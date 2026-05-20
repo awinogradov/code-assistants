@@ -1,0 +1,10 @@
+{
+  "name": "autopilot",
+  "version": "0.1.0",
+  "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
+  "author": {
+    "name": "Tony Vi",
+    "url": "https://github.com/awinogradov"
+  },
+  "repository": "https://github.com/awinogradov/code-assistants"
+}

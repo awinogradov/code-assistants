@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "wiretext": {
+      "command": "npx",
+      "args": ["-y", "@wiretext/mcp@0.3.3"]
+    }
+  }
+}

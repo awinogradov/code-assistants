@@ -1,0 +1,13 @@
+{
+  "name": "code-assistants",
+  "owner": {
+    "name": "Tony Vi"
+  },
+  "plugins": [
+    {
+      "name": "autopilot",
+      "source": "./claude-plugins/autopilot",
+      "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows"
+    }
+  ]
+}
