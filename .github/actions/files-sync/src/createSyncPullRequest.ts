@@ -72,7 +72,7 @@ export async function createSyncPullRequest({
     base_tree: baseTreeSha,
     tree: changes.map((change, index) => ({
       path: change.path,
-      mode: '100644',
+      mode: change.mode as '100644' | '100755' | '040000' | '160000' | '120000',
       type: 'blob',
       sha: blobs[index]!.data.sha,
     })),
@@ -162,6 +162,7 @@ async function upsertPullRequest({
     repo,
     state: 'open',
     head: `${owner}:${branch}`,
+    base,
   });
 
   const open = existing.data[0];
