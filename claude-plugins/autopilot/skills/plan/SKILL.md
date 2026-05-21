@@ -88,12 +88,12 @@ $ARGUMENTS
 
 Detect the input type from the arguments:
 
-| Pattern                 | Type              |
-| ----------------------- | ----------------- |
-| Number only (`123`)     | GitHub issue      |
-| `#` + number (`#123`)   | GitHub issue      |
-| Contains `github.com`   | GitHub issue URL  |
-| Anything else           | Plain description |
+| Pattern               | Type              |
+| --------------------- | ----------------- |
+| Number only (`123`)   | GitHub issue      |
+| `#` + number (`#123`) | GitHub issue      |
+| Contains `github.com` | GitHub issue URL  |
+| Anything else         | Plain description |
 
 Launch context-gathering calls **in parallel**. The number of parallel calls depends on input type:
 
@@ -204,12 +204,12 @@ Map each planned change to project rules defined in CLAUDE.md.
 2. Extract the `agents.rules` field value
 3. Map to the appropriate skill:
 
-| `rules` value             | Skill                                |
-| ------------------------- | ------------------------------------ |
-| `Bun`                     | `Skill(autopilot:plan-bun)`          |
-| `Bun+React+Tailwind`      | `Skill(autopilot:plan-bun)`          |
-| `NodeJS+React`            | `Skill(autopilot:plan-nodejs-react)` |
-| `NodeJS+React+Tailwind`   | `Skill(autopilot:plan-nodejs-react)` |
+| `rules` value           | Skill                                |
+| ----------------------- | ------------------------------------ |
+| `Bun`                   | `Skill(autopilot:plan-bun)`          |
+| `Bun+React+Tailwind`    | `Skill(autopilot:plan-bun)`          |
+| `NodeJS+React`          | `Skill(autopilot:plan-nodejs-react)` |
+| `NodeJS+React+Tailwind` | `Skill(autopilot:plan-nodejs-react)` |
 
 4. Invoke the skill. The skill receives the full Phase 0 context (issue data, branch info, TODO matches) from the conversation history and executes the stack-specific phases.
 

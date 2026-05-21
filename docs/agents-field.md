@@ -37,12 +37,12 @@ Both keys are required for full coverage. Missing keys force the consuming skill
 
 Identifies the tech stack and points at a matching rule set under `rules/` in the marketplace repo. Recognized values:
 
-| Value                    | Rule file                       | Used for                                |
-| ------------------------ | ------------------------------- | --------------------------------------- |
-| `Bun`                    | `rules/Bun.md`                  | Bun + TypeScript (CSS Modules)          |
-| `Bun+React+Tailwind`     | `rules/Bun+React+Tailwind.md`   | Bun + React + Tailwind frontend         |
-| `NodeJS+React`           | `rules/NodeJS+React.md`         | Node.js + React (CSS Modules)           |
-| `NodeJS+React+Tailwind`  | `rules/NodeJS+React+Tailwind.md` | Node.js + React + Tailwind frontend     |
+| Value                   | Rule file                        | Used for                            |
+| ----------------------- | -------------------------------- | ----------------------------------- |
+| `Bun`                   | `rules/Bun.md`                   | Bun + TypeScript (CSS Modules)      |
+| `Bun+React+Tailwind`    | `rules/Bun+React+Tailwind.md`    | Bun + React + Tailwind frontend     |
+| `NodeJS+React`          | `rules/NodeJS+React.md`          | Node.js + React (CSS Modules)       |
+| `NodeJS+React+Tailwind` | `rules/NodeJS+React+Tailwind.md` | Node.js + React + Tailwind frontend |
 
 Any other value is treated as unrecognized.
 
@@ -61,29 +61,29 @@ Only consumed by `/todo-cleanup` today.
 
 The matrix below lists every skill that reads `agents`, the key(s) it reads, and what it does with the value. Line numbers point at the canonical detection block in each skill.
 
-| Skill            | Reads                              | Behavior                                                                                          | Source                                                                                       |
-| ---------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `/plan`          | `agents.rules`                     | Delegates to `Skill(autopilot:plan-bun)` or `Skill(autopilot:plan-nodejs-react)`                  | `claude-plugins/autopilot/skills/plan/SKILL.md` (Phase 1: Detect Stack and Delegate)         |
-| `/run`           | `agents.rules`                     | Same delegation as `/plan`, plus embedded post-implementation autopilot                           | `claude-plugins/autopilot/skills/run/SKILL.md` (Phase 1: Detect Stack and Delegate)          |
-| `/pr:review`     | `agents.rules`                     | Tags the review with the stack identifier; falls back to `unknown` if missing                     | `claude-plugins/autopilot/skills/pr:review/SKILL.md` (Phase 2.1: Detect Stack)               |
-| `/todo-cleanup`  | `agents.language` + `agents.rules` | Picks file globs + comment syntax from `language`, picks verification command from `rules`        | `claude-plugins/autopilot/skills/todo-cleanup/SKILL.md` (Phase 1: Read Repository Context)   |
+| Skill           | Reads                              | Behavior                                                                                   | Source                                                                                     |
+| --------------- | ---------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `/plan`         | `agents.rules`                     | Delegates to `Skill(autopilot:plan-bun)` or `Skill(autopilot:plan-nodejs-react)`           | `claude-plugins/autopilot/skills/plan/SKILL.md` (Phase 1: Detect Stack and Delegate)       |
+| `/run`          | `agents.rules`                     | Same delegation as `/plan`, plus embedded post-implementation autopilot                    | `claude-plugins/autopilot/skills/run/SKILL.md` (Phase 1: Detect Stack and Delegate)        |
+| `/pr:review`    | `agents.rules`                     | Tags the review with the stack identifier; falls back to `unknown` if missing              | `claude-plugins/autopilot/skills/pr:review/SKILL.md` (Phase 2.1: Detect Stack)             |
+| `/todo-cleanup` | `agents.language` + `agents.rules` | Picks file globs + comment syntax from `language`, picks verification command from `rules` | `claude-plugins/autopilot/skills/todo-cleanup/SKILL.md` (Phase 1: Read Repository Context) |
 
 ### Stack → planning skill (used by `/plan` and `/run`)
 
-| `rules` value             | Planning skill                       |
-| ------------------------- | ------------------------------------ |
-| `Bun`                     | `Skill(autopilot:plan-bun)`          |
-| `Bun+React+Tailwind`      | `Skill(autopilot:plan-bun)`          |
-| `NodeJS+React`            | `Skill(autopilot:plan-nodejs-react)` |
-| `NodeJS+React+Tailwind`   | `Skill(autopilot:plan-nodejs-react)` |
+| `rules` value           | Planning skill                       |
+| ----------------------- | ------------------------------------ |
+| `Bun`                   | `Skill(autopilot:plan-bun)`          |
+| `Bun+React+Tailwind`    | `Skill(autopilot:plan-bun)`          |
+| `NodeJS+React`          | `Skill(autopilot:plan-nodejs-react)` |
+| `NodeJS+React+Tailwind` | `Skill(autopilot:plan-nodejs-react)` |
 
 ### Stack → verification command (used by `/todo-cleanup`)
 
-| `rules` value   | Command                             |
-| --------------- | ----------------------------------- |
-| `Bun`           | `bun run typecheck && bun run lint` |
-| `NodeJS+React`  | `npm run typecheck && npm run lint` |
-| Go (fallback)   | `go build ./... && go vet ./...`    |
+| `rules` value  | Command                             |
+| -------------- | ----------------------------------- |
+| `Bun`          | `bun run typecheck && bun run lint` |
+| `NodeJS+React` | `npm run typecheck && npm run lint` |
+| Go (fallback)  | `go build ./... && go vet ./...`    |
 
 ## Detection algorithm
 
@@ -98,11 +98,11 @@ Implementations may use `Read`, `jq`, or `grep_repomix_output` to read the file.
 
 ## Fallback behavior
 
-| Skill            | When detection fails                                                                                        |
-| ---------------- | ----------------------------------------------------------------------------------------------------------- |
-| `/plan`, `/run`  | `AskUserQuestion` with the four `rules` values as options; user's choice is used for the current invocation only — not written back to `package.json` |
-| `/pr:review`     | Stack stored as `unknown`; the review proceeds without stack-specific tagging                                |
-| `/todo-cleanup`  | Skill cannot proceed without `language`; the prompt asks the user to populate the field                      |
+| Skill           | When detection fails                                                                                                                                  |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/plan`, `/run` | `AskUserQuestion` with the four `rules` values as options; user's choice is used for the current invocation only — not written back to `package.json` |
+| `/pr:review`    | Stack stored as `unknown`; the review proceeds without stack-specific tagging                                                                         |
+| `/todo-cleanup` | Skill cannot proceed without `language`; the prompt asks the user to populate the field                                                               |
 
 Fallbacks are intentionally non-destructive — no skill writes to `package.json` on its own.
 

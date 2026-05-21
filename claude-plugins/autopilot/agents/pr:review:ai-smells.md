@@ -45,8 +45,8 @@ Function modifies a passed-in mutable object to "return" data through it, instea
 - Example violation:
   ```ts
   function getStatus(result: Record<string, unknown>) {
-      result.status = "active";
-      result.code = 200;
+    result.status = "active";
+    result.code = 200;
   }
   ```
   Should return a value instead.

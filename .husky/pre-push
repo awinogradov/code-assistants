@@ -1,0 +1,39 @@
+#!/bin/sh
+
+branch=$(git branch --show-current)
+
+# Skip validation for main/master
+if [ "$branch" = "main" ] || [ "$branch" = "master" ]; then
+  exit 0
+fi
+
+# Autopilot branch convention (CONTRIBUTING.md):
+#   issue-<number>-<short-description>            primary
+#   (trivial|maintenance|hotfix)-<short-description>   escapes
+issue_pattern='^issue-[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$'
+escape_pattern='^(trivial|maintenance|hotfix)-[a-z0-9]+(-[a-z0-9]+)*$'
+
+if ! echo "$branch" | grep -qE "$issue_pattern" \
+  && ! echo "$branch" | grep -qE "$escape_pattern"; then
+  echo "✖ Branch name \"$branch\" does not follow naming convention."
+  echo ""
+  echo "  Expected one of:"
+  echo "    issue-<number>-<short-description>      e.g. issue-42-add-auth"
+  echo "    trivial-<short-description>             e.g. trivial-fix-typo"
+  echo "    maintenance-<short-description>         e.g. maintenance-bump-deps"
+  echo "    hotfix-<short-description>              e.g. hotfix-bad-release"
+  echo ""
+  echo "  Lowercase letters, digits, hyphens only."
+  exit 1
+fi
+
+# Hard limit (100 chars)
+if [ ${#branch} -gt 100 ]; then
+  echo "✖ Branch name exceeds 100 character limit (${#branch} chars)."
+  exit 1
+fi
+
+# Warn over 60 chars
+if [ ${#branch} -gt 60 ]; then
+  echo "⚠ Branch name is ${#branch} chars (aim for under 60)."
+fi
