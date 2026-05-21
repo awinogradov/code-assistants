@@ -249,7 +249,7 @@ feat(api): add retry with exponential backoff to fetchUser
 fix(validator): handle null and empty-string inputs
 ```
 
-⚠️ Enforced locally by [`commitlint`](./commitlint.config.ts) on the `commit-msg` hook and in CI by [`wagoid/commitlint-github-action`](https://github.com/wagoid/commitlint-github-action). Invalid commits block PR merge.
+⚠️ Enforced locally by [`commitlint`](./commitlint.config.mjs) on the `commit-msg` hook and in CI by [`wagoid/commitlint-github-action`](https://github.com/wagoid/commitlint-github-action). Invalid commits block PR merge.
 
 #### Atomic Commits
 

@@ -1,0 +1,52 @@
+name: Contributing check
+description: Validate branch name, commit messages, and PR title against the conventions defined in CONTRIBUTING.md.
+
+runs:
+  using: composite
+  steps:
+    - name: Validate branch name
+      uses: deepakputhraya/action-branch-name@e0f8db53a8e289f1ae6f6c3e8dc70a3d366fd876 # v1.0.0
+      with:
+        regex: '^(issue-\d+-[a-z0-9]+(-[a-z0-9]+)*|(hotfix|trivial|maintenance|proposal)-[a-z0-9]+(-[a-z0-9]+)*|release-\d+\.\d+\.\d+)$'
+        min_length: 5
+        max_length: 100
+        ignore: main,master
+
+    - name: Checkout
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      with:
+        fetch-depth: 0
+
+    - name: Validate commit messages
+      uses: wagoid/commitlint-github-action@b948419dd99f3fd78a6548d48f94e3df7f6bf3ed # v6
+      with:
+        configFile: ./commitlint.config.mjs
+        failOnWarnings: false
+
+    - name: Validate PR title (semantic)
+      uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      with:
+        types: |
+          HOTFIX
+          TRIVIAL
+          MAINTENANCE
+          PROPOSAL
+          Release
+          [A-Z]\w*
+        headerPattern: '^([A-Z]\S*?):?\s+(.+)$'
+        headerPatternCorrespondence: type, subject
+        subjectPattern: '.*[^.]$'
+        subjectPatternError: |
+          PR title must not end with a period. See CONTRIBUTING.md §pr-title.
+
+    - name: Validate PR title length
+      shell: bash
+      env:
+        PR_TITLE: ${{ github.event.pull_request.title }}
+      run: |
+        if [ ${#PR_TITLE} -gt 120 ]; then
+          echo "::error::PR title exceeds 120 character limit (${#PR_TITLE} chars). See CONTRIBUTING.md §pr-title."
+          exit 1
+        fi

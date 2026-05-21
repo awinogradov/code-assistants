@@ -34,7 +34,7 @@ Evaluate only changes visible in the diff (lines prefixed with `+` or `-`). Skip
 
 GitHub issue references (e.g., `#123`, `Closes #123`) must NOT appear in commit messages. The PR description handles issue linking via magic words.
 
-- Platform ref: commitlint.config.ts custom rule `no-issue-id`
+- Platform ref: commitlint.config.mjs custom rule `no-issue-id`
 
 ### B. Lint and Suppression Hacks
 

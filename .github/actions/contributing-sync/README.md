@@ -1,10 +1,21 @@
 # Contributing sync
 
-Composite GitHub Action that syncs `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, and `LICENSE.md`
-from an upstream repository into the current repository and opens a single pull request with
-the differences.
+Composite GitHub Action that syncs the canonical contributing artefacts from an upstream
+repository into the current repository and opens a single pull request with the differences.
+The synced set is:
 
-The action builds a fixed three-entry sync list and delegates the diff and PR mechanics to the
+- `CONTRIBUTING.md`
+- `CODE_OF_CONDUCT.md`
+- `LICENSE.md`
+- `.github/workflows/contributing.yml`
+- `.github/actions/contributing-check/action.yml`
+
+The first three are the contributor-facing documentation. The last two propagate the
+[`contributing-check`](../contributing-check/README.md) enforcement action and the workflow
+that runs it on every PR, so consumer repos get the full enforcement set without writing any
+extra glue.
+
+The action builds a fixed five-entry sync list and delegates the diff and PR mechanics to the
 [`files-sync`](../files-sync/README.md) action. It does not require `actions/checkout` and
 never touches the runner's working tree.
 
@@ -66,16 +77,17 @@ See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/a
 
 ## Behavior
 
-- Delegates to `files-sync` with three fixed entries — one for each of `CONTRIBUTING.md`,
-  `CODE_OF_CONDUCT.md`, and `LICENSE.md` — sourced from `source-repo` at `source-ref`.
+- Delegates to `files-sync` with five fixed entries — `CONTRIBUTING.md`,
+  `CODE_OF_CONDUCT.md`, `LICENSE.md`, `.github/workflows/contributing.yml`, and
+  `.github/actions/contributing-check/action.yml` — sourced from `source-repo` at `source-ref`.
 - The PR is opened on the fixed branch `maintenance-sync-contributing` with the title
   `MAINTENANCE: Sync contributing files from upstream` and the commit message
   `chore: sync contributing files from upstream`. These values are not configurable so the
   action cannot collide with `files-sync`'s default branch and so every consumer gets the
   same one-line setup.
 - The head branch is force-updated on every run (inherited from `files-sync`); local edits
-  to any of the three synced files will be overwritten when the upstream files change.
-- If all three destination files already match upstream, no PR is created.
+  to any of the five synced files will be overwritten when the upstream files change.
+- If all five destination files already match upstream, no PR is created.
 - Missing source files fail the run with `Source not found at <repo>:<path>`.
 
 ## Versioning

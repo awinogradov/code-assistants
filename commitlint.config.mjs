@@ -1,6 +1,12 @@
-import type { UserConfig } from "@commitlint/types";
-
-const config: UserConfig = {
+/**
+ * Commitlint configuration.
+ *
+ * Enforced locally by the husky `commit-msg` hook and in CI by
+ * `wagoid/commitlint-github-action`. See CONTRIBUTING.md `Commits` section.
+ *
+ * @type {import("@commitlint/types").UserConfig}
+ */
+const config = {
   extends: ["@commitlint/config-conventional"],
   rules: {
     "type-enum": [
