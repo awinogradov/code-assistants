@@ -16,6 +16,7 @@ allowed-tools:
   - MCP(perplexity:*)
   - MCP(repomix:*)
   - AskUserQuestion
+  - Skill(autopilot:ascii-schemas)
 ---
 
 Continue implementation planning using Bun/NodeJS-specific configuration. Phase 0 context (issue data, branch info, TODO matches) is available from the conversation history.
@@ -134,6 +135,10 @@ After all expert reviews complete, call TaskUpdate to set task 5 ("Review with e
 ## Summary
 [1-2 sentences: what and why]
 Score: [X]/100
+
+<!-- Include the ## Diagrams section only if the change is architectural/visual/UI/flow-related. Generate diagrams via Skill(autopilot:ascii-schemas) per the plan skill's "Visualize with ASCII Schemas" guidance. -->
+## Diagrams
+[ASCII diagram(s) generated via Skill(autopilot:ascii-schemas) — architecture, data flow, sequence, topology, UI layout, or component interaction. Omit this section entirely for pure logic/refactor changes.]
 
 ## Implementation Steps
 1. [ ] [Action] in `path/to/file.ts`

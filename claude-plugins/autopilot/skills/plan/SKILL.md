@@ -18,6 +18,7 @@ allowed-tools:
   - Skill(autopilot:plan-bun)
   - Skill(autopilot:plan-nodejs-react)
   - Skill(autopilot:branch-create)
+  - Skill(autopilot:ascii-schemas)
 ---
 
 Perform deep analysis of the codebase, recent changes, and the requested task. Create a validated, expert-reviewed implementation plan.
@@ -197,6 +198,28 @@ Use all available documentation sources. If a source is unavailable or returns n
 ### CLAUDE.md Compliance
 
 Map each planned change to project rules defined in CLAUDE.md.
+
+### Visualize with ASCII Schemas
+
+When the planned change is structural or visual, invoke `Skill(autopilot:ascii-schemas)` to generate diagrams and embed them in the plan's `## Diagrams` section (see the stack skill's Phase 5 output template).
+
+**Trigger** — invoke the skill when the change touches any of:
+
+- Architecture or module boundaries
+- Data flow, request/response paths, event pipelines
+- Sequence or timing interactions between components
+- Deployment topology or infrastructure layout
+- UI layout, screen mockups, or component hierarchy
+- Component interactions (parent/child, pub/sub, dependencies)
+
+**Skip** — do NOT invoke for:
+
+- Pure refactors with no structural change
+- Formatting, lint fixes, dependency bumps
+- Internal logic edits inside a single function
+- Documentation-only changes with no diagrams requested
+
+Always reuse `Skill(autopilot:ascii-schemas)` output verbatim — do not hand-draw diagrams.
 
 ## Phase 1: Detect Stack and Delegate
 
