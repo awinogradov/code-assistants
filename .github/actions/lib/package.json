@@ -1,21 +1,20 @@
 {
-  "name": "@code-assistants/files-sync-action",
+  "name": "@code-assistants/actions-lib",
   "version": "0.0.0",
-  "description": "Composite GitHub Action that syncs declared files from upstream repositories.",
+  "description": "Shared helpers for GitHub Actions in this repository.",
   "private": true,
   "type": "module",
   "license": "MIT",
+  "exports": {
+    "./fetchRawContent": "./src/fetchRawContent.ts"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf node_modules .turbo"
   },
   "dependencies": {
-    "@actions/core": "3.0.1",
-    "@code-assistants/actions-lib": "workspace:*",
     "@octokit/request-error": "7.1.0",
-    "@octokit/rest": "22.0.1",
-    "yaml": "2.9.0",
-    "zod": "4.4.3"
+    "@octokit/rest": "22.0.1"
   },
   "devDependencies": {
     "@types/bun": "1.3.14",

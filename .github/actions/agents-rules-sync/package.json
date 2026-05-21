@@ -1,12 +1,13 @@
 {
-  "name": "@code-assistants/files-sync-action",
+  "name": "@code-assistants/agents-rules-sync-action",
   "version": "0.0.0",
-  "description": "Composite GitHub Action that syncs declared files from upstream repositories.",
+  "description": "Composite GitHub Action that syncs the stack-appropriate agent rules file into CLAUDE.md.",
   "private": true,
   "type": "module",
   "license": "MIT",
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test": "bun test",
     "clean": "rm -rf node_modules .turbo"
   },
   "dependencies": {

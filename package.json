@@ -15,13 +15,18 @@
     "rules": "Bun",
     "language": "typescript"
   },
-  "workspaces": [".github/actions/files-sync"],
+  "workspaces": [
+    ".github/actions/lib",
+    ".github/actions/files-sync",
+    ".github/actions/agents-rules-sync"
+  ],
   "scripts": {
     "prepare": "husky",
     "format": "prettier --write \"**/*.{md,json}\"",
     "format:check": "prettier --check \"**/*.{md,json}\"",
     "validate": "bun scripts/validate-plugins.ts",
     "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
     "lint": "bun run format:check && bun run validate && turbo run typecheck"
   },
   "devDependencies": {
@@ -34,6 +39,7 @@
     "lint-staged": "17.0.5",
     "prettier": "3.8.3",
     "turbo": "2.9.14",
+    "typescript": "6.0.3",
     "zod": "3.23.8"
   }
 }

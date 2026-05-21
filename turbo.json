@@ -8,6 +8,10 @@
       "inputs": ["action.yml", "*.ts", "src/**/*.ts", "tsconfig.json", "package.json"],
       "outputs": []
     },
+    "test": {
+      "inputs": ["*.ts", "src/**/*.ts", "tsconfig.json", "package.json"],
+      "outputs": []
+    },
     "clean": {
       "cache": false
     }

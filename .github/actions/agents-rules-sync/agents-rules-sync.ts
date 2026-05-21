@@ -1,0 +1,98 @@
+/**
+ * Entry point for the agents-rules-sync composite action.
+ *
+ * Reads the current repository's `package.json` via the GitHub contents API,
+ * validates the `agents.rules` field, and emits a single-entry YAML `files`
+ * list as a step output that the downstream `files-sync` step consumes.
+ */
+
+import * as core from '@actions/core';
+import { Octokit } from '@octokit/rest';
+import { stringify as stringifyYaml } from 'yaml';
+
+import { fetchRawContent } from '@code-assistants/actions-lib/fetchRawContent';
+
+import { resolvePackageAgentsRules } from './src/resolvePackageAgentsRules.ts';
+
+interface Env {
+  token: string;
+  destRepo: { owner: string; name: string };
+  sourceRepo: string;
+  sourceRef: string;
+  base: string;
+}
+
+function required(name: string): string {
+  const value = process.env[name];
+
+  if (value === undefined || value === '') {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+
+  return value;
+}
+
+function readEnv(): Env {
+  const token = required('GITHUB_TOKEN');
+  const destRepoRaw = required('DEST_REPO');
+  const sourceRepo = required('INPUT_SOURCE_REPO');
+  const base = required('INPUT_BASE');
+  const sourceRef = process.env.INPUT_SOURCE_REF ?? '';
+
+  const [owner, name] = destRepoRaw.split('/');
+
+  if (owner === undefined || name === undefined || owner === '' || name === '') {
+    throw new Error(`Invalid DEST_REPO slug: ${destRepoRaw}`);
+  }
+
+  return {
+    token,
+    destRepo: { owner, name },
+    sourceRepo,
+    sourceRef,
+    base,
+  };
+}
+
+async function main(): Promise<void> {
+  const env = readEnv();
+  const octokit = new Octokit({ auth: env.token });
+
+  const raw = await fetchRawContent({
+    octokit,
+    owner: env.destRepo.owner,
+    repo: env.destRepo.name,
+    path: 'package.json',
+    ref: env.base,
+  });
+
+  if (raw === null) {
+    throw new Error(
+      `package.json not found at ${env.destRepo.owner}/${env.destRepo.name}@${env.base}. ` +
+        `Add a package.json with an \`agents.rules\` field — see https://github.com/awinogradov/code-assistants/blob/main/docs/agents-field.md`,
+    );
+  }
+
+  const rules = resolvePackageAgentsRules(raw);
+
+  const entry: Record<string, string> = {
+    repo: env.sourceRepo,
+    source: `rules/${rules}.md`,
+    dest: 'CLAUDE.md',
+  };
+
+  if (env.sourceRef !== '') {
+    entry.ref = env.sourceRef;
+  }
+
+  const filesYaml = stringifyYaml([entry]);
+
+  core.info(`Resolved agents.rules=${rules}; syncing rules/${rules}.md → CLAUDE.md from ${env.sourceRepo}`);
+  core.setOutput('files', filesYaml);
+}
+
+await main().catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  core.setFailed(message);
+  process.exit(1);
+});

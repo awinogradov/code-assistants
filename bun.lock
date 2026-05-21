@@ -14,7 +14,24 @@
         "lint-staged": "17.0.5",
         "prettier": "3.8.3",
         "turbo": "2.9.14",
+        "typescript": "6.0.3",
         "zod": "3.23.8",
+      },
+    },
+    ".github/actions/agents-rules-sync": {
+      "name": "@code-assistants/agents-rules-sync-action",
+      "version": "0.0.0",
+      "dependencies": {
+        "@actions/core": "3.0.1",
+        "@code-assistants/actions-lib": "workspace:*",
+        "@octokit/request-error": "7.1.0",
+        "@octokit/rest": "22.0.1",
+        "yaml": "2.9.0",
+        "zod": "4.4.3",
+      },
+      "devDependencies": {
+        "@types/bun": "1.3.14",
+        "typescript": "6.0.3",
       },
     },
     ".github/actions/files-sync": {
@@ -22,10 +39,23 @@
       "version": "0.0.0",
       "dependencies": {
         "@actions/core": "3.0.1",
+        "@code-assistants/actions-lib": "workspace:*",
         "@octokit/request-error": "7.1.0",
         "@octokit/rest": "22.0.1",
         "yaml": "2.9.0",
         "zod": "4.4.3",
+      },
+      "devDependencies": {
+        "@types/bun": "1.3.14",
+        "typescript": "6.0.3",
+      },
+    },
+    ".github/actions/lib": {
+      "name": "@code-assistants/actions-lib",
+      "version": "0.0.0",
+      "dependencies": {
+        "@octokit/request-error": "7.1.0",
+        "@octokit/rest": "22.0.1",
       },
       "devDependencies": {
         "@types/bun": "1.3.14",
@@ -45,6 +75,10 @@
     "@babel/code-frame": ["@babel/code-frame@7.29.0", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.28.5", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-9NhCeYjq9+3uxgdtp20LSiJXJvN0FeCtNGpJxuMFZ1Kv3cWUNb6DOhJwUvcVCzKGR66cw4njwM6hrJLqgOwbcw=="],
 
     "@babel/helper-validator-identifier": ["@babel/helper-validator-identifier@7.28.5", "", {}, "sha512-qSs4ifwzKJSV39ucNjsvc6WVHs6b7S03sOh2OcHF9UHfVPqWWALUsNUVzhSBiItjRZoLHx7nIarVjqKVusUZ1Q=="],
+
+    "@code-assistants/actions-lib": ["@code-assistants/actions-lib@workspace:.github/actions/lib"],
+
+    "@code-assistants/agents-rules-sync-action": ["@code-assistants/agents-rules-sync-action@workspace:.github/actions/agents-rules-sync"],
 
     "@code-assistants/files-sync-action": ["@code-assistants/files-sync-action@workspace:.github/actions/files-sync"],
 
@@ -307,6 +341,8 @@
     "yargs-parser": ["yargs-parser@22.0.0", "", {}, "sha512-rwu/ClNdSMpkSrUb+d6BRsSkLUq1fmfsY6TOpYzTwvwkg1/NRG85KBy3kq++A8LKQwX6lsu+aWad+2khvuXrqw=="],
 
     "zod": ["zod@3.23.8", "", {}, "sha512-XBx9AXhXktjUqnepgTiE5flcKIYWi/rme0Eaj+5Y0lftuGBq+jyRu/md4WnuxqgP1ubdpNCsYEYPxrzVHD8d6g=="],
+
+    "@code-assistants/agents-rules-sync-action/zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
 
     "@code-assistants/files-sync-action/zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
 
