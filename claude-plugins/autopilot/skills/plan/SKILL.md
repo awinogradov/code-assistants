@@ -268,9 +268,23 @@ Tool parameters:
    - If output is empty → `worktreeNeedsBranch = true`
    - If output is non-empty → `worktreeNeedsBranch = false`
 
-### If (`github-issue` OR `plain description`) AND (on `main` branch OR `worktreeNeedsBranch` is true)
+### If on `main` branch OR `worktreeNeedsBranch` is true
 
-Add `## Pre-Implementation` as the FIRST section of the plan file (before `## Summary`):
+Add `## Pre-Implementation` as the FIRST section of the plan file (before `## Summary`). The block content depends on input type from Phase 0.
+
+#### Input type is `github-issue` (bare number, `#`-prefixed number, or GitHub issue URL)
+
+Use this body for the `## Pre-Implementation` section:
+
+```
+## Pre-Implementation
+
+Invoke `Skill(autopilot:branch-create)` with the resolved issue number (e.g., `42` for `#42`). The branch-create skill fetches the issue, generates an `issue-<number>-<slug>` branch name, and prompts the user to confirm before creation. Do NOT present a Hotfix/Trivial/Maintenance prefix prompt — issue inputs always use the `issue-<number>-<slug>` convention so the PR can link back via `Closes #<number>`.
+```
+
+#### Input type is `plain description`
+
+Use this body for the `## Pre-Implementation` section:
 
 ```
 ## Pre-Implementation
@@ -287,7 +301,7 @@ Tool parameters:
   ]
 - `multiSelect`: false
 
-Then invoke `/autopilot:branch-create --<chosen-prefix> "<description>"` using the Skill tool, where `<description>` is a short summary derived from the task context (issue title or user description). The branch name MUST be approved by the user via AskUserQuestion before creation — do not skip approval or create the branch directly with git commands.
+Then invoke `/autopilot:branch-create --<chosen-prefix> "<description>"` using the Skill tool, where `<description>` is a short summary derived from the user description. The branch name MUST be approved by the user via AskUserQuestion before creation — do not skip approval or create the branch directly with git commands.
 ```
 
 ### Otherwise (not on `main` AND (`isWorktree` is false OR `worktreeNeedsBranch` is false))
