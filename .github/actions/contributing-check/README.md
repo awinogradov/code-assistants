@@ -6,9 +6,10 @@ community actions (`deepakputhraya/action-branch-name`, `wagoid/commitlint-githu
 `amannn/action-semantic-pull-request`) so consumer repos get the full check set with one `uses:`
 line.
 
-The action is propagated to consumer repos together with [`contributing.yml`](../../workflows/contributing.yml)
-by [`contributing-sync`](../contributing-sync/README.md), so every repo using the sync gets the
-same enforcement automatically.
+Consumer repos get the action by syncing [`contributing.yml`](../../workflows/contributing.yml)
+via [`contributing-sync`](../contributing-sync/README.md). The synced workflow references the
+action remotely (`awinogradov/code-assistants/.github/actions/contributing-check@main`), so the
+action itself does not need to be checked into the consumer repo.
 
 ## Usage
 
@@ -34,8 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/contributing-check
+      - uses: awinogradov/code-assistants/.github/actions/contributing-check@v1
 ```
 
 ## Inputs
@@ -79,4 +79,4 @@ Reference the action by tag of the autopilot repo, e.g.:
 uses: awinogradov/code-assistants/.github/actions/contributing-check@v1
 ```
 
-In this repository (and in repos that receive the action via `contributing-sync`), the workflow references the action via the local `./.github/actions/contributing-check` path so the introducing PR can self-validate without a remote bootstrap dependency.
+The synced `contributing.yml` workflow references the action via `@main` so consumer repos always pick up the latest validation rules. Pin to a tag if you want explicit control.

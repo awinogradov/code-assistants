@@ -8,14 +8,14 @@ The synced set is:
 - `CODE_OF_CONDUCT.md`
 - `LICENSE.md`
 - `.github/workflows/contributing.yml`
-- `.github/actions/contributing-check/action.yml`
 
-The first three are the contributor-facing documentation. The last two propagate the
-[`contributing-check`](../contributing-check/README.md) enforcement action and the workflow
-that runs it on every PR, so consumer repos get the full enforcement set without writing any
-extra glue.
+The first three are the contributor-facing documentation. The workflow propagates the CI that
+runs the [`contributing-check`](../contributing-check/README.md) action on every PR — the
+action itself stays in the upstream repository and is referenced from the synced workflow via
+`awinogradov/code-assistants/.github/actions/contributing-check@main`, so consumers do not need
+a local copy.
 
-The action builds a fixed five-entry sync list and delegates the diff and PR mechanics to the
+The action builds a fixed four-entry sync list and delegates the diff and PR mechanics to the
 [`files-sync`](../files-sync/README.md) action. It does not require `actions/checkout` and
 never touches the runner's working tree.
 
@@ -77,17 +77,17 @@ See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/a
 
 ## Behavior
 
-- Delegates to `files-sync` with five fixed entries — `CONTRIBUTING.md`,
-  `CODE_OF_CONDUCT.md`, `LICENSE.md`, `.github/workflows/contributing.yml`, and
-  `.github/actions/contributing-check/action.yml` — sourced from `source-repo` at `source-ref`.
+- Delegates to `files-sync` with four fixed entries — `CONTRIBUTING.md`,
+  `CODE_OF_CONDUCT.md`, `LICENSE.md`, and `.github/workflows/contributing.yml` — sourced
+  from `source-repo` at `source-ref`.
 - The PR is opened on the fixed branch `maintenance-sync-contributing` with the title
   `MAINTENANCE: Sync contributing files from upstream` and the commit message
   `chore: sync contributing files from upstream`. These values are not configurable so the
   action cannot collide with `files-sync`'s default branch and so every consumer gets the
   same one-line setup.
 - The head branch is force-updated on every run (inherited from `files-sync`); local edits
-  to any of the five synced files will be overwritten when the upstream files change.
-- If all five destination files already match upstream, no PR is created.
+  to any of the four synced files will be overwritten when the upstream files change.
+- If all four destination files already match upstream, no PR is created.
 - Missing source files fail the run with `Source not found at <repo>:<path>`.
 
 ## Versioning
