@@ -1,0 +1,23 @@
+{
+  "name": "@autopilot/files-sync-action",
+  "version": "0.0.0",
+  "description": "Composite GitHub Action that syncs declared files from upstream repositories.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf node_modules .turbo"
+  },
+  "dependencies": {
+    "@actions/core": "3.0.1",
+    "@octokit/request-error": "7.1.0",
+    "@octokit/rest": "22.0.1",
+    "yaml": "2.9.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "6.0.3"
+  }
+}
