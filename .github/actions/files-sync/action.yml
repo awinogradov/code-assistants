@@ -52,7 +52,7 @@ runs:
     - name: Install workspace dependencies
       shell: bash
       working-directory: ${{ github.action_path }}/../../..
-      run: bun install --frozen-lockfile --filter @autopilot/files-sync-action
+      run: bun install --frozen-lockfile --filter @code-assistants/files-sync-action
 
     - name: Run files-sync
       id: sync

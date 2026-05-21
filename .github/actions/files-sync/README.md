@@ -24,13 +24,13 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - uses: awinogradov/autopilot/.github/actions/files-sync@v1
+      - uses: awinogradov/code-assistants/.github/actions/files-sync@v1
         with:
           files: |
-            - repo: awinogradov/autopilot
+            - repo: awinogradov/code-assistants
               source: CONTRIBUTING.md
               dest: CONTRIBUTING.md
-            - repo: awinogradov/autopilot
+            - repo: awinogradov/code-assistants
               source: rules/Bun.md
               dest: CLAUDE.md
 ```
@@ -84,5 +84,5 @@ For private source repositories or cross-org reads, provide a token with `conten
 Reference the action by tag of the autopilot repo, e.g.:
 
 ```yaml
-uses: awinogradov/autopilot/.github/actions/files-sync@v1
+uses: awinogradov/code-assistants/.github/actions/files-sync@v1
 ```
