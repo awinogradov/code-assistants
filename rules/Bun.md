@@ -37,7 +37,7 @@ Before making any changes:
 
 ### 2.1 Technology Stack
 
-- Bun, TypeScript 5.x
+- Bun, TypeScript 6.x
 - ESLint for linting
 - Prettier for formatting
 

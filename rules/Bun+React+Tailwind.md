@@ -39,7 +39,7 @@ Before making any changes:
 
 ### 2.1 Technology Stack
 
-- Bun, TypeScript 5.x, React 19, Vite
+- Bun, TypeScript 6.x, React 19, Vite
 - Tailwind CSS for styling
 - shadcn/ui + Radix UI for components
 - React Router for routing
