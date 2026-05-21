@@ -1,0 +1,62 @@
+name: Agents rules sync
+description: Sync the stack-appropriate agent rules file from an upstream repository into the current repository's CLAUDE.md.
+
+inputs:
+  token:
+    description: GitHub token used to read the source rules file and create the PR in the current repository. Defaults to the workflow token.
+    required: false
+    default: ${{ github.token }}
+  source-repo:
+    description: Source repository in `owner/name` form that hosts the `rules/<stack>.md` files.
+    required: false
+    default: awinogradov/code-assistants
+  source-ref:
+    description: Branch, tag, or SHA to read the source rules file from. Defaults to the source repository's default branch.
+    required: false
+    default: ""
+
+outputs:
+  changed-files:
+    description: Newline-separated list of destination paths that were updated. Empty when no changes were detected.
+    value: ${{ steps.sync.outputs.changed-files }}
+  pr-number:
+    description: Number of the opened or reused PR. Empty when no changes were detected.
+    value: ${{ steps.sync.outputs.pr-number }}
+  pr-url:
+    description: HTML URL of the opened or reused PR. Empty when no changes were detected.
+    value: ${{ steps.sync.outputs.pr-url }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      with:
+        bun-version: 1.x
+
+    - name: Install workspace dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: bun install --frozen-lockfile --filter @code-assistants/agents-rules-sync-action
+
+    - name: Resolve files list from agents.rules
+      id: resolve
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.token }}
+        DEST_REPO: ${{ github.repository }}
+        INPUT_SOURCE_REPO: ${{ inputs.source-repo }}
+        INPUT_SOURCE_REF: ${{ inputs.source-ref }}
+        INPUT_BASE: ${{ github.event.repository.default_branch }}
+      run: bun "${{ github.action_path }}/agents-rules-sync.ts"
+
+    - name: Sync via files-sync
+      id: sync
+      uses: awinogradov/code-assistants/.github/actions/files-sync@main
+      with:
+        files: ${{ steps.resolve.outputs.files }}
+        token: ${{ inputs.token }}
+        branch: chore/sync-agents-rules
+        title: "MAINTENANCE: Sync agent rules from upstream"
+        body: Automated agent rules sync from upstream.
+        commit-message: "chore: sync agent rules from upstream"
