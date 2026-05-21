@@ -32,8 +32,23 @@ function required(name: string): string {
   return value;
 }
 
+function requiredToken(): string {
+  const value = process.env.GITHUB_TOKEN;
+
+  if (value === undefined || value === '') {
+    throw new Error(
+      'GITHUB_TOKEN is empty. Pass an explicit PAT or GitHub App installation token via the action\'s `token` input — ' +
+        'the workflow\'s default `GITHUB_TOKEN` is not supported because it cannot create pull requests when the repo/org ' +
+        'disables "Allow GitHub Actions to create and approve pull requests". ' +
+        'See https://github.com/awinogradov/code-assistants/blob/main/.github/actions/agents-rules-sync/README.md#permissions',
+    );
+  }
+
+  return value;
+}
+
 function readEnv(): Env {
-  const token = required('GITHUB_TOKEN');
+  const token = requiredToken();
   const destRepoRaw = required('DEST_REPO');
   const sourceRepo = required('INPUT_SOURCE_REPO');
   const base = required('INPUT_BASE');
