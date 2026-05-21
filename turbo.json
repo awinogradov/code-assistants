@@ -1,0 +1,15 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "ui": "stream",
+  "globalDependencies": [".prettierignore", "bun.lock"],
+  "globalPassThroughEnv": ["CI", "GITHUB_*", "RUNNER_*", "TURBO_*", "PATH", "HOME", "TMPDIR"],
+  "tasks": {
+    "typecheck": {
+      "inputs": ["action.yml", "*.ts", "src/**/*.ts", "tsconfig.json", "package.json"],
+      "outputs": []
+    },
+    "clean": {
+      "cache": false
+    }
+  }
+}
