@@ -93,12 +93,17 @@ function composeBody(intro: string, paths: string[]): string {
 
 async function writeNoChangesSummary(entries: SyncEntry[]): Promise<void> {
   const sources = entries.map((entry) => `${entry.repo}:${entry.source} → ${entry.dest}`);
-  await core.summary
-    .addHeading('Files sync', 3)
-    .addRaw('No file differences detected. No PR created.', true)
-    .addRaw('**Checked entries:**', true)
-    .addRaw(formatFileList(sources), true)
-    .write();
+  const body = [
+    '### Files sync',
+    '',
+    'No file differences detected. No PR created.',
+    '',
+    '**Checked entries:**',
+    '',
+    formatFileList(sources),
+    '',
+  ].join('\n');
+  await core.summary.addRaw(body).write();
 }
 
 async function writePrReadySummary(
@@ -106,12 +111,17 @@ async function writePrReadySummary(
   title: string,
   paths: string[],
 ): Promise<void> {
-  await core.summary
-    .addHeading('Files sync', 3)
-    .addRaw(`PR ready: [#${pr.number}](${pr.htmlUrl}) — ${title}`, true)
-    .addRaw('**Updated files:**', true)
-    .addRaw(formatFileList(paths), true)
-    .write();
+  const body = [
+    '### Files sync',
+    '',
+    `PR ready: [#${pr.number}](${pr.htmlUrl}) — ${title}`,
+    '',
+    '**Updated files:**',
+    '',
+    formatFileList(paths),
+    '',
+  ].join('\n');
+  await core.summary.addRaw(body).write();
 }
 
 async function main(): Promise<void> {
