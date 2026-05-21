@@ -197,6 +197,12 @@ async function fetchSourceTreeModes({
     recursive: 'true',
   });
 
+  if (tree.data.truncated) {
+    throw new Error(
+      `Source tree is truncated for ${owner}/${repo}${ref ? `@${ref}` : ''}; cannot reliably resolve file modes`,
+    );
+  }
+
   const modes = new Map<string, string>();
   for (const entry of tree.data.tree) {
     if (entry.path !== undefined && entry.mode !== undefined) {
