@@ -104,6 +104,13 @@ async function main(): Promise<void> {
 
   core.info(`Resolved agents.rules=${rules}; syncing rules/${rules}.md → CLAUDE.md from ${env.sourceRepo}`);
   core.setOutput('files', filesYaml);
+
+  core.summary
+    .addHeading('Agents rules sync', 3)
+    .addRaw(
+      `Resolved \`agents.rules=${rules}\` → syncing \`rules/${rules}.md\` to \`CLAUDE.md\` from ${env.sourceRepo}.`,
+      true,
+    );
 }
 
 await main().catch((error: unknown) => {
