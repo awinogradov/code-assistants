@@ -73,7 +73,7 @@ Pass one of the following:
 
 - A **classic Personal Access Token** with the `repo` scope.
 - A **fine-grained Personal Access Token** scoped to this repository with `Contents: Read and write` and `Pull requests: Read and write`. For private source repositories, the same token also needs `Contents: Read` on the source repo.
-- A **GitHub App installation token** with the same `contents: write` + `pull-requests: write` permissions. If the org enforces the policy above, App tokens also require it to be enabled.
+- A **GitHub App installation token** with the same `contents: write` + `pull-requests: write` permissions. (App tokens are not subject to the workflow-permissions toggle above — that toggle gates `GITHUB_TOKEN` only.)
 
 Store the token in a secret (e.g., `SYNC_PAT`) and pass it via `token: ${{ secrets.SYNC_PAT }}`.
 

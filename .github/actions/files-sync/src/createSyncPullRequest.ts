@@ -189,8 +189,7 @@ async function upsertPullRequest({
       throw new Error(
         `Refused to create pull request in ${owner}/${repo}: ${requestError.message}. ` +
           'Confirm the `token` input is a PAT or GitHub App installation token with `contents: write` + `pull-requests: write` ' +
-          `on ${owner}/${repo} (not the workflow's default \`GITHUB_TOKEN\`), and that the repo/org has ` +
-          '"Allow GitHub Actions to create and approve pull requests" enabled when using a GitHub App token. ' +
+          `on ${owner}/${repo} (not the workflow's default \`GITHUB_TOKEN\`). ` +
           'See https://github.com/awinogradov/code-assistants/blob/main/.github/actions/files-sync/README.md#permissions',
         { cause: error },
       );
