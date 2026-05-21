@@ -1,5 +1,5 @@
 name: Contributing sync
-description: Sync CONTRIBUTING.md, CODE_OF_CONDUCT.md, and LICENSE.md from an upstream repository into the current repository.
+description: Sync CONTRIBUTING.md, CODE_OF_CONDUCT.md, LICENSE.md, the contributing workflow, and the contributing-check action from an upstream repository into the current repository.
 
 inputs:
   token:
@@ -37,7 +37,13 @@ runs:
         INPUT_SOURCE_REF: ${{ inputs.source-ref }}
       run: |
         set -euo pipefail
-        paths=(CONTRIBUTING.md CODE_OF_CONDUCT.md LICENSE.md)
+        paths=(
+          CONTRIBUTING.md
+          CODE_OF_CONDUCT.md
+          LICENSE.md
+          .github/workflows/contributing.yml
+          .github/actions/contributing-check/action.yml
+        )
         {
           echo "files<<__EOF__"
           for path in "${paths[@]}"; do
