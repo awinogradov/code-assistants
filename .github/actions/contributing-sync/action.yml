@@ -1,0 +1,63 @@
+name: Contributing sync
+description: Sync CONTRIBUTING.md, CODE_OF_CONDUCT.md, and LICENSE.md from an upstream repository into the current repository.
+
+inputs:
+  token:
+    description: |
+      PAT (classic with `repo`, or fine-grained with `contents: write` + `pull-requests: write` on this repo) or GitHub App installation token. The workflow's default `GITHUB_TOKEN` is not supported — it cannot create pull requests when the repo/org has "Allow GitHub Actions to create and approve pull requests" disabled, and the resulting 403 is opaque. See README for setup.
+    required: true
+  source-repo:
+    description: Source repository in `owner/name` form that hosts the canonical `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, and `LICENSE.md`.
+    required: false
+    default: awinogradov/code-assistants
+  source-ref:
+    description: Branch, tag, or SHA to read the source files from. Defaults to the source repository's default branch.
+    required: false
+    default: ""
+
+outputs:
+  changed-files:
+    description: Newline-separated list of destination paths that were updated. Empty when no changes were detected.
+    value: ${{ steps.sync.outputs.changed-files }}
+  pr-number:
+    description: Number of the opened or reused PR. Empty when no changes were detected.
+    value: ${{ steps.sync.outputs.pr-number }}
+  pr-url:
+    description: HTML URL of the opened or reused PR. Empty when no changes were detected.
+    value: ${{ steps.sync.outputs.pr-url }}
+
+runs:
+  using: composite
+  steps:
+    - name: Build files list
+      id: resolve
+      shell: bash
+      env:
+        INPUT_SOURCE_REPO: ${{ inputs.source-repo }}
+        INPUT_SOURCE_REF: ${{ inputs.source-ref }}
+      run: |
+        set -euo pipefail
+        paths=(CONTRIBUTING.md CODE_OF_CONDUCT.md LICENSE.md)
+        {
+          echo "files<<__EOF__"
+          for path in "${paths[@]}"; do
+            echo "- repo: ${INPUT_SOURCE_REPO}"
+            echo "  source: ${path}"
+            echo "  dest: ${path}"
+            if [ -n "${INPUT_SOURCE_REF}" ]; then
+              echo "  ref: ${INPUT_SOURCE_REF}"
+            fi
+          done
+          echo "__EOF__"
+        } >> "${GITHUB_OUTPUT}"
+
+    - name: Sync via files-sync
+      id: sync
+      uses: awinogradov/code-assistants/.github/actions/files-sync@main
+      with:
+        files: ${{ steps.resolve.outputs.files }}
+        token: ${{ inputs.token }}
+        branch: maintenance-sync-contributing
+        title: "MAINTENANCE: Sync contributing files from upstream"
+        body: Automated contributing files sync from upstream.
+        commit-message: "chore: sync contributing files from upstream"
