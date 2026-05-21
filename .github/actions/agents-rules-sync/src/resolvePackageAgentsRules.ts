@@ -75,7 +75,7 @@ function parseJsonOrThrow(raw: string): unknown {
     return JSON.parse(trimmed);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`package.json is not valid JSON: ${message}`);
+    throw new Error(`package.json is not valid JSON: ${message}. ${addInstructions()}`);
   }
 }
 

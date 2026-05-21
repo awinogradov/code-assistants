@@ -11,8 +11,12 @@ describe('resolvePackageAgentsRules', () => {
     expect(() => resolvePackageAgentsRules('')).toThrow(/agents-field\.md/);
   });
 
-  test('rejects non-JSON input', () => {
+  test('rejects non-JSON input with docs link and allowed values', () => {
     expect(() => resolvePackageAgentsRules('not json')).toThrow(/not valid JSON/);
+    expect(() => resolvePackageAgentsRules('not json')).toThrow(agentsFieldDocsUrl);
+    for (const value of agentsRulesValues) {
+      expect(() => resolvePackageAgentsRules('not json')).toThrow(new RegExp(`"${value.replace(/\+/g, '\\+')}"`));
+    }
   });
 
   test('rejects package.json without `agents`', () => {
