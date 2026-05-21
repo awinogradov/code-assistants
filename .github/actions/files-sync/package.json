@@ -1,5 +1,5 @@
 {
-  "name": "@autopilot/files-sync-action",
+  "name": "@code-assistants/files-sync-action",
   "version": "0.0.0",
   "description": "Composite GitHub Action that syncs declared files from upstream repositories.",
   "private": true,
