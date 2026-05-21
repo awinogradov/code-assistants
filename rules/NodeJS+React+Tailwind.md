@@ -319,6 +319,9 @@ Before making any changes:
 - 👤 No useEffect for state sync
 - 👤 No inline functions in loops
 - 👤 No incomplete configurations
+- 👤 No raw `git commit` — use `Skill(autopilot:commits:create)`
+- 👤 No raw `git checkout -b` / `git branch` — use `Skill(autopilot:branch:create)`
+- 👤 No raw `gh pr create` — use `Skill(autopilot:pr:create)`
 
 ## 16. AI Assistant Workflow
 
@@ -330,9 +333,9 @@ Before making any changes:
 - 👤 Gather context before editing
 - 👤 Use sub-agents for search-heavy or parallelizable investigation to keep the main context focused
 - 👤 Use `gh` CLI for GitHub issues, PRs, comments, and Actions info
-- 👤 Always use `Skill(autopilot:commits:create)` to commit — never run raw `git commit`. If the autopilot plugin is not installed, follow CONTRIBUTING.md
-- 👤 Always use `Skill(autopilot:branch:create)` to create branches — never run raw `git checkout -b` or `git branch`. If the autopilot plugin is not installed, follow CONTRIBUTING.md
-- 👤 Always use `Skill(autopilot:pr:create)` to create PRs — never run raw `gh pr create`. If the autopilot plugin is not installed, follow CONTRIBUTING.md
+- 👤 **MANDATORY**: Commit only via `Skill(autopilot:commits:create)` — no raw `git commit`, no `git commit -m`, no `--amend`, no exceptions. If the autopilot plugin is not installed, follow CONTRIBUTING.md
+- 👤 **MANDATORY**: Create branches only via `Skill(autopilot:branch:create)` — no raw `git checkout -b`, `git branch`, or `git switch -c`. If the autopilot plugin is not installed, follow CONTRIBUTING.md
+- 👤 **MANDATORY**: Create PRs only via `Skill(autopilot:pr:create)` — no raw `gh pr create` or web-UI PR creation. If the autopilot plugin is not installed, follow CONTRIBUTING.md
 
 ### 16.2 MCP Servers
 
