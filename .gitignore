@@ -1,0 +1,10 @@
+node_modules/
+.turbo/
+dist/
+coverage/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.log

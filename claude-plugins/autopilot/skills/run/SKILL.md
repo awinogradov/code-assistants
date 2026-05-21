@@ -94,12 +94,12 @@ $ARGUMENTS
 
 Detect the input type from the arguments:
 
-| Pattern                 | Type              |
-| ----------------------- | ----------------- |
-| Number only (`123`)     | GitHub issue      |
-| `#` + number (`#123`)   | GitHub issue      |
-| Contains `github.com`   | GitHub issue URL  |
-| Anything else           | Plain description |
+| Pattern               | Type              |
+| --------------------- | ----------------- |
+| Number only (`123`)   | GitHub issue      |
+| `#` + number (`#123`) | GitHub issue      |
+| Contains `github.com` | GitHub issue URL  |
+| Anything else         | Plain description |
 
 Launch context-gathering calls **in parallel**. The number of parallel calls depends on input type:
 

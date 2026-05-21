@@ -60,7 +60,7 @@ File placed in a directory that doesn't match its purpose based on the project's
 
 ## Stack-Specific Guidance
 
-- **Bun / NodeJS+React / Bun+React+Tailwind / NodeJS+React+Tailwind**: Check for `utils.ts`, `helpers.ts`, camelCase/PascalCase file naming per rules/*.md
+- **Bun / NodeJS+React / Bun+React+Tailwind / NodeJS+React+Tailwind**: Check for `utils.ts`, `helpers.ts`, camelCase/PascalCase file naming per rules/\*.md
 - **unknown**: Apply language-agnostic naming checks only
 
 ## Output
