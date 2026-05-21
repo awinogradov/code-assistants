@@ -45,10 +45,11 @@ Before making any changes:
 - React Router for routing
 - React Query for data fetching
 - Vitest for testing
-- Prisma (migrations) + Kysely (application ORM)
-- PostgreSQL database
+- Storage (choose one):
+  - Prisma (migrations) + Kysely (application ORM) + PostgreSQL
+  - Filesystem only (local-first apps; no database)
 - oRPC or tRPC for API, Zod for validation
-- BetterAuth for authentication
+- Authentication (only when using a database): BetterAuth
 - ESLint for linting
 - Prettier for formatting
 
@@ -194,13 +195,24 @@ Before making any changes:
 - 👤 Await promises before returning for complete stack traces
 - 👤 Subscribe to 'error' events on EventEmitters and streams
 
-### 8.2 Database (Prisma/Kysely)
+### 8.2 Storage
+
+Choose ONE backend based on the project's needs. Do not mix.
+
+**Option A — Relational database (Prisma + Kysely + PostgreSQL)**
 
 - 👤 Prisma: migrations and type generation ONLY
 - 👤 Kysely: ALL application queries
 - 👤 Never use Prisma Client in application code
 - 👤 Use explicit junction tables
 - 👤 Use `/// @kyselyType()` in schema.prisma for typed Json fields (never edit kysely.ts directly)
+
+**Option B — Filesystem (local-first, single-user apps; no database)**
+
+- 👤 Persist user-visible state to the filesystem under a per-app directory (e.g. `~/.<app>/`)
+- 👤 Use atomic writes (write-to-tmp + rename) for any user-visible state file
+- 👤 Validate file contents on read with Zod schemas — never trust on-disk shape
+- 👤 Handle ENOENT/EACCES explicitly; never swallow filesystem errors
 
 ### 8.3 File Operations
 
