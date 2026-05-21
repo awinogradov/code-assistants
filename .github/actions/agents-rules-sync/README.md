@@ -85,7 +85,7 @@ See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/a
   branch.
 - Delegates to `files-sync` with a single entry: `repo: <source-repo>`,
   `source: rules/<value>.md`, `dest: CLAUDE.md`.
-- The PR is opened on the fixed branch `chore/sync-agents-rules` with the title
+- The PR is opened on the fixed branch `maintenance-sync-agents-rules` with the title
   `MAINTENANCE: Sync agent rules from upstream` and the commit message
   `chore: sync agent rules from upstream`. These values are not configurable so the action
   cannot collide with `files-sync`'s default branch and so every consumer gets the same

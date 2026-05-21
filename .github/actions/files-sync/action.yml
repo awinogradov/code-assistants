@@ -16,7 +16,7 @@ inputs:
   branch:
     description: Head branch the PR uses. Force-updated on subsequent runs.
     required: false
-    default: chore/sync-files
+    default: maintenance-sync-files
   title:
     description: PR title. Defaults to the MAINTENANCE prefix per CONTRIBUTING.md.
     required: false

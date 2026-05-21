@@ -38,7 +38,7 @@ function makeOctokit(overrides: MockOverrides = {}): Octokit {
 const baseArgs = {
   destRepo: { owner: 'owner', name: 'repo' },
   base: 'main',
-  branch: 'chore/sync',
+  branch: 'maintenance-sync',
   title: 'Sync',
   body: 'body',
   commitMessage: 'chore: sync',

@@ -10,7 +10,7 @@
  *     source: README.md
  *     dest: README.md' \
  *   GITHUB_TOKEN=... GITHUB_REPOSITORY=me/dest \
- *   INPUT_BASE=main INPUT_BRANCH=chore/sync-files \
+ *   INPUT_BASE=main INPUT_BRANCH=maintenance-sync-files \
  *   INPUT_TITLE="MAINTENANCE: Sync" INPUT_BODY="Automated sync." \
  *   INPUT_COMMIT_MESSAGE="chore: sync files from upstream" \
  *   bun files-sync.ts
@@ -21,7 +21,7 @@ import { Octokit } from '@octokit/rest';
 
 import { computeChanges } from './src/changeDetector.ts';
 import { createSyncPullRequest } from './src/createSyncPullRequest.ts';
-import { parseFilesInput, parseRepoSlug } from './src/parseInputs.ts';
+import { parseFilesInput, parseRepoSlug, type SyncEntry } from './src/parseInputs.ts';
 
 interface Env {
   filesInput: string;
@@ -83,9 +83,35 @@ function requiredToken(): string {
   return value;
 }
 
+function formatFileList(paths: string[]): string {
+  return paths.map((path) => `- \`${path}\``).join('\n');
+}
+
 function composeBody(intro: string, paths: string[]): string {
-  const lines = paths.map((path) => `- \`${path}\``).join('\n');
-  return `${intro}\n\n**Updated files:**\n\n${lines}\n`;
+  return `${intro}\n\n**Updated files:**\n\n${formatFileList(paths)}\n`;
+}
+
+async function writeNoChangesSummary(entries: SyncEntry[]): Promise<void> {
+  const sources = entries.map((entry) => `${entry.repo}:${entry.source} → ${entry.dest}`);
+  await core.summary
+    .addHeading('Files sync', 3)
+    .addRaw('No file differences detected. No PR created.', true)
+    .addRaw('**Checked entries:**', true)
+    .addRaw(formatFileList(sources), true)
+    .write();
+}
+
+async function writePrReadySummary(
+  pr: { number: number; htmlUrl: string },
+  title: string,
+  paths: string[],
+): Promise<void> {
+  await core.summary
+    .addHeading('Files sync', 3)
+    .addRaw(`PR ready: [#${pr.number}](${pr.htmlUrl}) — ${title}`, true)
+    .addRaw('**Updated files:**', true)
+    .addRaw(formatFileList(paths), true)
+    .write();
 }
 
 async function main(): Promise<void> {
@@ -108,13 +134,15 @@ async function main(): Promise<void> {
     core.setOutput('changed-files', '');
     core.setOutput('pr-number', '');
     core.setOutput('pr-url', '');
+    await writeNoChangesSummary(entries);
     return;
   }
 
   core.info(`Detected ${changes.length} changed file(s):`);
   changes.forEach((change) => core.info(`  - ${change.path}`));
 
-  const body = composeBody(env.body, changes.map((change) => change.path));
+  const paths = changes.map((change) => change.path);
+  const body = composeBody(env.body, paths);
 
   const pr = await createSyncPullRequest({
     octokit,
@@ -127,11 +155,12 @@ async function main(): Promise<void> {
     changes,
   });
 
-  core.setOutput('changed-files', changes.map((change) => change.path).join('\n'));
+  core.setOutput('changed-files', paths.join('\n'));
   core.setOutput('pr-number', String(pr.number));
   core.setOutput('pr-url', pr.htmlUrl);
 
   core.info(`Pull request ready: ${pr.htmlUrl}`);
+  await writePrReadySummary(pr, env.title, paths);
 }
 
 await main().catch((error: unknown) => {
