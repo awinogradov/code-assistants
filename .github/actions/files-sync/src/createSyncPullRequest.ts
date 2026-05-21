@@ -171,14 +171,31 @@ async function upsertPullRequest({
     return { number: open.number, htmlUrl: open.html_url };
   }
 
-  const created = await octokit.rest.pulls.create({
-    owner,
-    repo,
-    base,
-    head: branch,
-    title,
-    body,
-  });
+  try {
+    const created = await octokit.rest.pulls.create({
+      owner,
+      repo,
+      base,
+      head: branch,
+      title,
+      body,
+    });
 
-  return { number: created.data.number, htmlUrl: created.data.html_url };
+    return { number: created.data.number, htmlUrl: created.data.html_url };
+  } catch (error) {
+    const requestError = error as RequestError;
+
+    if (requestError.status === 403) {
+      throw new Error(
+        `Refused to create pull request in ${owner}/${repo}: ${requestError.message}. ` +
+          'Confirm the `token` input is a PAT or GitHub App installation token with `contents: write` + `pull-requests: write` ' +
+          `on ${owner}/${repo} (not the workflow's default \`GITHUB_TOKEN\`), and that the repo/org has ` +
+          '"Allow GitHub Actions to create and approve pull requests" enabled when using a GitHub App token. ' +
+          'See https://github.com/awinogradov/code-assistants/blob/main/.github/actions/files-sync/README.md#permissions',
+        { cause: error },
+      );
+    }
+
+    throw error;
+  }
 }

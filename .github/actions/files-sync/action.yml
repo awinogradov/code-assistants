@@ -6,9 +6,9 @@ inputs:
     description: YAML list of sync entries. Each item must define `repo` (owner/name), `source`, `dest`, and optionally `ref`.
     required: true
   token:
-    description: GitHub token used to read source files and create the PR in the current repository. Defaults to the workflow token.
-    required: false
-    default: ${{ github.token }}
+    description: |
+      PAT (classic with `repo`, or fine-grained with `contents: write` + `pull-requests: write` on the destination repo) or GitHub App installation token. The workflow's default `GITHUB_TOKEN` is not supported — it cannot create pull requests when the destination repo/org has "Allow GitHub Actions to create and approve pull requests" disabled, and the resulting 403 is opaque. See README for setup.
+    required: true
   base:
     description: Base branch the PR targets.
     required: false

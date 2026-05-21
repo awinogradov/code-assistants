@@ -29,6 +29,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: awinogradov/code-assistants/.github/actions/agents-rules-sync@v1
+        with:
+          token: ${{ secrets.SYNC_PAT }}
 ```
 
 The consumer repository must declare an `agents.rules` field in its root `package.json`:
@@ -46,11 +48,11 @@ Accepted values: `Bun`, `Bun+React+Tailwind`, `NodeJS+React`, `NodeJS+React+Tail
 
 ## Inputs
 
-| Input         | Required | Default                       | Description                                                                                       |
-| ------------- | -------- | ----------------------------- | ------------------------------------------------------------------------------------------------- |
-| `token`       | no       | `${{ github.token }}`         | Token used to read `package.json`, fetch the source rules file, and create the PR.                |
-| `source-repo` | no       | `awinogradov/code-assistants` | Source repository in `owner/name` form that hosts the `rules/<stack>.md` files.                   |
-| `source-ref`  | no       | _(empty)_                     | Branch, tag, or SHA to read the source rules file from. Empty → source repository default branch. |
+| Input         | Required | Default                       | Description                                                                                                                                                                                      |
+| ------------- | -------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `token`       | yes      | —                             | PAT or GitHub App installation token with `contents: write` + `pull-requests: write` on this repo. The workflow's default `GITHUB_TOKEN` is **not** supported — see [Permissions](#permissions). |
+| `source-repo` | no       | `awinogradov/code-assistants` | Source repository in `owner/name` form that hosts the `rules/<stack>.md` files.                                                                                                                  |
+| `source-ref`  | no       | _(empty)_                     | Branch, tag, or SHA to read the source rules file from. Empty → source repository default branch.                                                                                                |
 
 PR-shaping inputs (branch, title, body, commit message) are fixed by design — see
 [Behavior](#behavior).
@@ -65,13 +67,17 @@ PR-shaping inputs (branch, title, body, commit message) are fixed by design — 
 
 ## Permissions
 
-The token (default `${{ github.token }}`) needs:
+The `token` input is **required**. The workflow's default `GITHUB_TOKEN` is not supported, because creating pull requests with it can fail with an opaque 403 (`GitHub Actions is not permitted to create or approve pull requests`) whenever this repo or its org disables the **Settings → Actions → General → Workflow permissions → "Allow GitHub Actions to create and approve pull requests"** toggle.
 
-- `contents: write` — to create the branch, blobs, tree, and commit on the consumer repo.
-- `pull-requests: write` — to open or reuse the PR.
+Pass one of the following:
 
-For private source repositories or cross-org reads, provide a token with `contents: read`
-scope on the source repository.
+- A **classic Personal Access Token** with the `repo` scope.
+- A **fine-grained Personal Access Token** scoped to this repository with `Contents: Read and write` and `Pull requests: Read and write`. For private source repositories, the same token also needs `Contents: Read` on the source repo.
+- A **GitHub App installation token** with the same `contents: write` + `pull-requests: write` permissions. If the org enforces the policy above, App tokens also require it to be enabled.
+
+Store the token in a secret (e.g., `SYNC_PAT`) and pass it via `token: ${{ secrets.SYNC_PAT }}`.
+
+See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) and [GitHub App installation tokens](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-an-installation-access-token-for-a-github-app).
 
 ## Behavior
 

@@ -26,6 +26,7 @@ jobs:
     steps:
       - uses: awinogradov/code-assistants/.github/actions/files-sync@v1
         with:
+          token: ${{ secrets.SYNC_PAT }}
           files: |
             - repo: awinogradov/code-assistants
               source: CONTRIBUTING.md
@@ -37,15 +38,15 @@ jobs:
 
 ## Inputs
 
-| Input            | Required | Default                                           | Description                                                                               |
-| ---------------- | -------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `files`          | yes      | —                                                 | YAML list of entries. Each item: `repo` (`owner/name`), `source`, `dest`, optional `ref`. |
-| `token`          | no       | `${{ github.token }}`                             | Token used for source reads and PR creation. Override for private cross-repo sources.     |
-| `base`           | no       | `${{ github.event.repository.default_branch }}`   | Base branch the PR targets.                                                               |
-| `branch`         | no       | `chore/sync-files`                                | Head branch the PR uses. Force-updated on subsequent runs.                                |
-| `title`          | no       | `MAINTENANCE: Sync files from upstream`           | PR title. Uses the `MAINTENANCE:` prefix per CONTRIBUTING.md.                             |
-| `body`           | no       | `Automated file sync from upstream repositories.` | PR body intro. The action auto-appends a `**Updated files:**` bullet list.                |
-| `commit-message` | no       | `chore: sync files from upstream`                 | Conventional commit message for the sync commit.                                          |
+| Input            | Required | Default                                           | Description                                                                                                                                                                                                 |
+| ---------------- | -------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `files`          | yes      | —                                                 | YAML list of entries. Each item: `repo` (`owner/name`), `source`, `dest`, optional `ref`.                                                                                                                   |
+| `token`          | yes      | —                                                 | PAT or GitHub App installation token with `contents: write` + `pull-requests: write` on the destination repo. The workflow's default `GITHUB_TOKEN` is **not** supported — see [Permissions](#permissions). |
+| `base`           | no       | `${{ github.event.repository.default_branch }}`   | Base branch the PR targets.                                                                                                                                                                                 |
+| `branch`         | no       | `chore/sync-files`                                | Head branch the PR uses. Force-updated on subsequent runs.                                                                                                                                                  |
+| `title`          | no       | `MAINTENANCE: Sync files from upstream`           | PR title. Uses the `MAINTENANCE:` prefix per CONTRIBUTING.md.                                                                                                                                               |
+| `body`           | no       | `Automated file sync from upstream repositories.` | PR body intro. The action auto-appends a `**Updated files:**` bullet list.                                                                                                                                  |
+| `commit-message` | no       | `chore: sync files from upstream`                 | Conventional commit message for the sync commit.                                                                                                                                                            |
 
 ### Entry fields
 
@@ -64,12 +65,17 @@ jobs:
 
 ## Permissions
 
-The token (default `${{ github.token }}`) needs:
+The `token` input is **required**. The workflow's default `GITHUB_TOKEN` is not supported, because creating pull requests with it can fail with an opaque 403 (`GitHub Actions is not permitted to create or approve pull requests`) whenever the destination repo or its org disables the **Settings → Actions → General → Workflow permissions → "Allow GitHub Actions to create and approve pull requests"** toggle.
 
-- `contents: write` — to create the branch, blobs, tree, and commit on the destination repo.
-- `pull-requests: write` — to open or reuse the PR.
+Pass one of the following:
 
-For private source repositories or cross-org reads, provide a token with `contents: read` scope on the source repos.
+- A **classic Personal Access Token** with the `repo` scope.
+- A **fine-grained Personal Access Token** scoped to the destination repository with `Contents: Read and write` and `Pull requests: Read and write`. For private source repositories, the same token also needs `Contents: Read` on each source repo.
+- A **GitHub App installation token** with the same `contents: write` + `pull-requests: write` permissions. If the destination org enforces the policy above, App tokens also require it to be enabled.
+
+Store the token in a secret (e.g., `SYNC_PAT`) and pass it via `token: ${{ secrets.SYNC_PAT }}`.
+
+See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) and [GitHub App installation tokens](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-an-installation-access-token-for-a-github-app).
 
 ## Behavior
 

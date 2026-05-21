@@ -3,9 +3,9 @@ description: Sync the stack-appropriate agent rules file from an upstream reposi
 
 inputs:
   token:
-    description: GitHub token used to read the source rules file and create the PR in the current repository. Defaults to the workflow token.
-    required: false
-    default: ${{ github.token }}
+    description: |
+      PAT (classic with `repo`, or fine-grained with `contents: write` + `pull-requests: write` on this repo) or GitHub App installation token. The workflow's default `GITHUB_TOKEN` is not supported — it cannot create pull requests when the repo/org has "Allow GitHub Actions to create and approve pull requests" disabled, and the resulting 403 is opaque. See README for setup.
+    required: true
   source-repo:
     description: Source repository in `owner/name` form that hosts the `rules/<stack>.md` files.
     required: false
