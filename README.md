@@ -21,6 +21,10 @@ See the [plugin README](./claude-plugins/autopilot/README.md#installation) for s
 - [`agents` field spec](./docs/agents-field.md) — how skills detect a repository's tech stack from `package.json`
 - [Stack rule sets](./rules/) — `Bun`, `Bun+React+Tailwind`, `NodeJS+React`, `NodeJS+React+Tailwind`
 
+## GitHub Actions
+
+- [`files-sync`](./.github/actions/files-sync/README.md) — sync declared files from upstream repos and open one PR with the differences
+
 ## Contributing
 
 - [Contributing guide](./CONTRIBUTING.md)
