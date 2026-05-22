@@ -75,6 +75,31 @@ describe("updateVersionFiles", () => {
       expect(content).toContain('version = "2.0.0"');
     }));
 
+  test("only updates the [project] version, not other sections with a version key", () =>
+    withTempDir(async (dir) => {
+      const original = [
+        '[project]',
+        'name = "test"',
+        'version = "1.0.0"',
+        '',
+        '[tool.uv.workspace]',
+        'version = "9.9.9"',
+        '',
+        '[[tool.poetry.source]]',
+        'name = "internal"',
+        'version = "0.1.0"',
+        '',
+      ].join("\n");
+      await Bun.write(join(dir, "pyproject.toml"), original);
+
+      await updateVersionFiles("2.0.0", dir);
+
+      const content = await Bun.file(join(dir, "pyproject.toml")).text();
+      expect(content).toContain('[project]\nname = "test"\nversion = "2.0.0"');
+      expect(content).toContain('[tool.uv.workspace]\nversion = "9.9.9"');
+      expect(content).toContain('version = "0.1.0"');
+    }));
+
   test("updates plugin.json version", () =>
     withTempDir(async (dir) => {
       const pluginDir = join(dir, "my-plugin", ".claude-plugin");
@@ -212,5 +237,33 @@ describe("updateUvLockVersion", () => {
     const result = updateUvLockVersion(baseLock, "1.0.0");
 
     expect(result).toBe(baseLock);
+  });
+
+  test("ignores workspace members whose source is not the project root", () => {
+    const lock = [
+      "version = 1",
+      "",
+      "[[package]]",
+      'name = "my-service"',
+      'version = "1.0.0"',
+      'source = { virtual = "." }',
+      "",
+      "[[package]]",
+      'name = "shared-utils"',
+      'version = "0.5.0"',
+      'source = { virtual = "packages/utils" }',
+      "",
+      "[[package]]",
+      'name = "shared-types"',
+      'version = "0.5.0"',
+      'source = { editable = "packages/types" }',
+      "",
+    ].join("\n");
+
+    const result = updateUvLockVersion(lock, "2.0.0");
+
+    expect(result).toContain('name = "my-service"\nversion = "2.0.0"');
+    expect(result).toContain('name = "shared-utils"\nversion = "0.5.0"');
+    expect(result).toContain('name = "shared-types"\nversion = "0.5.0"');
   });
 });

@@ -25,7 +25,13 @@
 export function parseReleaseType(content: string): string | null {
   for (const line of content.split("\n")) {
     if (line.startsWith("release:")) {
-      const value = line.slice("release:".length).trim();
+      // Strip surrounding double or single quotes so quoted YAML scalars
+      // (`release: "github-action"`) match the same values as bare ones.
+      const value = line
+        .slice("release:".length)
+        .trim()
+        .replace(/^"([^"]*)"$/, "$1")
+        .replace(/^'([^']*)'$/, "$1");
       return value || null;
     }
   }

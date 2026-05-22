@@ -131,9 +131,11 @@ export async function getCurrentVersion(cwd: string): Promise<VersionResult> {
     }
   }
 
-  // 3. First plugin.json found via glob
+  // 3. First plugin.json found via glob (skip node_modules to avoid picking
+  // a dependency's plugin.json instead of one belonging to this repo)
   const glob = new Glob("**/.claude-plugin/plugin.json");
   for await (const match of glob.scan({ cwd, dot: true, absolute: true })) {
+    if (match.includes("node_modules")) continue;
     const plugin = (await Bun.file(match).json()) as { version?: string };
     if (plugin.version) {
       return { version: plugin.version, source: "plugin-json" };

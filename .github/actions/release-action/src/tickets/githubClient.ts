@@ -192,7 +192,13 @@ export async function fetchPullRequestForCommit(
   });
 
   if (!response.ok) {
-    return null;
+    // 404 → commit has no associated PR (legitimate "no data"). Anything else
+    // (401, 403, 429, 5xx) is an operational failure that must surface so the
+    // release doesn't silently lose ticket data.
+    if (response.status === 404) return null;
+    throw new Error(
+      `GitHub API error fetching PR for commit ${commitSha}: ${response.status} ${response.statusText}`
+    );
   }
 
   const data = (await response.json()) as Array<{

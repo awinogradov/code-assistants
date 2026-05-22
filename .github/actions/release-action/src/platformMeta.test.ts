@@ -43,6 +43,14 @@ rules: Bun
 `;
     expect(parseReleaseType(content)).toBeNull();
   });
+
+  test("strips double quotes from quoted scalar", () => {
+    expect(parseReleaseType('release: "github-action"\n')).toBe("github-action");
+  });
+
+  test("strips single quotes from quoted scalar", () => {
+    expect(parseReleaseType("release: 'lib-nodejs'\n")).toBe("lib-nodejs");
+  });
 });
 
 describe("parseSlackRelease", () => {

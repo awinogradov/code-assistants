@@ -110,7 +110,7 @@ runs:
           echo "::error::platform.meta.yml not found."
           exit 1
         fi
-        RELEASE_TYPE=$(grep '^release:' platform.meta.yml | awk '{print $2}' || true)
+        RELEASE_TYPE=$(grep '^release:' platform.meta.yml | head -1 | sed -E 's/^release:[[:space:]]*//; s/^"(.*)"$/\1/; s/^'\''(.*)'\''$/\1/' | tr -d '[:space:]' || true)
         if [ -z "$RELEASE_TYPE" ]; then
           echo "::error::Missing 'release' field in platform.meta.yml."
           exit 1

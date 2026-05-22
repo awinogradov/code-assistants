@@ -436,6 +436,20 @@ export async function generateTicketsSection(
   const warnings: string[] = [];
   const ticketsBySystem = new Map<TicketSystemType, TicketInfo[]>();
 
+  // When multiple key-pattern systems (Linear, Jira) are configured, keys are
+  // required to route each ticket to the right system — without them, a `TEAM-123`
+  // could go to either. GitHub Issues uses `#N` so it never collides.
+  const keyPatternSystems = config.systems.filter((s) => s.type !== "github");
+  if (keyPatternSystems.length > 1) {
+    const missingKeys = keyPatternSystems.filter((s) => !s.keys || s.keys.length === 0);
+    if (missingKeys.length > 0) {
+      const types = missingKeys.map((s) => s.type).join(", ");
+      warnings.push(
+        `Multiple ticket systems configured but ${types} has no keys set. Tickets may be routed to the wrong system. Set ${missingKeys.map((s) => `${s.type.toUpperCase()}_KEYS`).join(" / ")} to disambiguate.`
+      );
+    }
+  }
+
   const clients = initializeClients(config, env, warnings);
   if (clients.size === 0) {
     return { markdown: "", tickets: [], prDescriptions: [], warnings };
@@ -473,8 +487,12 @@ export async function generateTicketsSection(
 
   for (const commit of commits) {
     const pr = prDetailsBySha.get(commit.sha);
-    // Search both PR title and body for ticket references (e.g., "Resolve #34" in body)
-    const textToSearch = pr ? `${pr.title} ${pr.body ?? ""}` : commit.message;
+    // Always include the commit message so ticket IDs that appear only in the
+    // commit text (not the PR title/body) still get picked up. Concatenating
+    // is safe — extractTicketIds dedupes by id+system.
+    const textToSearch = pr
+      ? `${pr.title} ${pr.body ?? ""} ${commit.message}`
+      : commit.message;
     const prInfo = { prNumber: pr?.number, prAuthor: pr?.author, prUrl: pr?.url };
 
     const tickets = extractTicketsFromCommit(
