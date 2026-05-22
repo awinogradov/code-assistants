@@ -62,9 +62,11 @@ export function updateUvLockVersion(lockContent: string, version: string): strin
   const packages = parsed.package as Array<Record<string, unknown>> | undefined;
   if (!packages) return lockContent;
 
+  // Match the project's own package — its source points at the repo root (".").
+  // Other workspace members may also use `virtual`/`editable` with different paths.
   const projectPkg = packages.find((pkg) => {
     const source = pkg.source as Record<string, unknown> | undefined;
-    return source && ("virtual" in source || "editable" in source);
+    return source && (source.virtual === "." || source.editable === ".");
   });
   if (!projectPkg || projectPkg.version === version) return lockContent;
 
@@ -103,14 +105,20 @@ export async function updateVersionFiles(version: string, cwd = process.cwd()): 
     updated.push("package.json");
   }
 
-  // pyproject.toml
+  // pyproject.toml — scoped to [project] section so unrelated `version` keys
+  // in other tables (e.g., [tool.uv.workspace], dependency declarations) are untouched
   const pyPath = `${cwd}/pyproject.toml`;
   const pyFile = Bun.file(pyPath);
   if (await pyFile.exists()) {
     const content = await pyFile.text();
-    const newContent = content.replace(/^version\s*=\s*"[^"]*"/m, `version = "${version}"`);
-    await Bun.write(pyPath, newContent);
-    updated.push("pyproject.toml");
+    const newContent = content.replace(
+      /(^\[project\][\s\S]*?^)version\s*=\s*"[^"]*"/m,
+      `$1version = "${version}"`
+    );
+    if (newContent !== content) {
+      await Bun.write(pyPath, newContent);
+      updated.push("pyproject.toml");
+    }
   }
 
   // uv.lock — update project version without resolving dependencies
