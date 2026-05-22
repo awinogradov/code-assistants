@@ -18,7 +18,8 @@
   "workspaces": [
     ".github/actions/lib",
     ".github/actions/files-sync",
-    ".github/actions/agents-rules-sync"
+    ".github/actions/agents-rules-sync",
+    ".github/actions/release-action"
   ],
   "scripts": {
     "prepare": "husky",
