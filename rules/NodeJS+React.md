@@ -2,6 +2,13 @@
 alwaysApply: true
 ---
 
+<!--
+Source: https://github.com/awinogradov/code-assistants/blob/main/rules/NodeJS+React.md
+This file is distributed to downstream repositories by an automated sync.
+Edits made downstream are overwritten on the next run.
+To change it, open a pull request against the source file above.
+-->
+
 # NodeJS + React Project Rules
 
 ## Mandatory Context
