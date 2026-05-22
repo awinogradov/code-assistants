@@ -1,0 +1,304 @@
+name: "Release"
+description: "Automated release and publish for npm packages, GitHub Actions, and Claude Plugins"
+
+inputs:
+  mode:
+    description: |
+      Workflow mode:
+      - create — generate changelog and open a release PR
+      - publish — tag and publish the release
+    required: true
+  github_token:
+    description: |
+      GitHub token with contents:write and pull-requests:write permissions.
+      Required for all modes.
+    required: true
+  npm_token:
+    description: |
+      NPM token for publishing packages.
+      Required for publish mode with lib-nodejs or lib-bun release types.
+    required: false
+  anthropic_api_key:
+    description: |
+      Anthropic API key for AI-generated release notes.
+      When provided, generates human-readable summaries from the changelog.
+    required: false
+  name:
+    description: |
+      Service or library name for PR titles.
+      Used in monorepo setups (e.g. "Dialog Manager" → "Release Dialog Manager 1.2.0").
+    required: false
+  branch:
+    description: |
+      Release branch name template. Use {version} as placeholder.
+      Only used in create mode.
+    required: false
+    default: "release-{version}"
+  linear_api_key:
+    description: |
+      Linear API key for ticket integration.
+      Enables automatic ticket reference extraction from commits and PRs.
+    required: false
+  linear_keys:
+    description: |
+      Linear ticket key prefixes (comma-separated).
+      Filters which ticket IDs to extract (e.g. "TEAM,PROJ").
+    required: false
+  jira_base_url:
+    description: |
+      Jira instance base URL.
+      Required together with jira_email and jira_api_token for Jira integration.
+    required: false
+  jira_email:
+    description: |
+      Jira authentication email.
+      Used with jira_base_url and jira_api_token.
+    required: false
+  jira_api_token:
+    description: |
+      Jira API token.
+      Used with jira_base_url and jira_email.
+    required: false
+  jira_keys:
+    description: |
+      Jira ticket key prefixes (comma-separated).
+      Filters which Jira ticket IDs to extract.
+    required: false
+  slack_token:
+    description: |
+      Slack bot token for release notifications.
+      Posts release notes to the channel configured in platform.meta.yml.
+    required: false
+
+outputs:
+  version:
+    description: "Released version number"
+    value: ${{ steps.version.outputs.version }}
+  release-type:
+    description: "Detected release type from platform.meta.yml"
+    value: ${{ steps.detect-type.outputs.type }}
+  pr-url:
+    description: "URL of the created or updated release PR"
+    value: ${{ steps.release-pr.outputs.pr-url }}
+
+runs:
+  using: composite
+  steps:
+    # ── Shared Setup ──
+
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      with:
+        bun-version: 1.x
+
+    - name: Install workspace dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: bun install --frozen-lockfile --filter @code-assistants/release-action
+
+    - name: Configure Git
+      shell: bash
+      run: |
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git config --global user.name "github-actions[bot]"
+
+    - name: Detect release type
+      id: detect-type
+      shell: bash
+      run: |
+        if [ ! -f "platform.meta.yml" ]; then
+          echo "::error::platform.meta.yml not found."
+          exit 1
+        fi
+        RELEASE_TYPE=$(grep '^release:' platform.meta.yml | awk '{print $2}' || true)
+        if [ -z "$RELEASE_TYPE" ]; then
+          echo "::error::Missing 'release' field in platform.meta.yml."
+          exit 1
+        fi
+        echo "type=${RELEASE_TYPE}" >> "$GITHUB_OUTPUT"
+        echo "Detected release type: ${RELEASE_TYPE}"
+
+    # ── Mode: create ──
+
+    - name: Ensure .gitignore excludes .release_bot
+      if: inputs.mode == 'create'
+      shell: bash
+      run: bun "${{ github.action_path }}/src/prepareRelease.ts" --ensure-gitignore
+
+    - name: Generate Changelog
+      if: inputs.mode == 'create'
+      shell: bash
+      env:
+        LINEAR_API_KEY: ${{ inputs.linear_api_key }}
+        LINEAR_KEYS: ${{ inputs.linear_keys }}
+        JIRA_BASE_URL: ${{ inputs.jira_base_url }}
+        JIRA_EMAIL: ${{ inputs.jira_email }}
+        JIRA_API_TOKEN: ${{ inputs.jira_api_token }}
+        JIRA_KEYS: ${{ inputs.jira_keys }}
+        GH_TOKEN: ${{ inputs.github_token }}
+      run: bun "${{ github.action_path }}/src/release.ts"
+
+    - name: Update Version Files
+      if: inputs.mode == 'create'
+      shell: bash
+      run: bun "${{ github.action_path }}/src/prepareRelease.ts" --update-version "$(cat version)"
+
+    - name: Update Release Badge
+      if: inputs.mode == 'create'
+      shell: bash
+      run: bun "${{ github.action_path }}/src/updateReleaseBadge.ts"
+
+    - name: Generate Release Notes
+      if: inputs.mode == 'create'
+      continue-on-error: true
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+      run: bun "${{ github.action_path }}/src/generateReleaseNotes.ts"
+
+    - name: Update Release Notes File
+      if: inputs.mode == 'create'
+      shell: bash
+      run: |
+        VERSION=$(cat version)
+        bun "${{ github.action_path }}/src/insert-release-notes.ts" "$VERSION"
+
+    - name: Assemble PR Body
+      if: inputs.mode == 'create'
+      shell: bash
+      env:
+        INPUT_BRANCH: ${{ inputs.branch }}
+      run: bun "${{ github.action_path }}/src/assemble-pr-body.ts"
+
+    - name: Commit and Push Release
+      if: inputs.mode == 'create'
+      shell: bash
+      env:
+        INPUT_BRANCH: ${{ inputs.branch }}
+      run: |
+        VERSION=$(cat version)
+        BRANCH="${INPUT_BRANCH//\{version\}/$VERSION}"
+        git checkout -B "$BRANCH"
+        git add .
+        git commit -n -m "chore: release ${VERSION}"
+        git push --no-verify --force origin "$BRANCH"
+        echo "Committed and pushed to $BRANCH"
+
+    - name: Create Pull Request
+      id: release-pr
+      if: inputs.mode == 'create'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+        INPUT_NAME: ${{ inputs.name }}
+      run: |
+        VERSION=$(cat version)
+
+        if [ -n "$INPUT_NAME" ]; then
+          TITLE="Release ${INPUT_NAME} ${VERSION}"
+        else
+          TITLE="Release ${VERSION}"
+        fi
+
+        BRANCH=$(git branch --show-current)
+
+        # Ensure label exists
+        gh label create release-action --color 85e131 --description "Release PR" 2>/dev/null || true
+
+        # Check for existing PR
+        PR_URL=$(gh pr view --head "$BRANCH" --json url -q .url 2>/dev/null || true)
+
+        if [ -n "$PR_URL" ]; then
+          echo "PR already exists, updating..."
+          gh pr edit --title "$TITLE" --body-file .release_bot/body_enhanced
+        else
+          PR_URL=$(gh pr create --head "$BRANCH" --title "$TITLE" --label release-action -F .release_bot/body_enhanced)
+        fi
+
+        echo "::notice title=${TITLE}::${PR_URL}"
+        echo "pr-url=${PR_URL}" >> "$GITHUB_OUTPUT"
+        echo "### [${TITLE}](${PR_URL})" >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Output version
+      id: version
+      shell: bash
+      env:
+        MODE: ${{ inputs.mode }}
+        PUBLISH_VERSION: ${{ steps.determine-version.outputs.version }}
+      run: |
+        VERSION=""
+        if [ "$MODE" = "publish" ] && [ -n "$PUBLISH_VERSION" ]; then
+          VERSION="$PUBLISH_VERSION"
+        else
+          [ -f version ] && VERSION=$(cat version | tr -d '[:space:]')
+        fi
+        if [ -n "$VERSION" ]; then
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Output version: ${VERSION}"
+        fi
+
+    # ── Mode: publish ──
+
+    - name: Determine Version
+      id: determine-version
+      if: inputs.mode == 'publish'
+      shell: bash
+      run: |
+        VERSION=$(cat version | tr -d '[:space:]')
+        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+        echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+        echo "Determined version: ${VERSION} (tag: v${VERSION})"
+
+    - name: Setup packages
+      if: inputs.mode == 'publish' && (steps.detect-type.outputs.type == 'lib-nodejs' || steps.detect-type.outputs.type == 'lib-bun')
+      shell: bash
+      run: bun install
+
+    - name: Publish to NPM
+      if: inputs.mode == 'publish' && (steps.detect-type.outputs.type == 'lib-nodejs' || steps.detect-type.outputs.type == 'lib-bun')
+      shell: bash
+      env:
+        NPM_TOKEN: ${{ inputs.npm_token }}
+      run: |
+        npm config set //registry.npmjs.org/:_authToken $NPM_TOKEN
+        npm publish
+
+    - name: Release Tag
+      if: inputs.mode == 'publish'
+      shell: bash
+      run: |
+        TAG="${{ steps.determine-version.outputs.tag }}"
+        git tag "$TAG"
+        git push --no-verify origin "$TAG"
+        echo "Created and pushed tag $TAG"
+
+    - name: Major Version Tag
+      if: inputs.mode == 'publish' && steps.detect-type.outputs.type == 'github-action'
+      shell: bash
+      run: |
+        VERSION="$(cat version)"
+        MAJOR="v${VERSION%%.*}"
+        git tag -fa "$MAJOR" -m "Update $MAJOR tag"
+        git push origin "$MAJOR" --force
+        echo "Updated major version tag $MAJOR"
+
+    - name: GitHub Release
+      if: inputs.mode == 'publish'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+        TAG: ${{ steps.determine-version.outputs.tag }}
+        VERSION: ${{ steps.determine-version.outputs.version }}
+      run: |
+        gh release create "$TAG" \
+          --title "Release $VERSION" \
+          -F ".release_notes/${VERSION}.md"
+        echo "Created GitHub release Release ${VERSION} (${TAG})"
+
+    - name: Slack Release Notification
+      if: inputs.mode == 'publish' && inputs.slack_token != ''
+      continue-on-error: true
+      shell: bash
+      env:
+        SLACK_TOKEN: ${{ inputs.slack_token }}
+      run: bun "${{ github.action_path }}/src/slackNotify.ts"
