@@ -1,3 +1,10 @@
+<!--
+Source: https://github.com/awinogradov/code-assistants/blob/main/CONTRIBUTING.md
+This file is distributed to downstream repositories by an automated sync.
+Edits made downstream are overwritten on the next run.
+To change it, open a pull request against the source file above.
+-->
+
 # Contributing
 
 Thank you for your interest in contributing! This guide will help you get started.
