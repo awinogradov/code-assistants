@@ -1,0 +1,32 @@
+# Requires repo secret `GH_TOKEN`: a PAT (classic with `repo`, or fine-grained
+# with `contents: write` + `pull-requests: write`) or a GitHub App installation
+# token. The default `GITHUB_TOKEN` is not supported — see the action README
+# in `.github/actions/agents-rules-sync` for the rationale.
+
+name: Upstream
+
+on:
+  schedule:
+    # Every hour at minute 0 (UTC). Picks up upstream agent rules changes
+    # within ~1h and opens (or updates) a maintenance PR on
+    # `maintenance-sync-agents-rules`.
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: upstream-${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    name: Sync agent rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: awinogradov/code-assistants/.github/actions/agents-rules-sync@main
+        with:
+          token: ${{ secrets.GH_TOKEN }}
