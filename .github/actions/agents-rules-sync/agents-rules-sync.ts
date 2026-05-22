@@ -10,7 +10,7 @@ import * as core from '@actions/core';
 import { Octokit } from '@octokit/rest';
 import { stringify as stringifyYaml } from 'yaml';
 
-import { fetchRawContent } from '@code-assistants/actions-lib/fetchRawContent';
+import { fetchRawContent } from '@code-assistants/actions-core/fetchRawContent';
 
 import { resolvePackageAgentsRules } from './src/resolvePackageAgentsRules.ts';
 

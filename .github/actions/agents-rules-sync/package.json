@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@actions/core": "3.0.1",
-    "@code-assistants/actions-lib": "workspace:*",
+    "@code-assistants/actions-core": "workspace:*",
     "@octokit/request-error": "7.1.0",
     "@octokit/rest": "22.0.1",
     "yaml": "2.9.0",

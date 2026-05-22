@@ -12,7 +12,7 @@
 
 import type { Octokit } from '@octokit/rest';
 
-import { fetchRawContent } from '@code-assistants/actions-lib/fetchRawContent';
+import { fetchRawContent } from '@code-assistants/actions-core/fetchRawContent';
 
 import { parseRepoSlug, type SyncEntry } from './parseInputs.ts';
 
