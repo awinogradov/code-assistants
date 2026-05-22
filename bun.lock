@@ -23,7 +23,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@actions/core": "3.0.1",
-        "@code-assistants/actions-lib": "workspace:*",
+        "@code-assistants/actions-core": "workspace:*",
         "@octokit/request-error": "7.1.0",
         "@octokit/rest": "22.0.1",
         "yaml": "2.9.0",
@@ -39,23 +39,11 @@
       "version": "0.0.0",
       "dependencies": {
         "@actions/core": "3.0.1",
-        "@code-assistants/actions-lib": "workspace:*",
+        "@code-assistants/actions-core": "workspace:*",
         "@octokit/request-error": "7.1.0",
         "@octokit/rest": "22.0.1",
         "yaml": "2.9.0",
         "zod": "4.4.3",
-      },
-      "devDependencies": {
-        "@types/bun": "1.3.14",
-        "typescript": "6.0.3",
-      },
-    },
-    ".github/actions/lib": {
-      "name": "@code-assistants/actions-lib",
-      "version": "0.0.0",
-      "dependencies": {
-        "@octokit/request-error": "7.1.0",
-        "@octokit/rest": "22.0.1",
       },
       "devDependencies": {
         "@types/bun": "1.3.14",
@@ -81,6 +69,18 @@
         "typescript": "6.0.3",
       },
     },
+    "packages/actions-core": {
+      "name": "@code-assistants/actions-core",
+      "version": "0.0.0",
+      "dependencies": {
+        "@octokit/request-error": "7.1.0",
+        "@octokit/rest": "22.0.1",
+      },
+      "devDependencies": {
+        "@types/bun": "1.3.14",
+        "typescript": "6.0.3",
+      },
+    },
   },
   "packages": {
     "@actions/core": ["@actions/core@3.0.1", "", { "dependencies": { "@actions/exec": "^3.0.0", "@actions/http-client": "^4.0.0" } }, "sha512-a6d/Nwahm9fliVGRhdhofo40HjHQasUPusmc7vBfyky+7Z+P2A1J68zyFVaNcEclc/Se+eO595oAr5nwEIoIUA=="],
@@ -99,7 +99,7 @@
 
     "@babel/runtime": ["@babel/runtime@7.29.2", "", {}, "sha512-JiDShH45zKHWyGe4ZNVRrCjBz8Nh9TMmZG1kh4QTK8hCBTWBi8Da+i7s1fJw7/lYpM4ccepSNfqzZ/QvABBi5g=="],
 
-    "@code-assistants/actions-lib": ["@code-assistants/actions-lib@workspace:.github/actions/lib"],
+    "@code-assistants/actions-core": ["@code-assistants/actions-core@workspace:packages/actions-core"],
 
     "@code-assistants/agents-rules-sync-action": ["@code-assistants/agents-rules-sync-action@workspace:.github/actions/agents-rules-sync"],
 

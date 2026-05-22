@@ -1,5 +1,5 @@
 {
-  "name": "@code-assistants/actions-lib",
+  "name": "@code-assistants/actions-core",
   "version": "0.0.0",
   "description": "Shared helpers for GitHub Actions in this repository.",
   "private": true,
