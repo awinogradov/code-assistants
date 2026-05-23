@@ -1,7 +1,7 @@
 ---
 name: pr:create
 description: Create a pull request with validated title and description following repository conventions. Use when creating PRs, or when invoked from other skills.
-argument-hint: "[--draft] [--release-notes] [--closes #N,#M] [--related #X,#Y]"
+argument-hint: "[--draft] [--release-notes] [--closes #N,#M] [--related #X,#Y] [--autopilot]"
 allowed-tools:
   - Bash(git *)
   - Bash(gh *)
@@ -30,6 +30,7 @@ Expected flags (all optional, any order):
 - `--release-notes` — include a release notes section in the body (auto-enabled on breaking changes)
 - `--closes #N,#M` — additional issue numbers to close on merge (comma-separated, GitHub issue numbers)
 - `--related #X,#Y` — related issues to link without closing (comma-separated, GitHub issue numbers)
+- `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips the Phase 5 confirmation prompt and creates the PR directly with the generated title and body. When meaningful changes are detected (Phase 2), release notes are auto-added.
 
 ## Input resolution
 
@@ -39,6 +40,7 @@ Arguments are optional. Resolve each field in this order:
 - **`--release-notes`** — `$ARGUMENTS` → auto-enable when Phase 2 detects breaking changes → default `false`. Do NOT prompt (user gets an "Add release notes" option in Phase 5 preview).
 - **`--closes`** — `$ARGUMENTS` → branch-name-derived issue number is already added automatically in Phase 4. No prompt; treat absence as intentional.
 - **`--related`** — `$ARGUMENTS` → no inference. No prompt; treat absence as intentional.
+- **`--autopilot`** — `$ARGUMENTS` only. Never inferred. Default: `false` (interactive mode).
 - **Branch + base + issue number** — from `git branch --show-current` and the branch-name pattern `^issue-([0-9]+)-`. Special prefix branches (`hotfix-`, `trivial-`, `maintenance-`, `proposal-`) have no issue number. No prompt.
 - **Repository conventions** — read `CONTRIBUTING.md` directly from the repository root.
 
@@ -49,6 +51,8 @@ This workflow is not complete until Phase 6 executes `gh pr create` and outputs 
 Do not call any skill not listed in `allowed-tools` above. The title and description rules in Phases 3-4 are the validation — there is no separate validation step.
 
 ## AskUserQuestion Contract (MANDATORY)
+
+**Autopilot bypass:** When `autopilotMode` is true (from Phase 1), this contract is moot — the Phase 5 confirmation prompt is skipped. Generate the title and body, then proceed directly to Phase 6.
 
 Every AskUserQuestion call that presents content for review (PR previews in Phase 5) MUST follow these exact rules. Simple choice dialogs (Phase 1 uncommitted changes) are exempt from the preview requirement.
 
@@ -109,6 +113,7 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: pr` from this conversation
 
 Uncommitted-change handling is done in Phase 0 by `preflight-check` — do not repeat it here.
 
+0. Parse `$ARGUMENTS`: if it contains `--autopilot`, set `autopilotMode = true` and remove the flag before further parsing. Otherwise `autopilotMode = false`.
 1. Get current branch name with `git branch --show-current`
 2. Validate branch name follows convention:
    - Standard: `issue-<number>-<short-description>` (e.g., `issue-123-add-feature`)
@@ -267,6 +272,11 @@ Closes #<issue-from-branch>
 ```
 
 ## Phase 5: Verify with User
+
+**Autopilot bypass:** If `autopilotMode` is true, skip the AskUserQuestion confirmation below. Before proceeding to Phase 6:
+
+- If meaningful changes are detected (Phase 2 step 7) AND neither `--release-notes` nor breaking changes triggered the release notes section, auto-generate the `**Release notes:**` section using the rules in Phase 4 and insert it between the description and the `**Issues:**` section (with `---` separators).
+- Then proceed directly to Phase 6 with the resulting title and body.
 
 Present PR details using **AskUserQuestion tool** with preview.
 

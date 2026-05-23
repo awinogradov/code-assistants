@@ -260,7 +260,7 @@ Use this body for the `## Pre-Implementation` section:
 ```
 ## Pre-Implementation
 
-Invoke `Skill(autopilot:branch-create)` with the resolved issue number (e.g., `42` for `#42`). The branch-create skill fetches the issue, generates an `issue-<number>-<slug>` branch name, and prompts the user to confirm before creation. Do NOT present a Hotfix/Trivial/Maintenance prefix prompt — issue inputs always use the `issue-<number>-<slug>` convention so the PR can link back via `Closes #<number>`.
+Invoke `Skill(autopilot:branch-create)` with arguments `<issue-number> --autopilot` (e.g., `42 --autopilot` for `#42`). The branch-create skill fetches the issue, generates an `issue-<number>-<slug>` branch name, and creates the branch directly without a confirmation prompt (the `--autopilot` flag suppresses Phase 5). Do NOT present a Hotfix/Trivial/Maintenance prefix prompt — issue inputs always use the `issue-<number>-<slug>` convention so the PR can link back via `Closes #<number>`. Conflict resolution still surfaces if the branch already exists.
 ```
 
 ##### Input type is `plain description`
@@ -270,7 +270,7 @@ Use this body for the `## Pre-Implementation` section:
 ```
 ## Pre-Implementation
 
-Choose a branch type for this change using AskUserQuestion:
+Choose a branch type for this change using AskUserQuestion (this is the one prompt autopilot keeps — picking a special-prefix type cannot be inferred from a free-form description):
 
 Tool parameters:
 - `question`: "Choose a branch type for this change."
@@ -282,7 +282,7 @@ Tool parameters:
   ]
 - `multiSelect`: false
 
-Then invoke `/autopilot:branch-create --<chosen-prefix> "<description>"` using the Skill tool, where `<description>` is a short summary derived from the user description. The branch name MUST be approved by the user via AskUserQuestion before creation — do not skip approval or create the branch directly with git commands.
+Then invoke `Skill(autopilot:branch-create)` with arguments `--<chosen-prefix> "<description>" --autopilot`, where `<description>` is a short summary derived from the user description. The `--autopilot` flag suppresses the Phase 5 confirmation so the branch is created directly with the generated name. Conflict resolution still surfaces if the branch already exists.
 ```
 
 #### Otherwise (not on `main` AND (`isWorktree` is false OR `worktreeNeedsBranch` is false))
@@ -300,12 +300,7 @@ After all implementation steps and verification are complete, execute the follow
 
 ### Step 1: Auto-Commit
 
-Invoke `Skill(autopilot:commits-create)`. Follow the skill's full workflow — do NOT run `git commit` directly.
-
-**Autopilot override:** This is autopilot mode — the user has pre-authorized automatic approval of commit messages. When the commits:create skill presents commit options via AskUserQuestion:
-- For commit strategy: auto-select "Single commit (Recommended)" unless the skill strongly recommends splitting
-- For commit message confirmation: auto-select "Commit" — do NOT select "Edit" or "Cancel"
-- Skip the "Offer PR Update" step (Phase 5 in commits:create) — the PR will be created in Step 2
+Invoke `Skill(autopilot:commits-create)` with arguments `--autopilot`. The `--autopilot` flag suppresses commits:create's commit-strategy prompt (Phase 3), commit-message confirmation (Phase 4), and PR-update offer (Phase 5). Follow the skill's full workflow — do NOT run `git commit` directly.
 
 If the commit fails due to a pre-commit hook, check `git status` for modified files (hook may have auto-formatted), re-stage with `git add -u`, and retry the commit once. If still fails, report the error and stop.
 
@@ -316,16 +311,11 @@ After committing, push: `git push -u origin <branch>`
 **CRITICAL — direct `gh pr create` and `gh pr edit` are FORBIDDEN in autopilot.** ALL PR creation and updates MUST go through `Skill(autopilot:pr-create)` and `Skill(autopilot:pr-update)`. Direct CLI calls produce PRs in the incorrect format. If a skill call fails or times out, report the error and stop — do NOT fall back to direct CLI commands.
 
 1. Check if PR already exists: `gh pr view --json number,url`
-   - If exit code 0 (PR exists): invoke `Skill(autopilot:pr-update)` — NEVER run `gh pr edit` directly. Proceed to format check below.
+   - If exit code 0 (PR exists): invoke `Skill(autopilot:pr-update)` — NEVER run `gh pr edit` directly. (pr:update has no user-facing confirmation prompt in the autopilot flow today, so no flag is needed.) Proceed to format check below.
    - If exit code 1 (no PR): proceed with creation below
    - If other error (network/auth): report error and stop
 
-2. Invoke `Skill(autopilot:pr-create)`. NEVER run `gh pr create` directly — even if the skill fails or times out. If the skill errors, report the failure and stop. Do NOT fall back to direct CLI.
-
-**Autopilot override:** This is autopilot mode — the user has pre-authorized automatic approval of PR content. When the pr:create skill presents PR options via AskUserQuestion:
-- For uncommitted changes check: auto-select "Continue anyway" (changes were already committed in Step 1)
-- For PR confirmation: auto-select "Create PR" — do NOT select "Edit content" or "Cancel"
-- If "Add release notes" option appears and the implementation includes user-facing changes (feat: or fix: commits), auto-select "Add release notes" first, then "Create PR"
+2. Invoke `Skill(autopilot:pr-create)` with arguments `--autopilot` (append `--release-notes` when the branch's commits include `feat:` or `fix:` types so user-facing notes are included). The `--autopilot` flag suppresses pr:create's Phase 5 confirmation. Release notes are added automatically for breaking changes regardless of the flag. NEVER run `gh pr create` directly — even if the skill fails or times out. If the skill errors, report the failure and stop. Do NOT fall back to direct CLI.
 
 Output the PR URL after creation.
 

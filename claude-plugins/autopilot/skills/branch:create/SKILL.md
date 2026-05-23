@@ -1,7 +1,7 @@
 ---
 name: branch:create
 description: Create and checkout a git branch following repository naming conventions with GitHub issue integration. Use when creating branches, or when invoked from other skills.
-argument-hint: <ISSUE-NUMBER> [description] [--trivial | --hotfix | --maintenance | --proposal]
+argument-hint: <ISSUE-NUMBER> [description] [--trivial | --hotfix | --maintenance | --proposal] [--autopilot]
 allowed-tools:
   - Bash(git *)
   - Read
@@ -30,6 +30,7 @@ Expected forms:
 - `<ISSUE-NUMBER>` — GitHub issue number (e.g., `123` or `#123`). Used to fetch the issue and to build the branch name `issue-<number>-<slug>`.
 - `<ISSUE-NUMBER> "<description>"` — issue number plus custom branch slug description
 - `--hotfix "<description>"` / `--trivial "<description>"` / `--maintenance "<description>"` / `--proposal "<description>"` — special prefix branches without a GitHub issue
+- `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips the Phase 5 confirmation prompt and creates the branch directly with the auto-generated name. Conflict resolution (Phase 4) and validation errors still surface.
 
 ## Input resolution
 
@@ -38,6 +39,7 @@ Arguments are optional. When `$ARGUMENTS` is empty OR a field is missing, resolv
 - **Issue number** — `$ARGUMENTS` → parse current branch name for `^issue-([0-9]+)` → prompt user only if none found and no special prefix flag is present.
 - **Description** — `$ARGUMENTS` → generate from GitHub issue title via Phase 3 rules → no user prompt (auto-generate always succeeds).
 - **Special prefix flags** (`--hotfix` / `--trivial` / `--maintenance` / `--proposal`) — `$ARGUMENTS` only. Never inferred. Default: none.
+- **`--autopilot`** — `$ARGUMENTS` only. Never inferred. Default: `false` (interactive mode).
 - **Repository conventions** — read `CONTRIBUTING.md` directly from the repository root.
 
 ## Phase 0: Preflight Check
@@ -47,6 +49,7 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
 ## Phase 1: Input Validation
 
 1. **Parse `$ARGUMENTS`** (shell-quoted positional tokens):
+   - Check for `--autopilot`: if present, strip it from the arguments and set `autopilotMode = true`. Otherwise `autopilotMode = false`.
    - Check for special prefix flags: `--trivial`, `--hotfix`, `--maintenance`, `--proposal`
    - If flag found: extract description from remaining arguments
    - If no flag: extract first argument as issue number, optional description
@@ -155,6 +158,8 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
    - `multiSelect`: false
 
 ## Phase 5: Verify with User
+
+**Autopilot bypass:** If `autopilotMode` is true (from Phase 1), skip this entire phase and proceed directly to Phase 6 with the resolved branch name. Do NOT call AskUserQuestion.
 
 Present branch details and confirm using **AskUserQuestion tool**.
 
