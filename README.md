@@ -18,6 +18,7 @@ See the [plugin README](./claude-plugins/autopilot/README.md#installation) for s
 
 ## Repository docs
 
+- [Workspace structure](./docs/workspace-structure.md) — where new actions, packages, and apps go, and how they wire into Turbo
 - [`agents` field spec](./docs/agents-field.md) — how skills detect a repository's tech stack from `package.json`
 - [Stack rule sets](./rules/) — `Bun`, `Bun+React+Tailwind`, `NodeJS+React`, `NodeJS+React+Tailwind`
 
