@@ -47,6 +47,20 @@ export interface ReleaseConfig {
   slack?: string;
 }
 
+/**
+ * Root-level `release` config from the repository-root `package.json`.
+ *
+ * A monorepo root declares `members` to enumerate workspace paths to release;
+ * a standalone repo declares `type` and behaves like a member. Both forms may
+ * carry `slack`. `members` and `type` are mutually exclusive at the root —
+ * mixing them is a configuration error.
+ */
+export interface RootReleaseConfig {
+  members?: readonly string[];
+  type?: ReleaseType;
+  slack?: string;
+}
+
 function fail(message: string): never {
   throw new Error(`${message} See ${DOCS_LINK}.`);
 }
@@ -148,4 +162,100 @@ export function readReleaseField(packageJson: unknown): ReleaseConfig {
   const slack = readSlack(release);
 
   return slack === undefined ? { type } : { type, slack };
+}
+
+function readMembers(release: Record<string, unknown>): readonly string[] | undefined {
+  if (!("members" in release)) {
+    return undefined;
+  }
+
+  const value: unknown = release.members;
+
+  if (!Array.isArray(value)) {
+    fail(
+      `'release.members' in package.json must be an array of workspace paths; got ${typeof value}.`,
+    );
+  }
+
+  if (value.length === 0) {
+    fail("'release.members' in package.json must contain at least one workspace path when present.");
+  }
+
+  for (const entry of value) {
+    if (typeof entry !== "string" || entry.length === 0) {
+      fail("'release.members' entries must be non-empty strings (workspace paths).");
+    }
+  }
+
+  return value as readonly string[];
+}
+
+/**
+ * Read and validate the top-level `release` object on a parsed repository-root
+ * `package.json`.
+ *
+ * Unlike {@link readReleaseField}, root config may declare `members` instead of
+ * `type` to opt into monorepo mode. Returns an empty object shape when the
+ * root has no `release` field — callers handle that case (e.g., fall back to
+ * `workspaces` discovery).
+ *
+ * @throws when both `members` and `type` are declared (ambiguous root mode),
+ *   when `members` is not a non-empty `string[]`, or when `type`/`slack` are
+ *   present but invalid (same rules as {@link readReleaseField}).
+ *
+ * @example
+ * ```typescript
+ * readRootRelease({ release: { members: ["packages/*"] } });
+ * // → { members: ["packages/*"] }
+ *
+ * readRootRelease({ release: { type: "lib-nodejs", slack: "#releases" } });
+ * // → { type: "lib-nodejs", slack: "#releases" }
+ *
+ * readRootRelease({ name: "monorepo" });
+ * // → {}
+ * ```
+ */
+export function readRootRelease(packageJson: unknown): RootReleaseConfig {
+  if (typeof packageJson !== "object" || packageJson === null) {
+    fail("Invalid package.json — expected an object.");
+  }
+
+  if (!("release" in packageJson)) {
+    return {};
+  }
+
+  const raw: unknown = (packageJson as Record<string, unknown>).release;
+
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    fail(
+      `'release' in package.json must be an object. Got ${
+        Array.isArray(raw) ? "array" : typeof raw
+      }.`,
+    );
+  }
+
+  const release = raw as Record<string, unknown>;
+  const members = readMembers(release);
+  const hasType = "type" in release;
+
+  if (members && hasType) {
+    fail(
+      "'release.members' and 'release.type' are mutually exclusive at the root — pick monorepo mode (members) or standalone mode (type).",
+    );
+  }
+
+  const slack = readSlack(release);
+  const config: RootReleaseConfig = {};
+
+  if (members) {
+    config.members = members;
+  } else if (hasType) {
+    config.type = readType(release);
+  }
+
+  if (slack !== undefined) {
+    config.slack = slack;
+  }
+
+  return config;
 }
