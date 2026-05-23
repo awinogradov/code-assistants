@@ -92,23 +92,26 @@ describe("detectStack", () => {
     await rm(dir, { recursive: true });
   });
 
-  test("reads 'rules' field from platform.meta.yml", async () => {
-    await writeFile(join(dir, "platform.meta.yml"), "language: typescript\nrules: Bun\n");
+  test("reads agents.rules from package.json", async () => {
+    await writeFile(
+      join(dir, "package.json"),
+      JSON.stringify({ agents: { rules: "Bun", language: "typescript" } })
+    );
     expect(await detectStack(dir)).toBe("Bun");
   });
 
-  test("returns 'unknown' when file is missing", async () => {
+  test("returns 'unknown' when package.json is missing", async () => {
     expect(await detectStack(dir)).toBe("unknown");
   });
 
-  test("returns 'unknown' when 'rules' field is absent", async () => {
-    await writeFile(join(dir, "platform.meta.yml"), "language: typescript\n");
+  test("returns 'unknown' when agents.rules is absent", async () => {
+    await writeFile(join(dir, "package.json"), JSON.stringify({ name: "pkg" }));
     expect(await detectStack(dir)).toBe("unknown");
   });
 
-  test("strips surrounding quotes from rules value", async () => {
-    await writeFile(join(dir, "platform.meta.yml"), 'rules: "Python+SqlAlchemy"\n');
-    expect(await detectStack(dir)).toBe("Python+SqlAlchemy");
+  test("returns 'unknown' when package.json is malformed", async () => {
+    await writeFile(join(dir, "package.json"), "{ not json");
+    expect(await detectStack(dir)).toBe("unknown");
   });
 });
 
