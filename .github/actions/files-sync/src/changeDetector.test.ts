@@ -9,11 +9,12 @@ interface TreeEntryFixture {
   path: string;
   mode: string;
   sha: string;
+  type?: 'blob' | 'tree';
 }
 
 interface MockOptions {
   treeEntries?: TreeEntryFixture[];
-  truncated?: boolean;
+  treesBySha?: Record<string, TreeEntryFixture[]>;
   blobs?: Record<string, string>;
 }
 
@@ -25,7 +26,8 @@ function encodeBase64(value: string): string {
 }
 
 function makeOctokit(options: MockOptions = {}): Octokit {
-  const treeEntries = options.treeEntries ?? [];
+  const rootTreeEntries = options.treeEntries ?? [];
+  const treesBySha = options.treesBySha ?? {};
   const blobs = options.blobs ?? {};
 
   return {
@@ -37,13 +39,16 @@ function makeOctokit(options: MockOptions = {}): Octokit {
         }),
       },
       git: {
-        getTree: async () => ({
-          data: {
-            sha: 'base-tree-sha',
-            tree: treeEntries,
-            truncated: options.truncated ?? false,
-          },
-        }),
+        getTree: async ({ tree_sha }: { tree_sha: string }) => {
+          const tree = tree_sha === 'base-tree-sha' ? rootTreeEntries : treesBySha[tree_sha] ?? [];
+          return {
+            data: {
+              sha: tree_sha,
+              tree,
+              truncated: false,
+            },
+          };
+        },
         getBlob: async ({ file_sha }: { file_sha: string }) => {
           const decoded = blobs[file_sha];
 
@@ -127,16 +132,25 @@ describe('computeChanges — symlink entries', () => {
     ]);
   });
 
-  test('throws when the dest tree is truncated', async () => {
-    const octokit = makeOctokit({ treeEntries: [], truncated: true });
+  test('walks nested destination paths via non-recursive tree calls', async () => {
+    const nestedEntry: SyncEntry = { symlink: 'CLAUDE.md', dest: 'tools/AGENTS.md' };
+    const octokit = makeOctokit({
+      treeEntries: [{ path: 'tools', mode: '040000', sha: 'tools-tree-sha', type: 'tree' }],
+      treesBySha: {
+        'tools-tree-sha': [
+          { path: 'AGENTS.md', mode: '120000', sha: 'nested-blob-sha' },
+        ],
+      },
+      blobs: { 'nested-blob-sha': 'CLAUDE.md' },
+    });
 
-    const promise = computeChanges({
+    const changes = await computeChanges({
       octokit,
-      entries: [symlinkEntry],
+      entries: [nestedEntry],
       destRepo,
       baseRef,
     });
 
-    await expect(promise).rejects.toThrow(/truncated/);
+    expect(changes).toEqual([]);
   });
 });

@@ -53,12 +53,43 @@ describe('parseFilesInput', () => {
     expect(entries[1]).toEqual({ symlink: 'CLAUDE.md', dest: 'AGENTS.md' });
   });
 
-  test('rejects an entry that mixes `source` and `symlink`', () => {
+  test('accepts a content entry with extra keys (legacy tolerance)', () => {
+    const yaml = `
+- repo: owner/name
+  source: README.md
+  dest: README.md
+  note: tracked manually
+`;
+    const entries = parseFilesInput(yaml);
+
+    expect(entries[0]).toEqual({
+      repo: 'owner/name',
+      source: 'README.md',
+      dest: 'README.md',
+    });
+  });
+
+  test('treats a mixed source+symlink entry as a content entry (symlink dropped)', () => {
     const yaml = `
 - repo: owner/name
   source: README.md
   symlink: README.md
   dest: AGENTS.md
+`;
+    const entries = parseFilesInput(yaml);
+
+    expect(entries[0]).toEqual({
+      repo: 'owner/name',
+      source: 'README.md',
+      dest: 'AGENTS.md',
+    });
+  });
+
+  test('rejects a symlink entry with extra keys (strict)', () => {
+    const yaml = `
+- symlink: CLAUDE.md
+  dest: AGENTS.md
+  extra: nope
 `;
     expect(() => parseFilesInput(yaml)).toThrow(/Invalid files input/);
   });
