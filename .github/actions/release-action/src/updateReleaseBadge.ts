@@ -56,14 +56,23 @@ export function updateReleaseBadge(
   return `${releaseBadge}\n${createBadge}\n\n${readme}`;
 }
 
-async function main(): Promise<void> {
-  const readmeFile = Bun.file("README.md");
+/**
+ * Update the README badge in-place for the given working directory.
+ * No-ops when `<cwd>/README.md` does not exist.
+ *
+ * @param cwd - Member directory (defaults to `process.cwd()`).
+ */
+export async function refreshReleaseBadge(cwd: string = process.cwd()): Promise<void> {
+  const { join } = await import("node:path");
+  const readmePath = join(cwd, "README.md");
+  const versionPath = join(cwd, "version");
+  const readmeFile = Bun.file(readmePath);
 
   if (!(await readmeFile.exists())) {
     return;
   }
 
-  const version = (await Bun.file("version").text()).trim();
+  const version = (await Bun.file(versionPath).text()).trim();
   const serverUrl = process.env.GITHUB_SERVER_URL ?? "https://github.com";
   const repo = process.env.GITHUB_REPOSITORY ?? "";
 
@@ -71,13 +80,13 @@ async function main(): Promise<void> {
   const updated = updateReleaseBadge(readme, version, serverUrl, repo);
 
   if (updated !== readme) {
-    await Bun.write("README.md", updated);
+    await Bun.write(readmePath, updated);
     console.log(`Updated release badge to v${version}`);
   }
 }
 
 if (import.meta.main) {
-  main().catch((error: Error) => {
+  refreshReleaseBadge().catch((error: Error) => {
     console.log(`::error::${error.message}`);
     process.exit(1);
   });

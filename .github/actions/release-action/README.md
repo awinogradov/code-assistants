@@ -165,6 +165,78 @@ Store the token as a secret (e.g. `GH_TOKEN`) and pass it via `github_token: ${{
 
 The Configure Git step inside the action commits as `github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>`.
 
+## Monorepo mode
+
+When the repository root declares either `release.members` or a `workspaces` array, `release-action` switches to **monorepo mode** and runs the create/publish flow once per release-eligible workspace member.
+
+### Discovery
+
+| Source                                          | Effect                                                                                                                         |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Root `release.members: string[]`                | Explicit allow-list of workspace paths. Preferred when not every workspace member should release.                              |
+| Root `workspaces: string[]`                     | Fallback when `release.members` is absent. Each glob is expanded and every member with a `release` field is included.          |
+| Member without its own `release` field          | Skipped (internal-only).                                                                                                       |
+| No eligible members AND root has `release.type` | Standalone fallback — the legacy single-artifact pipeline runs against the repo root, identical to the pre-monorepo behaviour. |
+
+### Per-member behaviour
+
+| Concern            | Standalone                   | Monorepo (per member)                                                                                   |
+| ------------------ | ---------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Last tag           | `v*`                         | `<name>@v*` (e.g. `release-action@v1.2.0`)                                                              |
+| Floating major tag | `v1` (`github-action` only)  | `<name>@v1` (`github-action` only)                                                                      |
+| Changelog file     | `CHANGELOG.md`               | `<member>/CHANGELOG.md`                                                                                 |
+| Release notes file | `.release_notes/<v>.md`      | `<member>/.release_notes/<v>.md`                                                                        |
+| Branch             | `release-<v>` (configurable) | `release-<name>-<v>` (template `release-{member}-{version}`)                                            |
+| PR label           | `release-action`             | `release-<name>` (auto-created per member)                                                              |
+| Slack channel      | Root `release.slack`         | Each member's own `release.slack`                                                                       |
+| Migrations         | n/a                          | `<member>/MIGRATING.md` is appended on major bumps with notes extracted from `BREAKING CHANGE:` footers |
+
+A member with no commits touching its path since its last tag is skipped silently. When a member's release ships and another member declares a workspace dependency on it, the dependent picks up at least a `patch` bump and a `chore(deps)` entry in its changelog.
+
+### Tag-ref ergonomics
+
+Composite-action consumers reference the action by ref: `uses: owner/repo/.github/actions/<name>@<ref>`. With `<name>@v<version>` tags, the ref contains a literal `@`, e.g.:
+
+```yaml
+uses: awinogradov/code-assistants/.github/actions/release-action@release-action@v1
+```
+
+GitHub accepts this form. SHA pins (`@<commit>`) are also fine.
+
+### Publish workflow
+
+A single shared `publish` workflow handles every member — the action reads the merged PR's changed files and resolves the unique `<member>/.release_notes/<version>.md` path to determine which member to publish:
+
+```yaml
+name: Publish
+
+on:
+  pull_request_target:
+    types: [closed]
+    paths:
+      - "**/.release_notes/**"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: awinogradov/code-assistants/.github/actions/release-action@v1
+        with:
+          mode: publish
+          github_token: ${{ secrets.GH_TOKEN }}
+          npm_token: ${{ secrets.NPM_TOKEN }}
+          slack_token: ${{ secrets.SLACK_TOKEN }}
+        env:
+          PR_CHANGED_FILES: ${{ steps.changed.outputs.files }}
+```
+
+`PR_CHANGED_FILES` is a newline-separated list of paths supplied by an upstream step (e.g., `gh pr view <N> --json files --jq '.files[].path'`). When the env variable is unset, the action falls back to `GITHUB_EVENT_PATH` and accepts a single-member PR shape.
+
 ## Versioning
 
 Reference the action by tag, for example:

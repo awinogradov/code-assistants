@@ -87,95 +87,113 @@ export function extractReleaseNotes(content: string): string {
   return notes;
 }
 
-// Only run when executed directly (not when imported for testing)
-if (import.meta.main) {
-  void (async () => {
-    const slackToken = process.env.SLACK_TOKEN;
-    if (!slackToken) {
-      console.log("SLACK_TOKEN not set, skipping Slack notification");
-      process.exit(0);
-    }
+/** Options accepted by {@link postReleaseNotification}. */
+export interface SlackNotifyOptions {
+  /** Member directory (defaults to `process.cwd()`). */
+  cwd?: string;
+  /** Per-member tag form (e.g. `release-action@v1.2.0`). Defaults to `v<version>`. */
+  releaseTag?: string;
+  /** Display name for the Slack header (defaults to the repo's basename). */
+  displayName?: string;
+}
 
-    const repo = process.env.GITHUB_REPOSITORY ?? "";
-    const serverUrl = process.env.GITHUB_SERVER_URL ?? "https://github.com";
+/**
+ * Post the per-member release notification to Slack. No-op when SLACK_TOKEN is
+ * unset or the member's `package.json` has no `release.slack` field.
+ */
+export async function postReleaseNotification(
+  options: SlackNotifyOptions = {},
+): Promise<void> {
+  const { join } = await import("node:path");
+  const cwd = options.cwd ?? process.cwd();
 
-    // Read package.json release.slack for channel
-    const pkgFile = Bun.file("package.json");
-    if (!(await pkgFile.exists())) {
-      console.log("package.json not found, skipping Slack notification");
-      process.exit(0);
-    }
+  const slackToken = process.env.SLACK_TOKEN;
+  if (!slackToken) {
+    console.log("SLACK_TOKEN not set, skipping Slack notification");
+    return;
+  }
 
-    const { slack: channel } = readReleaseField(await pkgFile.json());
-    if (!channel) {
-      console.log("No release.slack field in package.json, skipping notification");
-      process.exit(0);
-    }
+  const repo = process.env.GITHUB_REPOSITORY ?? "";
+  const serverUrl = process.env.GITHUB_SERVER_URL ?? "https://github.com";
 
-    // Read version and release notes
-    const version = (await Bun.file("version").text()).trim();
-    const repoName = repo.split("/").pop() ?? repo;
-    const releaseUrl = `${serverUrl}/${repo}/releases/tag/v${version}`;
+  const pkgFile = Bun.file(join(cwd, "package.json"));
+  if (!(await pkgFile.exists())) {
+    console.log("package.json not found, skipping Slack notification");
+    return;
+  }
 
-    const releaseNotesFile = Bun.file(`.release_notes/${version}.md`);
-    const releaseNotesContent = (await releaseNotesFile.exists())
-      ? await releaseNotesFile.text()
-      : "";
-    const notes = extractReleaseNotes(releaseNotesContent);
+  const { slack: channel } = readReleaseField(await pkgFile.json());
+  if (!channel) {
+    console.log("No release.slack field in package.json, skipping notification");
+    return;
+  }
 
-    // Post to Slack using Block Kit
-    const slack = new WebClient(slackToken);
+  const version = (await Bun.file(join(cwd, "version")).text()).trim();
+  const releaseTag = options.releaseTag ?? `v${version}`;
+  const repoName = options.displayName ?? repo.split("/").pop() ?? repo;
+  const releaseUrl = `${serverUrl}/${repo}/releases/tag/${encodeURIComponent(releaseTag)}`;
 
-    try {
-      const result = await slack.chat.postMessage({
-        channel,
-        text: `${repo} v${version} released`,
-        unfurl_links: false,
-        blocks: [
-          {
-            type: "header",
-            text: {
-              type: "plain_text",
-              text: `📦 ${repoName} v${version}`,
-              emoji: true,
-            },
+  const releaseNotesFile = Bun.file(join(cwd, ".release_notes", `${version}.md`));
+  const releaseNotesContent = (await releaseNotesFile.exists())
+    ? await releaseNotesFile.text()
+    : "";
+  const notes = extractReleaseNotes(releaseNotesContent);
+
+  const slack = new WebClient(slackToken);
+
+  try {
+    const result = await slack.chat.postMessage({
+      channel,
+      text: `${repo} ${releaseTag} released`,
+      unfurl_links: false,
+      blocks: [
+        {
+          type: "header",
+          text: {
+            type: "plain_text",
+            text: `📦 ${repoName} v${version}`,
+            emoji: true,
           },
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: notes,
-            },
+        },
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: notes,
           },
-          {
-            type: "divider",
-          },
-          {
-            type: "actions",
-            elements: [
-              {
-                type: "button",
-                text: {
-                  type: "plain_text",
-                  text: "View release",
-                },
-                url: releaseUrl,
-                action_id: "view_release",
-                style: "primary",
+        },
+        {
+          type: "divider",
+        },
+        {
+          type: "actions",
+          elements: [
+            {
+              type: "button",
+              text: {
+                type: "plain_text",
+                text: "View release",
               },
-            ],
-          },
-        ],
-      });
+              url: releaseUrl,
+              action_id: "view_release",
+              style: "primary",
+            },
+          ],
+        },
+      ],
+    });
 
-      if (result.ok) {
-        console.log(`Slack notification sent to ${channel}`);
-      } else {
-        console.log(`::warning::Slack notification failed: ${result.error}`);
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.log(`::warning::Slack notification failed: ${message}`);
+    if (result.ok) {
+      console.log(`Slack notification sent to ${channel}`);
+    } else {
+      console.log(`::warning::Slack notification failed: ${result.error}`);
     }
-  })();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.log(`::warning::Slack notification failed: ${message}`);
+  }
+}
+
+if (import.meta.main) {
+  await postReleaseNotification();
 }

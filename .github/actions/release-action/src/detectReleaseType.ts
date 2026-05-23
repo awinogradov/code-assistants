@@ -15,6 +15,7 @@
  */
 import { appendFile } from "node:fs/promises";
 
+import { discoverMembers } from "./monorepo/discoverMembers.ts";
 import { readReleaseField } from "./releaseField.ts";
 
 const DOCS_LINK = "docs/release-field.md";
@@ -51,9 +52,20 @@ async function writeGithubOutput(line: string): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  const discovery = await discoverMembers(process.cwd());
+
+  if (discovery.mode === "monorepo") {
+    await writeGithubOutput("mode=monorepo");
+    await writeGithubOutput(`type=monorepo`);
+    console.log(`Detected monorepo with ${discovery.members.length} member(s)`);
+    return;
+  }
+
+  // Standalone fallback — preserve the pre-monorepo contract by emitting the
+  // release.type so action.yml's existing publish steps continue to work.
   const pkg = await readPackageJson();
   const { type } = readReleaseField(pkg);
-
+  await writeGithubOutput("mode=standalone");
   await writeGithubOutput(`type=${type}`);
   console.log(`Detected release type: ${type}`);
 }
