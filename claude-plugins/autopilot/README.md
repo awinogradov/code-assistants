@@ -79,6 +79,7 @@ code-assistants/
             ├── commits:create/
             ├── commits:restructure/
             ├── dependabot:resolve/
+            ├── issue:create/
             ├── plan/
             ├── plan-bun/
             ├── plan-nodejs-react/
@@ -109,6 +110,16 @@ Create a git branch following repository naming conventions with GitHub issue in
 /autopilot:branch-create --trivial "fix typo in readme"          # Typos, docs, formatting
 /autopilot:branch-create --maintenance "upgrade node to 22"      # Deps, CI, configs
 /autopilot:branch-create --proposal "add vim keybindings"        # Suggest a change without an issue
+```
+
+### `/autopilot:issue-create`
+
+Create a GitHub issue with a structured body (Context / What / Why / Scope / Solution) and curated labels via the `gh` CLI. Titles are plain business descriptions — no convention prefixes.
+
+```bash
+/autopilot:issue-create                                                # Prompt for hint, generate everything
+/autopilot:issue-create "users cannot reset password via email"        # Use hint to seed title and body
+/autopilot:issue-create "refactor token streaming pipeline"            # Solution may include ASCII diagram
 ```
 
 ### `/autopilot:commits-create`

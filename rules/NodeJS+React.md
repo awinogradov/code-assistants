@@ -325,6 +325,7 @@ Before making any changes:
 - 👤 No raw `git commit` — use `Skill(autopilot:commits:create)`
 - 👤 No raw `git checkout -b` / `git branch` — use `Skill(autopilot:branch:create)`
 - 👤 No raw `gh pr create` — use `Skill(autopilot:pr:create)`
+- 👤 No raw `gh issue create` — use `Skill(autopilot:issue:create)`
 
 ## 16. AI Assistant Workflow
 
@@ -339,6 +340,7 @@ Before making any changes:
 - 👤 **MANDATORY**: Commit only via `Skill(autopilot:commits:create)` — no raw `git commit`, no `git commit -m`, no `--amend`, no exceptions. If the autopilot plugin is not installed, follow CONTRIBUTING.md
 - 👤 **MANDATORY**: Create branches only via `Skill(autopilot:branch:create)` — no raw `git checkout -b`, `git branch`, or `git switch -c`. If the autopilot plugin is not installed, follow CONTRIBUTING.md
 - 👤 **MANDATORY**: Create PRs only via `Skill(autopilot:pr:create)` — no raw `gh pr create` or web-UI PR creation. If the autopilot plugin is not installed, follow CONTRIBUTING.md
+- 👤 **MANDATORY**: Create issues only via `Skill(autopilot:issue:create)` — no raw `gh issue create` or web-UI issue creation. If the autopilot plugin is not installed, follow CONTRIBUTING.md
 
 ### 16.2 MCP Servers
 
