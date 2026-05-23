@@ -3,7 +3,7 @@
  */
 import { describe, expect, test } from "bun:test";
 
-import { readReleaseField, releaseTypes } from "./releaseField.ts";
+import { readReleaseField, readRootRelease, releaseTypes } from "./releaseField.ts";
 
 describe("readReleaseField — type", () => {
   test.each(releaseTypes.map((value) => [value]))(
@@ -99,5 +99,69 @@ describe("readReleaseField — slack", () => {
     expect(() =>
       readReleaseField({ release: { type: "lib-nodejs", slack: 42 } }),
     ).toThrow(/'release\.slack'.*must be a non-empty string/);
+  });
+});
+
+describe("readRootRelease", () => {
+  test("returns empty object when no release field is present", () => {
+    expect(readRootRelease({ name: "monorepo" })).toEqual({});
+  });
+
+  test("returns members array for monorepo root", () => {
+    expect(
+      readRootRelease({
+        release: { members: [".github/actions/release-action", "packages/foo"] },
+      }),
+    ).toEqual({ members: [".github/actions/release-action", "packages/foo"] });
+  });
+
+  test("returns type for standalone root", () => {
+    expect(readRootRelease({ release: { type: "lib-nodejs" } })).toEqual({
+      type: "lib-nodejs",
+    });
+  });
+
+  test("returns slack alongside members", () => {
+    expect(
+      readRootRelease({
+        release: { members: ["packages/*"], slack: "#releases" },
+      }),
+    ).toEqual({ members: ["packages/*"], slack: "#releases" });
+  });
+
+  test("throws when both members and type are declared", () => {
+    expect(() =>
+      readRootRelease({
+        release: { members: ["packages/*"], type: "lib-nodejs" },
+      }),
+    ).toThrow(/mutually exclusive/);
+  });
+
+  test("throws when members is not an array", () => {
+    expect(() =>
+      readRootRelease({ release: { members: "packages/*" } }),
+    ).toThrow(/must be an array of workspace paths/);
+  });
+
+  test("throws when members is empty", () => {
+    expect(() => readRootRelease({ release: { members: [] } })).toThrow(
+      /must contain at least one workspace path/,
+    );
+  });
+
+  test("throws when a members entry is not a non-empty string", () => {
+    expect(() =>
+      readRootRelease({ release: { members: ["packages/*", ""] } }),
+    ).toThrow(/entries must be non-empty strings/);
+  });
+
+  test("throws when release is not an object", () => {
+    expect(() => readRootRelease({ release: "lib-nodejs" })).toThrow(
+      /must be an object/,
+    );
+  });
+
+  test("throws when packageJson is null", () => {
+    expect(() => readRootRelease(null)).toThrow(/expected an object/);
   });
 });
