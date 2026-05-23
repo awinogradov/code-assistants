@@ -135,7 +135,10 @@ Search the repository for related work in both directions (open + closed) so the
 For each open item returned by Phase 3, compute the keyword-overlap ratio against the generated title:
 
 - Tokenize both strings into lowercase keywords, drop English stop words (`a`, `the`, `for`, `to`, `of`, `in`, `on`, etc.).
-- `overlap = |titleKeywords ∩ candidateKeywords| / min(|titleKeywords|, |candidateKeywords|)`.
+- Empty-set guard (apply BEFORE the division):
+  - If `titleKeywords` is empty AND `candidateKeywords` is empty → `overlap = 1.0` (both strings are stop-word-only; treat as identical).
+  - If exactly one of the two sets is empty → `overlap = 0` (no meaningful overlap; one side has nothing to match against).
+- Otherwise: `overlap = |titleKeywords ∩ candidateKeywords| / min(|titleKeywords|, |candidateKeywords|)`.
 - If `overlap > 0.8` for any open item, set `possibleDuplicate` to that item (the highest-scoring one wins on ties). Phase 7 will surface a warning line so the user can cancel and comment on the existing issue instead.
 - Closed and merged items are not duplicate candidates (they only feed the `Related:` line); only open items can trigger the warning.
 
