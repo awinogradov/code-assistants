@@ -22,9 +22,14 @@ const repoPattern = /^[^/]+\/[^/]+$/;
 /**
  * Schema for a content sync entry that copies a file between repositories.
  *
+ * Intentionally lenient: extra keys are accepted and stripped silently so that
+ * legacy YAML payloads which carried annotation fields (e.g., notes/comments)
+ * continue to parse. Strictness is reserved for the new symlink variant where
+ * the field set is small enough that typos should fail loudly.
+ *
  * @see {@link symlinkEntrySchema} for the symlink variant.
  */
-export const contentEntrySchema = z.strictObject({
+export const contentEntrySchema = z.object({
   repo: z
     .string()
     .regex(repoPattern, 'repo must be in `owner/name` form'),

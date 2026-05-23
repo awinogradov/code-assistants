@@ -136,7 +136,6 @@ async function detectSymlinkChange({
   entry,
   destRepo,
   baseRef,
-  treeCache,
 }: DetectSymlinkArgs): Promise<FileChange | null> {
   // NOTE: We cannot reuse `fetchRawContent` (Contents API + Accept: raw) here.
   // GitHub server-side-follows symlinks whose target is a normal file in the
@@ -144,18 +143,21 @@ async function detectSymlinkChange({
   // and produce spurious diffs. The Git Trees + Blobs APIs are the only
   // reliable way to read a symlink's target from a remote repo without a
   // local working tree.
-  const destEntries = await loadTreeEntries({
+  //
+  // We walk the destination path segment by segment with non-recursive tree
+  // calls (rather than a recursive `getTree` of the whole repo) so that very
+  // large consumer repos cannot hit the `truncated: true` failure on a path
+  // we only need a single entry from.
+  const existing = await fetchTreePathEntry({
     octokit,
     owner: destRepo.owner,
     repo: destRepo.name,
     ref: baseRef,
-    treeCache,
+    path: entry.dest,
   });
-
-  const existing = destEntries.get(entry.dest);
   const change: FileChange = { path: entry.dest, content: entry.symlink, mode: symlinkMode };
 
-  if (existing === undefined || existing.mode !== symlinkMode) {
+  if (existing === null || existing.mode !== symlinkMode) {
     return change;
   }
 
@@ -228,15 +230,78 @@ interface FetchTreeArgs {
 }
 
 /**
+ * Walk a path segment by segment via non-recursive Git Tree calls and return
+ * the matching tree entry, or `null` if any segment is missing.
+ *
+ * Unlike {@link fetchTreeEntries}, this helper makes one tree call per path
+ * segment and never asks GitHub for the whole repo's tree — so it cannot fail
+ * with `truncated: true` on very large destination repositories. Use this for
+ * lookups that need exactly one entry (e.g., symlink detection at a known
+ * destination path).
+ *
+ * @example
+ *   const entry = await fetchTreePathEntry({
+ *     octokit,
+ *     owner: 'me',
+ *     repo: 'app',
+ *     ref: 'main',
+ *     path: 'AGENTS.md',
+ *   });
+ *   entry?.mode; // '120000' if symlink, '100644' if file, etc.
+ */
+export async function fetchTreePathEntry({
+  octokit,
+  owner,
+  repo,
+  ref,
+  path,
+}: FetchTreeArgs & { path: string }): Promise<TreeEntry | null> {
+  const segments = path.split('/').filter((segment) => segment !== '');
+
+  if (segments.length === 0) {
+    return null;
+  }
+
+  const targetRef = ref ?? (await octokit.rest.repos.get({ owner, repo })).data.default_branch;
+  const commit = await octokit.rest.repos.getCommit({ owner, repo, ref: targetRef });
+  let currentTreeSha = commit.data.commit.tree.sha;
+
+  for (let index = 0; index < segments.length; index++) {
+    const segment = segments[index]!;
+    const tree = await octokit.rest.git.getTree({ owner, repo, tree_sha: currentTreeSha });
+    const match = tree.data.tree.find((node) => node.path === segment);
+
+    if (match?.mode === undefined || match.sha === undefined) {
+      return null;
+    }
+
+    const isLastSegment = index === segments.length - 1;
+
+    if (isLastSegment) {
+      return { mode: match.mode, sha: match.sha };
+    }
+
+    if (match.type !== 'tree') {
+      return null;
+    }
+
+    currentTreeSha = match.sha;
+  }
+
+  return null;
+}
+
+/**
  * Fetch the recursive Git tree for `owner/repo@ref` and return a Map keyed by path.
  *
  * Throws when the tree is truncated, because partial trees cannot reliably resolve
- * file modes or symlink targets. Used by both source-mode resolution (content sync)
- * and dest-tree probing (symlink detection).
+ * file modes for source files referenced by content entries. Used by source-mode
+ * resolution; symlink detection uses {@link fetchTreePathEntry} instead so it can
+ * never fail on truncation.
  *
  * @example
  *   const entries = await fetchTreeEntries({ octokit, owner: 'me', repo: 'app' });
- *   entries.get('AGENTS.md')?.mode; // '120000' if symlink
+ *   entries.get('rules/Bun.md')?.mode; // '100644'
  */
 export async function fetchTreeEntries({
   octokit,
