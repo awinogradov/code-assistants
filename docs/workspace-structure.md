@@ -54,7 +54,7 @@ Worked examples:
 | [`release-action`](../.github/actions/release-action/)         | `src/`-only         | `${{ github.action_path }}/src/<entry>.ts`       |
 | [`code-review-action`](../.github/actions/code-review-action/) | `src/`-only         | `${{ github.action_path }}/src/<entry>.ts`       |
 
-Required `package.json` scripts: `typecheck`, `test`, `clean`. Turbo reads them per-package.
+Required `package.json` scripts: see [Workspace scripts](#workspace-scripts).
 
 ### YAML composite action
 
@@ -106,7 +106,7 @@ Consumers import per-module (copy-pasted from `.github/actions/files-sync/src/ch
 import { fetchRawContent } from "@code-assistants/actions-core/fetchRawContent";
 ```
 
-Required scripts: `typecheck`, `clean`. The `test` script is optional — add it only when the package has test files (`actions-core` today has none).
+Required scripts: see [Workspace scripts](#workspace-scripts) (`test` is opt-in for packages — add it only when test files exist; `actions-core` today has none).
 
 **Extract vs. duplicate:** extract into a package when two or more actions need the same helper. Duplicate when it's used in only one place.
 
@@ -142,6 +142,21 @@ The root `package.json` declares the repo's stack via a top-level `agents` objec
   }
 }
 ```
+
+### Workspace scripts
+
+Every TypeScript workspace member (actions and packages) declares its scripts in its own `package.json`. Turbo discovers them per-package — there is no central script registry to update when you add a member.
+
+| Script      | Required?                            | Command (today)              | Notes                                                                                                                                                                                                                            |
+| ----------- | ------------------------------------ | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `typecheck` | Yes                                  | `tsc --noEmit`               | Runs in Turbo's `typecheck` task. Always present in TS members.                                                                                                                                                                  |
+| `test`      | Yes for actions, opt-in for packages | `bun test`                   | Bun's runner handles unit, integration, and e2e tests in the same invocation — test files live alongside source under `src/` per CLAUDE.md §3.1. Add this script only when the member has tests (`actions-core` today has none). |
+| `clean`     | Yes                                  | `rm -rf node_modules .turbo` | Removes per-member install and Turbo caches.                                                                                                                                                                                     |
+| `build`     | Optional                             | (none today)                 | Add only when the member produces a compiled output. Today every member runs TypeScript directly via Bun (`bun <entry>.ts`), so no build step is needed.                                                                         |
+
+**Other script names** (`lint`, `format`, `validate`, `prepare`) are root-only: they live in the root `package.json` and operate across the whole repo (Prettier, the `scripts/validate-plugins.ts` check, Husky setup). Do NOT duplicate them at the member level.
+
+Specialised script types as the project grows — e.g., `test:unit`, `test:integration`, `test:e2e`, `bench`, `start` — should be added per-member only when there is a reason to run them in isolation (the default `bun test` already covers everything under `src/`). Mirror the Turbo task graph if you add a name that should be cache-aware.
 
 ### Turbo task graph
 
