@@ -71,9 +71,7 @@ describe("memberHasChanges", () => {
   test("is true when at least one commit touched the path", () =>
     withTempRepo(async (repo) => {
       await commitInPath(repo, "packages/lib-a", "f1.txt", "feat(lib-a): seed");
-      expect(
-        await memberHasChanges({ cwd: repo, path: "packages/lib-a", since: null }),
-      ).toBe(true);
+      expect(await memberHasChanges({ cwd: repo, path: "packages/lib-a", since: null })).toBe(true);
     }));
 
   test("is false when no commits touched the path in the range", () =>

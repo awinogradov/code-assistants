@@ -178,7 +178,9 @@ function readMembers(release: Record<string, unknown>): readonly string[] | unde
   }
 
   if (value.length === 0) {
-    fail("'release.members' in package.json must contain at least one workspace path when present.");
+    fail(
+      "'release.members' in package.json must contain at least one workspace path when present.",
+    );
   }
 
   for (const entry of value) {

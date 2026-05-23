@@ -34,9 +34,7 @@ describe("tag builders", () => {
   });
 
   test("memberMajorTag throws for invalid versions", () => {
-    expect(() => memberMajorTag("release-action", "not-a-version")).toThrow(
-      /Invalid semver/,
-    );
+    expect(() => memberMajorTag("release-action", "not-a-version")).toThrow(/Invalid semver/);
   });
 });
 

@@ -15,7 +15,7 @@ import { withTempDir } from "./testHelpers.ts";
 /** Base env stripped of GitHub CI variables that affect URL generation */
 const ciVarKeys = ["GITHUB_SERVER_URL", "GITHUB_REPOSITORY", "INPUT_BRANCH"];
 const cleanEnv = Object.fromEntries(
-  Object.entries(process.env).filter(([key]) => !ciVarKeys.includes(key))
+  Object.entries(process.env).filter(([key]) => !ciVarKeys.includes(key)),
 ) as Record<string, string>;
 
 /** GitHub env vars for tests that verify absolute URL generation */
@@ -27,7 +27,7 @@ const githubEnv = {
 /** Run the assemble-pr-body script in a temp directory */
 async function runAssemblePrBody(
   cwd: string,
-  extraEnv?: Record<string, string>
+  extraEnv?: Record<string, string>,
 ): Promise<{ exitCode: number; output: string }> {
   const scriptPath = join(import.meta.dirname, "assemble-pr-body.ts");
   const result = await $`bun ${scriptPath}`
@@ -67,7 +67,7 @@ describe("assemble-pr-body", () => {
       withTempDir(async (dir) => {
         await createBody(
           dir,
-          "![release:minor](badge)\n\n## Linear\n\n| Issue | PR | Author |\n| --- | --- | --- |\n| [TOOLS-1: Fix](url) | [#10](pr) | @dev |\n\n### Features\n\n* feat A"
+          "![release:minor](badge)\n\n## Linear\n\n| Issue | PR | Author |\n| --- | --- | --- |\n| [TOOLS-1: Fix](url) | [#10](pr) | @dev |\n\n### Features\n\n* feat A",
         );
         await createReleaseNotes(dir, "Some AI release notes");
         await Bun.write(join(dir, "version"), "1.0.0");
@@ -142,7 +142,7 @@ describe("assemble-pr-body", () => {
 
         const enhanced = await readEnhanced(dir);
         expect(enhanced).toContain(
-          "📋 [Detailed changelog](https://github.com/test-owner/test-repo/blob/release-2.0.0/CHANGELOG.md)"
+          "📋 [Detailed changelog](https://github.com/test-owner/test-repo/blob/release-2.0.0/CHANGELOG.md)",
         );
       }));
 
@@ -200,7 +200,7 @@ describe("assemble-pr-body", () => {
         const enhanced = await readEnhanced(dir);
         expect(enhanced.length).toBeLessThanOrEqual(65536);
         expect(enhanced).toContain(
-          "See [full release notes](https://github.com/test-owner/test-repo/blob/release-1.5.0/.release_notes/1.5.0.md)"
+          "See [full release notes](https://github.com/test-owner/test-repo/blob/release-1.5.0/.release_notes/1.5.0.md)",
         );
       }));
 
@@ -208,7 +208,7 @@ describe("assemble-pr-body", () => {
       withTempDir(async (dir) => {
         await createBody(
           dir,
-          `![release:major](badge)\n\n## Linear\n\n| Issue | PR | Author |\n| --- | --- | --- |\n| [TOOLS-321: Fix](url) | [#10](pr) | @dev |\n\n### Features\n\n* feat`
+          `![release:major](badge)\n\n## Linear\n\n| Issue | PR | Author |\n| --- | --- | --- |\n| [TOOLS-321: Fix](url) | [#10](pr) | @dev |\n\n### Features\n\n* feat`,
         );
         await createReleaseNotes(dir, generateLargeContent(70000));
         await Bun.write(join(dir, "version"), "10.0.0");
@@ -220,7 +220,7 @@ describe("assemble-pr-body", () => {
         expect(enhanced).toContain("<h2>Linear</h2>");
         expect(enhanced).toContain("TOOLS-321");
         expect(enhanced).toContain(
-          "See [full release notes](https://github.com/test-owner/test-repo/blob/release-10.0.0/.release_notes/10.0.0.md)"
+          "See [full release notes](https://github.com/test-owner/test-repo/blob/release-10.0.0/.release_notes/10.0.0.md)",
         );
       }));
 
@@ -246,7 +246,7 @@ describe("assemble-pr-body", () => {
 
         const enhanced = await readEnhanced(dir);
         expect(enhanced).toContain(
-          "See [full release notes](https://github.com/test-owner/test-repo/blob/rel/3.1.0/.release_notes/3.1.0.md)"
+          "See [full release notes](https://github.com/test-owner/test-repo/blob/rel/3.1.0/.release_notes/3.1.0.md)",
         );
       }));
 
@@ -254,7 +254,7 @@ describe("assemble-pr-body", () => {
       withTempDir(async (dir) => {
         await createBody(
           dir,
-          `![badge](url)\n\n## Linear\n\n| Issue | PR | Author |\n| --- | --- | --- |\n| [TOOLS-99: Fix](url) | [#5](pr) | @dev |\n\n## GitHub Issues\n\n| Issue | PR | Author |\n| --- | --- | --- |\n| #42 | [#6](pr) | @dev |\n\n### Features\n\n* feat`
+          `![badge](url)\n\n## Linear\n\n| Issue | PR | Author |\n| --- | --- | --- |\n| [TOOLS-99: Fix](url) | [#5](pr) | @dev |\n\n## GitHub Issues\n\n| Issue | PR | Author |\n| --- | --- | --- |\n| #42 | [#6](pr) | @dev |\n\n### Features\n\n* feat`,
         );
         await createReleaseNotes(dir, generateLargeContent(70000));
         await Bun.write(join(dir, "version"), "7.0.0");
@@ -276,7 +276,7 @@ describe("assemble-pr-body", () => {
         const hugeTickets = `## Linear\n\n| Issue | PR | Author |\n| --- | --- | --- |\n${generateLargeContent(70000)}`;
         await createBody(
           dir,
-          `![release:major](badge)\n\n${hugeTickets}\n\n### Features\n\n* feat`
+          `![release:major](badge)\n\n${hugeTickets}\n\n### Features\n\n* feat`,
         );
         await createReleaseNotes(dir, "Small release notes");
         await Bun.write(join(dir, "version"), "25.0.0");
@@ -290,7 +290,7 @@ describe("assemble-pr-body", () => {
         expect(enhanced).toContain("![release:major](badge)");
         expect(enhanced).not.toContain("<h2>Linear</h2>");
         expect(enhanced).toContain(
-          "See [full release notes](https://github.com/test-owner/test-repo/blob/release-25.0.0/.release_notes/25.0.0.md)"
+          "See [full release notes](https://github.com/test-owner/test-repo/blob/release-25.0.0/.release_notes/25.0.0.md)",
         );
       }));
 
@@ -309,10 +309,10 @@ describe("assemble-pr-body", () => {
         expect(enhanced.length).toBeLessThanOrEqual(65536);
         expect(enhanced.startsWith("![release:major](badge)")).toBe(true);
         expect(enhanced).toContain(
-          "See [full release notes](https://github.com/test-owner/test-repo/blob/release-9.0.0/.release_notes/9.0.0.md)"
+          "See [full release notes](https://github.com/test-owner/test-repo/blob/release-9.0.0/.release_notes/9.0.0.md)",
         );
         expect(enhanced).toContain(
-          "📋 [Detailed changelog](https://github.com/test-owner/test-repo/blob/release-9.0.0/CHANGELOG.md)"
+          "📋 [Detailed changelog](https://github.com/test-owner/test-repo/blob/release-9.0.0/CHANGELOG.md)",
         );
       }));
   });

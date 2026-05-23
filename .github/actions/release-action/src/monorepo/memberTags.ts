@@ -63,10 +63,7 @@ export function parseMemberTag(name: string, tag: string): string | null {
  * Find the latest released version for a member by scanning `<name>@v*` tags.
  * Returns `null` when the member has no prior releases.
  */
-export async function getLatestMemberVersion(
-  name: string,
-  cwd: string,
-): Promise<string | null> {
+export async function getLatestMemberVersion(name: string, cwd: string): Promise<string | null> {
   const tags = await listTags(memberTagPattern(name), cwd);
   for (const tag of tags) {
     const version = parseMemberTag(name, tag);

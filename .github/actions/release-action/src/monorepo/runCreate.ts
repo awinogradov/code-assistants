@@ -19,10 +19,7 @@ import { join } from "node:path";
 import semver from "semver";
 
 import { assemblePrBody } from "../assemble-pr-body.ts";
-import {
-  appendMigratingSection,
-  readBreakingNotes,
-} from "../migrations/migratingAppend.ts";
+import { appendMigratingSection, readBreakingNotes } from "../migrations/migratingAppend.ts";
 import { bumpVersion, generateChangelog } from "../release.ts";
 import { updateVersionFiles } from "../prepareRelease.ts";
 import { refreshReleaseBadge } from "../updateReleaseBadge.ts";
@@ -32,11 +29,7 @@ import {
   type BumpLevel,
   type MemberManifest,
 } from "./dependentsGraph.ts";
-import {
-  discoverMembers,
-  type DiscoveryResult,
-  type Member,
-} from "./discoverMembers.ts";
+import { discoverMembers, type DiscoveryResult, type Member } from "./discoverMembers.ts";
 import {
   getLatestMemberTagReachable,
   getLatestMemberVersion,
@@ -85,9 +78,7 @@ export interface RunCreateOptions {
  * empty `releases` array — the caller should fall through to the standalone
  * flow.
  */
-export async function runCreate(
-  options: RunCreateOptions = {},
-): Promise<RunCreateResult> {
+export async function runCreate(options: RunCreateOptions = {}): Promise<RunCreateResult> {
   const cwd = options.cwd ?? process.cwd();
   const branchTemplate = options.branchTemplate ?? "release-{member}-{version}";
 
@@ -206,9 +197,7 @@ export interface EmitMemberArtifactsOptions {
  * the emit step with another member's branch is what allowed earlier drafts of
  * this orchestrator to cross-pollinate release commits between PRs.
  */
-export async function emitMemberArtifacts(
-  options: EmitMemberArtifactsOptions,
-): Promise<void> {
+export async function emitMemberArtifacts(options: EmitMemberArtifactsOptions): Promise<void> {
   const { release, cwd } = options;
   const { member, previousVersion, newVersion, bumpLevel, natural, branch } = release;
   const tagPrefix = memberTagPrefix(member.name);
@@ -230,9 +219,7 @@ export async function emitMemberArtifacts(
   // stripped of its own header by `startOfLastReleasePattern`).
   const memberChangelogPath = join(member.path, "CHANGELOG.md");
   const memberChangelogFile = Bun.file(memberChangelogPath);
-  const priorContent = (await memberChangelogFile.exists())
-    ? await memberChangelogFile.text()
-    : "";
+  const priorContent = (await memberChangelogFile.exists()) ? await memberChangelogFile.text() : "";
   const priorStart = priorContent.search(/(^#+ \[?[0-9]+\.[0-9]+\.[0-9]+|<a name=)/m);
   const history = priorStart !== -1 ? priorContent.substring(priorStart) : "";
   await Bun.write(
@@ -272,6 +259,7 @@ export async function emitMemberArtifacts(
     branchTemplate: branch.replaceAll(newVersion, "{version}"),
   });
 
-  console.log(`Prepared ${member.name} ${previousVersion ?? "0.0.0"} → ${newVersion} (${bumpLevel})`);
+  console.log(
+    `Prepared ${member.name} ${previousVersion ?? "0.0.0"} → ${newVersion} (${bumpLevel})`,
+  );
 }
-

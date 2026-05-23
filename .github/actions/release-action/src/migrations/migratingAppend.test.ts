@@ -81,7 +81,12 @@ describe("appendMigratingSection", () => {
 });
 
 describe("readBreakingNotes", () => {
-  async function commit(repo: string, relPath: string, file: string, message: string): Promise<void> {
+  async function commit(
+    repo: string,
+    relPath: string,
+    file: string,
+    message: string,
+  ): Promise<void> {
     await mkdir(join(repo, relPath), { recursive: true });
     await Bun.write(join(repo, relPath, file), `${Date.now()}\n`);
     await $`git add ${join(relPath, file)}`.cwd(repo).quiet();

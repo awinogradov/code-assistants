@@ -150,8 +150,7 @@ function pickBodyWithinLimit(
  */
 export async function assemblePrBody(options: AssemblePrBodyOptions = {}): Promise<void> {
   const cwd = options.cwd ?? process.cwd();
-  const branchTemplate =
-    options.branchTemplate ?? process.env.INPUT_BRANCH ?? "release-{version}";
+  const branchTemplate = options.branchTemplate ?? process.env.INPUT_BRANCH ?? "release-{version}";
   const releaseNotesDir = options.releaseNotesDir ?? ".release_notes";
   const changelogFileName = options.changelogFileName ?? "CHANGELOG.md";
 
@@ -204,8 +203,7 @@ export async function assemblePrBody(options: AssemblePrBodyOptions = {}): Promi
   const wrappedTickets = wrapTicketsInDetails(ticketSection);
   const ticketBlock = wrappedTickets ? `${wrappedTickets}\n\n` : "";
 
-  const enhanced =
-    `${summarySection.trimEnd()}\n\n## Release Notes\n\n${cleanedNotes}\n\n${ticketBlock}${changelogLink}\n`;
+  const enhanced = `${summarySection.trimEnd()}\n\n## Release Notes\n\n${cleanedNotes}\n\n${ticketBlock}${changelogLink}\n`;
 
   const finalBody = pickBodyWithinLimit(
     enhanced,

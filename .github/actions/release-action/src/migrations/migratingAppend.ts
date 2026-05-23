@@ -110,7 +110,9 @@ export async function readBreakingNotes(options: {
 
   const notes: string[] = [];
   for (const message of messages) {
-    const matches = message.matchAll(/^BREAKING[ -]CHANGE:\s*(.+?)(?=\n\n|\n[A-Z][A-Za-z-]+:|\n*$)/gms);
+    const matches = message.matchAll(
+      /^BREAKING[ -]CHANGE:\s*(.+?)(?=\n\n|\n[A-Z][A-Za-z-]+:|\n*$)/gms,
+    );
     for (const match of matches) {
       const note = match[1]?.replace(/\s+/g, " ").trim();
       if (note) notes.push(note);

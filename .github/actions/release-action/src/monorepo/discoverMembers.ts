@@ -77,10 +77,7 @@ async function readJsonIfExists(path: string): Promise<unknown> {
   return file.json();
 }
 
-async function expandWorkspaceGlobs(
-  globs: readonly string[],
-  cwd: string,
-): Promise<string[]> {
+async function expandWorkspaceGlobs(globs: readonly string[], cwd: string): Promise<string[]> {
   // Overlapping globs (e.g. `packages/*` plus `packages/lib-a`) can yield the
   // same member directory twice. Deduplicate by path so a member never gets
   // released more than once per run.
@@ -180,9 +177,7 @@ export async function discoverMembers(cwd = process.cwd()): Promise<DiscoveryRes
     return { mode: "unknown", members: [] };
   }
 
-  const paths = root.members
-    ? Array.from(candidates)
-    : await expandWorkspaceGlobs(candidates, cwd);
+  const paths = root.members ? Array.from(candidates) : await expandWorkspaceGlobs(candidates, cwd);
 
   const members: Member[] = [];
   for (const memberPath of paths) {
