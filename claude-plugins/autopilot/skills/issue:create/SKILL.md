@@ -107,8 +107,7 @@ Search the repository for related work in both directions (open + closed) so the
 3. Merge and deduplicate by `number`. Rank by relevance (keyword match count + recency from `updatedAt`).
 4. Keep the top 5 results across issues+PRs combined. Categorise each as `[open]`, `[closed]`, or `[merged]` (PRs).
 5. On error (non-zero exit, network failure): log a warning and continue with no related items. Do not block the skill.
-6. If any open result has a title with > 80% keyword overlap with the planned title, flag it as a `possibleDuplicate`. Phase 7 will surface a warning line so the user can cancel and comment on the existing issue instead.
-7. Pass the related items into Phase 5 (used in the body's Context section as a `Related: #N, #M` line — magic-word free so it does NOT auto-close anything) and Phase 7 (preview includes the warning line if `possibleDuplicate` is set).
+6. Pass the related items into Phase 5 (used in the body's Context section as a `Related: #N, #M` line — magic-word free so it does NOT auto-close anything). The duplicate-detection check against the planned title runs in Phase 4 (after the title exists).
 
 ## Phase 4: Generate Title
 
@@ -130,6 +129,15 @@ Search the repository for related work in both directions (open + closed) so the
 | `"refactor token streaming pipeline"`               | `Refactor token streaming pipeline for backpressure` |
 | `"add release notes section to PR template"`        | `Add release notes section to pull request template` |
 | `"audio drops every time multiple clients connect"` | `Audio playback drops when multiple clients connect` |
+
+**Duplicate-detection check (after the title is generated):**
+
+For each open item returned by Phase 3, compute the keyword-overlap ratio against the generated title:
+
+- Tokenize both strings into lowercase keywords, drop English stop words (`a`, `the`, `for`, `to`, `of`, `in`, `on`, etc.).
+- `overlap = |titleKeywords ∩ candidateKeywords| / min(|titleKeywords|, |candidateKeywords|)`.
+- If `overlap > 0.8` for any open item, set `possibleDuplicate` to that item (the highest-scoring one wins on ties). Phase 7 will surface a warning line so the user can cancel and comment on the existing issue instead.
+- Closed and merged items are not duplicate candidates (they only feed the `Related:` line); only open items can trigger the warning.
 
 ## Phase 5: Generate Body
 
