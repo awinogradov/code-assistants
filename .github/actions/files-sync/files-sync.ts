@@ -21,7 +21,12 @@ import { Octokit } from '@octokit/rest';
 
 import { computeChanges } from './src/changeDetector.ts';
 import { createSyncPullRequest } from './src/createSyncPullRequest.ts';
-import { parseFilesInput, parseRepoSlug, type SyncEntry } from './src/parseInputs.ts';
+import {
+  isSymlinkEntry,
+  parseFilesInput,
+  parseRepoSlug,
+  type SyncEntry,
+} from './src/parseInputs.ts';
 
 interface Env {
   filesInput: string;
@@ -91,8 +96,16 @@ function composeBody(intro: string, paths: string[]): string {
   return `${intro}\n\n**Updated files:**\n\n${formatFileList(paths)}\n`;
 }
 
+function formatEntrySource(entry: SyncEntry): string {
+  if (isSymlinkEntry(entry)) {
+    return `(symlink) ${entry.symlink} → ${entry.dest}`;
+  }
+
+  return `${entry.repo}:${entry.source} → ${entry.dest}`;
+}
+
 async function writeNoChangesSummary(entries: SyncEntry[]): Promise<void> {
-  const sources = entries.map((entry) => `${entry.repo}:${entry.source} → ${entry.dest}`);
+  const sources = entries.map(formatEntrySource);
   const body = [
     '### Files sync',
     '',
