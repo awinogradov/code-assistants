@@ -88,21 +88,30 @@ function resolveBranchTemplate(): string {
 async function resolveBaseRef(cwd: string): Promise<string> {
   // Capture once before the loop so every member's branch is rooted at the
   // commit that triggered the workflow, never at the tip of the previous
-  // iteration's release commit.
+  // iteration's release commit. We always resolve symbolic names (GITHUB_SHA,
+  // origin/HEAD, HEAD) to a concrete commit SHA so subsequent checkouts in
+  // the loop don't drift as new commits land on the resolved ref.
   const sha = process.env.GITHUB_SHA;
   if (sha && sha.length > 0) return sha;
+
   const remoteHead = await $`git symbolic-ref refs/remotes/origin/HEAD`.cwd(cwd).quiet().nothrow();
   if (remoteHead.exitCode === 0) {
     const ref = remoteHead.stdout.toString().trim();
     if (ref) {
       const stripped = ref.replace(/^refs\/remotes\//, "");
-      const verify = await $`git rev-parse ${stripped}`.cwd(cwd).quiet().nothrow();
-      if (verify.exitCode === 0) {
-        return stripped;
+      const resolved = await $`git rev-parse ${stripped}`.cwd(cwd).quiet().nothrow();
+      if (resolved.exitCode === 0) {
+        const oid = resolved.stdout.toString().trim();
+        if (oid) return oid;
       }
     }
   }
-  return "HEAD";
+
+  // Final fallback: pin to whatever HEAD points at right now. Returning the
+  // symbolic name "HEAD" instead would re-resolve at each checkout and pick
+  // up the previous iteration's release commit.
+  const localHead = await $`git rev-parse HEAD`.cwd(cwd).quiet();
+  return localHead.stdout.toString().trim();
 }
 
 async function runMonorepoCreate(cwd: string): Promise<void> {
