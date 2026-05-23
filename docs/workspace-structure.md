@@ -38,10 +38,12 @@ Directory contents:
 - `action.yml` — composite step definitions, invokes the entry via `${{ github.action_path }}/<entry-path>`
 - `package.json` — workspace member, package name `@code-assistants/<name>-action`
 - `tsconfig.json` — includes `src/**/*.ts`
-- `src/` — all helpers, tests, and (eventually) entry files
+- `src/` — all source code (helpers, tests, and entry files)
 - `README.md`
+- Optional: `docs/`, `CLAUDE.md`, `AGENTS.md` (see [Per-member docs and agent files](#per-member-docs-and-agent-files))
+- Optional: tool config files with a `.ts`/`.mjs` extension (e.g., `vitest.config.ts`) — configs live at the root, not under `src/`
 
-**Target rule:** every `.ts` file should live under `src/`. Today two actions still have a root entry file (`files-sync.ts`, `agents-rules-sync.ts`) invoked directly by `action.yml`. That is the current state, not a violation — see [Current vs. target](#current-vs-target).
+**Target rule:** every `.ts` source file (entries, helpers, tests) should live under `src/`. Tool config files keyed by extension (`*.config.ts`, `*.config.mjs`) are exempt and remain at the root. Today two actions still have a root entry file (`files-sync.ts`, `agents-rules-sync.ts`) invoked directly by `action.yml` — that is the current state for source code, not a violation; see [Current vs. target](#current-vs-target).
 
 Worked examples:
 
@@ -77,11 +79,15 @@ Directory layout (`packages/<name>/`):
 packages/<name>/
 ├── package.json          # workspace name `@code-assistants/<name>` (no -action suffix)
 ├── tsconfig.json
+├── README.md             # optional
+├── docs/                 # optional (see Per-member docs and agent files)
+├── CLAUDE.md             # optional
+├── AGENTS.md             # optional
 └── src/
     └── <module>.ts       # one file per exported module
 ```
 
-No `.ts` files at the package root.
+Source code (entries, helpers, tests) lives under `src/`, never at the package root. Tool config files with a `.ts`/`.mjs` extension (e.g., `vitest.config.ts`) are the exception — like at the repo root (`lint-staged.config.ts`, `prettier.config.ts`), configs stay at the package root and are not imported as modules.
 
 `package.json` `exports` field maps the public surface — one entry per `src/` module:
 
@@ -141,6 +147,16 @@ The root `package.json` declares the repo's stack via a top-level `agents` objec
 
 `turbo.json` defines three tasks: `typecheck`, `test`, `clean`. Each task's `inputs` glob covers `action.yml`, `*.ts`, `src/**/*.ts`, `tsconfig.json`, and `package.json`. Tasks run only in workspace members that declare the matching `package.json` script — there is no global config to update when you add a new member.
 
+### Per-member docs and agent files
+
+Any workspace member (TypeScript action, YAML composite action, or package) MAY include:
+
+- `docs/` — a member-scoped docs directory for material too specific or too long for the README
+- `CLAUDE.md` — agent rules that apply only inside that member's directory (Claude Code loads these in addition to the repo-root `CLAUDE.md`)
+- `AGENTS.md` — optional, same scope as `CLAUDE.md` but consumed by other agent tooling
+
+None of these are required. Use them when a member has enough surface area to need it; for small members a `README.md` alone is fine.
+
 ### CLAUDE.md §3.1 file organization
 
 - Single module → flat file (`foo.ts`).
@@ -168,10 +184,10 @@ No CI matrix entry, no release-workflow registration, no extra `turbo.json` conf
 
 As of 2026-05-23.
 
-| Rule                                                      | State                                                                 |
-| --------------------------------------------------------- | --------------------------------------------------------------------- |
-| All `.ts` under `src/`                                    | Target — `files-sync` and `agents-rules-sync` still have root entries |
-| Package name `@code-assistants/<name>-action` for actions | Current                                                               |
-| Package name `@code-assistants/<name>` for packages       | Current                                                               |
-| `test` script in every TS workspace member                | N/A — `actions-core` has none by design                               |
-| `apps/` directory                                         | Target — no apps exist yet                                            |
+| Rule                                                      | State                                                                                                                      |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| All source `.ts` (entries, helpers, tests) under `src/`   | Target — `files-sync` and `agents-rules-sync` still have root entries (configs like `*.config.ts` always stay at the root) |
+| Package name `@code-assistants/<name>-action` for actions | Current                                                                                                                    |
+| Package name `@code-assistants/<name>` for packages       | Current                                                                                                                    |
+| `test` script in every TS workspace member                | N/A — `actions-core` has none by design                                                                                    |
+| `apps/` directory                                         | Target — no apps exist yet                                                                                                 |
