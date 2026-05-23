@@ -8,7 +8,7 @@ Several Autopilot skills behave differently per stack — `/plan` delegates to a
 
 ## Location
 
-A single object under the top-level key `agents` in the repository-root `package.json`:
+An object under the top-level key `agents` in a `package.json`:
 
 ```json
 {
@@ -21,6 +21,16 @@ A single object under the top-level key `agents` in the repository-root `package
 ```
 
 The field coexists with normal npm metadata. It is not consumed by npm, Bun, or any package manager — only by Autopilot skills.
+
+### Workspaces
+
+Consuming skills always read the **repository-root** `package.json` to detect stack and language; workspace members are not walked. Members may declare their own `agents` field anyway, and this repository does so on every workspace member to keep stack metadata visible at every module boundary — consistent with the per-member `docs/`, `CLAUDE.md`, and `AGENTS.md` convention recorded in `docs/workspace-structure.md`.
+
+Rules for member declarations:
+
+- The value should match the root unless the member genuinely uses a different stack or language.
+- Members do not override the root for skill detection today; if a future consumer reads the nearest `package.json` instead, the member declaration takes effect automatically.
+- A member may omit the field; nothing breaks because root still drives detection.
 
 ## Spec
 
