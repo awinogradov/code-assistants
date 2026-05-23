@@ -145,6 +145,20 @@ The root `package.json` declares the repo's stack via a top-level `agents` objec
 }
 ```
 
+### The `release` field
+
+A workspace member's `package.json` declares its release config via a top-level `release` object — see [`docs/release-field.md`](./release-field.md) for the contract. Consumed by [`release-action`](../.github/actions/release-action/README.md) to pick the version source, npm-publish step, major-version tag, and the optional Slack notification channel. Example for a Node.js library member:
+
+```json
+{
+  "name": "@org/ingest",
+  "release": {
+    "type": "lib-nodejs",
+    "slack": "#releases"
+  }
+}
+```
+
 ### Workspace scripts
 
 Every TypeScript workspace member (actions and packages) declares its scripts in its own `package.json`. Turbo discovers them per-package — there is no central script registry to update when you add a member.

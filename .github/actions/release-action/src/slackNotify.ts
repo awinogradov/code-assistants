@@ -1,9 +1,11 @@
 /**
  * Post release notification to Slack with Block Kit formatting.
  *
- * Reads the release channel from `platform.meta.yml` (`slack.release` field),
+ * Reads the release channel from `package.json` (`release.slack` field),
  * extracts AI-generated release notes, and posts a rich message with
  * version, notes, and a link to the GitHub release.
+ *
+ * @see ../../../../docs/release-field.md
  *
  * @example
  * ```bash
@@ -12,7 +14,7 @@
  */
 import { WebClient } from "@slack/web-api";
 
-import { parseSlackRelease } from "./platformMeta.ts";
+import { readReleaseField } from "./releaseField.ts";
 import { changelogSectionNames } from "./release.ts";
 
 /** Heading prefix used by conventional changelog sections in release notes files */
@@ -97,16 +99,16 @@ if (import.meta.main) {
     const repo = process.env.GITHUB_REPOSITORY ?? "";
     const serverUrl = process.env.GITHUB_SERVER_URL ?? "https://github.com";
 
-    // Read platform.meta.yml for channel
-    const metaFile = Bun.file("platform.meta.yml");
-    if (!(await metaFile.exists())) {
-      console.log("platform.meta.yml not found, skipping Slack notification");
+    // Read package.json release.slack for channel
+    const pkgFile = Bun.file("package.json");
+    if (!(await pkgFile.exists())) {
+      console.log("package.json not found, skipping Slack notification");
       process.exit(0);
     }
 
-    const channel = parseSlackRelease(await metaFile.text());
+    const { slack: channel } = readReleaseField(await pkgFile.json());
     if (!channel) {
-      console.log("No slack.release field in platform.meta.yml, skipping notification");
+      console.log("No release.slack field in package.json, skipping notification");
       process.exit(0);
     }
 
