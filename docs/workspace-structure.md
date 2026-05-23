@@ -147,7 +147,7 @@ The root `package.json` declares the repo's stack via a top-level `agents` objec
 
 ### The `release` field
 
-A workspace member's `package.json` declares its release config via a top-level `release` object — see [`docs/release-field.md`](./release-field.md) for the contract. Consumed by [`release-action`](../.github/actions/release-action/README.md) to pick the version source, npm-publish step, major-version tag, and the optional Slack notification channel. Example for a Node.js library member:
+A workspace member's `package.json` declares its release config via a top-level `release` object — see [`docs/release-field.md`](./release-field.md) for the contract. Consumed by [`release-action`](../.github/actions/release-action/README.md) to pick the version source, npm-publish step, major-version tag, and the optional Slack notification channel. The repo-root `package.json` may also declare `release.members` to opt specific workspace paths into monorepo mode — see [`docs/release-field.md`](./release-field.md#monorepo-root) and the [release-action monorepo section](../.github/actions/release-action/README.md#monorepo-mode). Example for a Node.js library member:
 
 ```json
 {
