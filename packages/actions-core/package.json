@@ -5,6 +5,10 @@
   "private": true,
   "type": "module",
   "license": "MIT",
+  "agents": {
+    "rules": "Bun",
+    "language": "typescript"
+  },
   "exports": {
     "./fetchRawContent": "./src/fetchRawContent.ts"
   },
