@@ -23,12 +23,7 @@ import {
   appendMigratingSection,
   readBreakingNotes,
 } from "../migrations/migratingAppend.ts";
-import {
-  bumpVersion,
-  changelogHeader,
-  generateChangelog,
-  startOfLastReleasePattern,
-} from "../release.ts";
+import { bumpVersion, generateChangelog } from "../release.ts";
 import { updateVersionFiles } from "../prepareRelease.ts";
 import { refreshReleaseBadge } from "../updateReleaseBadge.ts";
 import {
@@ -75,26 +70,26 @@ export interface RunCreateOptions {
   cwd?: string;
   /** Branch template for per-member release branches; `{member}` and `{version}` are substituted. */
   branchTemplate?: string;
-  /**
-   * Skip side effects (file writes, git tag reads stay since they're read-only).
-   * Used by tests and the `--dry-run` CLI mode.
-   */
-  dryRun?: boolean;
 }
 
 /**
- * Compute and (unless `dryRun`) apply per-member release artifacts for the monorepo.
+ * Compute the per-member release plan for a monorepo.
  *
- * Returns the {@link DiscoveryResult} alongside the computed releases. Standalone
- * repos are returned with `discovery.mode === "standalone"` and an empty
- * `releases` array — the caller should fall through to the standalone flow.
+ * This function is pure with respect to the filesystem: it inspects git
+ * history and workspace manifests but does NOT write per-member changelog,
+ * version, or release-notes files. The caller drives side effects by invoking
+ * {@link emitMemberArtifacts} once per release inside a `git checkout -B
+ * <branch> origin/main` boundary so commits never cross-contaminate.
+ *
+ * Standalone repos are returned with `discovery.mode === "standalone"` and an
+ * empty `releases` array — the caller should fall through to the standalone
+ * flow.
  */
 export async function runCreate(
   options: RunCreateOptions = {},
 ): Promise<RunCreateResult> {
   const cwd = options.cwd ?? process.cwd();
   const branchTemplate = options.branchTemplate ?? "release-{member}-{version}";
-  const dryRun = options.dryRun ?? false;
 
   const discovery = await discoverMembers(cwd);
 
@@ -146,18 +141,6 @@ export async function runCreate(
       branch,
       tag,
     });
-
-    if (!dryRun) {
-      await emitMemberArtifacts({
-        member,
-        previousVersion: previous,
-        newVersion,
-        bumpLevel: bump,
-        natural: naturalBumps.has(member.name),
-        cwd,
-        branch,
-      });
-    }
   }
 
   return { discovery, releases };
@@ -181,6 +164,10 @@ async function computeNaturalBump(
   currentVersion: string,
 ): Promise<BumpLevel | undefined> {
   const tagPrefix = memberTagPrefix(member.name);
+  // Git path filters are resolved relative to the process working directory,
+  // not the repository root, so the orchestrator pins cwd to the repo root and
+  // uses the member's repo-relative path as the filter. Mixing them silently
+  // skipped real commits in early drafts of this orchestrator.
   const result = await bumpVersion(currentVersion, repoCwd, {
     tagPrefix,
     path: member.relPath,
@@ -204,45 +191,60 @@ function renderBranch(template: string, memberName: string, version: string): st
   return template.replaceAll("{member}", memberName).replaceAll("{version}", version);
 }
 
-async function emitMemberArtifacts(input: {
-  member: Member;
-  previousVersion: string | null;
-  newVersion: string;
-  bumpLevel: BumpLevel;
-  natural: boolean;
+export interface EmitMemberArtifactsOptions {
+  release: MemberRelease;
+  /** Repository root (used for git operations and path resolution). */
   cwd: string;
-  branch: string;
-}): Promise<void> {
-  const { member, previousVersion, newVersion, bumpLevel, natural, cwd, branch } = input;
+}
+
+/**
+ * Write all per-member artifacts (changelog, release notes, version file,
+ * README badge, MIGRATING.md on major bumps, and the PR-body skeleton).
+ *
+ * Must be invoked AFTER the per-member branch has been checked out from
+ * `origin/main`, so the working tree is clean of prior members' files. Mixing
+ * the emit step with another member's branch is what allowed earlier drafts of
+ * this orchestrator to cross-pollinate release commits between PRs.
+ */
+export async function emitMemberArtifacts(
+  options: EmitMemberArtifactsOptions,
+): Promise<void> {
+  const { release, cwd } = options;
+  const { member, previousVersion, newVersion, bumpLevel, natural, branch } = release;
   const tagPrefix = memberTagPrefix(member.name);
 
-  // Per-member changelog
-  const log = await generateChangelog(newVersion, member.path, {
+  // Generate the changelog using the same (repoCwd, path) shape as
+  // `computeNaturalBump`. The history portion read from `<member>/CHANGELOG.md`
+  // is preserved via `generateChangelog`'s own logic — see release.ts.
+  const log = await generateChangelog(newVersion, cwd, {
     tagPrefix,
     path: member.relPath,
   });
 
-  // Per-member release notes (initial body — AI/Slack enrichment happens later
-  // by the consumer side after `assemblePrBody`).
   await Bun.write(join(member.path, ".release_notes", `${newVersion}.md`), log.release, {
     createPath: true,
   });
 
-  // Per-member CHANGELOG.md
-  const changelogPath = join(member.path, "CHANGELOG.md");
+  // Per-member CHANGELOG.md: prepend the canonical header + this release, then
+  // append the prior `history` returned by `generateChangelog` (already
+  // stripped of its own header by `startOfLastReleasePattern`).
+  const memberChangelogPath = join(member.path, "CHANGELOG.md");
+  const memberChangelogFile = Bun.file(memberChangelogPath);
+  const priorContent = (await memberChangelogFile.exists())
+    ? await memberChangelogFile.text()
+    : "";
+  const priorStart = priorContent.search(/(^#+ \[?[0-9]+\.[0-9]+\.[0-9]+|<a name=)/m);
+  const history = priorStart !== -1 ? priorContent.substring(priorStart) : "";
   await Bun.write(
-    changelogPath,
-    `${changelogHeader}${log.release}${stripChangelogHeader(log.history)}`.replace(/\n+$/, "\n"),
+    memberChangelogPath,
+    `${log.header}${log.release}${history}`.replace(/\n+$/, "\n"),
   );
 
-  // Per-member version-file write (package.json / pyproject.toml / plugin.json)
   await updateVersionFiles(newVersion, member.path);
   await Bun.write(join(member.path, "version"), newVersion);
 
-  // Per-member README badge
   await refreshReleaseBadge(member.path);
 
-  // Per-member MIGRATING.md on major bump
   if (bumpLevel === "major") {
     const breakingNotes = await readBreakingNotes({
       cwd,
@@ -257,8 +259,8 @@ async function emitMemberArtifacts(input: {
     });
   }
 
-  // PR-body skeleton: same content as the changelog, plus a single-line note
-  // for dependent-driven bumps so reviewers can see why the member is moving.
+  // PR-body skeleton: the changelog body plus a single-line note for
+  // dependent-driven bumps so reviewers can see why the member is moving.
   const bodyPrefix = natural ? "" : "_Workspace dependent bump._\n\n";
   await Bun.write(join(member.path, ".release_bot", "body"), `${bodyPrefix}${log.release}`, {
     createPath: true,
@@ -266,15 +268,10 @@ async function emitMemberArtifacts(input: {
 
   await assemblePrBody({
     cwd: member.path,
+    memberRelPath: member.relPath,
     branchTemplate: branch.replaceAll(newVersion, "{version}"),
   });
 
   console.log(`Prepared ${member.name} ${previousVersion ?? "0.0.0"} → ${newVersion} (${bumpLevel})`);
 }
 
-function stripChangelogHeader(history: string): string {
-  // The first occurrence of the conventional-changelog header is meaningful
-  // only when there is no prior history; the orchestrator always prepends a
-  // canonical `changelogHeader`, so any previously-stored header is dropped.
-  return history.replace(startOfLastReleasePattern, (match) => match);
-}

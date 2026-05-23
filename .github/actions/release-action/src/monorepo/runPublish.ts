@@ -11,6 +11,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { $ } from "bun";
+
 import { discoverMembers, type Member } from "./discoverMembers.ts";
 import { memberMajorTag, memberVersionTag } from "./memberTags.ts";
 
@@ -18,6 +20,10 @@ import { memberMajorTag, memberVersionTag } from "./memberTags.ts";
 interface PullRequestEvent {
   pull_request?: {
     merged?: boolean;
+    number?: number;
+  };
+  repository?: {
+    full_name?: string;
   };
 }
 
@@ -45,27 +51,52 @@ export interface ResolveMemberOptions {
 }
 
 /**
- * Read a list of changed file paths.
+ * Read the list of file paths changed by the merged PR.
  *
- * The action expects a list of files modified by the merged PR. In CI we read
- * the PR's files via `gh pr view <N> --json files`, but the publish entry can
- * also be invoked with `changedFiles` directly (used by the test suite and the
- * `--dry-run` smoke flow).
+ * Resolution order:
+ * 1. Explicit `changedFiles` override (tests and the `--dry-run` smoke flow).
+ * 2. `GITHUB_EVENT_PATH` — read the merged PR number, then call
+ *    `gh pr view <N> --repo <owner/repo> --json files` to fetch the file list.
+ *    The `pull_request` payload itself does not carry files, so the gh API
+ *    call is required.
+ *
+ * Returns an empty array only when the event payload reports the PR is not
+ * merged (publish must no-op in that case); any other failure throws so the
+ * orchestrator never silently picks the wrong member.
  */
 export async function readChangedFiles(options: ResolveMemberOptions): Promise<string[]> {
   if (options.changedFiles) return [...options.changedFiles];
 
   const eventPath = options.eventPath ?? process.env.GITHUB_EVENT_PATH;
-  if (!eventPath) return [];
+  if (!eventPath) {
+    throw new Error(
+      "Cannot read changed files: GITHUB_EVENT_PATH is unset and no changedFiles override was provided.",
+    );
+  }
 
   const raw = await readFile(eventPath, "utf8");
   const event = JSON.parse(raw) as PullRequestEvent;
   if (!event.pull_request?.merged) return [];
 
-  // The pull_request payload does not carry the file list — the caller must
-  // hand us one via `changedFiles`. We return [] here so callers can fall back
-  // to `gh pr view <N> --json files` if needed.
-  return [];
+  const prNumber = event.pull_request.number;
+  const repo = event.repository?.full_name ?? process.env.GITHUB_REPOSITORY;
+  if (!prNumber || !repo) {
+    throw new Error("Cannot read changed files: event payload missing PR number or repository name.");
+  }
+
+  const result = await $`gh pr view ${prNumber} --repo ${repo} --json files --jq ${".files[].path"}`
+    .quiet()
+    .nothrow();
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `gh pr view ${prNumber} failed: ${result.stderr.toString().trim() || `exit ${result.exitCode}`}`,
+    );
+  }
+  return result.stdout
+    .toString()
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
 }
 
 /**

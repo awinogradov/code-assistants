@@ -157,6 +157,33 @@ describe("assemble-pr-body", () => {
         const enhanced = await readEnhanced(dir);
         expect(enhanced).toContain("📋 [Detailed changelog](CHANGELOG.md)");
       }));
+
+    test("monorepo: blob URLs are prefixed with the member rel-path", () =>
+      withTempDir(async (dir) => {
+        await createBody(dir, "![badge](url)\n\n### Features\n\n* feat M");
+        await createReleaseNotes(dir, "Notes");
+        await Bun.write(join(dir, "version"), "1.0.0");
+
+        const { assemblePrBody } = await import("./assemble-pr-body.ts");
+        process.env.GITHUB_SERVER_URL = githubEnv.GITHUB_SERVER_URL;
+        process.env.GITHUB_REPOSITORY = githubEnv.GITHUB_REPOSITORY;
+        process.env.INPUT_BRANCH = "release-mylib-1.0.0";
+        try {
+          await assemblePrBody({
+            cwd: dir,
+            memberRelPath: "packages/mylib",
+          });
+        } finally {
+          delete process.env.GITHUB_SERVER_URL;
+          delete process.env.GITHUB_REPOSITORY;
+          delete process.env.INPUT_BRANCH;
+        }
+
+        const enhanced = await readEnhanced(dir);
+        expect(enhanced).toContain(
+          "📋 [Detailed changelog](https://github.com/test-owner/test-repo/blob/release-mylib-1.0.0/packages/mylib/CHANGELOG.md)",
+        );
+      }));
   });
 
   describe("truncation", () => {

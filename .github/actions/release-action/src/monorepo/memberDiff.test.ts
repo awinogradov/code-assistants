@@ -53,6 +53,20 @@ describe("listMemberCommits", () => {
     }));
 });
 
+describe("listMemberCommits failure", () => {
+  test("throws when git log exits non-zero (e.g. invalid range)", () =>
+    withTempRepo(async (repo) => {
+      await commitInPath(repo, "packages/lib", "f.txt", "feat(lib): seed");
+      await expect(
+        listMemberCommits({
+          cwd: repo,
+          path: "packages/lib",
+          since: "does-not-exist@v999.0.0",
+        }),
+      ).rejects.toThrow(/git log failed/);
+    }));
+});
+
 describe("memberHasChanges", () => {
   test("is true when at least one commit touched the path", () =>
     withTempRepo(async (repo) => {

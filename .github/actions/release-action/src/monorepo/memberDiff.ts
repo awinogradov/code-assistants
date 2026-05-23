@@ -44,7 +44,10 @@ export async function listMemberCommits(options: MemberDiffOptions): Promise<str
     .quiet()
     .nothrow();
   if (result.exitCode !== 0) {
-    return [];
+    const stderr = result.stderr.toString().trim();
+    throw new Error(
+      `git log failed for ${path} (range ${range}): ${stderr || `exit ${result.exitCode}`}`,
+    );
   }
   return result.stdout.toString().trim().split("\n").filter(Boolean);
 }
