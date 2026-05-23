@@ -1,0 +1,301 @@
+/**
+ * Shared GitHub review operations for PR review submission and comment reaction scripts.
+ * Provides review thread fetching, resolution, and Octokit initialization.
+ *
+ * @example
+ * import { fetchReviewThreads, resolveThread, parseRepoEnv } from "./github/githubReview.ts";
+ */
+import { Octokit } from "@octokit/rest";
+
+/** GitHub PR review event type */
+export type ReviewEvent = "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
+
+/** Flattened review thread from GraphQL response */
+export interface ReviewThread {
+  id: string;
+  path: string;
+  line: number | null;
+  isOutdated: boolean;
+  isResolved: boolean;
+  firstCommentAuthor: string | null;
+  firstCommentBody: string;
+  firstCommentReviewId: string | null;
+}
+
+/** Parsed repository environment configuration */
+export interface RepoEnv {
+  octokit: Octokit;
+  owner: string;
+  repoName: string;
+  pullNumber: number;
+  reviewer: string;
+}
+
+/** GraphQL response shape for review threads query */
+interface ReviewThreadsResponse {
+  repository: {
+    pullRequest: {
+      reviewThreads: {
+        nodes: Array<{
+          id: string;
+          path: string;
+          line: number | null;
+          isOutdated: boolean;
+          isResolved: boolean;
+          comments: {
+            nodes: Array<{
+              author: { login: string } | null;
+              body: string;
+              pullRequestReview: { id: string } | null;
+            }>;
+          };
+        }>;
+      };
+    };
+  };
+}
+
+/** Maps verdict string to GitHub review event */
+export const verdictToEvent: Record<string, ReviewEvent> = {
+  approve: "APPROVE",
+  requestChanges: "REQUEST_CHANGES",
+  comment: "COMMENT",
+};
+
+/**
+ * Parse and validate required environment variables, initialize Octokit.
+ * Throws if GH_TOKEN, REPO, PR_NUMBER, or REVIEWER are missing or invalid.
+ */
+export function parseRepoEnv(): RepoEnv {
+  const token = process.env.GH_TOKEN;
+  const repo = process.env.REPO;
+  const prNumber = process.env.PR_NUMBER;
+  const reviewer = process.env.REVIEWER;
+
+  if (!token || !repo || !prNumber || !reviewer) {
+    throw new Error("Missing required environment variables: GH_TOKEN, REPO, PR_NUMBER, REVIEWER");
+  }
+
+  const [owner, repoName] = repo.split("/");
+  if (!owner || !repoName) {
+    throw new Error(`Invalid REPO format: ${repo}. Expected owner/repo`);
+  }
+
+  return {
+    octokit: new Octokit({ auth: token }),
+    owner,
+    repoName,
+    pullNumber: Number(prNumber),
+    reviewer,
+  };
+}
+
+/**
+ * Fetch all review threads for a PR via GraphQL.
+ * Returns flattened thread objects with first comment metadata.
+ */
+export async function fetchReviewThreads(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  pullNumber: number
+): Promise<ReviewThread[]> {
+  const query = `
+    query($owner: String!, $repo: String!, $number: Int!) {
+      repository(owner: $owner, name: $repo) {
+        pullRequest(number: $number) {
+          reviewThreads(first: 100) {
+            nodes {
+              id
+              path
+              line
+              isOutdated
+              isResolved
+              comments(first: 1) {
+                nodes {
+                  author { login }
+                  body
+                  pullRequestReview { id }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const result = await octokit.graphql<ReviewThreadsResponse>(query, {
+    owner,
+    repo,
+    number: pullNumber,
+  });
+
+  return result.repository.pullRequest.reviewThreads.nodes.map((node) => ({
+    id: node.id,
+    path: node.path,
+    line: node.line,
+    isOutdated: node.isOutdated,
+    isResolved: node.isResolved,
+    firstCommentAuthor: node.comments.nodes[0]?.author?.login ?? null,
+    firstCommentBody: node.comments.nodes[0]?.body ?? "",
+    firstCommentReviewId: node.comments.nodes[0]?.pullRequestReview?.id ?? null,
+  }));
+}
+
+/**
+ * Resolve a single review thread by its GraphQL node ID.
+ */
+export async function resolveThread(octokit: Octokit, threadId: string): Promise<void> {
+  await octokit.graphql(
+    `
+      mutation($threadId: ID!) {
+        resolveReviewThread(input: { threadId: $threadId }) {
+          thread { isResolved }
+        }
+      }
+    `,
+    { threadId }
+  );
+}
+
+/**
+ * Unresolve a single review thread by its GraphQL node ID.
+ * Used to reopen threads that GitHub auto-resolves on APPROVE reviews.
+ */
+export async function unresolveThread(octokit: Octokit, threadId: string): Promise<void> {
+  await octokit.graphql(
+    `
+      mutation($threadId: ID!) {
+        unresolveReviewThread(input: { threadId: $threadId }) {
+          thread { isResolved }
+        }
+      }
+    `,
+    { threadId }
+  );
+}
+
+/**
+ * Delete all pending reviews for a PR to avoid GitHub's single-pending-review limit.
+ */
+export async function deletePendingReviews(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  pullNumber: number
+): Promise<void> {
+  const { data: reviews } = await octokit.rest.pulls.listReviews({
+    owner,
+    repo,
+    pull_number: pullNumber,
+  });
+
+  const pendingReviews = reviews.filter((r) => r.state === "PENDING");
+
+  for (const review of pendingReviews) {
+    console.log(`Deleting pending review ${review.id}...`);
+    await octokit.rest.pulls.deletePendingReview({
+      owner,
+      repo,
+      pull_number: pullNumber,
+      review_id: review.id,
+    });
+  }
+}
+
+/**
+ * Read Claude's plain text result from the execution output file.
+ * Falls back gracefully: returns null if file is missing, unreadable, or lacks a result message.
+ *
+ * @param filePath - Path to the execution output JSON file
+ * @see https://docs.anthropic.com/en/docs/agent-sdk/typescript - SDKResultMessage
+ */
+export async function readExecutionResult(filePath: string | undefined): Promise<string | null> {
+  if (!filePath) {
+    return null;
+  }
+
+  try {
+    const data: unknown = await Bun.file(filePath).json();
+    const messages = Array.isArray(data) ? data : [data];
+    const resultMessage = messages.findLast(
+      (m) => typeof m === "object" && m !== null && (m as Record<string, unknown>).type === "result"
+    ) as Record<string, unknown> | undefined;
+    const result = resultMessage?.result;
+    return typeof result === "string" ? result : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if the bot already submitted a review on the current PR head commit.
+ * Detects reviews submitted during Claude's execution via MCP tools when structured output is missing.
+ *
+ * @param headSha - Current PR head commit SHA for commit-level matching
+ */
+export async function hasRecentBotReview(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  pullNumber: number,
+  reviewer: string,
+  headSha?: string
+): Promise<boolean> {
+  const { data: reviews } = await octokit.rest.pulls.listReviews({
+    owner,
+    repo,
+    pull_number: pullNumber,
+  });
+
+  const lastBotReview = reviews
+    .filter((r) => r.user?.login === reviewer && r.state !== "PENDING")
+    .at(-1);
+
+  if (!lastBotReview) {
+    return false;
+  }
+
+  if (headSha) {
+    return lastBotReview.commit_id === headSha;
+  }
+
+  return true;
+}
+
+/**
+ * Check if the bot already replied to a specific comment.
+ * Detects replies submitted during Claude's execution via MCP tools when structured output is missing.
+ */
+export async function hasRecentBotReply(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  pullNumber: number,
+  reviewer: string,
+  commentId?: string,
+  commentPath?: string
+): Promise<boolean> {
+  const since = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+
+  if (commentPath && commentId) {
+    const { data: comments } = await octokit.rest.pulls.listReviewComments({
+      owner,
+      repo,
+      pull_number: pullNumber,
+      since,
+    });
+    return comments.some(
+      (c) => c.in_reply_to_id === Number(commentId) && c.user?.login === reviewer
+    );
+  }
+
+  const { data: comments } = await octokit.rest.issues.listComments({
+    owner,
+    repo,
+    issue_number: pullNumber,
+    since,
+  });
+  return comments.some((c) => c.user?.login === reviewer);
+}
