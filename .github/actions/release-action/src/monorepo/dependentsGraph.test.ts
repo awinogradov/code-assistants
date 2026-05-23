@@ -68,6 +68,23 @@ describe("buildDependentsGraph", () => {
       expect(Array.from(graph.get("lib") ?? [])).toEqual([]);
     }));
 
+  test("ignores a member-named dependency that is not declared as workspace:*", () =>
+    withTempDir(async (dir) => {
+      const core = await setupMember(dir, "packages/core", {
+        name: "@scope/core",
+        shortName: "core",
+      });
+      const consumer = await setupMember(dir, "packages/consumer", {
+        name: "@scope/consumer",
+        shortName: "consumer",
+        // pinned to a registry version, not workspace:* — must not create an edge
+        dependencies: { "@scope/core": "1.0.0" },
+      });
+
+      const graph = await buildDependentsGraph([core, consumer]);
+      expect(Array.from(graph.get("core") ?? [])).toEqual([]);
+    }));
+
   test("does not add a self-edge when a member declares itself", () =>
     withTempDir(async (dir) => {
       const lib = await setupMember(dir, "packages/lib", {

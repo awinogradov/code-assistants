@@ -95,7 +95,12 @@ export async function readBreakingNotes(options: {
     .cwd(cwd)
     .quiet()
     .nothrow();
-  if (result.exitCode !== 0) return [];
+  if (result.exitCode !== 0) {
+    const stderr = result.stderr.toString().trim();
+    throw new Error(
+      `git log failed for ${path} (range ${range}): ${stderr || `exit ${result.exitCode}`}`,
+    );
+  }
 
   const stream = result.stdout.toString();
   const messages = stream

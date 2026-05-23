@@ -124,6 +124,23 @@ describe("discoverMembers", () => {
     });
   });
 
+  test("deduplicates members matched by overlapping workspace globs", () =>
+    withTempDir(async (dir) => {
+      await writePkg(dir, {
+        name: "monorepo",
+        workspaces: ["packages/*", "packages/lib"],
+      });
+      await mkdir(join(dir, "packages", "lib"), { recursive: true });
+      await writePkg(join(dir, "packages", "lib"), {
+        name: "@scope/lib",
+        release: { type: "lib-nodejs" },
+      });
+
+      const result = await discoverMembers(dir);
+      expect(result.members.length).toBe(1);
+      expect(result.members[0]?.name).toBe("lib");
+    }));
+
   test("falls back to standalone when workspaces yield zero eligible members but root has release.type", async () => {
     await withTempDir(async (dir) => {
       await writePkg(dir, {

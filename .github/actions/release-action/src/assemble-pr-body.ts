@@ -31,6 +31,13 @@ export interface AssemblePrBodyOptions {
   releaseNotesDir?: string;
   /** Path within the member where the CHANGELOG.md lives. Defaults to `CHANGELOG.md`. */
   changelogFileName?: string;
+  /**
+   * Member path relative to the repository root (e.g. `.github/actions/release-action`).
+   * When set, the blob URLs for the changelog and release-notes links are
+   * prefixed with this path so they resolve from the repo root instead of the
+   * member subtree. Omit for standalone repos.
+   */
+  memberRelPath?: string;
 }
 
 /** Release notes file path and the branch it will be committed to */
@@ -39,17 +46,24 @@ interface ReleaseNotesTarget {
   branch: string;
 }
 
+function joinRelPath(prefix: string | undefined, suffix: string): string {
+  if (!prefix) return suffix;
+  const normalized = prefix.replace(/^\/+|\/+$/g, "");
+  return normalized.length === 0 ? suffix : `${normalized}/${suffix}`;
+}
+
 async function getReleaseNotesTarget(
   cwd: string,
   branchTemplate: string,
   releaseNotesDir: string,
+  memberRelPath: string | undefined,
 ): Promise<ReleaseNotesTarget | undefined> {
   const versionFile = Bun.file(join(cwd, "version"));
   if (await versionFile.exists()) {
     const version = (await versionFile.text()).trim();
     if (version) {
       return {
-        path: `${releaseNotesDir}/${version}.md`,
+        path: joinRelPath(memberRelPath, `${releaseNotesDir}/${version}.md`),
         branch: branchTemplate.replace("{version}", version),
       };
     }
@@ -175,10 +189,16 @@ export async function assemblePrBody(options: AssemblePrBodyOptions = {}): Promi
   // Safety net: strip any leading markdown headers AI may generate
   const cleanedNotes = releaseNotes.replace(/^(#+\s+.*\n+)+/, "");
 
-  const releaseTarget = await getReleaseNotesTarget(cwd, branchTemplate, releaseNotesDir);
+  const releaseTarget = await getReleaseNotesTarget(
+    cwd,
+    branchTemplate,
+    releaseNotesDir,
+    options.memberRelPath,
+  );
 
+  const changelogPath = joinRelPath(options.memberRelPath, changelogFileName);
   const changelogLink = releaseTarget
-    ? `📋 [Detailed changelog](${buildBlobUrl(releaseTarget.branch, changelogFileName)})`
+    ? `📋 [Detailed changelog](${buildBlobUrl(releaseTarget.branch, changelogPath)})`
     : "📋 Detailed changelog";
 
   const wrappedTickets = wrapTicketsInDetails(ticketSection);

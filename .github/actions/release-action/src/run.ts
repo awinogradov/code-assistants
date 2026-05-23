@@ -19,7 +19,11 @@ import { $ } from "bun";
 
 import { discoverMembers } from "./monorepo/discoverMembers.ts";
 import { memberMajorTag, memberVersionTag } from "./monorepo/memberTags.ts";
-import { runCreate, type MemberRelease } from "./monorepo/runCreate.ts";
+import {
+  emitMemberArtifacts,
+  runCreate,
+  type MemberRelease,
+} from "./monorepo/runCreate.ts";
 import {
   readChangedFiles,
   resolvePublishPlan,
@@ -48,19 +52,6 @@ async function ensureLabel(label: string, description: string): Promise<void> {
   await $`gh label create ${label} --color 85e131 --description ${description}`
     .quiet()
     .nothrow();
-}
-
-async function pushBranch(cwd: string, release: MemberRelease): Promise<void> {
-  await $`git checkout -B ${release.branch}`.cwd(cwd).quiet();
-  await $`git add ${release.member.relPath}`.cwd(cwd).quiet();
-  // .release_bot is shared per-member; it lives gitignored but we still want a
-  // clean commit, so add it explicitly only if it exists under the member dir.
-  await $`git commit -n -m ${`chore: release ${release.member.name} ${release.newVersion}`}`
-    .cwd(cwd)
-    .quiet();
-  await $`git push --no-verify --force origin ${release.branch}`
-    .cwd(cwd)
-    .quiet();
 }
 
 async function openOrUpdatePr(
@@ -103,7 +94,17 @@ async function runMonorepoCreate(cwd: string): Promise<void> {
 
   const releasedNames: string[] = [];
   for (const release of result.releases) {
-    await pushBranch(cwd, release);
+    // Reset to origin/main BEFORE emitting artifacts so the working tree is
+    // clean of prior members' files. Emit, then commit + push the per-member
+    // diff onto the fresh branch.
+    await $`git fetch origin main`.cwd(cwd).quiet().nothrow();
+    await $`git checkout -B ${release.branch} origin/main`.cwd(cwd).quiet();
+    await emitMemberArtifacts({ release, cwd });
+    await $`git add ${release.member.relPath}`.cwd(cwd).quiet();
+    await $`git commit -n -m ${`chore: release ${release.member.name} ${release.newVersion}`}`
+      .cwd(cwd)
+      .quiet();
+    await $`git push --no-verify --force origin ${release.branch}`.cwd(cwd).quiet();
     const url = await openOrUpdatePr(release, cwd);
     console.log(`::notice title=Release ${release.member.name} ${release.newVersion}::${url}`);
     releasedNames.push(`${release.member.name}@${release.newVersion}`);

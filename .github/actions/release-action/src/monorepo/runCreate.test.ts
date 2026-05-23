@@ -65,7 +65,7 @@ describe("runCreate", () => {
       await $`git tag lib-a@v0.1.0 HEAD`.cwd(repo).quiet();
       await $`git tag lib-b@v0.1.0 HEAD`.cwd(repo).quiet();
 
-      const result = await runCreate({ cwd: repo, dryRun: true });
+      const result = await runCreate({ cwd: repo });
       expect(result.discovery.mode).toBe("monorepo");
       expect(result.releases.map((r) => r.member.name)).toEqual([]);
     }));
@@ -77,7 +77,7 @@ describe("runCreate", () => {
       await $`git tag lib-b@v0.1.0 HEAD`.cwd(repo).quiet();
       await commitInPath(repo, "packages/lib-a", "f1.txt", "feat(lib-a): add foo");
 
-      const result = await runCreate({ cwd: repo, dryRun: true });
+      const result = await runCreate({ cwd: repo });
       const libA = result.releases.find((r) => r.member.name === "lib-a");
       expect(libA?.bumpLevel).toBe("minor");
       expect(libA?.newVersion).toBe("0.2.0");
@@ -93,7 +93,7 @@ describe("runCreate", () => {
       await $`git tag lib-b@v0.1.0 HEAD`.cwd(repo).quiet();
       await commitInPath(repo, "packages/lib-a", "f1.txt", "feat(lib-a): add foo");
 
-      const result = await runCreate({ cwd: repo, dryRun: true });
+      const result = await runCreate({ cwd: repo });
       const libB = result.releases.find((r) => r.member.name === "lib-b");
       expect(libB?.bumpLevel).toBe("patch");
       expect(libB?.newVersion).toBe("0.1.1");
@@ -109,7 +109,7 @@ describe("runCreate", () => {
       // depend on itself and there's no consumer of lib-b).
       await commitInPath(repo, "packages/lib-b", "f1.txt", "fix(lib-b): bug");
 
-      const result = await runCreate({ cwd: repo, dryRun: true });
+      const result = await runCreate({ cwd: repo });
       expect(result.releases.map((r) => r.member.name)).toEqual(["lib-b"]);
     }));
 
@@ -122,7 +122,7 @@ describe("runCreate", () => {
       await $`git add .`.cwd(repo).quiet();
       await $`git commit -m ${"chore: seed"}`.cwd(repo).quiet();
 
-      const result = await runCreate({ cwd: repo, dryRun: true });
+      const result = await runCreate({ cwd: repo });
       expect(result.discovery.mode).toBe("standalone");
       expect(result.releases).toEqual([]);
     }));

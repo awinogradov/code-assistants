@@ -81,6 +81,10 @@ async function expandWorkspaceGlobs(
   globs: readonly string[],
   cwd: string,
 ): Promise<string[]> {
+  // Overlapping globs (e.g. `packages/*` plus `packages/lib-a`) can yield the
+  // same member directory twice. Deduplicate by path so a member never gets
+  // released more than once per run.
+  const seen = new Set<string>();
   const out: string[] = [];
   for (const pattern of globs) {
     // Bun's `Glob` matches files; workspaces are directories, so look for a
@@ -89,6 +93,8 @@ async function expandWorkspaceGlobs(
     for await (const match of glob.scan({ cwd, dot: true, absolute: false })) {
       if (match.includes("node_modules")) continue;
       const dir = match.slice(0, -"/package.json".length);
+      if (seen.has(dir)) continue;
+      seen.add(dir);
       out.push(dir);
     }
   }

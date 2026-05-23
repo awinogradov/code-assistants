@@ -52,12 +52,21 @@ async function readManifest(memberPath: string): Promise<Record<string, unknown>
   return json;
 }
 
-function collectDeclaredDeps(pkg: Record<string, unknown>): Set<string> {
+/**
+ * Collect dependency names that point at another workspace member.
+ *
+ * Only entries whose version specifier starts with `workspace:` count — npm
+ * packages that happen to share a name with a workspace member must not pull
+ * a release through the graph. The check matches Bun's `workspace:*` /
+ * `workspace:^` / `workspace:<range>` forms.
+ */
+function collectWorkspaceDeps(pkg: Record<string, unknown>): Set<string> {
   const out = new Set<string>();
   for (const key of ["dependencies", "devDependencies", "peerDependencies"] as const) {
     const value = pkg[key];
-    if (value && typeof value === "object" && !Array.isArray(value)) {
-      for (const dep of Object.keys(value as Record<string, unknown>)) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    for (const [dep, specifier] of Object.entries(value as Record<string, unknown>)) {
+      if (typeof specifier === "string" && specifier.startsWith("workspace:")) {
         out.add(dep);
       }
     }
@@ -90,7 +99,7 @@ export async function buildDependentsGraph(
   for (const consumer of members) {
     const pkg = await readManifest(consumer.path);
     if (!pkg) continue;
-    const declared = collectDeclaredDeps(pkg);
+    const declared = collectWorkspaceDeps(pkg);
     for (const dep of declared) {
       const depMemberName = byPackageName.get(dep);
       if (!depMemberName || depMemberName === consumer.name) continue;
