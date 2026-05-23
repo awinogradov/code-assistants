@@ -1,7 +1,7 @@
 ---
 name: commits:create
 description: Analyze staged changes and create conventional commits with intelligent grouping. Use when creating commits, or when invoked from other skills.
-argument-hint: "[optional commit context]"
+argument-hint: "[optional commit context] [--autopilot]"
 allowed-tools:
   - Bash(git *)
   - Bash(gh *)
@@ -29,16 +29,20 @@ Expected form:
 
 - (no arguments) — auto-analyze staged changes
 - `"<context>"` — free-form context that helps generate a better commit message (e.g., `"add auth feature"`)
+- `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips commit-strategy, commit-message, and PR-update prompts and commits directly using the auto-generated messages.
 
 ## Input resolution
 
 Arguments are optional. When `$ARGUMENTS` is empty:
 
 - **Commit context** — skip; rely on the diff itself (`git diff --staged`) plus recent conversation history (skill analyses, user instructions) to generate the message. Do NOT prompt.
+- **`--autopilot`** — `$ARGUMENTS` only. Never inferred. Default: `false` (interactive mode). Strip from `$ARGUMENTS` before parsing the remainder as commit context.
 - **Repository conventions** — read `CONTRIBUTING.md` directly from the repository root.
 - **Existing PR** — detect via `gh pr view --json number,url 2>/dev/null` at Phase 5. No user prompt needed.
 
 ## AskUserQuestion Contract (MANDATORY)
+
+**Autopilot bypass:** When `autopilotMode` is true (from Phase 1), this entire contract is moot — every AskUserQuestion call in Phases 3, 4, and 5 is skipped. Generate the commit message(s), commit directly, and exit without prompting.
 
 Every AskUserQuestion call that presents content for review (commit messages) MUST follow these exact rules. Simple choice dialogs (Phase 3 commit strategy, Phase 5 PR update offer) are exempt from the preview requirement.
 
@@ -110,6 +114,7 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: commits` from this convers
 
 ## Phase 1: Check for Changes
 
+0. Parse `$ARGUMENTS`: if it contains `--autopilot`, strip the flag and set `autopilotMode = true`. Otherwise `autopilotMode = false`. The remainder (if any) is the commit context.
 1. Run `git status` to see current state
 2. If there are unstaged changes:
    - Show the list of modified/untracked files
@@ -131,6 +136,8 @@ Use the Agent tool with:
 After the agent completes, store the structured results (categories, file lists, strategy recommendation, recent commit style).
 
 ## Phase 3: Choose Commit Strategy
+
+**Autopilot bypass:** If `autopilotMode` is true, do NOT call AskUserQuestion. Use single commit flow when `singleCommitRecommended: true`; otherwise use grouped commit flow. Proceed to Phase 4.
 
 Use the agent's analysis to decide the commit flow:
 
@@ -162,6 +169,9 @@ Use the agent's analysis to decide the commit flow:
 3. Generate commit message following the format below — the title must name the specific thing that changed, and the body must list the concrete modifications
 4. **WHAT-not-WHY validation**: Check the generated title against the WHY signal words and vague signal words listed in the WHAT-not-WHY Rule section below. If the title contains any of those words followed by abstract goals (not technical specifics), or contains the words "review", "feedback", "comments", or "suggestions", regenerate the title using only concrete technical details from the diff. Repeat up to 3 times. If the title still fails, present it to the user with a note that it may need manual rewording.
 5. Verify the title is at most 72 characters: run `printf '%s' "<title>" | wc -m`. If the count exceeds 72, regenerate a shorter title and re-run the check. Do not present a title to the user that exceeds 72 characters.
+
+**Autopilot bypass:** If `autopilotMode` is true, skip steps 6–9 below. Run `git commit -m "<message>"` directly with the generated message and continue to Phase 5.
+
 6. Present using **AskUserQuestion tool** with preview:
 
    **Preview content rules:**
@@ -215,6 +225,8 @@ For each category that has files:
 After analyzing all categories, `git reset HEAD` to unstage everything.
 
 #### Step 2: Present all commits in one dialog
+
+**Autopilot bypass:** If `autopilotMode` is true, skip this step entirely. Skip to Step 3 and execute each commit directly with its generated message.
 
 Use a **single AskUserQuestion** with multiple questions (one per commit), each with preview.
 
@@ -339,6 +351,8 @@ The title must "contain the answer" — a reader should understand what changed 
 **Vague signal words to avoid in titles:** "update", "fix stuff", "changes", "improvements", "tweaks", "adjustments", "various", "some", "misc", "review updates", "address feedback", "resolve issue", "close gaps", "cover edge cases", "ensure compliance", "improve handling", "address concerns", "satisfy requirements"
 
 ## Phase 5: Offer PR Update
+
+**Autopilot bypass:** If `autopilotMode` is true, skip this entire phase — the calling skill (`/autopilot:run`) creates or updates the PR itself in its next step.
 
 After all commits are created successfully:
 
