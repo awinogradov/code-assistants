@@ -38,9 +38,18 @@ interface ReleaseConfig {
   type: ReleaseType; // required
   slack?: string; // optional Slack channel, e.g. "#releases"
 }
+
+// Root-only superset (repository-root `package.json` in a monorepo)
+interface RootReleaseConfig {
+  members?: string[]; // monorepo: explicit member paths (mutually exclusive with `type`)
+  type?: ReleaseType; // standalone: same shape as ReleaseConfig
+  slack?: string;
+}
 ```
 
-`type` is required. `slack` is optional — when omitted, `release-action` skips the Slack notification step. When present, it must be a non-empty string.
+`type` is required on **member** manifests. `slack` is optional — when omitted, `release-action` skips the Slack notification step. When present, it must be a non-empty string.
+
+At the **root** of a monorepo, `release.members` declares the workspace paths to release; `type` is omitted on the root in that case. When neither `members` nor `type` is present, `release-action` falls back to expanding the root's `workspaces` globs and using only members that declare their own `release.type`.
 
 ### Recognized `type` values
 
@@ -118,6 +127,24 @@ The reference implementation is `.github/actions/release-action/src/releaseField
 ```
 
 Version source switches to `plugin.json`; npm publish is skipped; GitHub Release is created.
+
+### Monorepo root
+
+```json
+{
+  "name": "monorepo",
+  "workspaces": [".github/actions/*", "packages/*"],
+  "release": {
+    "members": [
+      ".github/actions/release-action",
+      ".github/actions/files-sync",
+      "claude-plugins/autopilot"
+    ]
+  }
+}
+```
+
+`release-action` runs once per member with the per-member `release.type` driving artifacts. Per-member tags use the form `<name>@v<version>` (e.g. `release-action@v1.2.0`) and the floating major tag becomes `<name>@v1`. When `release.members` is omitted, the action falls back to the root `workspaces` array and skips any member that does not declare its own `release` field.
 
 ## Extending
 
