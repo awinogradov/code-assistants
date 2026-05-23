@@ -1,0 +1,9 @@
+{
+  "name": "autopilot",
+  "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
+  "private": true,
+  "license": "MIT",
+  "release": {
+    "type": "claude-plugin"
+  }
+}
