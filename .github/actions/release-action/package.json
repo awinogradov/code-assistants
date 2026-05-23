@@ -8,6 +8,10 @@
   "release": {
     "type": "github-action"
   },
+  "agents": {
+    "rules": "Bun",
+    "language": "typescript"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "bun test",
