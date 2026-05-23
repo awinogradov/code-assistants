@@ -36,11 +36,19 @@ jobs:
               dest: CLAUDE.md
 ```
 
+Symlink entries write a Git symlink at `dest` instead of copying a file:
+
+```yaml
+files: |
+  - symlink: CLAUDE.md
+    dest: AGENTS.md
+```
+
 ## Inputs
 
 | Input            | Required | Default                                           | Description                                                                                                                                                                                                 |
 | ---------------- | -------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `files`          | yes      | —                                                 | YAML list of entries. Each item: `repo` (`owner/name`), `source`, `dest`, optional `ref`.                                                                                                                   |
+| `files`          | yes      | —                                                 | YAML list of entries — either a [content entry](#content-entry) or a [symlink entry](#symlink-entry). At least one required.                                                                                |
 | `token`          | yes      | —                                                 | PAT or GitHub App installation token with `contents: write` + `pull-requests: write` on the destination repo. The workflow's default `GITHUB_TOKEN` is **not** supported — see [Permissions](#permissions). |
 | `base`           | no       | `${{ github.event.repository.default_branch }}`   | Base branch the PR targets.                                                                                                                                                                                 |
 | `branch`         | no       | `maintenance-sync-files`                          | Head branch the PR uses. Force-updated on subsequent runs.                                                                                                                                                  |
@@ -50,10 +58,21 @@ jobs:
 
 ### Entry fields
 
+Each entry is one of two variants — content or symlink. Fields are strict and mutually exclusive.
+
+#### Content entry
+
 - `repo` — source repository in `owner/name` form.
 - `source` — path in the source repository (relative to the repo root).
 - `dest` — destination path in the current repository.
 - `ref` _(optional)_ — branch, tag, or SHA to read the source from. Defaults to the source repo's default branch.
+
+#### Symlink entry
+
+- `symlink` — target path the symlink will point at, relative to `dest`.
+- `dest` — destination path in the current repository.
+
+A symlink entry writes a Git mode `120000` blob whose body is the literal `symlink` target string — not a content copy. The action does not require the target to exist; dangling symlinks are valid in Git.
 
 ## Outputs
 
@@ -84,6 +103,7 @@ See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/a
 - If no files differ between source and destination, no PR is created and the action exits cleanly.
 - A missing source path fails the run with `Source not found at <repo>:<path>`.
 - The destination path may not exist yet — it will be created in the PR.
+- Symlink entries are detected against the destination via the Git Trees and Blobs APIs (not the Contents API, which would follow symlinks server-side and mask the link metadata). An existing matching symlink at `dest` is a no-op; a missing or differently-shaped `dest` is rewritten as a symlink in the PR.
 
 ## Versioning
 

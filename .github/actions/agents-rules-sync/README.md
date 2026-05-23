@@ -31,6 +31,7 @@ jobs:
       - uses: awinogradov/code-assistants/.github/actions/agents-rules-sync@v1
         with:
           token: ${{ secrets.SYNC_PAT }}
+          # agents-md: true  # also publish AGENTS.md → CLAUDE.md symlink
 ```
 
 The consumer repository must declare an `agents.rules` field in its root `package.json`:
@@ -53,6 +54,7 @@ Accepted values: `Bun`, `Bun+React+Tailwind`, `NodeJS+React`, `NodeJS+React+Tail
 | `token`       | yes      | —                             | PAT or GitHub App installation token with `contents: write` + `pull-requests: write` on this repo. The workflow's default `GITHUB_TOKEN` is **not** supported — see [Permissions](#permissions). |
 | `source-repo` | no       | `awinogradov/code-assistants` | Source repository in `owner/name` form that hosts the `rules/<stack>.md` files.                                                                                                                  |
 | `source-ref`  | no       | _(empty)_                     | Branch, tag, or SHA to read the source rules file from. Empty → source repository default branch.                                                                                                |
+| `agents-md`   | no       | `false`                       | When `true`, also publish `AGENTS.md` as a Git symlink to `CLAUDE.md`. See [Behavior](#behavior).                                                                                                |
 
 PR-shaping inputs (branch, title, body, commit message) are fixed by design — see
 [Behavior](#behavior).
@@ -85,6 +87,10 @@ See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/a
   branch.
 - Delegates to `files-sync` with a single entry: `repo: <source-repo>`,
   `source: rules/<value>.md`, `dest: CLAUDE.md`.
+- When `agents-md: true`, also delegates a second [symlink entry](../files-sync/README.md#symlink-entry)
+  to `files-sync`, publishing `AGENTS.md` in the consumer repo as a Git symlink (mode `120000`)
+  pointing at `CLAUDE.md`. Both entries land in the same PR; default behavior is unchanged so
+  existing v1 consumers need no action.
 - The PR is opened on the fixed branch `maintenance-sync-agents-rules` with the title
   `MAINTENANCE: Sync agent rules from upstream` and the commit message
   `chore: sync agent rules from upstream`. These values are not configurable so the action
@@ -96,6 +102,10 @@ See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/a
 - If `package.json` is missing, malformed, or lacks `agents.rules` (or its value is
   unrecognized), the action fails with a link to `docs/agents-field.md` and the list of
   accepted values.
+
+## Flow
+
+See [docs/sync-flow.md](./docs/sync-flow.md) for the end-to-end data flow diagram and a walkthrough of the symlink detection path.
 
 ## Versioning
 

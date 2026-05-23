@@ -56,6 +56,8 @@ Identifies the tech stack and points at a matching rule set under `rules/` in th
 
 Any other value is treated as unrecognized.
 
+The resolved rules file is published to `CLAUDE.md` by default. The [`agents-rules-sync`](../.github/actions/agents-rules-sync/README.md) action can additionally expose it as `AGENTS.md` via a Git symlink — see the [`agents-md`](../.github/actions/agents-rules-sync/README.md#inputs) input.
+
 ### `language`
 
 Identifies the source language for code-level operations (scanning, comment syntax). Recognized values:
