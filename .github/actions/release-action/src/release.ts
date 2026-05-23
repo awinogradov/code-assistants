@@ -67,6 +67,18 @@ export interface ReleaseOptions {
   owner?: string;
   /** GitHub repository name (required for tickets) */
   repo?: string;
+  /**
+   * Tag prefix used by `conventional-recommended-bump` and `conventional-changelog`
+   * to match prior tags. Defaults to `"v"` (matches `v1.2.3`). In monorepo mode
+   * pass `<name>@v` so per-member tags like `release-action@v1.2.0` are honoured.
+   */
+  tagPrefix?: string;
+  /**
+   * Path filter scoping the commit range. When set, only commits that touched
+   * this path contribute to the bump and the changelog. Used in monorepo mode
+   * to compute per-member releases.
+   */
+  path?: string;
 }
 
 /**
@@ -168,17 +180,33 @@ export async function getCurrentVersion(cwd: string): Promise<VersionResult> {
   return { version: initialVersion, source: "version-file" };
 }
 
+/** Optional scoping for {@link bumpVersion} when releasing one member of a monorepo. */
+export interface BumpScope {
+  /** Tag prefix passed to `Bumper.tag` (e.g. `release-action@v`). */
+  tagPrefix?: string;
+  /** Path filter passed to `Bumper.path` so only commits touching the path contribute. */
+  path?: string;
+}
+
 /**
  * Bump version based on conventional commits
  *
  * @param currentVersion - Current semver version
  * @param cwd - Working directory (default: process.cwd())
+ * @param scope - Optional tag prefix and/or path filter for monorepo members
  */
 export async function bumpVersion(
   currentVersion: string,
-  cwd = process.cwd()
+  cwd = process.cwd(),
+  scope: BumpScope = {}
 ): Promise<BumpResult> {
-  const bumper = new Bumper(cwd).loadPreset("conventionalcommits");
+  let bumper = new Bumper(cwd).loadPreset("conventionalcommits");
+  if (scope.tagPrefix) {
+    bumper = bumper.tag({ prefix: scope.tagPrefix });
+  }
+  if (scope.path) {
+    bumper = bumper.commits({ path: scope.path });
+  }
   const recommendation = await bumper.bump();
 
   if (!("releaseType" in recommendation)) {
@@ -192,12 +220,21 @@ export async function bumpVersion(
     throw new Error(`Failed to calculate new version from ${currentVersion} with ${releaseType}`);
   }
 
+  const tagPrefix = scope.tagPrefix ?? "v";
   return {
     summary: "reason" in recommendation ? (recommendation.reason ?? "") : "",
     type: releaseType,
     newVersion,
-    newTag: `v${newVersion}`,
+    newTag: `${tagPrefix}${newVersion}`,
   };
+}
+
+/** Optional scoping for {@link generateChangelog} when releasing one member of a monorepo. */
+export interface ChangelogScope {
+  /** Tag prefix passed to `ConventionalChangelog.tags` (e.g. `release-action@v`). */
+  tagPrefix?: string;
+  /** Path filter passed to `ConventionalChangelog.commits` so only matching commits appear. */
+  path?: string;
 }
 
 /**
@@ -205,10 +242,12 @@ export async function bumpVersion(
  *
  * @param newVersion - Version to generate changelog for
  * @param cwd - Working directory (default: process.cwd())
+ * @param scope - Optional tag prefix and/or path filter for monorepo members
  */
 export async function generateChangelog(
   newVersion: string,
-  cwd = process.cwd()
+  cwd = process.cwd(),
+  scope: ChangelogScope = {}
 ): Promise<ChangelogResult> {
   const changelogFile = join(cwd, "CHANGELOG.md");
 
@@ -220,7 +259,7 @@ export async function generateChangelog(
   const historyStart = historyContent.search(startOfLastReleasePattern);
   const history = historyStart !== -1 ? historyContent.substring(historyStart) : historyContent;
 
-  const generator = new ConventionalChangelog(cwd)
+  let generator = new ConventionalChangelog(cwd)
     .readPackage()
     .loadPreset({
       name: "conventionalcommits",
@@ -237,8 +276,11 @@ export async function generateChangelog(
         { type: "ci", section: "CI", hidden: false },
       ],
     })
-    .tags({ prefix: "v" })
+    .tags({ prefix: scope.tagPrefix ?? "v" })
     .context({ version: newVersion });
+  if (scope.path) {
+    generator = generator.commits({ path: scope.path });
+  }
 
   let release = "";
   for await (const chunk of generator.write()) {
@@ -297,16 +339,18 @@ async function processTickets(params: {
  * @param options - Release options
  */
 export async function main(options: ReleaseOptions = {}): Promise<string> {
-  const { cwd = process.cwd(), ticketSystems, owner, repo } = options;
+  const { cwd = process.cwd(), ticketSystems, owner, repo, tagPrefix, path } = options;
+  const scope = { tagPrefix, path };
 
   const { version: currentVersion, source: versionSource } = await getCurrentVersion(cwd);
   console.log(`Detected version ${currentVersion} from ${versionSource}`);
   const { newVersion, type: releaseType, summary: releaseSummary } = await bumpVersion(
     currentVersion,
-    cwd
+    cwd,
+    scope
   );
 
-  const log = await generateChangelog(newVersion, cwd);
+  const log = await generateChangelog(newVersion, cwd, scope);
 
   const releaseLines = log.release.split("\n").slice(1).join("\n").trim();
   if (!releaseLines) {

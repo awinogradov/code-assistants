@@ -72,14 +72,17 @@ inputs:
 
 outputs:
   version:
-    description: "Released version number"
+    description: "Released version number (standalone mode only)"
     value: ${{ steps.version.outputs.version }}
   release-type:
-    description: "Detected release type from package.json `release` field"
+    description: "Detected release type from package.json `release` field (standalone) or `monorepo`"
     value: ${{ steps.detect-type.outputs.type }}
   pr-url:
-    description: "URL of the created or updated release PR"
+    description: "URL of the created or updated release PR (standalone mode only)"
     value: ${{ steps.release-pr.outputs.pr-url }}
+  mode:
+    description: "Detected workflow mode: `standalone` or `monorepo`"
+    value: ${{ steps.detect-type.outputs.mode }}
 
 runs:
   using: composite
@@ -107,15 +110,35 @@ runs:
       shell: bash
       run: bun "${{ github.action_path }}/src/detectReleaseType.ts"
 
-    # ── Mode: create ──
+    # ── Monorepo path (handled entirely in TypeScript) ──
+
+    - name: Run monorepo release
+      if: steps.detect-type.outputs.mode == 'monorepo'
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        GH_TOKEN: ${{ inputs.github_token }}
+        LINEAR_API_KEY: ${{ inputs.linear_api_key }}
+        LINEAR_KEYS: ${{ inputs.linear_keys }}
+        JIRA_BASE_URL: ${{ inputs.jira_base_url }}
+        JIRA_EMAIL: ${{ inputs.jira_email }}
+        JIRA_API_TOKEN: ${{ inputs.jira_api_token }}
+        JIRA_KEYS: ${{ inputs.jira_keys }}
+        NPM_TOKEN: ${{ inputs.npm_token }}
+        SLACK_TOKEN: ${{ inputs.slack_token }}
+        INPUT_BRANCH: ${{ inputs.branch }}
+        INPUT_NAME: ${{ inputs.name }}
+      run: bun "${{ github.action_path }}/src/run.ts" --mode=${{ inputs.mode }}
+
+    # ── Mode: create (standalone) ──
 
     - name: Ensure .gitignore excludes .release_bot
-      if: inputs.mode == 'create'
+      if: inputs.mode == 'create' && steps.detect-type.outputs.mode == 'standalone' && steps.detect-type.outputs.mode == 'standalone'
       shell: bash
       run: bun "${{ github.action_path }}/src/prepareRelease.ts" --ensure-gitignore
 
     - name: Generate Changelog
-      if: inputs.mode == 'create'
+      if: inputs.mode == 'create' && steps.detect-type.outputs.mode == 'standalone'
       shell: bash
       env:
         LINEAR_API_KEY: ${{ inputs.linear_api_key }}
@@ -128,17 +151,17 @@ runs:
       run: bun "${{ github.action_path }}/src/release.ts"
 
     - name: Update Version Files
-      if: inputs.mode == 'create'
+      if: inputs.mode == 'create' && steps.detect-type.outputs.mode == 'standalone'
       shell: bash
       run: bun "${{ github.action_path }}/src/prepareRelease.ts" --update-version "$(cat version)"
 
     - name: Update Release Badge
-      if: inputs.mode == 'create'
+      if: inputs.mode == 'create' && steps.detect-type.outputs.mode == 'standalone'
       shell: bash
       run: bun "${{ github.action_path }}/src/updateReleaseBadge.ts"
 
     - name: Generate Release Notes
-      if: inputs.mode == 'create'
+      if: inputs.mode == 'create' && steps.detect-type.outputs.mode == 'standalone'
       continue-on-error: true
       shell: bash
       env:
@@ -146,21 +169,21 @@ runs:
       run: bun "${{ github.action_path }}/src/generateReleaseNotes.ts"
 
     - name: Update Release Notes File
-      if: inputs.mode == 'create'
+      if: inputs.mode == 'create' && steps.detect-type.outputs.mode == 'standalone'
       shell: bash
       run: |
         VERSION=$(cat version)
         bun "${{ github.action_path }}/src/insert-release-notes.ts" "$VERSION"
 
     - name: Assemble PR Body
-      if: inputs.mode == 'create'
+      if: inputs.mode == 'create' && steps.detect-type.outputs.mode == 'standalone'
       shell: bash
       env:
         INPUT_BRANCH: ${{ inputs.branch }}
       run: bun "${{ github.action_path }}/src/assemble-pr-body.ts"
 
     - name: Commit and Push Release
-      if: inputs.mode == 'create'
+      if: inputs.mode == 'create' && steps.detect-type.outputs.mode == 'standalone'
       shell: bash
       env:
         INPUT_BRANCH: ${{ inputs.branch }}
@@ -175,7 +198,7 @@ runs:
 
     - name: Create Pull Request
       id: release-pr
-      if: inputs.mode == 'create'
+      if: inputs.mode == 'create' && steps.detect-type.outputs.mode == 'standalone'
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github_token }}
@@ -210,6 +233,7 @@ runs:
 
     - name: Output version
       id: version
+      if: steps.detect-type.outputs.mode == 'standalone'
       shell: bash
       env:
         MODE: ${{ inputs.mode }}
@@ -230,7 +254,7 @@ runs:
 
     - name: Determine Version
       id: determine-version
-      if: inputs.mode == 'publish'
+      if: inputs.mode == 'publish' && steps.detect-type.outputs.mode == 'standalone'
       shell: bash
       run: |
         VERSION=$(cat version | tr -d '[:space:]')
@@ -239,12 +263,12 @@ runs:
         echo "Determined version: ${VERSION} (tag: v${VERSION})"
 
     - name: Setup packages
-      if: inputs.mode == 'publish' && (steps.detect-type.outputs.type == 'lib-nodejs' || steps.detect-type.outputs.type == 'lib-bun')
+      if: inputs.mode == 'publish' && steps.detect-type.outputs.mode == 'standalone' && (steps.detect-type.outputs.type == 'lib-nodejs' || steps.detect-type.outputs.type == 'lib-bun')
       shell: bash
       run: bun install
 
     - name: Publish to NPM
-      if: inputs.mode == 'publish' && (steps.detect-type.outputs.type == 'lib-nodejs' || steps.detect-type.outputs.type == 'lib-bun')
+      if: inputs.mode == 'publish' && steps.detect-type.outputs.mode == 'standalone' && (steps.detect-type.outputs.type == 'lib-nodejs' || steps.detect-type.outputs.type == 'lib-bun')
       shell: bash
       env:
         NPM_TOKEN: ${{ inputs.npm_token }}
@@ -253,7 +277,7 @@ runs:
         npm publish
 
     - name: Release Tag
-      if: inputs.mode == 'publish'
+      if: inputs.mode == 'publish' && steps.detect-type.outputs.mode == 'standalone'
       shell: bash
       run: |
         TAG="${{ steps.determine-version.outputs.tag }}"
@@ -262,7 +286,7 @@ runs:
         echo "Created and pushed tag $TAG"
 
     - name: Major Version Tag
-      if: inputs.mode == 'publish' && steps.detect-type.outputs.type == 'github-action'
+      if: inputs.mode == 'publish' && steps.detect-type.outputs.mode == 'standalone' && steps.detect-type.outputs.type == 'github-action'
       shell: bash
       run: |
         VERSION="$(cat version)"
@@ -272,7 +296,7 @@ runs:
         echo "Updated major version tag $MAJOR"
 
     - name: GitHub Release
-      if: inputs.mode == 'publish'
+      if: inputs.mode == 'publish' && steps.detect-type.outputs.mode == 'standalone'
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github_token }}
@@ -285,7 +309,7 @@ runs:
         echo "Created GitHub release Release ${VERSION} (${TAG})"
 
     - name: Slack Release Notification
-      if: inputs.mode == 'publish' && inputs.slack_token != ''
+      if: inputs.mode == 'publish' && steps.detect-type.outputs.mode == 'standalone' && inputs.slack_token != ''
       continue-on-error: true
       shell: bash
       env:
