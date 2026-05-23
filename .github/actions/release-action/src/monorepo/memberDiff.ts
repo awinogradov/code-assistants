@@ -39,10 +39,7 @@ export interface MemberDiffOptions {
 export async function listMemberCommits(options: MemberDiffOptions): Promise<string[]> {
   const { cwd, path, since } = options;
   const range = since ? `${since}..HEAD` : "HEAD";
-  const result = await $`git log ${range} --pretty=format:%s -- ${path}`
-    .cwd(cwd)
-    .quiet()
-    .nothrow();
+  const result = await $`git log ${range} --pretty=format:%s -- ${path}`.cwd(cwd).quiet().nothrow();
   if (result.exitCode !== 0) {
     const stderr = result.stderr.toString().trim();
     throw new Error(

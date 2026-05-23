@@ -198,7 +198,7 @@ export interface BumpScope {
 export async function bumpVersion(
   currentVersion: string,
   cwd = process.cwd(),
-  scope: BumpScope = {}
+  scope: BumpScope = {},
 ): Promise<BumpResult> {
   let bumper = new Bumper(cwd).loadPreset("conventionalcommits");
   if (scope.tagPrefix) {
@@ -247,7 +247,7 @@ export interface ChangelogScope {
 export async function generateChangelog(
   newVersion: string,
   cwd = process.cwd(),
-  scope: ChangelogScope = {}
+  scope: ChangelogScope = {},
 ): Promise<ChangelogResult> {
   const changelogFile = join(cwd, "CHANGELOG.md");
 
@@ -322,7 +322,7 @@ async function processTickets(params: {
     await Bun.write(
       join(releaseBotDir, "pr_descriptions.yml"),
       serializePrDescriptionsToYaml(result.prDescriptions),
-      { createPath: true }
+      { createPath: true },
     );
   }
 
@@ -344,11 +344,11 @@ export async function main(options: ReleaseOptions = {}): Promise<string> {
 
   const { version: currentVersion, source: versionSource } = await getCurrentVersion(cwd);
   console.log(`Detected version ${currentVersion} from ${versionSource}`);
-  const { newVersion, type: releaseType, summary: releaseSummary } = await bumpVersion(
-    currentVersion,
-    cwd,
-    scope
-  );
+  const {
+    newVersion,
+    type: releaseType,
+    summary: releaseSummary,
+  } = await bumpVersion(currentVersion, cwd, scope);
 
   const log = await generateChangelog(newVersion, cwd, scope);
 
@@ -387,7 +387,7 @@ export async function main(options: ReleaseOptions = {}): Promise<string> {
   });
   await Bun.write(
     changelogFile,
-    (log.header + releaseWithTickets + log.history).replace(/\n+$/, "\n")
+    (log.header + releaseWithTickets + log.history).replace(/\n+$/, "\n"),
   );
 
   return newVersion;

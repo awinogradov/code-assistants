@@ -62,9 +62,9 @@ describe("resolvePublishPlan", () => {
   test("throws when no member is referenced", () =>
     withTempDir(async (dir) => {
       await setupMonorepo(dir);
-      await expect(
-        resolvePublishPlan({ cwd: dir, changedFiles: ["README.md"] }),
-      ).rejects.toThrow(/No release-notes file/);
+      await expect(resolvePublishPlan({ cwd: dir, changedFiles: ["README.md"] })).rejects.toThrow(
+        /No release-notes file/,
+      );
     }));
 
   test("throws when multiple members are referenced", () =>

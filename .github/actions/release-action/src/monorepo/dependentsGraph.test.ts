@@ -152,7 +152,10 @@ describe("propagateBumps", () => {
   });
 
   test("returns a new map without mutating the input", () => {
-    const graph = new Map<string, Set<string>>([["a", new Set(["b"])], ["b", new Set()]]);
+    const graph = new Map<string, Set<string>>([
+      ["a", new Set(["b"])],
+      ["b", new Set()],
+    ]);
     const natural = new Map([["a", "patch" as const]]);
     const result = propagateBumps(graph, natural);
     expect(result).not.toBe(natural);

@@ -19,15 +19,8 @@ import { $ } from "bun";
 
 import { discoverMembers } from "./monorepo/discoverMembers.ts";
 import { memberMajorTag, memberVersionTag } from "./monorepo/memberTags.ts";
-import {
-  emitMemberArtifacts,
-  runCreate,
-  type MemberRelease,
-} from "./monorepo/runCreate.ts";
-import {
-  readChangedFiles,
-  resolvePublishPlan,
-} from "./monorepo/runPublish.ts";
+import { emitMemberArtifacts, runCreate, type MemberRelease } from "./monorepo/runCreate.ts";
+import { readChangedFiles, resolvePublishPlan } from "./monorepo/runPublish.ts";
 import { ensureGitignoreEntry } from "./prepareRelease.ts";
 import { postReleaseNotification } from "./slackNotify.ts";
 
@@ -49,15 +42,10 @@ async function writeGithubOutput(line: string): Promise<void> {
 }
 
 async function ensureLabel(label: string, description: string): Promise<void> {
-  await $`gh label create ${label} --color 85e131 --description ${description}`
-    .quiet()
-    .nothrow();
+  await $`gh label create ${label} --color 85e131 --description ${description}`.quiet().nothrow();
 }
 
-async function openOrUpdatePr(
-  release: MemberRelease,
-  cwd: string,
-): Promise<string> {
+async function openOrUpdatePr(release: MemberRelease, cwd: string): Promise<string> {
   const label = `release-${release.member.name}`;
   await ensureLabel(label, `Release PR for ${release.member.name}`);
 
@@ -69,21 +57,57 @@ async function openOrUpdatePr(
     .quiet()
     .nothrow();
   if (existing.exitCode === 0 && existing.stdout.toString().trim()) {
-    await $`gh pr edit --title ${title} --body-file ${bodyFile}`
-      .cwd(cwd)
-      .quiet();
+    await $`gh pr edit --title ${title} --body-file ${bodyFile}`.cwd(cwd).quiet();
     return existing.stdout.toString().trim();
   }
 
-  const created = await $`gh pr create --head ${release.branch} --title ${title} --label ${label} -F ${bodyFile}`
-    .cwd(cwd)
-    .quiet();
+  const created =
+    await $`gh pr create --head ${release.branch} --title ${title} --label ${label} -F ${bodyFile}`
+      .cwd(cwd)
+      .quiet();
   return created.stdout.toString().trim();
+}
+
+function resolveBranchTemplate(): string {
+  const raw = process.env.INPUT_BRANCH;
+  const fallback = "release-{member}-{version}";
+  if (!raw || raw.length === 0) return fallback;
+  if (raw.includes("{member}")) return raw;
+  // The standalone default `release-{version}` (the action.yml default) and
+  // any other user-supplied template without `{member}` would collapse all
+  // members onto the same branch. Inject `{member}` so per-member PRs stay
+  // distinct, and warn so the operator can override the input explicitly.
+  const injected = raw.replace(/\{version\}/, "{member}-{version}");
+  const finalTemplate = injected.includes("{member}") ? injected : `${raw}-{member}`;
+  console.log(
+    `::warning::INPUT_BRANCH '${raw}' is missing {member} placeholder for monorepo mode; using '${finalTemplate}' instead.`,
+  );
+  return finalTemplate;
+}
+
+async function resolveBaseRef(cwd: string): Promise<string> {
+  // Capture once before the loop so every member's branch is rooted at the
+  // commit that triggered the workflow, never at the tip of the previous
+  // iteration's release commit.
+  const sha = process.env.GITHUB_SHA;
+  if (sha && sha.length > 0) return sha;
+  const remoteHead = await $`git symbolic-ref refs/remotes/origin/HEAD`.cwd(cwd).quiet().nothrow();
+  if (remoteHead.exitCode === 0) {
+    const ref = remoteHead.stdout.toString().trim();
+    if (ref) {
+      const stripped = ref.replace(/^refs\/remotes\//, "");
+      const verify = await $`git rev-parse ${stripped}`.cwd(cwd).quiet().nothrow();
+      if (verify.exitCode === 0) {
+        return stripped;
+      }
+    }
+  }
+  return "HEAD";
 }
 
 async function runMonorepoCreate(cwd: string): Promise<void> {
   await ensureGitignoreEntry(".release_bot", cwd);
-  const branchTemplate = process.env.INPUT_BRANCH ?? "release-{member}-{version}";
+  const branchTemplate = resolveBranchTemplate();
   const result = await runCreate({ cwd, branchTemplate });
 
   if (result.releases.length === 0) {
@@ -92,13 +116,15 @@ async function runMonorepoCreate(cwd: string): Promise<void> {
     return;
   }
 
+  await $`git fetch origin`.cwd(cwd).quiet().nothrow();
+  const baseRef = await resolveBaseRef(cwd);
+
   const releasedNames: string[] = [];
   for (const release of result.releases) {
-    // Reset to origin/main BEFORE emitting artifacts so the working tree is
-    // clean of prior members' files. Emit, then commit + push the per-member
-    // diff onto the fresh branch.
-    await $`git fetch origin main`.cwd(cwd).quiet().nothrow();
-    await $`git checkout -B ${release.branch} origin/main`.cwd(cwd).quiet();
+    // Reset to the captured base ref BEFORE emitting artifacts so the working
+    // tree is clean of any prior member's files. Emit, then commit + push the
+    // per-member diff onto the fresh branch.
+    await $`git checkout -B ${release.branch} ${baseRef}`.cwd(cwd).quiet();
     await emitMemberArtifacts({ release, cwd });
     await $`git add ${release.member.relPath}`.cwd(cwd).quiet();
     await $`git commit -n -m ${`chore: release ${release.member.name} ${release.newVersion}`}`
@@ -125,7 +151,10 @@ async function runMonorepoPublish(cwd: string): Promise<void> {
   // GITHUB_EVENT_PATH discovery. Read the env override here.
   const overrideFiles = process.env.PR_CHANGED_FILES;
   const changedFiles = overrideFiles
-    ? overrideFiles.split("\n").map((line) => line.trim()).filter(Boolean)
+    ? overrideFiles
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
     : await readChangedFiles({ cwd });
 
   const plan = await resolvePublishPlan({ cwd, changedFiles });

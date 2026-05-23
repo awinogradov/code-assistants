@@ -28,7 +28,7 @@ export function updateReleaseBadge(
   readme: string,
   version: string,
   serverUrl: string,
-  repo: string
+  repo: string,
 ): string {
   const releaseBadge = `[![GitHub Release](https://img.shields.io/badge/release-v${version}-blue)](${serverUrl}/${repo}/releases/latest)`;
   const createBadge = `[![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](${serverUrl}/${repo}/actions/workflows/release_create.yml)`;

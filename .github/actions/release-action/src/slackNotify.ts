@@ -101,9 +101,7 @@ export interface SlackNotifyOptions {
  * Post the per-member release notification to Slack. No-op when SLACK_TOKEN is
  * unset or the member's `package.json` has no `release.slack` field.
  */
-export async function postReleaseNotification(
-  options: SlackNotifyOptions = {},
-): Promise<void> {
+export async function postReleaseNotification(options: SlackNotifyOptions = {}): Promise<void> {
   const { join } = await import("node:path");
   const cwd = options.cwd ?? process.cwd();
 

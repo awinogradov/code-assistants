@@ -25,19 +25,16 @@ async function readPackageJson(): Promise<unknown> {
   const file = Bun.file(PACKAGE_JSON);
 
   if (!(await file.exists())) {
-    throw new Error(
-      `${PACKAGE_JSON} not found in the working directory. See ${DOCS_LINK}.`,
-    );
+    throw new Error(`${PACKAGE_JSON} not found in the working directory. See ${DOCS_LINK}.`);
   }
 
   try {
     return await file.json();
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `Failed to parse ${PACKAGE_JSON}: ${detail}. See ${DOCS_LINK}.`,
-      { cause: error },
-    );
+    throw new Error(`Failed to parse ${PACKAGE_JSON}: ${detail}. See ${DOCS_LINK}.`, {
+      cause: error,
+    });
   }
 }
 

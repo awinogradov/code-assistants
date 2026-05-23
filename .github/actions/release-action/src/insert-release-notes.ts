@@ -35,11 +35,7 @@ function insertAfterVersionHeader(content: string, ver: string, notesBlock: stri
   return lines.join("\n");
 }
 
-async function insertIntoChangelog(
-  cwd: string,
-  ver: string,
-  notesBlock: string,
-): Promise<void> {
+async function insertIntoChangelog(cwd: string, ver: string, notesBlock: string): Promise<void> {
   const changelogPath = join(cwd, "CHANGELOG.md");
   const changelogFile = Bun.file(changelogPath);
   if (!(await changelogFile.exists())) return;

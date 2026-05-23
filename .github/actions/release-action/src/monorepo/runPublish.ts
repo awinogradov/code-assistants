@@ -81,15 +81,22 @@ export async function readChangedFiles(options: ResolveMemberOptions): Promise<s
   const prNumber = event.pull_request.number;
   const repo = event.repository?.full_name ?? process.env.GITHUB_REPOSITORY;
   if (!prNumber || !repo) {
-    throw new Error("Cannot read changed files: event payload missing PR number or repository name.");
+    throw new Error(
+      "Cannot read changed files: event payload missing PR number or repository name.",
+    );
   }
 
-  const result = await $`gh pr view ${prNumber} --repo ${repo} --json files --jq ${".files[].path"}`
-    .quiet()
-    .nothrow();
+  // Use the paginated REST endpoint instead of `gh pr view --json files` so
+  // PRs with more than 100 changed files (the GraphQL cap) still resolve the
+  // member correctly. `--paginate` walks every page; `--jq` extracts the
+  // filenames inline.
+  const result =
+    await $`gh api ${`repos/${repo}/pulls/${prNumber}/files`} --paginate --jq ${".[].filename"}`
+      .quiet()
+      .nothrow();
   if (result.exitCode !== 0) {
     throw new Error(
-      `gh pr view ${prNumber} failed: ${result.stderr.toString().trim() || `exit ${result.exitCode}`}`,
+      `gh api repos/${repo}/pulls/${prNumber}/files failed: ${result.stderr.toString().trim() || `exit ${result.exitCode}`}`,
     );
   }
   return result.stdout
@@ -108,9 +115,7 @@ export async function readChangedFiles(options: ResolveMemberOptions): Promise<s
  * when the changed list references multiple members (the workflow assumes
  * one PR per member) or no member at all.
  */
-export async function resolvePublishPlan(
-  options: ResolveMemberOptions,
-): Promise<PublishPlan> {
+export async function resolvePublishPlan(options: ResolveMemberOptions): Promise<PublishPlan> {
   const cwd = options.cwd ?? process.cwd();
   const discovery = await discoverMembers(cwd);
 
