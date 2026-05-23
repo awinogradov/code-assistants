@@ -67,7 +67,7 @@ inputs:
   slack_token:
     description: |
       Slack bot token for release notifications.
-      Posts release notes to the channel configured in platform.meta.yml.
+      Posts release notes to the channel configured in package.json `release.slack`.
     required: false
 
 outputs:
@@ -75,7 +75,7 @@ outputs:
     description: "Released version number"
     value: ${{ steps.version.outputs.version }}
   release-type:
-    description: "Detected release type from platform.meta.yml"
+    description: "Detected release type from package.json `release` field"
     value: ${{ steps.detect-type.outputs.type }}
   pr-url:
     description: "URL of the created or updated release PR"
@@ -105,18 +105,7 @@ runs:
     - name: Detect release type
       id: detect-type
       shell: bash
-      run: |
-        if [ ! -f "platform.meta.yml" ]; then
-          echo "::error::platform.meta.yml not found."
-          exit 1
-        fi
-        RELEASE_TYPE=$(grep '^release:' platform.meta.yml | head -1 | sed -E 's/^release:[[:space:]]*//; s/^"(.*)"$/\1/; s/^'\''(.*)'\''$/\1/' | tr -d '[:space:]' || true)
-        if [ -z "$RELEASE_TYPE" ]; then
-          echo "::error::Missing 'release' field in platform.meta.yml."
-          exit 1
-        fi
-        echo "type=${RELEASE_TYPE}" >> "$GITHUB_OUTPUT"
-        echo "Detected release type: ${RELEASE_TYPE}"
+      run: bun "${{ github.action_path }}/src/detectReleaseType.ts"
 
     # ── Mode: create ──
 

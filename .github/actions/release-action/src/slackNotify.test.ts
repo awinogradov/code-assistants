@@ -1,7 +1,7 @@
 /**
  * Tests for Slack release notification utilities
  *
- * Note: parseSlackRelease tests are in platformMeta/platformMeta.test.ts
+ * Note: `release.slack` channel parsing is tested in `releaseField.test.ts`.
  */
 import { describe, expect, test } from "bun:test";
 
