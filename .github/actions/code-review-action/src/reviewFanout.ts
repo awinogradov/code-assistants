@@ -160,13 +160,14 @@ async function fetchPrDiff(repo: string, prNumber: string): Promise<string> {
   return stdout;
 }
 
-/** Detect the stack name from `platform.meta.yml` in the checked-out repo root. */
+/** Detect the stack name from `package.json` `agents.rules` in the checked-out repo root. */
 export async function detectStack(cwd: string = process.cwd()): Promise<string> {
   try {
-    const content = await Bun.file(join(cwd, "platform.meta.yml")).text();
-    const match = content.match(/^rules:\s*(.+)$/m);
-    const value = match?.[1]?.trim();
-    return value ? stripQuotes(value) : "unknown";
+    const pkg = (await Bun.file(join(cwd, "package.json")).json()) as {
+      agents?: { rules?: unknown };
+    };
+    const value = pkg.agents?.rules;
+    return typeof value === "string" && value.length > 0 ? value : "unknown";
   } catch {
     return "unknown";
   }
