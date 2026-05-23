@@ -1,0 +1,513 @@
+name: "AI Code Review"
+description: "AI-powered code review using Claude Code"
+author: "Code Assistants"
+
+inputs:
+  pr_number:
+    description: "Pull request number (auto-detected from event context, override with explicit value)"
+    required: false
+  pr_head_sha:
+    description: "PR head commit SHA (auto-detected from event context, override with explicit value)"
+    required: false
+  mode:
+    description: "Action mode: 'review' for PR review, 'react' for comment reaction"
+    required: false
+    default: "review"
+  react_to_comments:
+    description: "Auto-detect and handle comment reactions when bot is mentioned"
+    required: false
+    default: "true"
+  comment_id:
+    description: "ID of the comment to react to (required for react mode)"
+    required: false
+  comment_body:
+    description: "Body of the triggering comment (required for react mode)"
+    required: false
+  comment_path:
+    description: "File path for review thread comments (empty for general PR comments)"
+    required: false
+  comment_line:
+    description: "Line number for review thread comments"
+    required: false
+  reviewer:
+    description: "GitHub username to add as reviewer. Required — no default."
+    required: true
+  bot_username:
+    description: "Bot username for skipping CI-author PRs. When set, PRs authored by this user with the 'ci-skip-review' label are skipped. Falls back to reviewer if omitted."
+    required: false
+  bot_token:
+    description: "GitHub token for bot operations"
+    required: true
+  anthropic_api_key:
+    description: "Anthropic API key (alternative to claude_oauth_token)"
+    required: false
+  claude_oauth_token:
+    description: "Claude Code OAuth token (alternative to anthropic_api_key)"
+    required: false
+  settings:
+    description: "Claude Code settings JSON (use env to pass API keys for MCP servers)"
+    required: false
+  mcp_config:
+    description: "Additional MCP servers configuration JSON (merged with repo .mcp.json)"
+    required: false
+  model:
+    description: "Claude model to use for AI operations"
+    required: false
+    default: "claude-sonnet-4-6"
+  debug_logs:
+    description: "Enable verbose DEBUG-level Claude trace logging and force execution artifact upload. When false, artifacts upload only on failure or when a run exceeds 5 minutes."
+    required: false
+    default: "false"
+  parallel_fanout:
+    description: "Run PR-review sub-agents as parallel headless SDK calls from the action orchestrator instead of delegating fan-out to the root model. Cuts review-phase wall time when working correctly. Opt-in until fan-out is stable."
+    required: false
+    default: "false"
+  preflight_checks:
+    description: "Wait for all PR checks to pass before running AI review (review mode only)"
+    required: false
+    default: "true"
+  poll_interval:
+    description: "Seconds between polling for check statuses (used with preflight_checks)"
+    required: false
+    default: "10"
+  checks_timeout:
+    description: "Maximum seconds to wait for checks to complete (used with preflight_checks)"
+    required: false
+    default: "600"
+
+runs:
+  using: composite
+  steps:
+    # ── Validation ──
+
+    - name: Validate tokens
+      shell: bash
+      env:
+        BOT_TOKEN: ${{ inputs.bot_token }}
+        ANTHROPIC_KEY: ${{ inputs.anthropic_api_key }}
+        CLAUDE_TOKEN: ${{ inputs.claude_oauth_token }}
+      run: |
+        echo "bot_token: ${#BOT_TOKEN} chars"
+        echo "anthropic_api_key: ${#ANTHROPIC_KEY} chars"
+        echo "claude_oauth_token: ${#CLAUDE_TOKEN} chars"
+
+        if [[ -z "$BOT_TOKEN" ]]; then
+          echo "::error::bot_token is empty"
+          exit 1
+        fi
+
+        if [[ -z "$ANTHROPIC_KEY" && -z "$CLAUDE_TOKEN" ]]; then
+          echo "::error::Either anthropic_api_key or claude_oauth_token must be provided"
+          exit 1
+        fi
+
+    # ── Context detection ──
+
+    - name: Detect context
+      id: ctx
+      shell: bash
+      env:
+        INPUT_REACT_TO_COMMENTS: ${{ inputs.react_to_comments }}
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_PR_NUMBER: ${{ inputs.pr_number }}
+        INPUT_PR_HEAD_SHA: ${{ inputs.pr_head_sha }}
+        INPUT_COMMENT_ID: ${{ inputs.comment_id }}
+        INPUT_COMMENT_BODY: ${{ inputs.comment_body }}
+        INPUT_COMMENT_PATH: ${{ inputs.comment_path }}
+        INPUT_COMMENT_LINE: ${{ inputs.comment_line }}
+        INPUT_REVIEWER: ${{ inputs.reviewer }}
+        INPUT_BOT_USERNAME: ${{ inputs.bot_username }}
+        EVENT_NAME: ${{ github.event_name }}
+        EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
+        EVENT_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        EVENT_PR_DRAFT: ${{ github.event.pull_request.draft }}
+        EVENT_PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        EVENT_PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        EVENT_PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        EVENT_ISSUE_NUMBER: ${{ github.event.issue.number }}
+        EVENT_COMMENT_ID: ${{ github.event.comment.id }}
+        EVENT_COMMENT_PATH: ${{ github.event.comment.path }}
+        EVENT_COMMENT_LINE: ${{ github.event.comment.original_line || github.event.comment.line }}
+        EVENT_COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
+        EVENT_COMMENT_IN_REPLY_TO_ID: ${{ github.event.comment.in_reply_to_id }}
+        EVENT_IS_PR_COMMENT: ${{ github.event.issue.pull_request && 'true' || 'false' }}
+        COMMENT_BODY_RAW: ${{ github.event.comment.body }}
+        EVENT_REVIEW_ID: ${{ github.event.review.id }}
+        EVENT_REVIEW_AUTHOR: ${{ github.event.review.user.login }}
+        REVIEW_BODY_RAW: ${{ github.event.review.body }}
+        EVENT_SENDER: ${{ github.event.sender.login }}
+        GH_TOKEN: ${{ inputs.bot_token }}
+      run: |
+        # Skip draft PRs (covers pull_request and pull_request_review_comment events)
+        if [[ "$EVENT_PR_DRAFT" == "true" ]]; then
+          echo "Skipping: draft PR"
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        # Skip draft PRs for issue_comment events (draft status not in payload)
+        if [[ "$EVENT_NAME" == "issue_comment" && "$EVENT_IS_PR_COMMENT" == "true" ]]; then
+          if [[ "$(gh pr view "$EVENT_ISSUE_NUMBER" --json isDraft --jq '.isDraft' 2>/dev/null)" == "true" ]]; then
+            echo "Skipping: draft PR"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+        fi
+
+        # Skip release PRs
+        if [[ "$EVENT_NAME" == "pull_request" && "$EVENT_PR_HEAD_REF" =~ ^(release-|delivery-) ]]; then
+          echo "Skipping: release/delivery branch ($EVENT_PR_HEAD_REF)"
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        # Skip CI-author PRs labeled ci-skip-review (bot_username input, falls back to reviewer)
+        if [[ "$EVENT_NAME" == "pull_request" && "$EVENT_PR_AUTHOR" == "${INPUT_BOT_USERNAME:-$INPUT_REVIEWER}" && ",$EVENT_PR_LABELS," == *",ci-skip-review,"* ]]; then
+          echo "Skipping: ci-skip-review PR by $EVENT_PR_AUTHOR"
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        # Skip dependabot PRs
+        if [[ "$EVENT_NAME" == "pull_request" && "$EVENT_PR_AUTHOR" == "dependabot[bot]" ]]; then
+          echo "Skipping: dependabot PR"
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        # When react_to_comments is disabled, pass through explicit inputs
+        if [[ "$INPUT_REACT_TO_COMMENTS" != "true" ]]; then
+          echo "mode=${INPUT_MODE}" >> "$GITHUB_OUTPUT"
+          echo "pr_number=${INPUT_PR_NUMBER:-${EVENT_PR_NUMBER:-$EVENT_ISSUE_NUMBER}}" >> "$GITHUB_OUTPUT"
+          echo "pr_head_sha=${INPUT_PR_HEAD_SHA:-$EVENT_PR_HEAD_SHA}" >> "$GITHUB_OUTPUT"
+          echo "comment_id=${INPUT_COMMENT_ID}" >> "$GITHUB_OUTPUT"
+          echo "comment_path=${INPUT_COMMENT_PATH}" >> "$GITHUB_OUTPUT"
+          echo "comment_line=${INPUT_COMMENT_LINE}" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+          delimiter="$(openssl rand -hex 16)"
+          {
+            echo "comment_body<<${delimiter}"
+            echo "$INPUT_COMMENT_BODY"
+            echo "${delimiter}"
+          } >> "$GITHUB_OUTPUT"
+
+          exit 0
+        fi
+
+        # Auto-detection: pull_request event → review mode
+        if [[ "$EVENT_NAME" == "pull_request" ]]; then
+          echo "mode=review" >> "$GITHUB_OUTPUT"
+          echo "pr_number=${EVENT_PR_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "pr_head_sha=${EVENT_PR_HEAD_SHA}" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        # Skip events triggered by the bot itself (prevents infinite loops)
+        if [[ "$EVENT_SENDER" == "$INPUT_REVIEWER" ]]; then
+          echo "Skipping: event triggered by bot ($EVENT_SENDER)"
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        # Skip unsupported events early
+        # Note: pull_request_review is intentionally excluded — it causes
+        # concurrency group collisions that cancel in-progress review runs.
+        # Use pull_request_review_comment for inline reply reactions instead.
+        if [[ "$EVENT_NAME" != "issue_comment" && \
+              "$EVENT_NAME" != "pull_request_review_comment" ]]; then
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        # Auto-detection: comment/review events → validate and extract
+        EFFECTIVE_AUTHOR="${EVENT_COMMENT_AUTHOR:-$EVENT_REVIEW_AUTHOR}"
+        EFFECTIVE_BODY="${COMMENT_BODY_RAW:-$REVIEW_BODY_RAW}"
+        EFFECTIVE_ID="${EVENT_COMMENT_ID:-$EVENT_REVIEW_ID}"
+
+        if [[ "$EFFECTIVE_AUTHOR" == "$INPUT_REVIEWER" ]]; then
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        # Bypass the @mention requirement when replying inside a review thread
+        # whose root comment was authored by the bot — no mention needed to keep
+        # the conversation going.
+        BOT_IDENTITY="${INPUT_BOT_USERNAME:-$INPUT_REVIEWER}"
+        BOT_IN_THREAD="false"
+        if [[ "$EVENT_NAME" == "pull_request_review_comment" \
+              && "$EVENT_COMMENT_IN_REPLY_TO_ID" =~ ^[0-9]+$ \
+              && "$BOT_IDENTITY" =~ ^[A-Za-z0-9_-]+$ ]]; then
+          PARENT_AUTHOR=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/comments/${EVENT_COMMENT_IN_REPLY_TO_ID}" \
+            --jq '.user.login' 2>/dev/null) || {
+            echo "::warning::Failed to fetch parent comment ${EVENT_COMMENT_IN_REPLY_TO_ID}"
+            PARENT_AUTHOR=""
+          }
+          if [[ "$PARENT_AUTHOR" == "$BOT_IDENTITY" ]]; then
+            BOT_IN_THREAD="true"
+            echo "Bot authored parent comment — bypassing mention requirement"
+          fi
+        fi
+
+        if [[ "$EFFECTIVE_BODY" != *"@${INPUT_REVIEWER}"* && "$BOT_IN_THREAD" != "true" ]]; then
+          echo "Skipping: comment does not mention ${INPUT_REVIEWER} and bot is not in thread"
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        if [[ "$EVENT_NAME" == "issue_comment" && "$EVENT_IS_PR_COMMENT" != "true" ]]; then
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        # Atomic claim: add eyes reaction to prevent duplicate processing.
+        # GitHub returns 201 for new reactions, 200 if already exists from same user.
+        if [[ "$EVENT_NAME" == "issue_comment" ]]; then
+          REACTION_URL="repos/${GITHUB_REPOSITORY}/issues/comments/${EFFECTIVE_ID}/reactions"
+        else
+          REACTION_URL="repos/${GITHUB_REPOSITORY}/pulls/comments/${EFFECTIVE_ID}/reactions"
+        fi
+
+        CLAIM_RAW=$(gh api "$REACTION_URL" \
+          --method POST \
+          --field content=eyes \
+          --include 2>/dev/null) || true
+        CLAIM_RESPONSE="${CLAIM_RAW%%$'\n'*}"
+
+        if [[ "$CLAIM_RESPONSE" == *"200"* ]]; then
+          echo "Skipping: comment already claimed by another workflow run"
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        echo "mode=react" >> "$GITHUB_OUTPUT"
+        echo "skip=false" >> "$GITHUB_OUTPUT"
+
+        if [[ -n "$EVENT_ISSUE_NUMBER" ]]; then
+          echo "pr_number=${EVENT_ISSUE_NUMBER}" >> "$GITHUB_OUTPUT"
+        else
+          echo "pr_number=${EVENT_PR_NUMBER}" >> "$GITHUB_OUTPUT"
+        fi
+
+        echo "comment_id=${EFFECTIVE_ID}" >> "$GITHUB_OUTPUT"
+        echo "comment_path=${EVENT_COMMENT_PATH}" >> "$GITHUB_OUTPUT"
+        echo "comment_line=${EVENT_COMMENT_LINE}" >> "$GITHUB_OUTPUT"
+
+        delimiter="$(openssl rand -hex 16)"
+        {
+          echo "comment_body<<${delimiter}"
+          echo "$EFFECTIVE_BODY"
+          echo "${delimiter}"
+        } >> "$GITHUB_OUTPUT"
+
+    # ── Shared steps ──
+
+    - name: Resolve PR head SHA
+      id: resolve-sha
+      if: steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.mode == 'react'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.bot_token }}
+      run: |
+        echo "sha=$(gh pr view ${{ steps.ctx.outputs.pr_number }} --json headRefOid --jq '.headRefOid')" >> "$GITHUB_OUTPUT"
+
+    - name: Checkout repository
+      if: steps.ctx.outputs.skip != 'true'
+      uses: actions/checkout@v6
+      with:
+        # Depth 20: lets sub-agent git history walks (HEAD~N) succeed without paying for a full clone.
+        fetch-depth: 20
+        ref: ${{ steps.ctx.outputs.mode == 'react' && steps.resolve-sha.outputs.sha || steps.ctx.outputs.pr_head_sha }}
+
+    - name: Setup Bun
+      if: steps.ctx.outputs.skip != 'true'
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      with:
+        bun-version: 1.x
+
+    - name: Write MCP config
+      id: mcp
+      if: steps.ctx.outputs.skip != 'true' && inputs.mcp_config != ''
+      shell: bash
+      env:
+        MCP_CONFIG: ${{ inputs.mcp_config }}
+      run: |
+        echo "$MCP_CONFIG" > "$RUNNER_TEMP/mcp-config.json"
+        echo "path=$RUNNER_TEMP/mcp-config.json" >> "$GITHUB_OUTPUT"
+
+    # ── Claude Code setup ──
+
+    - name: Install action dependencies
+      if: steps.ctx.outputs.skip != 'true'
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: bun install --frozen-lockfile --filter @code-assistants/code-review-action
+
+    - name: Resolve plugin directory
+      id: plugin
+      if: steps.ctx.outputs.skip != 'true'
+      shell: bash
+      run: |
+        echo "dir=${{ github.action_path }}/../../../claude-plugins/autopilot" >> "$GITHUB_OUTPUT"
+
+    # ── PR help footer ──
+
+    - name: Update PR help footer
+      if: steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.mode == 'review'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.bot_token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ steps.ctx.outputs.pr_number }}
+        HELP_ID: code-review-action
+        HELP_TEXT: |
+          - `@${{ inputs.reviewer }} <comment>` — Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.
+      run: bun run "${{ github.action_path }}/src/updatePrFooter.ts"
+
+    # ── Review mode ──
+
+    - name: Force AI reviewer
+      if: steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.mode == 'review'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.bot_token }}
+        REVIEWER: ${{ inputs.reviewer }}
+        PR_NUMBER: ${{ steps.ctx.outputs.pr_number }}
+      run: |
+        ALREADY_REVIEWER=$(gh pr view "$PR_NUMBER" --json reviewRequests,latestReviews --jq \
+          "[(.reviewRequests[]?.login), (.latestReviews[]?.author.login)] | any(. == \"$REVIEWER\")")
+        if [[ "$ALREADY_REVIEWER" != "true" ]]; then
+          gh pr edit "$PR_NUMBER" --add-reviewer "$REVIEWER" || true
+        fi
+
+    - name: Get PR author
+      id: pr
+      if: steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.mode == 'review'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.bot_token }}
+      run: |
+        echo "author=$(gh pr view ${{ steps.ctx.outputs.pr_number }} --json author --jq '.author.login')" >> "$GITHUB_OUTPUT"
+
+    - name: Preflight PR checks
+      id: preflight
+      if: >-
+        steps.ctx.outputs.skip != 'true'
+        && steps.ctx.outputs.mode == 'review'
+        && inputs.preflight_checks == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.bot_token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ steps.ctx.outputs.pr_number }}
+        REVIEWER: ${{ inputs.reviewer }}
+        PR_HEAD_SHA: ${{ steps.ctx.outputs.pr_head_sha }}
+        JOB_NAME: ${{ github.job }}
+        POLL_INTERVAL: ${{ inputs.poll_interval }}
+        CHECKS_TIMEOUT: ${{ inputs.checks_timeout }}
+        PR_AUTHOR: ${{ steps.pr.outputs.author }}
+      run: bun run "${{ github.action_path }}/src/preflightChecks.ts"
+
+    - name: Code Review
+      id: review
+      if: steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.mode == 'review' && steps.preflight.outputs.skip_review != 'true'
+      continue-on-error: true
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude_oauth_token }}
+        GH_TOKEN: ${{ inputs.bot_token }}
+        CLAUDE_PROMPT: |
+          /autopilot:pr-review REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} PR_AUTHOR: ${{ steps.pr.outputs.author }}
+        CLAUDE_MODEL: ${{ inputs.model }}
+        CLAUDE_ALLOWED_TOOLS: "Bash(gh:*),mcp__repomix__*,mcp__context7__*,mcp__Ref__*,mcp__exa__*,mcp__perplexity__*,Read,Glob,Grep"
+        CLAUDE_DISALLOWED_TOOLS: "Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh issue comment:*),Bash(gh api:*)"
+        CLAUDE_JSON_SCHEMA: '{"type":"object","properties":{"verdict":{"type":"string","enum":["approve","requestChanges","comment"]},"reviewComment":{"type":"string"},"inlineComments":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"},"body":{"type":"string"}},"required":["path","line","body"]}}},"required":["verdict","reviewComment"]}'
+        CLAUDE_PLUGIN_DIR: ${{ steps.plugin.outputs.dir }}
+        CLAUDE_MCP_CONFIG: ${{ steps.mcp.outputs.path }}
+        CLAUDE_SETTINGS: ${{ inputs.settings }}
+        EXECUTION_OUTPUT_FILE: ${{ runner.temp }}/claude-execution-output.json
+        LOG_LEVEL: ${{ inputs.debug_logs == 'true' && 'debug' || 'info' }}
+        PARALLEL_FANOUT: ${{ inputs.parallel_fanout }}
+        PR_NUMBER: ${{ steps.ctx.outputs.pr_number }}
+      run: bun run "${{ github.action_path }}/src/runClaude.ts"
+
+    - name: Submit Review
+      if: steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.mode == 'review' && steps.preflight.outputs.skip_review != 'true' && always() && (steps.review.outcome == 'success' || steps.review.outcome == 'failure')
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.bot_token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ steps.ctx.outputs.pr_number }}
+        REVIEWER: ${{ inputs.reviewer }}
+        STRUCTURED_OUTPUT: ${{ steps.review.outputs.structured_output }}
+        EXECUTION_FILE: ${{ steps.review.outputs.execution_file }}
+        PR_HEAD_SHA: ${{ steps.ctx.outputs.pr_head_sha }}
+        RUNNER_TEMP: ${{ runner.temp }}
+      run: bun run "${{ github.action_path }}/src/submitReview.ts"
+
+    - name: Upload review execution artifact
+      if: >-
+        steps.ctx.outputs.skip != 'true'
+        && steps.ctx.outputs.mode == 'review'
+        && always()
+        && (steps.review.outcome == 'failure' || inputs.debug_logs == 'true' || steps.review.outputs.long_run == 'true')
+      uses: actions/upload-artifact@v7
+      with:
+        name: claude-execution-${{ steps.ctx.outputs.pr_number }}-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/claude-execution-output.json
+        retention-days: 14
+        if-no-files-found: ignore
+
+    # ── React mode ──
+
+    - name: React to Comment
+      id: reaction
+      if: steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.mode == 'react'
+      continue-on-error: true
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude_oauth_token }}
+        GH_TOKEN: ${{ inputs.bot_token }}
+        CLAUDE_PROMPT: |
+          /autopilot:pr-answer REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} COMMENT_BODY: ${{ steps.ctx.outputs.comment_body }} COMMENT_PATH: ${{ steps.ctx.outputs.comment_path }} COMMENT_LINE: ${{ steps.ctx.outputs.comment_line }}
+        CLAUDE_MODEL: ${{ inputs.model }}
+        CLAUDE_ALLOWED_TOOLS: "Bash(gh:*),mcp__repomix__*,mcp__context7__*,mcp__Ref__*,mcp__exa__*,mcp__perplexity__*,Read,Glob,Grep"
+        CLAUDE_DISALLOWED_TOOLS: "Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh issue comment:*),Bash(gh api:*)"
+        CLAUDE_JSON_SCHEMA: '{"type":"object","properties":{"reply":{"type":"string"},"resolveComments":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"}},"required":["path","line"]}},"updatedVerdict":{"type":["string","null"],"enum":["approve","requestChanges","comment",null]},"updatedReviewComment":{"type":["string","null"]}},"required":["reply"]}'
+        CLAUDE_PLUGIN_DIR: ${{ steps.plugin.outputs.dir }}
+        CLAUDE_MCP_CONFIG: ${{ steps.mcp.outputs.path }}
+        CLAUDE_SETTINGS: ${{ inputs.settings }}
+        EXECUTION_OUTPUT_FILE: ${{ runner.temp }}/claude-reaction-output.json
+        LOG_LEVEL: ${{ inputs.debug_logs == 'true' && 'debug' || 'info' }}
+      run: bun run "${{ github.action_path }}/src/runClaude.ts"
+
+    - name: Submit Reaction
+      if: steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.mode == 'react' && always() && (steps.reaction.outcome == 'success' || steps.reaction.outcome == 'failure')
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.bot_token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ steps.ctx.outputs.pr_number }}
+        REVIEWER: ${{ inputs.reviewer }}
+        COMMENT_ID: ${{ steps.ctx.outputs.comment_id }}
+        COMMENT_PATH: ${{ steps.ctx.outputs.comment_path }}
+        STRUCTURED_OUTPUT: ${{ steps.reaction.outputs.structured_output }}
+        EXECUTION_FILE: ${{ steps.reaction.outputs.execution_file }}
+        RUNNER_TEMP: ${{ runner.temp }}
+      run: bun run "${{ github.action_path }}/src/reactToComment.ts"
+
+    - name: Upload reaction execution artifact
+      if: >-
+        steps.ctx.outputs.skip != 'true'
+        && steps.ctx.outputs.mode == 'react'
+        && always()
+        && (steps.reaction.outcome == 'failure' || inputs.debug_logs == 'true' || steps.reaction.outputs.long_run == 'true')
+      uses: actions/upload-artifact@v7
+      with:
+        name: claude-reaction-${{ steps.ctx.outputs.pr_number }}-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/claude-reaction-output.json
+        retention-days: 14
+        if-no-files-found: ignore
