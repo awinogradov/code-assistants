@@ -114,7 +114,7 @@ Pack codebase (MCP direct call):
 Agent 1 (resolve-issue-context):
   Use the Agent tool with:
   - `subagent_type`: "autopilot:resolve-issue-context"
-  - `prompt`: "Fetch issue context. Input type: github-issue. Issue ID: [id]. Repository: [owner/repo]. Fetch parent/siblings: true."
+  - `prompt`: "Fetch issue context. Input type: github-issue. Issue ID: [id]. Repository: [owner/repo]. Fetch parent/siblings: true. Auto-assign current user: true."
   - `description`: "Resolve issue context"
 
 Agent 2 (search-codebase-todos):
