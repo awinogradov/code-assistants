@@ -123,8 +123,10 @@ From the repo root:
 ```bash
 bun install              # refresh the lockfile after editing workspaces
 bun run typecheck        # runs the `typecheck` task across the workspace via Turbo
-bun test                 # runs the `test` task in packages that declare it
+bun run test             # runs the `test` task across the workspace via Turbo
 ```
+
+Use `bun run test`, not `bun test` — the root `package.json` maps `test` to `turbo run test` (`bun test` is Bun's own test runner and does not dispatch workspace scripts; it exits with "No tests found" when invoked at the repo root).
 
 Turbo handles per-package execution and caching. You don't need to `cd` into the member.
 
@@ -160,7 +162,15 @@ Specialised script types as the project grows — e.g., `test:unit`, `test:integ
 
 ### Turbo task graph
 
-`turbo.json` defines three tasks: `typecheck`, `test`, `clean`. Each task's `inputs` glob covers `action.yml`, `*.ts`, `src/**/*.ts`, `tsconfig.json`, and `package.json`. Tasks run only in workspace members that declare the matching `package.json` script — there is no global config to update when you add a new member.
+`turbo.json` defines three tasks. Each task runs only in workspace members that declare the matching `package.json` script — there is no global config to update when you add a new member.
+
+| Task        | `inputs`                                                                 | Cached?             |
+| ----------- | ------------------------------------------------------------------------ | ------------------- |
+| `typecheck` | `action.yml`, `*.ts`, `src/**/*.ts`, `tsconfig.json`, `package.json`     | Yes                 |
+| `test`      | `*.ts`, `src/**/*.ts`, `tsconfig.json`, `package.json` (no `action.yml`) | Yes                 |
+| `clean`     | _none_                                                                   | No (`cache: false`) |
+
+`action.yml` is intentionally excluded from `test` inputs — changes to action metadata invalidate `typecheck` but not the test cache. If you add a task that needs cache-aware action-metadata sensitivity, include `action.yml` in its `inputs`.
 
 ### Per-member docs and agent files
 
