@@ -149,7 +149,7 @@ The root `package.json` declares the repo's stack via a top-level `agents` objec
 
 ### Per-member docs and agent files
 
-Any workspace member (TypeScript action, YAML composite action, or package) MAY include:
+Any action or package directory (TypeScript action, YAML composite action, or package) MAY include:
 
 - `docs/` — a member-scoped docs directory for material too specific or too long for the README
 - `CLAUDE.md` — agent rules that apply only inside that member's directory (Claude Code loads these in addition to the repo-root `CLAUDE.md`)
@@ -168,8 +168,8 @@ These rules are inherited from CLAUDE.md (a symlink to `rules/Bun.md`); not dupl
 
 For TypeScript actions and packages:
 
-1. Add the directory path to root `package.json` `workspaces`, then run `bun install` from the repo root to refresh the lockfile.
-2. Create the directory layout described above.
+1. Create the directory layout described above.
+2. Add the directory path to root `package.json` `workspaces`, then run `bun install` from the repo root to refresh the lockfile.
 3. Add a row to root `README.md` under the appropriate section (`## GitHub Actions` for actions, `## Repository docs` for docs, etc.).
 
 For YAML composite actions:
