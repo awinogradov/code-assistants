@@ -195,6 +195,29 @@ Run multiple `resolve-library-id` calls in parallel, then multiple `query-docs` 
 
 Use all available documentation sources. If a source is unavailable or returns no results, continue with remaining sources. Each tool provides different information (structured docs, official references, real-world patterns, reasoning).
 
+### Plan File Header (MANDATORY)
+
+Every plan file written by any stack skill MUST begin with a single `# <Title>` line on line 1, followed by a blank line. This rule is stack-agnostic and supersedes any stack-specific Phase 5 template that omits the header.
+
+**Title derivation:**
+
+- For `github-issue` inputs: use the GitHub issue title verbatim as resolved in Phase 0 (no `#<n>` prefix, no truncation).
+- For `plain description` inputs: paraphrase the user's task description into a single sentence (≤80 characters), sentence case.
+
+**Section ordering** when a `## Pre-Implementation` block is also emitted (see Phase 2):
+
+```
+# <Title>
+
+## Pre-Implementation
+...
+
+## Summary
+...
+```
+
+When no Pre-Implementation block is emitted, the order is `# <Title>` → blank line → `## Summary` → rest of plan.
+
 ### CLAUDE.md Compliance
 
 Map each planned change to project rules defined in CLAUDE.md.
@@ -270,7 +293,7 @@ Tool parameters:
 
 ### If on `main` branch OR `worktreeNeedsBranch` is true
 
-Add `## Pre-Implementation` as the FIRST section of the plan file (before `## Summary`). The block content depends on input type from Phase 0.
+Insert `## Pre-Implementation` directly below the `# <Title>` line (which per the Plan File Header rule above must already be line 1) and above `## Summary`. The block content depends on input type from Phase 0.
 
 #### Input type is `github-issue` (bare number, `#`-prefixed number, or GitHub issue URL)
 
