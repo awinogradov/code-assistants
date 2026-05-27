@@ -78,13 +78,13 @@ After completing deep analysis, call TaskUpdate to set task 3 ("Analyze codebase
 
 Rate the plan (20 points each dimension = 100 total):
 
-| Dimension        | Criteria                                                     | Score |
-| ---------------- | ------------------------------------------------------------ | ----- |
-| **Alignment**    | Follows CLAUDE.md, project patterns, naming conventions      | /20   |
-| **Completeness** | All requirements addressed, no missing steps                 | /20   |
-| **Type Safety**  | Proper types, Zod schemas, no unsafe `as` assertions         | /20   |
-| **Testability**  | Clear test strategy, edge cases identified                   | /20   |
-| **Simplicity**   | Minimal code, reuses existing functions, no over-engineering | /20   |
+| Dimension        | Criteria                                                                                                                            | Score |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| **Alignment**    | Follows CLAUDE.md, project patterns, naming conventions                                                                             | /20   |
+| **Completeness** | All requirements addressed, no missing steps                                                                                        | /20   |
+| **Type Safety**  | Proper types, Zod schemas, no unsafe `as` assertions                                                                                | /20   |
+| **Testability**  | Clear test strategy, edge cases identified                                                                                          | /20   |
+| **Simplicity**   | Minimal code, reuses existing functions, no over-engineering, every change traces to steelmanned intent, no opportunistic refactors | /20   |
 
 ### Auto-Iteration Protocol (Target: 95+)
 
@@ -154,8 +154,9 @@ Score: [X]/100
 
 ## Implementation Steps
 1. [ ] [Action] in `path/to/file.ts`
-   - Test: [inline test description if needed]
+   - verify: [observable check — test name, command, or behavior]
 2. [ ] [Action] in `path/to/file.ts`
+   - verify: [observable check — test name, command, or behavior]
 
 ## Files
 - `path/to/file.ts:NN` - [what changes]

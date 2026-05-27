@@ -35,7 +35,11 @@ Before making any changes:
 - 👤 Every line of code must be used or removed
 - 👤 The fewer lines of code the better
 - 👤 Avoid code duplication - maximize reuse
-- 👤 Do not over-engineer - only make directly requested changes
+- 👤 Do not over-engineer - only make directly requested changes. No abstractions for single-use code, no unrequested configurability, no error handling for impossible scenarios. If 200 lines could be 50, rewrite
+- 👤 Surface assumptions and ambiguities before coding; if multiple interpretations exist, present them - don't pick silently
+- 👤 Define verifiable success criteria before implementing (test, command, or observable behavior)
+- 👤 Every changed line must trace to the request - no opportunistic refactors of adjacent code or unrelated formatting
+- 👤 When deleting unused code, only remove orphans your changes created; mention pre-existing dead code instead of deleting it
 - 👤 Be consistent with existing code style
 - 👤 Write failing tests first, then write code to pass tests
 - 👤 Run tests after any code changes
