@@ -290,30 +290,38 @@ After all review results are available — whether produced in Phase 2.3 (in-mod
 
 Used in §2.5 steps 3 and 5 to turn a bare rule code into a markdown link to the rule's category in the producing sub-agent file on GitHub.
 
-**Sub-agent → file lookup.** Every review block carries a `subagent_type` (pre-computed entries) or originates from an Agent tool call whose `subagent_type` is known (in-model fan-out). Strip the `autopilot:` prefix and append `.md` to get the agent file path under `claude-plugins/autopilot/agents/`:
+**Sub-agent → file lookup.** Every review block carries a `subagent_type` with the `autopilot:` prefix — in-model fan-out gets it from the Agent tool's `subagent_type` field; pre-computed fan-out gets it from `code-review-action`'s `reviewFanout.ts`. Strip the `autopilot:` prefix and append `.md` to get the bare agent filename:
 
-| `subagent_type`                           | Agent file                                                         |
-| ----------------------------------------- | ------------------------------------------------------------------ |
-| `autopilot:pr:review:correctness`         | `claude-plugins/autopilot/agents/pr:review:correctness.md`         |
-| `autopilot:pr:review:testing`             | `claude-plugins/autopilot/agents/pr:review:testing.md`             |
-| `autopilot:pr:review:complexity`          | `claude-plugins/autopilot/agents/pr:review:complexity.md`          |
-| `autopilot:pr:review:standards`           | `claude-plugins/autopilot/agents/pr:review:standards.md`           |
-| `autopilot:pr:review:architecture`        | `claude-plugins/autopilot/agents/pr:review:architecture.md`        |
-| `autopilot:pr:review:ai-smells`           | `claude-plugins/autopilot/agents/pr:review:ai-smells.md`           |
-| `autopilot:pr:review:common-sense`        | `claude-plugins/autopilot/agents/pr:review:common-sense.md`        |
-| `autopilot:pr:review:pr-hygiene`          | `claude-plugins/autopilot/agents/pr:review:pr-hygiene.md`          |
-| `autopilot:pr:review:surface-correctness` | `claude-plugins/autopilot/agents/pr:review:surface-correctness.md` |
-| `autopilot:pr:review:surface-testing`     | `claude-plugins/autopilot/agents/pr:review:surface-testing.md`     |
-| `autopilot:pr:review:surface-naming`      | `claude-plugins/autopilot/agents/pr:review:surface-naming.md`      |
+| `subagent_type`                           | Agent filename                     |
+| ----------------------------------------- | ---------------------------------- |
+| `autopilot:pr:review:correctness`         | `pr:review:correctness.md`         |
+| `autopilot:pr:review:testing`             | `pr:review:testing.md`             |
+| `autopilot:pr:review:complexity`          | `pr:review:complexity.md`          |
+| `autopilot:pr:review:standards`           | `pr:review:standards.md`           |
+| `autopilot:pr:review:architecture`        | `pr:review:architecture.md`        |
+| `autopilot:pr:review:ai-smells`           | `pr:review:ai-smells.md`           |
+| `autopilot:pr:review:common-sense`        | `pr:review:common-sense.md`        |
+| `autopilot:pr:review:pr-hygiene`          | `pr:review:pr-hygiene.md`          |
+| `autopilot:pr:review:surface-correctness` | `pr:review:surface-correctness.md` |
+| `autopilot:pr:review:surface-testing`     | `pr:review:surface-testing.md`     |
+| `autopilot:pr:review:surface-naming`      | `pr:review:surface-naming.md`      |
 
-**Anchor derivation.** Read the producing agent file once via the `Read` tool, find the line containing the rule code (matched as `**<CODE>:`), then walk upward to the nearest `### ` heading. Slugify that heading: lowercase, strip characters other than `[a-z0-9 -]`, replace spaces with `-`, collapse repeats. Example: `### B. Concurrency and Async Issues` → `b-concurrency-and-async-issues`. Cache the heading map per agent file for the run.
+**Local file path (for reading).** The skill must read the agent file from the installed plugin directory, not the caller's checkout — when `code-review-action` runs in a downstream repo, `claude-plugins/autopilot/agents/` does not exist in the workspace. Resolve the read path in this order:
 
-**URL template.** `https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/<file-encoded>#<anchor>` — percent-encode `:` as `%3A` in the file segment so markdown parsers do not misinterpret it. Example: `pr:review:correctness.md` → `pr%3Areview%3Acorrectness.md`.
+1. If the `CLAUDE_PLUGIN_DIR` env var is set (exposed by `code-review-action`), read from `${CLAUDE_PLUGIN_DIR}/agents/<filename>`.
+2. Otherwise (running inside the autopilot source repo), read from `claude-plugins/autopilot/agents/<filename>` relative to the repository root.
+
+If neither path is readable, fall back per the Edge cases below — never block the review.
+
+**Anchor derivation.** Read the producing agent file once via the `Read` tool (using the local path resolved above), find the line containing the rule code (matched as `**<CODE>:`), then walk upward to the nearest `### ` heading. Slugify that heading: lowercase, strip characters other than `[a-z0-9 -]`, replace spaces with `-`, collapse repeats. Example: `### B. Concurrency and Async Issues` → `b-concurrency-and-async-issues`. Cache the heading map per agent file for the run.
+
+**URL template.** Always emit links to the canonical GitHub source — the local read path is only used for anchor lookup, never as the link target. URL: `https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/<file-encoded>#<anchor>` — percent-encode `:` as `%3A` in the file segment so markdown parsers do not misinterpret it. Example: `pr:review:correctness.md` → `pr%3Areview%3Acorrectness.md`.
 
 **Edge cases.**
 
 - The sub-agent emitted no rule code: omit the bracket suffix entirely (see §2.5 step 1 and step 5). Do not emit `[UNSPECIFIED]`.
 - Rule code present but not found in the agent file (rename, typo, drift): fall back to bare `[<CODE>]` with no URL. Never block the review.
+- Local agent file not readable (neither `$CLAUDE_PLUGIN_DIR/agents/<filename>` nor `claude-plugins/autopilot/agents/<filename>` exists): fall back to bare `[<CODE>]` for every code from that sub-agent. Never block the review.
 
 ---
 

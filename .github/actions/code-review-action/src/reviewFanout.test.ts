@@ -149,8 +149,8 @@ describe("loadReviewAgents", () => {
     const agents = await loadReviewAgents(pluginDir);
     const names = agents.map((a) => a.subagent_type).sort();
 
-    expect(names).toEqual(["platform:pr:review:correctness", "platform:pr:review:surface-naming"]);
-    const correctness = agents.find((a) => a.subagent_type === "platform:pr:review:correctness");
+    expect(names).toEqual(["autopilot:pr:review:correctness", "autopilot:pr:review:surface-naming"]);
+    const correctness = agents.find((a) => a.subagent_type === "autopilot:pr:review:correctness");
     expect(correctness?.model).toBe("sonnet");
     expect(correctness?.body).toBe("correctness body");
   });

@@ -128,7 +128,7 @@ export async function loadReviewAgents(pluginDir: string): Promise<AgentDefiniti
       const { fm, body } = splitFrontmatter(content);
       const parsed = parseAgentFrontmatter(fm);
       return {
-        subagent_type: `platform:${filename.replace(/\.md$/, "")}`,
+        subagent_type: `autopilot:${filename.replace(/\.md$/, "")}`,
         filename,
         body: body.trim(),
         model: parsed.model,
