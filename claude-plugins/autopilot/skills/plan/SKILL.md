@@ -156,7 +156,27 @@ Format:
 
 Derive from: the resolved issue title + body (for `github-issue` input), or the task description (for `plain description` input). Do not invent scope the user did not request.
 
-After completing the Issue Context Output and Steelmanned Intent, call TaskUpdate to set task 1 ("Resolve input") to `status: "completed"`.
+### Assumptions & Open Questions
+
+After the Steelmanned Intent, emit two short blocks. This forces interpretive choices into the open instead of letting them propagate silently into the plan.
+
+**Assumptions** — up to 5 bullets. Each names an interpretation being made that the user could disagree with (e.g., "treating this as a read-only API, not a webhook"). If none, write "none".
+
+**Open Questions** — material ambiguities that would change the design. If any open question is load-bearing (the plan's structure depends on the answer), raise it via `AskUserQuestion` BEFORE delegating to the stack skill in Phase 1. If none are load-bearing, state "none" and proceed.
+
+Format:
+
+```
+### Assumptions
+- [interpretation 1]
+- [interpretation 2]
+
+### Open Questions
+- [ambiguity 1] — load-bearing? yes/no
+- [ambiguity 2] — load-bearing? yes/no
+```
+
+After completing the Issue Context Output, Steelmanned Intent, and Assumptions & Open Questions, call TaskUpdate to set task 1 ("Resolve input") to `status: "completed"`.
 
 ## Preflight Check
 
