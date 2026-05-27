@@ -143,7 +143,20 @@ Present the `resolve-issue-context` agent's output along with TODO search result
 [output from search-codebase-todos agent]
 ```
 
-After completing the Issue Context Output, call TaskUpdate to set task 1 ("Resolve input") to `status: "completed"`.
+### Steelmanned Intent
+
+After the issue context and TODOs, emit a single-line **Steelmanned intent**: the user's request restated in its strongest form, with any vague language tightened. One sentence, ≤200 characters. This becomes the stable target for the stack skill's expert reviewers and lands verbatim in the Phase 5 plan file `## Summary` block.
+
+Format:
+
+```
+### Steelmanned Intent
+[one-sentence restatement of what success looks like, in the user's strongest framing]
+```
+
+Derive from: the resolved issue title + body (for `github-issue` input), or the task description (for `plain description` input). Do not invent scope the user did not request.
+
+After completing the Issue Context Output and Steelmanned Intent, call TaskUpdate to set task 1 ("Resolve input") to `status: "completed"`.
 
 ## Preflight Check
 

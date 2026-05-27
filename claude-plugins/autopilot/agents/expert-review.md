@@ -46,13 +46,13 @@ Repeat until the target is met or you determine the gaps are acceptable trade-of
 
 ## Phase 4: Output
 
-Output ONLY the structured report block. No preamble, no explanation outside this format:
+Output ONLY the structured report block. No preamble, no explanation outside this format. Key findings MUST be capped at 3–5 entries — depth over breadth. Stack minor objections together rather than listing them separately; if you have more than 5 candidate findings, drop the weakest until you are at 5.
 
 ```
 ### [Your Expert Role]
 - Score: [X]/100
 - Verdict: Approved | Needs revision
-- Key findings:
+- Key findings (3–5):
   - [Finding 1]
   - [Finding 2]
   - [Finding 3]
