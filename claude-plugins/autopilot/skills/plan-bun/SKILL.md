@@ -131,7 +131,11 @@ After all expert reviews complete, call TaskUpdate to set task 5 ("Review with e
 
 **FIRST**, call TaskUpdate to set task 6 ("Output final plan") to `status: "in_progress"`.
 
+The template below starts with `# <Title>` — see the canonical "Plan File Header (MANDATORY)" rule in `plan/SKILL.md` `## Common Instructions` for title derivation and section ordering.
+
 ```
+# <Title>
+
 ## Summary
 [1-2 sentences: what and why]
 Score: [X]/100
