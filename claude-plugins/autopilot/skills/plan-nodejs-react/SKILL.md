@@ -153,10 +153,13 @@ Score: [X]/100
 [ASCII diagram(s) generated via Skill(autopilot:ascii-schemas) — architecture, data flow, sequence, topology, UI layout, or component interaction. Omit this section entirely for pure logic/refactor changes.]
 
 ## Implementation Steps
+
+Every step MUST include a `verify:` line — an observable check (test name, command, or behavior).
+
 1. [ ] [Action] in `path/to/file.ts`
-   - verify: [observable check — test name, command, or behavior]
+   - verify: `vitest run path/to/file.test.ts` passes
 2. [ ] [Action] in `path/to/file.ts`
-   - verify: [observable check — test name, command, or behavior]
+   - verify: rendered component shows the new label in the page
 
 ## Files
 - `path/to/file.ts:NN` - [what changes]
