@@ -101,19 +101,20 @@ After scoring completes, call TaskUpdate to set task 4 ("Validate plan scores") 
 
 **FIRST**, call TaskUpdate to set task 5 ("Review with experts") to `status: "in_progress"`.
 
-**Select 2-3 most relevant experts** based on task scope:
+**Always include the Pre-mortem Analyst**, then select 2-3 additional experts based on task scope:
 
-| Expert                         | When to Include         | Focus Areas                                           |
-| ------------------------------ | ----------------------- | ----------------------------------------------------- |
-| **Principal Node.js Engineer** | Server-side logic, APIs | Performance, async, error handling, memory            |
-| **DBA**                        | Database changes        | Query efficiency, indexes, transactions, migrations   |
-| **Principal DevOps Engineer**  | Infra, env, deployment  | Env vars, scaling, monitoring, CI/CD                  |
-| **Senior Frontend Engineer**   | UI changes              | React patterns, state, UX, accessibility              |
-| **Senior QA Engineer**         | Any code change         | Test coverage, edge cases, regression risk            |
-| **CISO**                       | Auth, data, APIs, infra | Security architecture, OWASP, compliance, reliability |
-| **Principal Designer**         | UI/UX changes           | Fast, beautiful, simple, minimal; design patterns     |
-| **Principal SRE**              | Production systems      | Scalability, metrics, stability, performance          |
-| **Boring Tech Writer**         | User-facing changes     | README clarity, usage instructions, JSDoc, comments   |
+| Expert                         | When to Include           | Focus Areas                                                                                                        |
+| ------------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **Pre-mortem Analyst**         | Always (default reviewer) | Imagine the plan failed 6 months from now — return ranked failure narratives, early warning signs, and mitigations |
+| **Principal Node.js Engineer** | Server-side logic, APIs   | Performance, async, error handling, memory                                                                         |
+| **DBA**                        | Database changes          | Query efficiency, indexes, transactions, migrations                                                                |
+| **Principal DevOps Engineer**  | Infra, env, deployment    | Env vars, scaling, monitoring, CI/CD                                                                               |
+| **Senior Frontend Engineer**   | UI changes                | React patterns, state, UX, accessibility                                                                           |
+| **Senior QA Engineer**         | Any code change           | Test coverage, edge cases, regression risk                                                                         |
+| **CISO**                       | Auth, data, APIs, infra   | Security architecture, OWASP, compliance, reliability                                                              |
+| **Principal Designer**         | UI/UX changes             | Fast, beautiful, simple, minimal; design patterns                                                                  |
+| **Principal SRE**              | Production systems        | Scalability, metrics, stability, performance                                                                       |
+| **Boring Tech Writer**         | User-facing changes       | README clarity, usage instructions, JSDoc, comments                                                                |
 
 For each selected expert, launch a `autopilot:expert-review` sub-agent. Launch all experts **in parallel** (single message, multiple Agent tool calls):
 
@@ -123,6 +124,7 @@ Use the Agent tool with:
 - `prompt`: "You are a [Expert Role]. Review this implementation plan.
   Focus areas: [from table above].
   Scoring target: 95+.
+  Limit your report to the 3–5 strongest findings — depth over breadth.
 
   [full plan text from Phase 5 output]"
 - `description`: "Expert review: [Role]"
@@ -143,6 +145,7 @@ The template below starts with `# <Title>` — see the canonical "Plan File Head
 
 ## Summary
 [1-2 sentences: what and why]
+Steelmanned intent: [verbatim from Phase 0 Steelmanned Intent block]
 Score: [X]/100
 
 <!-- Include the ## Diagrams section only if the change is architectural/visual/UI/flow-related. Generate diagrams via Skill(autopilot:ascii-schemas) per the plan skill's "Visualize with ASCII Schemas" guidance. -->
