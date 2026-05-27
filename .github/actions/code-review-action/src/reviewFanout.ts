@@ -134,7 +134,7 @@ export async function loadReviewAgents(pluginDir: string): Promise<AgentDefiniti
         model: parsed.model,
         allowedTools: parsed.allowedTools,
       };
-    })
+    }),
   );
 }
 
@@ -210,7 +210,7 @@ function extractFinalText(message: SDKMessage): string | undefined {
 async function runSubagent(
   ctx: FanoutContext,
   agent: AgentDefinition,
-  userPrompt: string
+  userPrompt: string,
 ): Promise<SubagentResult> {
   const childLog = ctx.log.child({ orchestrator_subagent: agent.subagent_type });
   const start = performance.now();
@@ -229,7 +229,7 @@ async function runSubagent(
       query({
         prompt: userPrompt,
         options: buildSubagentOptions(ctx, agent, abortController),
-      })
+      }),
     );
   } catch (err) {
     error = err instanceof Error ? err.message : String(err);
@@ -241,7 +241,7 @@ async function runSubagent(
   const durationMs = Math.round(performance.now() - start);
   childLog.info(
     { duration_ms: durationMs, markdown_bytes: markdown.length, error },
-    "Sub-agent query finished."
+    "Sub-agent query finished.",
   );
   return { subagent_type: agent.subagent_type, markdown, duration_ms: durationMs, error };
 }
@@ -249,7 +249,7 @@ async function runSubagent(
 /** Stream SDK messages through the logger; return the last assistant text. */
 async function streamAssistantText(
   log: pino.Logger,
-  stream: AsyncIterable<SDKMessage>
+  stream: AsyncIterable<SDKMessage>,
 ): Promise<string> {
   let markdown = "";
   for await (const message of stream) {
@@ -264,7 +264,7 @@ async function streamAssistantText(
 function buildSubagentOptions(
   ctx: FanoutContext,
   agent: AgentDefinition,
-  abortController: AbortController
+  abortController: AbortController,
 ): Parameters<typeof query>[0]["options"] {
   return {
     model: agent.model ?? ctx.fallbackModel,
@@ -300,7 +300,7 @@ function buildSubagentOptions(
 export async function runReviewFanout(ctx: FanoutContext): Promise<SubagentResult[]> {
   ctx.log.info(
     { repo: ctx.repo, pr_number: ctx.prNumber, plugin_dir: ctx.pluginDir },
-    "Parallel review fan-out starting."
+    "Parallel review fan-out starting.",
   );
 
   const [agents, diff, stack] = await Promise.all([
@@ -311,7 +311,7 @@ export async function runReviewFanout(ctx: FanoutContext): Promise<SubagentResul
 
   ctx.log.info(
     { agent_count: agents.length, diff_bytes: diff.length, stack },
-    "Agent definitions and PR context loaded."
+    "Agent definitions and PR context loaded.",
   );
 
   const userPrompt = buildSubagentPrompt(stack, diff);
@@ -333,7 +333,7 @@ export async function runReviewFanout(ctx: FanoutContext): Promise<SubagentResul
       agent_count: results.length,
       failed_count: failed,
     },
-    "Parallel review fan-out complete."
+    "Parallel review fan-out complete.",
   );
 
   return results;

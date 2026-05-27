@@ -95,7 +95,7 @@ describe("detectStack", () => {
   test("reads agents.rules from package.json", async () => {
     await writeFile(
       join(dir, "package.json"),
-      JSON.stringify({ agents: { rules: "Bun", language: "typescript" } })
+      JSON.stringify({ agents: { rules: "Bun", language: "typescript" } }),
     );
     expect(await detectStack(dir)).toBe("Bun");
   });
@@ -136,11 +136,11 @@ describe("loadReviewAgents", () => {
   test("loads only pr:review:* files and parses frontmatter", async () => {
     await seed(
       "pr:review:correctness.md",
-      "---\nname: pr:review:correctness\nmodel: sonnet\n---\ncorrectness body"
+      "---\nname: pr:review:correctness\nmodel: sonnet\n---\ncorrectness body",
     );
     await seed(
       "pr:review:surface-naming.md",
-      "---\nname: pr:review:surface-naming\nmodel: haiku\n---\nsurface body"
+      "---\nname: pr:review:surface-naming\nmodel: haiku\n---\nsurface body",
     );
     // Unrelated file must be filtered out
     await seed("pr:review.md", "should be excluded");
@@ -149,7 +149,10 @@ describe("loadReviewAgents", () => {
     const agents = await loadReviewAgents(pluginDir);
     const names = agents.map((a) => a.subagent_type).sort();
 
-    expect(names).toEqual(["autopilot:pr:review:correctness", "autopilot:pr:review:surface-naming"]);
+    expect(names).toEqual([
+      "autopilot:pr:review:correctness",
+      "autopilot:pr:review:surface-naming",
+    ]);
     const correctness = agents.find((a) => a.subagent_type === "autopilot:pr:review:correctness");
     expect(correctness?.model).toBe("sonnet");
     expect(correctness?.body).toBe("correctness body");
@@ -158,7 +161,7 @@ describe("loadReviewAgents", () => {
   test("propagates allowed tools when declared", async () => {
     await seed(
       "pr:review:rfc-compliance.md",
-      "---\nname: pr:review:rfc-compliance\nmodel: sonnet\ntools: Bash(gh *)\n---\nbody"
+      "---\nname: pr:review:rfc-compliance\nmodel: sonnet\ntools: Bash(gh *)\n---\nbody",
     );
     const agents = await loadReviewAgents(pluginDir);
     expect(agents[0]?.allowedTools).toEqual(["Bash(gh *)"]);
@@ -167,10 +170,9 @@ describe("loadReviewAgents", () => {
   test("leaves allowedTools undefined when frontmatter omits tools", async () => {
     await seed(
       "pr:review:correctness.md",
-      "---\nname: pr:review:correctness\nmodel: sonnet\n---\nbody"
+      "---\nname: pr:review:correctness\nmodel: sonnet\n---\nbody",
     );
     const agents = await loadReviewAgents(pluginDir);
     expect(agents[0]?.allowedTools).toBeUndefined();
   });
 });
-
