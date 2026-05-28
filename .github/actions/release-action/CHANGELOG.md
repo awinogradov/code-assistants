@@ -1,0 +1,107 @@
+# Changelog
+
+All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
+
+## 0.1.0 (2026-05-28)
+
+## Release Notes
+
+Release action now handles npm packages, GitHub Actions, and Claude plugins — simplifying your release workflow with automated versioning, changelogs, and multi-channel publishing.
+
+## ✨ What's New
+
+### Multi-format Release Support
+Release action adapts to your project type by reading a `release` field from `package.json`, automating the right publishing steps whether you're releasing npm packages, GitHub Actions, or Claude plugins — with specific artifacts and distribution channels for each.
+
+### Monorepo Release Orchestration
+Projects with multiple packages can now release them together or individually, with the action automatically discovering workspace members and coordinating version bumps and changelogs across the entire monorepo structure.
+
+### Enriched Changelogs with Ticket Context
+Changelogs now pull in full context from Linear, Jira, and GitHub Issues, transforming bare ticket IDs into meaningful descriptions that help your team understand what each change actually delivers.
+
+### Two-Phase Release Workflow
+The release process splits into create (opens a PR with version bump and changelog) and publish (triggers on merge to handle tagging, publishing, and notifications), giving you a chance to review changes before they go live.
+
+## 🐛 Bug Fixes
+
+### Stable Branch References
+Release branches now correctly resolve to specific commits instead of floating references, preventing race conditions when multiple releases run in parallel or when the main branch advances during processing.
+
+### Reliable Monorepo Member Detection
+Workspace discovery now handles edge cases like missing package.json files, circular dependencies, and non-standard directory structures, ensuring all packages in your monorepo get processed correctly.
+
+### Improved Error Handling
+API failures from Linear, Jira, or GitHub now fail gracefully with clear error messages instead of crashing the release process, and malformed commit messages no longer break changelog generation.
+
+## 📋 Protocol & Contract Changes
+
+### Package.json Release Configuration
+Services must now define their release configuration in package.json to enable automated publishing:
+
+**Before:**
+```json
+{
+  "name": "my-service",
+  "version": "1.0.0"
+}
+```
+
+**After:**
+```json
+{
+  "name": "my-service", 
+  "version": "1.0.0",
+  "release": {
+    "type": "npm",
+    "publish": {
+      "access": "public"
+    }
+  }
+}
+```
+
+See `docs/release-field.md` for full configuration options.
+
+## ⚙️ Configuration Required
+
+### GitHub Token Permissions
+The `github_token` must be a PAT or GitHub App token with enhanced permissions to create release branches and PRs. The default `GITHUB_TOKEN` has insufficient permissions.
+
+### API Keys for Ticket Enrichment
+To enable ticket context in changelogs, configure these optional secrets:
+- `linear_api_key`: For Linear ticket details
+- `anthropic_api_key`: For AI-generated release summaries
+- `slack_token`: For release notifications
+
+### Monorepo Workspace Configuration
+For monorepo setups, ensure your root package.json declares workspaces using standard npm/yarn/pnpm workspace patterns.
+
+
+### Features
+
+* **release-action:** add composite action for release workflows ([6368fbe](https://github.com/awinogradov/code-assistants/commit/6368fbef248c1e3c7c47bfdbc2d8a8e1598f6587))
+* **release-action:** add monorepo member discovery modules ([6dfbef7](https://github.com/awinogradov/code-assistants/commit/6dfbef7a8bfc15032868b4fcecca9632e1a52c34))
+* **release-action:** orchestrate per-member releases in monorepo mode ([687d7d3](https://github.com/awinogradov/code-assistants/commit/687d7d3f257a0a3ebd38aa151be50fa02b2173f0))
+* **release-action:** read release config from package.json ([de0f103](https://github.com/awinogradov/code-assistants/commit/de0f103a117fa63ff895a936540c8b9d05bfd5d2))
+
+### Bug Fixes
+
+* **release-action:** correct base-ref and branch template coercion ([ac586a4](https://github.com/awinogradov/code-assistants/commit/ac586a46f950d5eddb016f0ba82b445d42f30f15))
+* **release-action:** resolve base ref to a concrete commit sha ([611ddfd](https://github.com/awinogradov/code-assistants/commit/611ddfd587c0a3ff9e01759c0fef4efd26cbc51d))
+* **release-action:** tighten monorepo orchestrator correctness ([65d12c9](https://github.com/awinogradov/code-assistants/commit/65d12c950c6cbe6d1d4693324e24621318ca698b))
+* **release-action:** tighten parsers, ticket extraction, and api errors ([6eb786c](https://github.com/awinogradov/code-assistants/commit/6eb786cd6e41d4805cac38a7b53ae3b868797b12))
+* **release-action:** wire ai notes into monorepo ([fd8dbf1](https://github.com/awinogradov/code-assistants/commit/fd8dbf16163e0a9024fd332032b4965c0b411882))
+
+### Chores
+
+* **actions:** declare release.type for each composite action ([7650e6a](https://github.com/awinogradov/code-assistants/commit/7650e6a6a081b568f9c6ee09520232aa8e78bc1c))
+* **workspaces:** declare agents field on workspace modules ([68c6d3a](https://github.com/awinogradov/code-assistants/commit/68c6d3a19026b2265efa737ddba6484222de8289))
+
+### Tests
+
+* **release-action:** cover cwd path in notes ([720647d](https://github.com/awinogradov/code-assistants/commit/720647d9350bdfc66b220ff03e4298e43afde697))
+* **release-action:** cover happy paths in notes ([643c4c8](https://github.com/awinogradov/code-assistants/commit/643c4c86bdcbb324062129131ba3083ab949c930))
+
+### CI
+
+* pin actions with floating semver tags ([d1e0af8](https://github.com/awinogradov/code-assistants/commit/d1e0af8ce106b938140a5d6f42d31a8055909c73))
