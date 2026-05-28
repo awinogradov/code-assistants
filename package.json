@@ -11,6 +11,9 @@
     "node": ">=22"
   },
   "packageManager": "bun@1.3.9",
+  "release": {
+    "automerge": true
+  },
   "agents": {
     "rules": "Bun",
     "language": "typescript"

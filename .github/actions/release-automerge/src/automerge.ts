@@ -3,16 +3,21 @@
  *
  * Re-evaluated on every relevant event (check_suite, status, review), the action
  * merges a PR only when ALL of these hold: the head ref matches `^release-`, the
- * PR is open, every sibling check is green, and the review decision is APPROVED.
- * Any unmet condition or unexpected error is fail-closed — the action never
- * merges on doubt. The merge is pinned to the triggering head SHA so a push that
- * lands mid-evaluation cannot be merged unreviewed.
+ * PR is open, the repo-root `package.json` opts in via `release.automerge === true`,
+ * every sibling check is green, and the review decision is APPROVED. The opt-in is
+ * read from the root `package.json` at the triggering head SHA, so the policy
+ * travels with the release branch. Any unmet condition or unexpected error is
+ * fail-closed — the action never merges on doubt. The merge is pinned to the
+ * triggering head SHA so a push that lands mid-evaluation cannot be merged
+ * unreviewed.
  *
  * @example
  * GH_TOKEN=xxx REPO=owner/repo HEAD_SHA=abc JOB_NAME=automerge bun run src/automerge.ts
  */
 import { fetchCheckStatuses } from "@code-assistants/actions-core/checkStatus";
+import { fetchRawContent } from "@code-assistants/actions-core/fetchRawContent";
 import { parseRepo } from "@code-assistants/actions-core/parseRepo";
+import { readRootRelease } from "@code-assistants/actions-core/releaseField";
 import { Octokit } from "@octokit/rest";
 
 /** Minimal PR shape needed to pick the release PR for a commit. */
@@ -33,6 +38,8 @@ export interface MergeMethodFlags {
 export type MergeMethod = "rebase" | "squash" | "merge";
 
 const releaseBranch = /^release-/;
+// Repo-wide auto-merge opt-in lives in the root package.json's `release` object.
+const rootPackageJsonPath = "package.json";
 // GitHub merge-API responses that mean "nothing to do" rather than a real error:
 // 405 not mergeable / already merged, 409 head SHA moved (sha mismatch), 422 unprocessable.
 const idempotentMergeStatuses = new Set([405, 409, 422]);
@@ -84,6 +91,44 @@ export function selectMergeMethod(flags: MergeMethodFlags): MergeMethod | null {
 /** True only for an explicit APPROVED review decision. */
 export function isApprovedDecision(decision: string | null): boolean {
   return decision === "APPROVED";
+}
+
+/**
+ * Repo-wide auto-merge opt-in: true only when the root `package.json` declares
+ * `release.automerge === true`. Any other value — including an absent field —
+ * leaves auto-merge disabled, so the action no-ops and a human merges instead.
+ */
+export function isAutomergeEnabled(rootPackageJson: unknown): boolean {
+  return readRootRelease(rootPackageJson).automerge === true;
+}
+
+/**
+ * Read the root `package.json` at the triggering head SHA and decide whether
+ * the repo opted into auto-merge. A missing file is a clean "disabled" (no-op);
+ * a malformed file throws so the fail-closed wrapper never merges on doubt.
+ */
+async function fetchAutomergeOptIn(config: AutomergeConfig): Promise<boolean> {
+  const { octokit, owner, repo, headSha } = config;
+  const raw = await fetchRawContent({
+    octokit,
+    owner,
+    repo,
+    path: rootPackageJsonPath,
+    ref: headSha,
+  });
+
+  if (raw === null) {
+    return false;
+  }
+
+  try {
+    return isAutomergeEnabled(JSON.parse(raw));
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Failed to read auto-merge opt-in from ${owner}/${repo}:${rootPackageJsonPath}@${headSha.slice(0, 7)}: ${detail}`
+    );
+  }
 }
 
 /** Fetch the PR's aggregate review decision via GraphQL. */
@@ -166,6 +211,13 @@ async function run(config: AutomergeConfig): Promise<void> {
 
   if (!pr) {
     console.log(`Skip: no open release PR for ${headSha.slice(0, 7)}`);
+    return;
+  }
+
+  if (!(await fetchAutomergeOptIn(config))) {
+    console.log(
+      "Skip: auto-merge disabled — set release.automerge:true in the root package.json (see docs/release-automerge.md)"
+    );
     return;
   }
 

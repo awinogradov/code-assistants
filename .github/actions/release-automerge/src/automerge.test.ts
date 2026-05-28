@@ -7,7 +7,12 @@
  */
 import { describe, expect, test } from "bun:test";
 
-import { isApprovedDecision, pickReleasePr, selectMergeMethod } from "./automerge.ts";
+import {
+  isApprovedDecision,
+  isAutomergeEnabled,
+  pickReleasePr,
+  selectMergeMethod,
+} from "./automerge.ts";
 
 describe("pickReleasePr", () => {
   test("picks the open release PR", () => {
@@ -68,5 +73,29 @@ describe("isApprovedDecision", () => {
     expect(isApprovedDecision("CHANGES_REQUESTED")).toBe(false);
     expect(isApprovedDecision("REVIEW_REQUIRED")).toBe(false);
     expect(isApprovedDecision(null)).toBe(false);
+  });
+});
+
+describe("isAutomergeEnabled", () => {
+  test("true when release.automerge is true", () => {
+    expect(isAutomergeEnabled({ release: { automerge: true } })).toBe(true);
+  });
+
+  test("true alongside a monorepo members root", () => {
+    expect(isAutomergeEnabled({ release: { members: ["packages/*"], automerge: true } })).toBe(
+      true
+    );
+  });
+
+  test("false when release.automerge is false", () => {
+    expect(isAutomergeEnabled({ release: { automerge: false } })).toBe(false);
+  });
+
+  test("false when release.automerge is absent", () => {
+    expect(isAutomergeEnabled({ release: { type: "github-action" } })).toBe(false);
+  });
+
+  test("false when there is no release field", () => {
+    expect(isAutomergeEnabled({ name: "x" })).toBe(false);
   });
 });

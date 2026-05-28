@@ -154,3 +154,37 @@ describe("readRootRelease", () => {
     expect(() => readRootRelease(null)).toThrow(/expected an object/);
   });
 });
+
+describe("readRootRelease — automerge", () => {
+  test("returns automerge alongside members", () => {
+    expect(readRootRelease({ release: { members: ["packages/*"], automerge: true } })).toEqual({
+      members: ["packages/*"],
+      automerge: true,
+    });
+  });
+
+  test("returns automerge alongside type", () => {
+    expect(readRootRelease({ release: { type: "lib-nodejs", automerge: false } })).toEqual({
+      type: "lib-nodejs",
+      automerge: false,
+    });
+  });
+
+  test("returns automerge-only root with no members or type", () => {
+    const result = readRootRelease({ release: { automerge: true } });
+    expect(result).toEqual({ automerge: true });
+    expect("members" in result).toBe(false);
+    expect("type" in result).toBe(false);
+  });
+
+  test("omits automerge key when not present", () => {
+    const result = readRootRelease({ release: { type: "lib-nodejs" } });
+    expect("automerge" in result).toBe(false);
+  });
+
+  test("throws when automerge is not a boolean", () => {
+    expect(() => readRootRelease({ release: { automerge: "yes" } })).toThrow(
+      /'release\.automerge'.*must be a boolean/,
+    );
+  });
+});

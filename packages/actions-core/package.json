@@ -12,7 +12,8 @@
   "exports": {
     "./fetchRawContent": "./src/fetchRawContent.ts",
     "./checkStatus": "./src/checkStatus.ts",
-    "./parseRepo": "./src/parseRepo.ts"
+    "./parseRepo": "./src/parseRepo.ts",
+    "./releaseField": "./src/releaseField.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

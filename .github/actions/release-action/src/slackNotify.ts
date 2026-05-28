@@ -12,9 +12,9 @@
  * SLACK_TOKEN=xoxb-... bun src/slackNotify.ts
  * ```
  */
+import { readReleaseField } from "@code-assistants/actions-core/releaseField";
 import { WebClient } from "@slack/web-api";
 
-import { readReleaseField } from "./releaseField.ts";
 import { changelogSectionNames } from "./release.ts";
 
 /** Heading prefix used by conventional changelog sections in release notes files */
