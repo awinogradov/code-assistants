@@ -73,6 +73,8 @@ Pass one of the following:
 
 Store the token in a secret (e.g., `BOT_TOKEN`) and pass it via `bot_token: ${{ secrets.BOT_TOKEN }}`. Optionally set a `BOT_USERNAME` repository variable to control the commit author identity.
 
+> **Ruleset bypass for the synced workflow.** This action syncs `repomix-pack.yml`, which pushes the regenerated pack **directly** to your default branch on every merge. If that branch is governed by a ruleset (`pull_request` / `non_fast_forward` push rules), the `BOT_TOKEN` identity must be a **bypass actor** on it — otherwise the pack-on-merge run fails with `GH013` ("Changes must be made through a pull request"), even though the token has `contents: write`. Add the bot to the ruleset's bypass list (Settings → Rules → the branch ruleset → Bypass list).
+
 See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) and [GitHub App installation tokens](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-an-installation-access-token-for-a-github-app).
 
 ## Behavior
