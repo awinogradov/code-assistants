@@ -25,7 +25,9 @@ on:
     types: [created]
 
 concurrency:
-  group: code-review-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number }}
+  # comment.id gives each comment its own group so bursty replies aren't cancelled;
+  # it's empty for pull_request events, which stay grouped per-PR (event_name + number).
+  group: code-review-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event.comment.id }}
   cancel-in-progress: true
 
 jobs:
