@@ -1,0 +1,105 @@
+# Release auto-merge
+
+Composite GitHub Action that merges a release PR once it is fully green and
+approved. It is event-driven and self-healing: re-evaluated on every relevant
+event, it merges as soon as the conditions are met, with no manual step.
+
+A PR is merged only when **all** of the following hold:
+
+- the head ref matches `^release-`,
+- the PR is open,
+- every sibling check is green (a failed check skips; a still-pending check skips),
+  and
+- the PR's `reviewDecision` is `APPROVED`.
+
+The merge is pinned to the triggering head commit, so a push that lands during
+evaluation is rejected rather than merged unreviewed. The check aggregation reuses
+the same logic as the AI-review preflight (the shared
+[`checkStatus`](../../../packages/actions-core/src/checkStatus.ts) helper),
+deduplicated by name and excluding the action's own job. See the
+[Release auto-merge flow](../../../docs/release-automerge.md) doc for the full
+picture and the downstream-sync design.
+
+## Usage
+
+```yaml
+name: Release auto-merge
+
+on:
+  check_suite:
+    types: [completed]
+  status:
+  pull_request_review:
+    types: [submitted]
+
+concurrency:
+  group: release-automerge-${{ github.event.check_suite.head_sha || github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: awinogradov/code-assistants/.github/actions/release-automerge@v1
+        with:
+          bot_token: ${{ secrets.BOT_TOKEN }}
+```
+
+Most consumers receive this workflow automatically from
+[`release-automerge-sync`](../release-automerge-sync/README.md) and never write it
+by hand.
+
+## Inputs
+
+| Input       | Required | Default | Description                                                                                                                                                          |
+| ----------- | -------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bot_token` | yes      | —       | PAT or GitHub App installation token used to read PR state and perform the merge. The default `GITHUB_TOKEN` is **not** supported — see [Permissions](#permissions). |
+
+## Permissions
+
+The `bot_token` input is **required**. The workflow's default `GITHUB_TOKEN` is not
+supported because a merge it performs **does not trigger downstream workflows** —
+[`publish.yml`](../../workflows/publish.yml) (which runs on
+`pull_request_target: [closed]` for `**/.release_notes/**`) would never fire, so the
+release would not publish. Pass one of:
+
+- A **classic Personal Access Token** with the `repo` scope.
+- A **fine-grained Personal Access Token** scoped to this repository with
+  `Contents: Read and write` and `Pull requests: Read and write`.
+- A **GitHub App installation token** with the same `contents: write` +
+  `pull-requests: write` permissions.
+
+Store the token in a secret (e.g., `BOT_TOKEN`) and pass it via
+`bot_token: ${{ secrets.BOT_TOKEN }}`.
+
+> **Ruleset bypass for protected `main`.** If `main` is governed by a ruleset
+> (`pull_request` / required-status-checks / linear-history / signed-commits rules),
+> the `BOT_TOKEN` identity must be a **bypass actor** on it, and the ruleset's
+> allowed merge methods must include the method the action selects (it prefers
+> `rebase`, then `squash`, then `merge`) — otherwise the merge fails with an opaque
+> 403/422. A required check that is _skipped_ on release branches must report a
+> neutral/success conclusion or be marked non-required, or it blocks the merge.
+
+## Behavior
+
+- Resolves the open release PR from the triggering commit via the
+  commit-associated-PRs API, then bails unless its head ref matches `^release-`.
+- Aggregates check runs and commit statuses in a single snapshot (no polling):
+  any failed check or any still-pending check skips the merge until a later event.
+- Reads `reviewDecision` and merges only when it is `APPROVED`.
+- Reads the repository's allowed merge methods and prefers `rebase`, falling back
+  to `squash` then `merge`. The merge is pinned to the head SHA.
+- Fail-closed: any unmet condition or unexpected error performs no merge. An
+  already-merged or no-longer-mergeable PR is a clean no-op.
+
+## Versioning
+
+Reference the action by tag of the autopilot repo, e.g.:
+
+```yaml
+uses: awinogradov/code-assistants/.github/actions/release-automerge@v1
+```

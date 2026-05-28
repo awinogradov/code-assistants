@@ -21,6 +21,7 @@ See the [plugin README](./claude-plugins/autopilot/README.md#installation) for s
 - [Workspace structure](./docs/workspace-structure.md) — where new actions, packages, and apps go, and how they wire into Turbo
 - [`agents` field spec](./docs/agents-field.md) — how skills detect a repository's tech stack from `package.json`
 - [`release` field spec](./docs/release-field.md) — how `release-action` picks the right artifacts for npm packages, GitHub Actions, and Claude plugins
+- [Release auto-merge flow](./docs/release-automerge.md) — the event-driven action that merges approved, all-green release PRs, and how its workflow is propagated downstream
 - [Committed Repomix pack](./docs/repomix-pack.md) — the `.repomix/pack.xml` snapshot, the merge-triggered workflow that refreshes it, and the snapshot-first contract skills follow
 - [Stack rule sets](./rules/) — `Bun`, `Bun+React+Tailwind`, `NodeJS+React`, `NodeJS+React+Tailwind`
 
@@ -31,8 +32,10 @@ See the [plugin README](./claude-plugins/autopilot/README.md#installation) for s
 - [`contributing-check`](./.github/actions/contributing-check/README.md) — validate branch name, commit messages, and PR title against `CONTRIBUTING.md`
 - [`contributing-sync`](./.github/actions/contributing-sync/README.md) — sync `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, and the contributing workflow from upstream
 - [`release-action`](./.github/actions/release-action/README.md) — conventional-commit-driven release pipeline for npm packages, GitHub Actions, and Claude plugins
+- [`release-automerge`](./.github/actions/release-automerge/README.md) — merge an approved, all-green release PR (`^release-`), driven by an event-based workflow so `publish.yml` runs without a manual click
 - [`code-review-action`](./.github/actions/code-review-action/README.md) — AI code review for pull requests via Claude Code, with a react mode for replying to bot mentions
 - [`repomix-sync`](./.github/actions/repomix-sync/README.md) — sync the `repomix-pack` workflow and `repomix.config.json` from upstream so each consumer commits its own codebase snapshot
+- [`release-automerge-sync`](./.github/actions/release-automerge-sync/README.md) — sync the `release-automerge` workflow from upstream so each consumer auto-merges its own release PRs
 
 ## Contributing
 
