@@ -24,7 +24,7 @@ import { ConventionalChangelog } from "conventional-changelog";
 import semver from "semver";
 
 import { listTags } from "./gitTags.ts";
-import type { TicketConfig, TicketSystemEntry } from "./tickets/tickets.types.ts";
+import type { CommitScope, TicketConfig, TicketSystemEntry } from "./tickets/tickets.types.ts";
 import {
   autoDetectTicketSystems,
   generateTicketsSection,
@@ -290,15 +290,22 @@ export async function generateChangelog(
   return { header: changelogHeader, release, history };
 }
 
-/** Generate tickets section and save artifacts if configured */
-async function processTickets(params: {
+/**
+ * Generate tickets section and save artifacts if configured.
+ *
+ * Returns an empty string (no-op) when ticket systems or owner/repo are absent,
+ * so callers can splice the result unconditionally. `scope` restricts the commit
+ * range for monorepo per-member extraction; omit it for the standalone path.
+ */
+export async function processTickets(params: {
   ticketSystems?: TicketSystemEntry[];
   owner?: string;
   repo?: string;
   cwd: string;
   releaseBotDir: string;
+  scope?: CommitScope;
 }): Promise<string> {
-  const { ticketSystems, owner, repo, cwd, releaseBotDir } = params;
+  const { ticketSystems, owner, repo, cwd, releaseBotDir, scope } = params;
 
   if (!ticketSystems || ticketSystems.length === 0 || !owner || !repo) {
     return "";
@@ -310,6 +317,7 @@ async function processTickets(params: {
     config: ticketConfig,
     env,
     cwd,
+    scope,
   });
 
   if (result.tickets.length > 0) {
@@ -426,7 +434,7 @@ function breakingChangesBadge(summary: string): string {
  * @param tickets - Tickets markdown section
  * @returns Release notes with tickets inserted
  */
-function insertTicketsInRelease(release: string, tickets: string): string {
+export function insertTicketsInRelease(release: string, tickets: string): string {
   if (!tickets) {
     return release;
   }

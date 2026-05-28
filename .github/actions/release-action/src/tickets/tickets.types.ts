@@ -176,6 +176,21 @@ export interface PullRequestInfo {
 }
 
 /**
+ * Commit-range scoping for {@link getCommitsSinceLastTag}.
+ *
+ * In monorepo mode each member release reads only its own slice of history:
+ * `tagPattern` selects the member's `<name>@v*` tags as the "since" point and
+ * `path` restricts commits to those touching the member's directory. Both fall
+ * back to the standalone behaviour (`v*`, no path filter) when omitted.
+ */
+export interface CommitScope {
+  /** Tag glob used to find the latest reachable "since" tag (e.g. `release-action@v*`). Defaults to `"v*"`. */
+  tagPattern?: string;
+  /** Pathspec restricting the commit range to commits touching this path. */
+  path?: string;
+}
+
+/**
  * Options for generating tickets section
  *
  * @see {@link generateTicketsSection}
@@ -187,6 +202,8 @@ export interface GenerateTicketsSectionOptions {
   env: TicketEnvVars;
   /** Working directory */
   cwd?: string;
+  /** Optional commit-range scoping for monorepo per-member extraction. */
+  scope?: CommitScope;
 }
 
 /** Result of generating tickets section */

@@ -23,6 +23,7 @@ import { emitMemberArtifacts, runCreate, type MemberRelease } from "./monorepo/r
 import { readChangedFiles, resolvePublishPlan } from "./monorepo/runPublish.ts";
 import { ensureGitignoreEntry } from "./prepareRelease.ts";
 import { postReleaseNotification } from "./slackNotify.ts";
+import { autoDetectTicketSystems, loadTicketEnv } from "./tickets/tickets.ts";
 
 type Mode = "create" | "publish";
 
@@ -114,6 +115,14 @@ async function resolveBaseRef(cwd: string): Promise<string> {
   return localHead.stdout.toString().trim();
 }
 
+/** Split `owner/repo` out of GITHUB_REPOSITORY for ticket links; empty when unset. */
+function resolveOwnerRepo(): { owner?: string; repo?: string } {
+  const repository = process.env.GITHUB_REPOSITORY;
+  if (!repository) return {};
+  const [owner, repo] = repository.split("/");
+  return { owner, repo };
+}
+
 async function runMonorepoCreate(cwd: string): Promise<void> {
   await ensureGitignoreEntry(".release_bot", cwd);
   const branchTemplate = resolveBranchTemplate();
@@ -128,13 +137,18 @@ async function runMonorepoCreate(cwd: string): Promise<void> {
   await $`git fetch origin`.cwd(cwd).quiet().nothrow();
   const baseRef = await resolveBaseRef(cwd);
 
+  // Resolve ticket config once from the same env the standalone path reads;
+  // every member shares it (owner/repo are repo-wide, systems are credential-driven).
+  const ticketSystems = autoDetectTicketSystems(loadTicketEnv());
+  const { owner, repo } = resolveOwnerRepo();
+
   const releasedNames: string[] = [];
   for (const release of result.releases) {
     // Reset to the captured base ref BEFORE emitting artifacts so the working
     // tree is clean of any prior member's files. Emit, then commit + push the
     // per-member diff onto the fresh branch.
     await $`git checkout -B ${release.branch} ${baseRef}`.cwd(cwd).quiet();
-    await emitMemberArtifacts({ release, cwd });
+    await emitMemberArtifacts({ release, cwd, ticketSystems, owner, repo });
     await $`git add ${release.member.relPath}`.cwd(cwd).quiet();
     await $`git commit -n -m ${`chore: release ${release.member.name} ${release.newVersion}`}`
       .cwd(cwd)
