@@ -173,14 +173,26 @@ The content is organized as follows:
       README.md
       tsconfig.json
       version
+    release-automerge/
+      src/
+        automerge.test.ts
+        automerge.ts
+      action.yml
+      package.json
+      README.md
+      tsconfig.json
+    release-sync/
+      action.yml
+      README.md
     repomix-sync/
       action.yml
       README.md
   workflows/
     code-review.yml
     contributing.yml
-    publish.yml
-    release.yml
+    release-automerge.yml
+    release-create.yml
+    release-publish.yml
     repomix-pack.yml
     upstream.yml
 .husky/
@@ -259,13 +271,18 @@ claude-plugins/
     version
 docs/
   agents-field.md
+  release-automerge.md
   release-field.md
   repomix-pack.md
   workspace-structure.md
 packages/
   actions-core/
     src/
+      checkStatus.test.ts
+      checkStatus.ts
       fetchRawContent.ts
+      parseRepo.test.ts
+      parseRepo.ts
     package.json
     tsconfig.json
 rules/
@@ -2252,17 +2269,10 @@ export function logMessage(log: pino.Logger, message: SDKMessage): void {
  */
 import { appendFile } from "node:fs/promises";
 
+import { fetchCheckStatuses } from "@code-assistants/actions-core/checkStatus";
 import type { Octokit } from "@octokit/rest";
 
 import { parseRepoEnv } from "./github/githubReview.ts";
-
-/** Aggregated check status result from both GitHub APIs */
-interface CheckResult {
-  allCompleted: boolean;
-  hasFailed: boolean;
-  failedNames: string[];
-  pendingNames: string[];
-}
 
 /** Outcome of the preflight polling loop */
 type PreflightOutcome =
@@ -2283,9 +2293,6 @@ interface PreflightConfig {
   timeoutMs: number;
   prAuthor: string;
 }
-
-const failedConclusions = new Set(["failure", "timed_out"]);
-const failedStatuses = new Set(["failure", "error"]);
 
 /** Parse and validate preflight-specific environment variables. */
 function parsePreflightEnv(): PreflightConfig {
@@ -2315,87 +2322,6 @@ function parsePreflightEnv(): PreflightConfig {
     pollIntervalMs,
     timeoutMs,
     prAuthor,
-  };
-}
-
-/**
- * Normalize name for self-exclusion comparison.
- * Strips non-alphanumeric characters so "code-review" matches "Code Review".
- */
-function normalizeCheckName(name: string): string {
-  return name.toLowerCase().replaceAll(/[^a-z0-9]/g, "");
-}
-
-/**
- * Deduplicate check runs by name, keeping only the most recent run per name.
- * GitHub's Check Runs API returns all runs including superseded ones from previous pushes.
- * Uses the auto-incrementing `id` field as the recency indicator.
- */
-function deduplicateCheckRuns<T extends { id: number; name: string }>(runs: T[]): T[] {
-  const latestByName = new Map<string, T>();
-
-  for (const run of runs) {
-    const existing = latestByName.get(run.name);
-    if (!existing || run.id > existing.id) {
-      latestByName.set(run.name, run);
-    }
-  }
-
-  return [...latestByName.values()];
-}
-
-/**
- * Fetch and aggregate check statuses from both Check Runs and Commit Status APIs.
- * Excludes the current job's own check run by normalized name comparison.
- */
-async function fetchCheckStatuses(
-  octokit: Octokit,
-  owner: string,
-  repo: string,
-  ref: string,
-  jobName: string
-): Promise<CheckResult> {
-  const normalizedJobName = normalizeCheckName(jobName);
-
-  const [checkRuns, commitStatus] = await Promise.all([
-    octokit.paginate(octokit.rest.checks.listForRef, { owner, repo, ref, per_page: 100 }),
-    octokit.rest.repos.getCombinedStatusForRef({ owner, repo, ref }),
-  ]);
-
-  const allSiblingRuns = checkRuns.filter(
-    (run) => normalizeCheckName(run.name) !== normalizedJobName
-  );
-  const nonCancelledRuns = allSiblingRuns.filter((run) => run.conclusion !== "cancelled");
-  const siblingRuns = deduplicateCheckRuns(nonCancelledRuns);
-
-  const siblingNames = new Set(siblingRuns.map((run) => run.name));
-  const cancelledOnlyNames = [...new Set(allSiblingRuns.map((run) => run.name))].filter(
-    (name) => !siblingNames.has(name)
-  );
-
-  const pendingRuns = [
-    ...siblingRuns.filter((run) => run.status !== "completed").map((run) => run.name),
-    ...cancelledOnlyNames,
-  ];
-  const failedRuns = siblingRuns
-    .filter((run) => run.status === "completed" && failedConclusions.has(run.conclusion ?? ""))
-    .map((run) => run.name);
-
-  const pendingStatuses = commitStatus.data.statuses
-    .filter((s) => s.state === "pending")
-    .map((s) => s.context);
-  const failedCommitStatuses = commitStatus.data.statuses
-    .filter((s) => failedStatuses.has(s.state))
-    .map((s) => s.context);
-
-  const allPending = [...pendingRuns, ...pendingStatuses];
-  const allFailed = [...failedRuns, ...failedCommitStatuses];
-
-  return {
-    allCompleted: allPending.length === 0,
-    hasFailed: allFailed.length > 0,
-    failedNames: allFailed,
-    pendingNames: allPending,
   };
 }
 
@@ -5205,6 +5131,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.2.126",
+    "@code-assistants/actions-core": "workspace:*",
     "@octokit/rest": "22.0.1",
     "pino": "10.3.1",
     "zod": "4.4.3"
@@ -18307,6 +18234,685 @@ uses: awinogradov/code-assistants/.github/actions/release-action@v1
 0.1.0
 </file>
 
+<file path=".github/actions/release-automerge/src/automerge.test.ts">
+/**
+ * Tests for automerge.ts pure helpers.
+ *
+ * The API-driven flow (`run`, octokit calls, merge) is exercised end-to-end in
+ * CI against real release PRs; only the deterministic gate helpers are unit-tested
+ * here. Self-exclusion of the action's own check is covered by checkStatus.test.ts.
+ */
+import { describe, expect, test } from "bun:test";
+
+import { isApprovedDecision, pickReleasePr, selectMergeMethod } from "./automerge.ts";
+
+describe("pickReleasePr", () => {
+  test("picks the open release PR", () => {
+    const prs = [
+      { number: 1, state: "closed", head: { ref: "release-1.0.0" } },
+      { number: 2, state: "open", head: { ref: "release-1.1.0" } },
+    ];
+    expect(pickReleasePr(prs)?.number).toBe(2);
+  });
+
+  test("ignores non-release branches", () => {
+    const prs = [{ number: 3, state: "open", head: { ref: "feature-x" } }];
+    expect(pickReleasePr(prs)).toBeNull();
+  });
+
+  test("ignores closed release PRs", () => {
+    const prs = [{ number: 4, state: "closed", head: { ref: "release-2.0.0" } }];
+    expect(pickReleasePr(prs)).toBeNull();
+  });
+
+  test("returns null for no associated PRs", () => {
+    expect(pickReleasePr([])).toBeNull();
+  });
+});
+
+describe("selectMergeMethod", () => {
+  test("prefers rebase when allowed", () => {
+    expect(
+      selectMergeMethod({ allowRebase: true, allowSquash: true, allowMerge: true })
+    ).toBe("rebase");
+  });
+
+  test("falls back to squash when rebase disabled", () => {
+    expect(
+      selectMergeMethod({ allowRebase: false, allowSquash: true, allowMerge: true })
+    ).toBe("squash");
+  });
+
+  test("falls back to merge when only merge allowed", () => {
+    expect(
+      selectMergeMethod({ allowRebase: false, allowSquash: false, allowMerge: true })
+    ).toBe("merge");
+  });
+
+  test("returns null when no method allowed", () => {
+    expect(
+      selectMergeMethod({ allowRebase: false, allowSquash: false, allowMerge: false })
+    ).toBeNull();
+  });
+});
+
+describe("isApprovedDecision", () => {
+  test("true only for APPROVED", () => {
+    expect(isApprovedDecision("APPROVED")).toBe(true);
+  });
+
+  test("false for other decisions and null", () => {
+    expect(isApprovedDecision("CHANGES_REQUESTED")).toBe(false);
+    expect(isApprovedDecision("REVIEW_REQUIRED")).toBe(false);
+    expect(isApprovedDecision(null)).toBe(false);
+  });
+});
+</file>
+
+<file path=".github/actions/release-automerge/src/automerge.ts">
+/**
+ * Event-driven auto-merge for release PRs.
+ *
+ * Re-evaluated on every relevant event (check_suite, status, review), the action
+ * merges a PR only when ALL of these hold: the head ref matches `^release-`, the
+ * PR is open, every sibling check is green, and the review decision is APPROVED.
+ * Any unmet condition or unexpected error is fail-closed — the action never
+ * merges on doubt. The merge is pinned to the triggering head SHA so a push that
+ * lands mid-evaluation cannot be merged unreviewed.
+ *
+ * @example
+ * GH_TOKEN=xxx REPO=owner/repo HEAD_SHA=abc JOB_NAME=automerge bun run src/automerge.ts
+ */
+import { fetchCheckStatuses } from "@code-assistants/actions-core/checkStatus";
+import { parseRepo } from "@code-assistants/actions-core/parseRepo";
+import { Octokit } from "@octokit/rest";
+
+/** Minimal PR shape needed to pick the release PR for a commit. */
+export interface PrRef {
+  number: number;
+  state: string;
+  head: { ref: string };
+}
+
+/** Repository merge-method permission flags. */
+export interface MergeMethodFlags {
+  allowRebase: boolean;
+  allowSquash: boolean;
+  allowMerge: boolean;
+}
+
+/** A merge method accepted by the GitHub merge API. */
+export type MergeMethod = "rebase" | "squash" | "merge";
+
+const releaseBranch = /^release-/;
+// GitHub merge-API responses that mean "nothing to do" rather than a real error:
+// 405 not mergeable / already merged, 409 head SHA moved (sha mismatch), 422 unprocessable.
+const idempotentMergeStatuses = new Set([405, 409, 422]);
+
+/** Configuration parsed from environment. */
+interface AutomergeConfig {
+  octokit: Octokit;
+  owner: string;
+  repo: string;
+  headSha: string;
+  jobName: string;
+}
+
+/** Parse and validate required environment variables, initialize Octokit. */
+function parseEnv(): AutomergeConfig {
+  const token = process.env.GH_TOKEN;
+  const repository = process.env.REPO;
+  const headSha = process.env.HEAD_SHA;
+  const jobName = process.env.JOB_NAME;
+
+  if (!token || !repository || !headSha || !jobName) {
+    throw new Error("Missing required environment variables: GH_TOKEN, REPO, HEAD_SHA, JOB_NAME");
+  }
+
+  const { owner, repo } = parseRepo(repository);
+
+  return { octokit: new Octokit({ auth: token }), owner, repo, headSha, jobName };
+}
+
+/** Pick the open release PR (head ref `^release-`) from commit-associated PRs. */
+export function pickReleasePr(prs: PrRef[]): PrRef | null {
+  return prs.find((pr) => pr.state === "open" && releaseBranch.test(pr.head.ref)) ?? null;
+}
+
+/** Choose a merge method, preferring rebase then squash then merge. */
+export function selectMergeMethod(flags: MergeMethodFlags): MergeMethod | null {
+  if (flags.allowRebase) {
+    return "rebase";
+  }
+  if (flags.allowSquash) {
+    return "squash";
+  }
+  if (flags.allowMerge) {
+    return "merge";
+  }
+  return null;
+}
+
+/** True only for an explicit APPROVED review decision. */
+export function isApprovedDecision(decision: string | null): boolean {
+  return decision === "APPROVED";
+}
+
+/** Fetch the PR's aggregate review decision via GraphQL. */
+async function fetchReviewDecision(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  pullNumber: number
+): Promise<string | null> {
+  const result = await octokit.graphql<{
+    repository: { pullRequest: { reviewDecision: string | null } };
+  }>(
+    `query($owner: String!, $repo: String!, $number: Int!) {
+      repository(owner: $owner, name: $repo) {
+        pullRequest(number: $number) { reviewDecision }
+      }
+    }`,
+    { owner, repo, number: pullNumber }
+  );
+
+  return result.repository.pullRequest.reviewDecision;
+}
+
+/** Read the repository's allowed merge methods. */
+async function fetchMergeMethodFlags(
+  octokit: Octokit,
+  owner: string,
+  repo: string
+): Promise<MergeMethodFlags> {
+  const { data } = await octokit.rest.repos.get({ owner, repo });
+  return {
+    allowRebase: data.allow_rebase_merge ?? false,
+    allowSquash: data.allow_squash_merge ?? false,
+    allowMerge: data.allow_merge_commit ?? false,
+  };
+}
+
+/**
+ * Merge the PR, treating an already-merged / moved-head / not-mergeable response
+ * as a clean no-op so concurrent events do not error.
+ */
+async function mergeRelease(config: AutomergeConfig, pullNumber: number): Promise<void> {
+  const { octokit, owner, repo, headSha } = config;
+  const method = selectMergeMethod(await fetchMergeMethodFlags(octokit, owner, repo));
+
+  if (!method) {
+    console.log("Skip: repository allows no merge method");
+    return;
+  }
+
+  try {
+    await octokit.rest.pulls.merge({
+      owner,
+      repo,
+      pull_number: pullNumber,
+      merge_method: method,
+      sha: headSha,
+    });
+    console.log(`✓ Merged PR #${pullNumber} via ${method}`);
+  } catch (error) {
+    const status = (error as { status?: number }).status;
+    if (status && idempotentMergeStatuses.has(status)) {
+      console.log(`Skip: PR #${pullNumber} not mergeable now (HTTP ${status}) — head moved or already merged`);
+      return;
+    }
+    throw error;
+  }
+}
+
+/** Evaluate the merge gate for the triggering commit and merge when satisfied. */
+async function run(config: AutomergeConfig): Promise<void> {
+  const { octokit, owner, repo, headSha, jobName } = config;
+
+  const { data: associated } = await octokit.rest.repos.listPullRequestsAssociatedWithCommit({
+    owner,
+    repo,
+    commit_sha: headSha,
+  });
+  const pr = pickReleasePr(associated);
+
+  if (!pr) {
+    console.log(`Skip: no open release PR for ${headSha.slice(0, 7)}`);
+    return;
+  }
+
+  const checks = await fetchCheckStatuses(octokit, owner, repo, headSha, jobName);
+  if (checks.hasFailed) {
+    console.log(`Skip: failed checks — ${checks.failedNames.join(", ")}`);
+    return;
+  }
+  if (!checks.allCompleted) {
+    console.log(`Skip: pending checks — ${checks.pendingNames.join(", ")}`);
+    return;
+  }
+
+  const decision = await fetchReviewDecision(octokit, owner, repo, pr.number);
+  if (!isApprovedDecision(decision)) {
+    console.log(`Skip: review decision is ${decision ?? "none"}, not APPROVED`);
+    return;
+  }
+
+  await mergeRelease(config, pr.number);
+}
+
+/** Entry point: fail-closed wrapper around the merge gate. */
+async function main(): Promise<void> {
+  try {
+    await run(parseEnv());
+  } catch (error) {
+    // Fail-closed: never merge on doubt. Surface the error with a non-zero exit.
+    console.error("Auto-merge error (no merge performed):", error);
+    process.exitCode = 1;
+  }
+}
+
+// Run only when executed directly (`bun run automerge.ts`), not when imported by tests.
+if (import.meta.main) {
+  void main();
+}
+</file>
+
+<file path=".github/actions/release-automerge/action.yml">
+name: "Release auto-merge"
+description: "Merge an approved, all-green release PR (head ref ^release-)."
+author: "Code Assistants"
+
+inputs:
+  bot_token:
+    description: |
+      PAT (classic with `repo`, or fine-grained with `contents: write` + `pull-requests: write`) or GitHub App installation token used to read PR state and perform the merge. The workflow's default `GITHUB_TOKEN` is not supported — a merge it performs does not trigger downstream workflows (e.g. `release-publish.yml`), and on a protected branch the token must additionally be a ruleset bypass actor. See README.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Validate token
+      shell: bash
+      env:
+        BOT_TOKEN: ${{ inputs.bot_token }}
+      run: |
+        if [[ -z "$BOT_TOKEN" ]]; then
+          echo "::error::bot_token is empty"
+          exit 1
+        fi
+
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: 1.x
+
+    - name: Install action dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: bun install --frozen-lockfile --filter @code-assistants/release-automerge
+
+    - name: Evaluate and merge
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.bot_token }}
+        REPO: ${{ github.repository }}
+        # HEAD_SHA and JOB_NAME are derived from the event context, not consumer inputs.
+        # HEAD_SHA is the triggering commit (check_suite or review head); the merge is pinned to it.
+        # JOB_NAME tracks the calling job via github.job, so the action excludes its own
+        # check from the green-checks aggregation even if the job is renamed downstream.
+        HEAD_SHA: ${{ github.event.check_suite.head_sha || github.event.pull_request.head.sha }}
+        JOB_NAME: ${{ github.job }}
+      run: bun run "${{ github.action_path }}/src/automerge.ts"
+</file>
+
+<file path=".github/actions/release-automerge/package.json">
+{
+  "name": "@code-assistants/release-automerge",
+  "version": "0.1.0",
+  "description": "Composite GitHub Action that merges an approved, all-green release PR.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "release": {
+    "type": "github-action"
+  },
+  "agents": {
+    "rules": "Bun",
+    "language": "typescript"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "clean": "rm -rf node_modules .turbo"
+  },
+  "dependencies": {
+    "@code-assistants/actions-core": "workspace:*",
+    "@octokit/rest": "22.0.1"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "typescript": "6.0.3"
+  }
+}
+</file>
+
+<file path=".github/actions/release-automerge/README.md">
+# Release auto-merge
+
+Composite GitHub Action that merges a release PR once it is fully green and
+approved. It is event-driven and self-healing: re-evaluated on every relevant
+event, it merges as soon as the conditions are met, with no manual step.
+
+A PR is merged only when **all** of the following hold:
+
+- the head ref matches `^release-`,
+- the PR is open,
+- every sibling check is green (a failed check skips; a still-pending check skips),
+  and
+- the PR's `reviewDecision` is `APPROVED`.
+
+The merge is pinned to the triggering head commit, so a push that lands during
+evaluation is rejected rather than merged unreviewed. The check aggregation reuses
+the same logic as the AI-review preflight (the shared
+[`checkStatus`](../../../packages/actions-core/src/checkStatus.ts) helper),
+deduplicated by name and excluding the action's own job. See the
+[Release auto-merge flow](../../../docs/release-automerge.md) doc for the full
+picture and the downstream-sync design.
+
+## Usage
+
+```yaml
+name: Release auto-merge
+
+on:
+  check_suite:
+    types: [completed]
+  pull_request_review:
+    types: [submitted]
+
+concurrency:
+  group: release-automerge-${{ github.event.check_suite.head_sha || github.event.pull_request.head.sha }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    # Run only for release branches — the triggers are repo-wide, so this guard
+    # keeps the job (and its check) off every non-release PR.
+    if: >-
+      startsWith(github.event.check_suite.head_branch, 'release-')
+      || startsWith(github.event.pull_request.head.ref, 'release-')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: awinogradov/code-assistants/.github/actions/release-automerge@v1
+        with:
+          bot_token: ${{ secrets.BOT_TOKEN }}
+```
+
+Most consumers receive this workflow automatically from
+[`release-sync`](../release-sync/README.md) — which syncs the whole release pipeline
+(`release-create.yml`, `release-publish.yml`, `release-automerge.yml`) — and never write it by hand.
+
+## Inputs
+
+| Input       | Required | Default | Description                                                                                                                                                          |
+| ----------- | -------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bot_token` | yes      | —       | PAT or GitHub App installation token used to read PR state and perform the merge. The default `GITHUB_TOKEN` is **not** supported — see [Permissions](#permissions). |
+
+## Permissions
+
+The `bot_token` input is **required**. The workflow's default `GITHUB_TOKEN` is not
+supported because a merge it performs **does not trigger downstream workflows** —
+[`release-publish.yml`](../../workflows/release-publish.yml) (which runs on
+`pull_request_target: [closed]` for `**/.release_notes/**`) would never fire, so the
+release would not publish. Pass one of:
+
+- A **classic Personal Access Token** with the `repo` scope.
+- A **fine-grained Personal Access Token** scoped to this repository with
+  `Contents: Read and write` and `Pull requests: Read and write`.
+- A **GitHub App installation token** with the same `contents: write` +
+  `pull-requests: write` permissions.
+
+Store the token in a secret (e.g., `BOT_TOKEN`) and pass it via
+`bot_token: ${{ secrets.BOT_TOKEN }}`.
+
+> **Ruleset bypass for protected `main`.** If `main` is governed by a ruleset
+> (`pull_request` / required-status-checks / linear-history / signed-commits rules),
+> the `BOT_TOKEN` identity must be a **bypass actor** on it, and the ruleset's
+> allowed merge methods must include the method the action selects (it prefers
+> `rebase`, then `squash`, then `merge`) — otherwise the merge fails with an opaque
+> 403/422. A required check that is _skipped_ on release branches must report a
+> neutral/success conclusion or be marked non-required, or it blocks the merge.
+
+## Behavior
+
+- Resolves the open release PR from the triggering commit via the
+  commit-associated-PRs API, then bails unless its head ref matches `^release-`.
+- Aggregates check runs and commit statuses in a single snapshot (no polling):
+  any failed check or any still-pending check skips the merge until a later event.
+- Reads `reviewDecision` and merges only when it is `APPROVED`.
+- Reads the repository's allowed merge methods and prefers `rebase`, falling back
+  to `squash` then `merge`. The merge is pinned to the head SHA.
+- Fail-closed: any unmet condition or unexpected error performs no merge. An
+  already-merged or no-longer-mergeable PR is a clean no-op.
+
+## Versioning
+
+Reference the action by tag of the autopilot repo, e.g.:
+
+```yaml
+uses: awinogradov/code-assistants/.github/actions/release-automerge@v1
+```
+</file>
+
+<file path=".github/actions/release-automerge/tsconfig.json">
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["ESNext"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["bun"]
+  },
+  "include": ["src/**/*.ts"]
+}
+</file>
+
+<file path=".github/actions/release-sync/action.yml">
+name: Release workflows sync
+description: Sync the release pipeline workflows (release, publish, auto-merge) from an upstream repository into the current repository.
+
+inputs:
+  bot_token:
+    description: |
+      PAT (classic with `repo`, or fine-grained with `contents: write` + `pull-requests: write` on this repo) or GitHub App installation token. The workflow's default `GITHUB_TOKEN` is not supported — it cannot create pull requests when the repo/org has "Allow GitHub Actions to create and approve pull requests" disabled, and the resulting 403 is opaque. See README for setup.
+    required: true
+  bot_username:
+    description: |
+      Git author/committer login for the sync commit. Defaults to `github-actions[bot]` when unset. Pass the `vars.BOT_USERNAME` repository variable to attribute commits to a dedicated bot identity.
+    required: false
+  source-repo:
+    description: Source repository in `owner/name` form that hosts the canonical release workflows.
+    required: false
+    default: awinogradov/code-assistants
+  source-ref:
+    description: Branch, tag, or SHA to read the source files from. Defaults to the source repository's default branch.
+    required: false
+    default: ""
+
+outputs:
+  changed-files:
+    description: Newline-separated list of destination paths that were updated. Empty when no changes were detected.
+    value: ${{ steps.sync.outputs.changed-files }}
+  pr-number:
+    description: Number of the opened or reused PR. Empty when no changes were detected.
+    value: ${{ steps.sync.outputs.pr-number }}
+  pr-url:
+    description: HTML URL of the opened or reused PR. Empty when no changes were detected.
+    value: ${{ steps.sync.outputs.pr-url }}
+
+runs:
+  using: composite
+  steps:
+    - name: Build files list
+      id: resolve
+      shell: bash
+      env:
+        INPUT_SOURCE_REPO: ${{ inputs.source-repo }}
+        INPUT_SOURCE_REF: ${{ inputs.source-ref }}
+      run: |
+        set -euo pipefail
+        paths=(
+          .github/workflows/release-create.yml
+          .github/workflows/release-publish.yml
+          .github/workflows/release-automerge.yml
+        )
+        {
+          echo "files<<__EOF__"
+          for path in "${paths[@]}"; do
+            echo "- repo: ${INPUT_SOURCE_REPO}"
+            echo "  source: ${path}"
+            echo "  dest: ${path}"
+            if [ -n "${INPUT_SOURCE_REF}" ]; then
+              echo "  ref: ${INPUT_SOURCE_REF}"
+            fi
+          done
+          echo "__EOF__"
+        } >> "${GITHUB_OUTPUT}"
+
+    - name: Sync via files-sync
+      id: sync
+      uses: awinogradov/code-assistants/.github/actions/files-sync@main
+      with:
+        files: ${{ steps.resolve.outputs.files }}
+        bot_token: ${{ inputs.bot_token }}
+        bot_username: ${{ inputs.bot_username }}
+        branch: maintenance-sync-release
+        title: "MAINTENANCE: Sync release workflows from upstream"
+        body: Automated release pipeline workflow sync (release, publish, auto-merge) from upstream.
+        commit-message: "chore: sync release workflows from upstream"
+</file>
+
+<file path=".github/actions/release-sync/README.md">
+# Release workflows sync
+
+Composite GitHub Action that syncs the release pipeline workflows from an upstream
+repository into the current repository and opens a single pull request with the
+difference. The synced set is:
+
+- `.github/workflows/release-create.yml` — opens the release PR
+- `.github/workflows/release-publish.yml` — publishes on merge of the release PR
+- `.github/workflows/release-automerge.yml` — merges the approved, all-green release PR
+
+Together these are the full release pipeline: `release-create.yml` creates the release
+PR, `release-automerge.yml` merges it once it is approved and green, and
+`release-publish.yml` runs on the merge. See the [Release auto-merge flow](../../../docs/release-automerge.md)
+doc for how the merge gate works. The actions these workflows invoke
+([`release-action`](../release-action/README.md),
+[`release-automerge`](../release-automerge/README.md)) are **not** synced — downstream
+repos reference them via `@main`, the same way `code-review.yml` references
+`code-review-action`.
+
+The action builds the sync list and delegates the diff and PR mechanics to the
+[`files-sync`](../files-sync/README.md) action. It does not require
+`actions/checkout` and never touches the runner's working tree.
+
+## Usage
+
+```yaml
+name: Sync release workflows
+
+on:
+  schedule:
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: awinogradov/code-assistants/.github/actions/release-sync@v1
+        with:
+          bot_token: ${{ secrets.BOT_TOKEN }}
+          bot_username: ${{ vars.BOT_USERNAME }}
+```
+
+## Inputs
+
+| Input          | Required | Default                       | Description                                                                                                                                                                                      |
+| -------------- | -------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `bot_token`    | yes      | —                             | PAT or GitHub App installation token with `contents: write` + `pull-requests: write` on this repo. The workflow's default `GITHUB_TOKEN` is **not** supported — see [Permissions](#permissions). |
+| `bot_username` | no       | `github-actions[bot]`         | Git author/committer login for the sync commit. Pass `${{ vars.BOT_USERNAME }}`. The PR itself is opened by the `bot_token` owner.                                                               |
+| `source-repo`  | no       | `awinogradov/code-assistants` | Source repository in `owner/name` form that hosts the canonical release workflows.                                                                                                               |
+| `source-ref`   | no       | _(empty)_                     | Branch, tag, or SHA to read the source files from. Empty → source repository default branch.                                                                                                     |
+
+PR-shaping inputs (branch, title, body, commit message) are fixed by design — see
+[Behavior](#behavior).
+
+## Outputs
+
+| Output          | Description                                                          |
+| --------------- | -------------------------------------------------------------------- |
+| `changed-files` | Newline-separated list of destination paths that were updated.       |
+| `pr-number`     | Number of the opened or reused PR. Empty when no changes detected.   |
+| `pr-url`        | HTML URL of the opened or reused PR. Empty when no changes detected. |
+
+## Permissions
+
+The `bot_token` input is **required**. The workflow's default `GITHUB_TOKEN` is not
+supported, because creating pull requests with it can fail with an opaque 403
+(`GitHub Actions is not permitted to create or approve pull requests`) whenever this
+repo or its org disables the **Settings → Actions → General → Workflow permissions →
+"Allow GitHub Actions to create and approve pull requests"** toggle.
+
+Pass one of the following:
+
+- A **classic Personal Access Token** with the `repo` scope.
+- A **fine-grained Personal Access Token** scoped to this repository with
+  `Contents: Read and write` and `Pull requests: Read and write`. For private source
+  repositories, the same token also needs `Contents: Read` on the source repo.
+- A **GitHub App installation token** with the same `contents: write` +
+  `pull-requests: write` permissions.
+
+Store the token in a secret (e.g., `BOT_TOKEN`) and pass it via
+`bot_token: ${{ secrets.BOT_TOKEN }}`. Optionally set a `BOT_USERNAME` repository
+variable to control the commit author identity.
+
+## Behavior
+
+- Delegates to `files-sync` with a fixed sync list — `.github/workflows/release-create.yml`,
+  `.github/workflows/release-publish.yml`, and `.github/workflows/release-automerge.yml` —
+  sourced from `source-repo` at `source-ref`.
+- The PR is opened on the fixed branch `maintenance-sync-release` with the title
+  `MAINTENANCE: Sync release workflows from upstream` and the commit message
+  `chore: sync release workflows from upstream`. These values are not configurable so
+  the action cannot collide with `files-sync`'s default branch and so every consumer
+  gets the same one-line setup.
+- The head branch is force-updated on every run (inherited from `files-sync`); local
+  edits to the synced files will be overwritten when the upstream files change.
+- If the destination files already match upstream, no PR is created.
+- A missing source file fails the run with `Source not found at <repo>:<path>`.
+
+## Versioning
+
+Reference the action by tag of the autopilot repo, e.g.:
+
+```yaml
+uses: awinogradov/code-assistants/.github/actions/release-sync@v1
+```
+</file>
+
 <file path=".github/actions/repomix-sync/action.yml">
 name: Repomix sync
 description: Sync the repomix pack workflow and config from an upstream repository into the current repository.
@@ -18560,14 +19166,117 @@ jobs:
       - uses: awinogradov/code-assistants/.github/actions/contributing-check@main
 </file>
 
-<file path=".github/workflows/publish.yml">
+<file path=".github/workflows/release-automerge.yml">
+# Source: https://github.com/awinogradov/code-assistants/blob/main/.github/workflows/release-automerge.yml
+# This file is distributed to downstream repositories by an automated sync.
+# Edits made downstream are overwritten on the next run.
+# To change it, open a pull request against the source file above.
+#
+# Repository secrets/variables consumed by this workflow:
+#   - `BOT_TOKEN` (secret, required): PAT or App installation token with
+#     `contents: write` + `pull-requests: write`. The default `GITHUB_TOKEN` is
+#     not supported — a merge it performs does not trigger `release-publish.yml`, and on a
+#     protected `main` the token must also be a ruleset bypass actor.
+#     See `.github/actions/release-automerge/README.md`.
+
+name: Release auto-merge
+
+on:
+  check_suite:
+    types: [completed]
+  pull_request_review:
+    types: [submitted]
+
+concurrency:
+  # Keyed on the head commit, not the PR number: the check_suite payload carries
+  # no PR number, so a SHA group is the stable serializer across both events.
+  # Do not cancel — let an in-flight merge finish.
+  group: release-automerge-${{ github.event.check_suite.head_sha || github.event.pull_request.head.sha }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    # Run only for release branches. Both events are repo-wide, so without this
+    # guard the job would run (and post a check) on every PR. Each event exposes
+    # the head branch reliably (check_suite.head_branch / pull_request.head.ref);
+    # the action re-checks ^release- internally as defense in depth.
+    if: >-
+      startsWith(github.event.check_suite.head_branch, 'release-')
+      || startsWith(github.event.pull_request.head.ref, 'release-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: awinogradov/code-assistants/.github/actions/release-automerge@main
+        with:
+          bot_token: ${{ secrets.BOT_TOKEN }}
+</file>
+
+<file path=".github/workflows/release-create.yml">
+# Source: https://github.com/awinogradov/code-assistants/blob/main/.github/workflows/release-create.yml
+# This file is distributed to downstream repositories by an automated sync.
+# Edits made downstream are overwritten on the next run.
+# To change it, open a pull request against the source file above.
+#
+# Requires repo secrets and variables:
+#   - `BOT_TOKEN` (secret): PAT or App installation token with `contents: write` and
+#     `pull-requests: write`. The default `GITHUB_TOKEN` cannot create PRs.
+#     See `.github/actions/release-action/README.md` for the rationale.
+#   - `BOT_USERNAME` (variable, optional): git author login for release commits, tags,
+#     and PRs. Defaults to `github-actions[bot]` when unset.
+#   - `ANTHROPIC_RELEASE` (secret): Anthropic API key used to generate human-readable
+#     release-note summaries from the changelog (optional but recommended).
+
+name: Release create
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Mondays at 09:00 UTC — keeps the release PR refreshed weekly without
+    # firing on every push. Trigger sooner via `workflow_dispatch` when needed.
+    - cron: "0 9 * * 1"
+
+concurrency:
+  group: release-${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    name: Create release PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: awinogradov/code-assistants/.github/actions/release-action@main
+        with:
+          mode: create
+          bot_token: ${{ secrets.BOT_TOKEN }}
+          bot_username: ${{ vars.BOT_USERNAME }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_RELEASE }}
+</file>
+
+<file path=".github/workflows/release-publish.yml">
+# Source: https://github.com/awinogradov/code-assistants/blob/main/.github/workflows/release-publish.yml
+# This file is distributed to downstream repositories by an automated sync.
+# Edits made downstream are overwritten on the next run.
+# To change it, open a pull request against the source file above.
+#
 # Requires repo secrets and variables:
 #   - `BOT_TOKEN` (secret): PAT or App installation token with `contents: write` and
 #     `pull-requests: write`, used to read PR files and publish the release.
 #   - `BOT_USERNAME` (variable, optional): git author login for release tags and the
 #     GitHub Release. Defaults to `github-actions[bot]` when unset.
 
-name: Publish
+name: Release publish
 
 on:
   pull_request_target:
@@ -18609,50 +19318,6 @@ jobs:
           mode: publish
           bot_token: ${{ secrets.BOT_TOKEN }}
           bot_username: ${{ vars.BOT_USERNAME }}
-</file>
-
-<file path=".github/workflows/release.yml">
-# Requires repo secrets and variables:
-#   - `BOT_TOKEN` (secret): PAT or App installation token with `contents: write` and
-#     `pull-requests: write`. The default `GITHUB_TOKEN` cannot create PRs.
-#     See `.github/actions/release-action/README.md` for the rationale.
-#   - `BOT_USERNAME` (variable, optional): git author login for release commits, tags,
-#     and PRs. Defaults to `github-actions[bot]` when unset.
-#   - `ANTHROPIC_RELEASE` (secret): Anthropic API key used to generate human-readable
-#     release-note summaries from the changelog (optional but recommended).
-
-name: Release
-
-on:
-  workflow_dispatch:
-  schedule:
-    # Mondays at 09:00 UTC — keeps the release PR refreshed weekly without
-    # firing on every push. Trigger sooner via `workflow_dispatch` when needed.
-    - cron: "0 9 * * 1"
-
-concurrency:
-  group: release-${{ github.workflow }}
-  cancel-in-progress: false
-
-permissions:
-  contents: write
-  pull-requests: write
-
-jobs:
-  release:
-    name: Create release PR
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-      - uses: awinogradov/code-assistants/.github/actions/release-action@main
-        with:
-          mode: create
-          bot_token: ${{ secrets.BOT_TOKEN }}
-          bot_username: ${{ vars.BOT_USERNAME }}
-          anthropic_api_key: ${{ secrets.ANTHROPIC_RELEASE }}
 </file>
 
 <file path=".github/workflows/repomix-pack.yml">
@@ -18769,6 +19434,16 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: awinogradov/code-assistants/.github/actions/repomix-sync@main
+        with:
+          bot_token: ${{ secrets.BOT_TOKEN }}
+          bot_username: ${{ vars.BOT_USERNAME }}
+
+  sync-release:
+    name: Sync release workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: awinogradov/code-assistants/.github/actions/release-sync@main
         with:
           bot_token: ${{ secrets.BOT_TOKEN }}
           bot_username: ${{ vars.BOT_USERNAME }}
@@ -27957,6 +28632,129 @@ To add a new stack:
 To add a new language: extend the language-to-pattern table in `claude-plugins/autopilot/skills/todo-cleanup/SKILL.md` and mirror the change here.
 </file>
 
+<file path="docs/release-automerge.md">
+# Release auto-merge
+
+Release PRs (branch `release-<version>`) are auto-approved by
+[`code-review-action`](../.github/actions/code-review-action/README.md) but then
+sit approved-but-unmerged until a human clicks merge, stalling the publish
+pipeline. This repository closes that gap with an event-driven
+[`release-automerge`](../.github/actions/release-automerge/README.md) action that
+merges a release PR the moment it is green and approved. This document describes
+why it exists, how the merge gate works, and how the workflow is propagated
+downstream.
+
+## Why it exists
+
+GitHub's native auto-merge cannot be scoped to a specific PR or branch under this
+repository's org settings, so it cannot be limited to release branches. A custom,
+event-driven action is the only way to merge **only** release PRs without
+babysitting each release. Because it re-evaluates on every relevant event, it is
+self-healing: a late approval or a re-run that turns the last check green triggers
+the merge with no manual step.
+
+## How it works
+
+```
+ release PR (head: release-<version>)
+   │ checks run            code-review-action auto-approves
+   │ (CI, lint, …)         (release-* PR by trusted author)
+   ▼                                  │
+ ┌──────────────────────────────────────────────────────────┐
+ │ release-automerge.yml  (event-driven)                     │
+ │ on: check_suite[completed] · pull_request_review[submitted]│
+ └───────────────────────────┬───────────────────────────────┘
+                             ▼
+   ┌─────────────────────────────────────────────────┐
+   │ release-automerge action                         │
+   │ 1. resolve open PR for the head SHA              │
+   │ 2. head ref ~ ^release-  AND  state == open ?    │
+   │ 3. all checks green? (shared aggregation)        │
+   │ 4. reviewDecision == APPROVED ?                  │
+   │ 5. merge (sha-pinned) with an allowed method     │
+   └───────────────────────────┬─────────────────────┘
+                  ▼ all true                ▼ any false / any error
+            merge PR                   no-op (never merge)
+                  │
+                  ▼ merge cascades (PAT bot_token)
+            release-publish.yml runs on merge
+```
+
+- **Triggers:** `check_suite: [completed]` and `pull_request_review: [submitted]`.
+  The first covers checks finishing after approval; the second covers a late
+  approval landing after checks are already green. Both events expose the head
+  branch reliably (`check_suite.head_branch` / `pull_request.head.ref`), so the job
+  carries an `if:` guard that runs it **only** when that branch matches `^release-`
+  — on every other PR the job is skipped and posts no check. The action re-checks
+  `^release-` internally as defense in depth. (The `status` event is intentionally
+  not a trigger: its payload has no reliable release-branch signal to filter on, and
+  approval already re-evaluates commit statuses, so dropping it avoids running on
+  non-release PRs without losing meaningful coverage.)
+- **Merge conditions (all must hold):** the head ref matches `^release-`, the PR
+  is open, every sibling check is green (failed → skip; still pending → skip), and
+  `reviewDecision == APPROVED`. The check aggregation reuses the same logic as the
+  AI-review preflight (see [the shared `checkStatus` helper][checkstatus]),
+  deduplicated by name and excluding the action's own job.
+- **Merge method:** the action reads the repository's allowed merge methods
+  (`allow_rebase_merge` / `allow_squash_merge` / `allow_merge_commit`) and prefers
+  `rebase`, falling back to `squash` then `merge`. The merge is pinned to the
+  triggering head SHA, so a push that lands mid-evaluation is rejected rather than
+  merged unreviewed.
+- **Fail-closed:** any unmet condition or unexpected error results in no merge.
+  An already-merged or no-longer-mergeable PR is treated as a clean no-op so
+  concurrent events do not error.
+
+### Why a PAT/App token, not `GITHUB_TOKEN`
+
+The action merges with the repository's `BOT_TOKEN` (a PAT or GitHub App
+installation token), **not** the default `GITHUB_TOKEN`. A merge performed with
+`GITHUB_TOKEN` does not trigger downstream workflows, so
+[`release-publish.yml`](../.github/workflows/release-publish.yml) — which runs on
+`pull_request_target: [closed]` for `**/.release_notes/**` — would never fire and
+the release would not publish. The upstream auto-approval is posted with the same
+token for the same reason.
+
+> **Ruleset bypass for protected `main`.** If `main` is governed by a ruleset
+> (`pull_request` / required-status-checks / linear-history / signed-commits
+> rules), the `BOT_TOKEN` identity must be a **bypass actor** on it, and the
+> ruleset's allowed merge methods must include the method the action selects —
+> otherwise `gh`/the merge API returns an opaque 403/422. A required check that is
+> _skipped_ on release branches (e.g. the AI review) must report a neutral/success
+> conclusion or be marked non-required, or it will block the merge. Add the bot to
+> the ruleset's bypass list (Settings → Rules → the branch ruleset → Bypass list).
+
+## Downstream propagation
+
+`release-automerge.yml` is one of three workflows that form the release pipeline,
+and all three are distributed to downstream repositories together — exactly like the
+code-review and repomix workflows:
+
+```
+   upstream.yml ──hourly──> release-sync ──> files-sync
+     (cron)                  (wraps files-sync)   │
+                                                  ▼
+              PR: sync .github/workflows/{release,publish,release-automerge}.yml
+              (action dirs NOT synced — referenced via @main)
+```
+
+The [`release-sync`](../.github/actions/release-sync/README.md) action wraps
+[`files-sync`](../.github/actions/files-sync/README.md) to sync the full pipeline —
+`release-create.yml` (opens the release PR), `release-publish.yml` (publishes on
+merge), and `release-automerge.yml` (merges the approved, green PR) — to a
+`maintenance-sync-release` branch and open (or reuse) a single PR. The action
+directories these workflows invoke (`release-action`, `release-automerge`) are
+**not** synced — downstream repos reference them via `@main`, the same way
+`code-review.yml` references `code-review-action`. A `sync-release` job in
+[`upstream.yml`](../.github/workflows/upstream.yml) runs it on the existing hourly
+schedule.
+
+The merge this action performs is what feeds the publish step; see the
+[`release` field spec](./release-field.md) for how `release-action` then selects
+artifacts on publish.
+
+[checkstatus]: ../packages/actions-core/src/checkStatus.ts
+</file>
+
 <file path="docs/release-field.md">
 # The `release` field
 
@@ -28156,7 +28954,7 @@ The `.github/workflows/repomix-pack.yml` workflow regenerates the pack on every 
 - **Trigger:** `pull_request` `types: [closed]`, `branches: [main]`, gated by `if: github.event.pull_request.merged == true` — runs on the merge, not on every `push`.
 - **Pack:** pinned `npx repomix@<version>` (exact version, no `^`/`~`) so pack diffs reflect codebase drift, not tool-version drift.
 - **Commit:** the pack is staged and committed only when `git diff --cached --quiet -- .repomix/pack.xml` reports a staged change — this covers both a modified file and a brand-new untracked one (e.g. the very first run). The auto-commit uses the Conventional-Commits message `chore(repomix): refresh pack from #<PR>`.
-- **Push:** uses the repo's `BOT_TOKEN` secret (with `BOT_USERNAME` as the git author, matching `upstream.yml`/`release.yml`). The default `GITHUB_TOKEN` cannot push to protected `main` or trigger downstream workflows. Because this step pushes **directly** to `main`, the `BOT_TOKEN` identity must also be a **bypass actor** on the protected-branch ruleset; `contents: write` alone is insufficient. When the ruleset's `pull_request` rule is active, a direct push is rejected with `GH013` ("Changes must be made through a pull request") no matter the token's scope. Add the bot to the ruleset's bypass list to allow it.
+- **Push:** uses the repo's `BOT_TOKEN` secret (with `BOT_USERNAME` as the git author, matching `upstream.yml`/`release-create.yml`). The default `GITHUB_TOKEN` cannot push to protected `main` or trigger downstream workflows. Because this step pushes **directly** to `main`, the `BOT_TOKEN` identity must also be a **bypass actor** on the protected-branch ruleset; `contents: write` alone is insufficient. When the ruleset's `pull_request` rule is active, a direct push is rejected with `GH013` ("Changes must be made through a pull request") no matter the token's scope. Add the bot to the ruleset's bypass list to allow it.
 
 ### Determinism
 
@@ -28414,6 +29212,290 @@ As of 2026-05-23.
 | `apps/` directory                                         | Target — no apps exist yet                                                                                                 |
 </file>
 
+<file path="packages/actions-core/src/checkStatus.test.ts">
+/**
+ * Contract tests for the shared check-status aggregation.
+ *
+ * These pin the subtle behaviors both consumers (code-review preflight poll and
+ * release-automerge merge gate) rely on: dedup by run id, cancelled runs carrying
+ * no signal, combined-status classification, self-exclusion, and that the API args
+ * (owner/repo/ref) are forwarded unchanged.
+ */
+import type { Octokit } from "@octokit/rest";
+
+import { describe, expect, test } from "bun:test";
+
+import { deduplicateCheckRuns, fetchCheckStatuses, normalizeCheckName } from "./checkStatus.ts";
+
+interface FakeRun {
+  id: number;
+  name: string;
+  status: string;
+  conclusion: string | null;
+}
+
+interface FakeStatus {
+  context: string;
+  state: string;
+}
+
+interface CapturedCalls {
+  paginate: Array<Record<string, unknown>>;
+  combined: Array<Record<string, unknown>>;
+}
+
+/**
+ * Build a minimal Octokit stand-in returning the supplied runs and statuses, and
+ * recording the params each API received so tests can assert they are forwarded.
+ */
+function fakeOctokit(
+  runs: FakeRun[],
+  statuses: FakeStatus[]
+): { octokit: Octokit; calls: CapturedCalls } {
+  const calls: CapturedCalls = { paginate: [], combined: [] };
+  const octokit = {
+    paginate: async (_fn: unknown, params: Record<string, unknown>) => {
+      calls.paginate.push(params);
+      return runs;
+    },
+    rest: {
+      checks: { listForRef: () => undefined },
+      repos: {
+        getCombinedStatusForRef: async (params: Record<string, unknown>) => {
+          calls.combined.push(params);
+          return { data: { statuses } };
+        },
+      },
+    },
+  };
+
+  return { octokit: octokit as unknown as Octokit, calls };
+}
+
+describe("normalizeCheckName", () => {
+  test("strips non-alphanumerics and lowercases", () => {
+    expect(normalizeCheckName("Code Review")).toBe("codereview");
+    expect(normalizeCheckName("code-review")).toBe("codereview");
+  });
+});
+
+describe("deduplicateCheckRuns", () => {
+  test("keeps the highest id per name", () => {
+    const runs = [
+      { id: 1, name: "build" },
+      { id: 3, name: "build" },
+      { id: 2, name: "test" },
+    ];
+    expect(deduplicateCheckRuns(runs)).toEqual([
+      { id: 3, name: "build" },
+      { id: 2, name: "test" },
+    ]);
+  });
+});
+
+describe("fetchCheckStatuses", () => {
+  test("all green completed runs pass", async () => {
+    const { octokit } = fakeOctokit(
+      [{ id: 1, name: "build", status: "completed", conclusion: "success" }],
+      []
+    );
+    const result = await fetchCheckStatuses(octokit, "o", "r", "sha", "automerge");
+    expect(result).toEqual({
+      allCompleted: true,
+      hasFailed: false,
+      failedNames: [],
+      pendingNames: [],
+    });
+  });
+
+  test("forwards owner, repo, and ref to both APIs", async () => {
+    const { octokit, calls } = fakeOctokit([], []);
+    await fetchCheckStatuses(octokit, "acme", "widgets", "deadbeef", "automerge");
+    expect(calls.combined[0]).toMatchObject({ owner: "acme", repo: "widgets", ref: "deadbeef" });
+    expect(calls.paginate[0]).toMatchObject({ owner: "acme", repo: "widgets", ref: "deadbeef" });
+  });
+
+  test("excludes its own check by normalized name", async () => {
+    const { octokit } = fakeOctokit(
+      [{ id: 1, name: "Release Automerge", status: "in_progress", conclusion: null }],
+      []
+    );
+    const result = await fetchCheckStatuses(octokit, "o", "r", "sha", "release-automerge");
+    expect(result.allCompleted).toBe(true);
+    expect(result.pendingNames).toEqual([]);
+  });
+
+  test("incomplete sibling run counts as pending", async () => {
+    const { octokit } = fakeOctokit(
+      [{ id: 1, name: "build", status: "in_progress", conclusion: null }],
+      []
+    );
+    const result = await fetchCheckStatuses(octokit, "o", "r", "sha", "automerge");
+    expect(result.allCompleted).toBe(false);
+    expect(result.pendingNames).toEqual(["build"]);
+  });
+
+  test("superseded failed run is ignored when a newer success exists", async () => {
+    const { octokit } = fakeOctokit(
+      [
+        { id: 1, name: "build", status: "completed", conclusion: "failure" },
+        { id: 2, name: "build", status: "completed", conclusion: "success" },
+      ],
+      []
+    );
+    const result = await fetchCheckStatuses(octokit, "o", "r", "sha", "automerge");
+    expect(result.hasFailed).toBe(false);
+    expect(result.allCompleted).toBe(true);
+  });
+
+  test("cancelled-only run carries no signal and does not block the gate", async () => {
+    const { octokit } = fakeOctokit(
+      [{ id: 1, name: "flaky", status: "completed", conclusion: "cancelled" }],
+      []
+    );
+    const result = await fetchCheckStatuses(octokit, "o", "r", "sha", "automerge");
+    expect(result.allCompleted).toBe(true);
+    expect(result.hasFailed).toBe(false);
+    expect(result.pendingNames).toEqual([]);
+  });
+
+  test("failed conclusion is reported", async () => {
+    const { octokit } = fakeOctokit(
+      [{ id: 1, name: "lint", status: "completed", conclusion: "timed_out" }],
+      []
+    );
+    const result = await fetchCheckStatuses(octokit, "o", "r", "sha", "automerge");
+    expect(result.hasFailed).toBe(true);
+    expect(result.failedNames).toEqual(["lint"]);
+  });
+
+  test("combined commit statuses classify pending and failure", async () => {
+    const { octokit } = fakeOctokit(
+      [],
+      [
+        { context: "ci/pending", state: "pending" },
+        { context: "ci/broken", state: "error" },
+      ]
+    );
+    const result = await fetchCheckStatuses(octokit, "o", "r", "sha", "automerge");
+    expect(result.allCompleted).toBe(false);
+    expect(result.pendingNames).toEqual(["ci/pending"]);
+    expect(result.hasFailed).toBe(true);
+    expect(result.failedNames).toEqual(["ci/broken"]);
+  });
+});
+</file>
+
+<file path="packages/actions-core/src/checkStatus.ts">
+/**
+ * Shared PR check-status aggregation across the repository's GitHub Actions.
+ *
+ * Merges GitHub's two independent signals for a commit — Check Runs
+ * (`checks.listForRef`) and Commit Statuses (`repos.getCombinedStatusForRef`) —
+ * into a single verdict, deduplicating superseded check runs and excluding the
+ * caller's own check by normalized name. Used by `code-review-action`'s
+ * preflight poll loop and by `release-automerge`'s one-shot merge gate.
+ *
+ * @example
+ *   const result = await fetchCheckStatuses(octokit, owner, repo, headSha, jobName);
+ *   if (result.hasFailed || !result.allCompleted) return; // not green yet
+ */
+import type { Octokit } from "@octokit/rest";
+
+/** Aggregated check status result from both GitHub APIs. */
+export interface CheckResult {
+  allCompleted: boolean;
+  hasFailed: boolean;
+  failedNames: string[];
+  pendingNames: string[];
+}
+
+const failedConclusions = new Set(["failure", "timed_out"]);
+const failedStatuses = new Set(["failure", "error"]);
+
+/**
+ * Normalize a check name for self-exclusion comparison.
+ * Strips non-alphanumeric characters so "code-review" matches "Code Review".
+ */
+export function normalizeCheckName(name: string): string {
+  return name.toLowerCase().replaceAll(/[^a-z0-9]/g, "");
+}
+
+/**
+ * Deduplicate check runs by name, keeping only the most recent run per name.
+ * GitHub's Check Runs API returns all runs including superseded ones from previous pushes.
+ * Uses the auto-incrementing `id` field as the recency indicator.
+ */
+export function deduplicateCheckRuns<T extends { id: number; name: string }>(runs: T[]): T[] {
+  const latestByName = new Map<string, T>();
+
+  for (const run of runs) {
+    const existing = latestByName.get(run.name);
+    if (!existing || run.id > existing.id) {
+      latestByName.set(run.name, run);
+    }
+  }
+
+  return [...latestByName.values()];
+}
+
+/**
+ * Fetch and aggregate check statuses from both Check Runs and Commit Status APIs.
+ * Excludes the current job's own check run by normalized name comparison.
+ */
+export async function fetchCheckStatuses(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  ref: string,
+  jobName: string
+): Promise<CheckResult> {
+  const normalizedJobName = normalizeCheckName(jobName);
+
+  const [checkRuns, commitStatus] = await Promise.all([
+    octokit.paginate(octokit.rest.checks.listForRef, { owner, repo, ref, per_page: 100 }),
+    octokit.rest.repos.getCombinedStatusForRef({ owner, repo, ref }),
+  ]);
+
+  const allSiblingRuns = checkRuns.filter(
+    (run) => normalizeCheckName(run.name) !== normalizedJobName
+  );
+  // A cancelled run carries no pass/fail/pending signal (e.g. a path-filter-skipped
+  // job, or a run superseded by a newer push). Excluding cancelled runs entirely —
+  // rather than treating a cancelled-only check as pending — keeps a permanently
+  // cancelled check from blocking the gate forever. The one-shot merge gate has no
+  // poll loop to recover, and GitHub's merge API still enforces genuinely required
+  // checks regardless.
+  const siblingRuns = deduplicateCheckRuns(
+    allSiblingRuns.filter((run) => run.conclusion !== "cancelled")
+  );
+
+  const pendingRuns = siblingRuns
+    .filter((run) => run.status !== "completed")
+    .map((run) => run.name);
+  const failedRuns = siblingRuns
+    .filter((run) => run.status === "completed" && failedConclusions.has(run.conclusion ?? ""))
+    .map((run) => run.name);
+
+  const pendingStatuses = commitStatus.data.statuses
+    .filter((s) => s.state === "pending")
+    .map((s) => s.context);
+  const failedCommitStatuses = commitStatus.data.statuses
+    .filter((s) => failedStatuses.has(s.state))
+    .map((s) => s.context);
+
+  const allPending = [...pendingRuns, ...pendingStatuses];
+  const allFailed = [...failedRuns, ...failedCommitStatuses];
+
+  return {
+    allCompleted: allPending.length === 0,
+    hasFailed: allFailed.length > 0,
+    failedNames: allFailed,
+    pendingNames: allPending,
+  };
+}
+</file>
+
 <file path="packages/actions-core/src/fetchRawContent.ts">
 /**
  * Fetch raw file content from a GitHub repository via the contents API.
@@ -28481,6 +29563,57 @@ export async function fetchRawContent({
 }
 </file>
 
+<file path="packages/actions-core/src/parseRepo.test.ts">
+import { describe, expect, test } from "bun:test";
+
+import { parseRepo } from "./parseRepo.ts";
+
+describe("parseRepo", () => {
+  test("splits a valid owner/repo slug", () => {
+    expect(parseRepo("awinogradov/code-assistants")).toEqual({
+      owner: "awinogradov",
+      repo: "code-assistants",
+    });
+  });
+
+  test("throws on a missing repo segment", () => {
+    expect(() => parseRepo("owner-only")).toThrow("Invalid REPO format");
+  });
+
+  test("throws on an empty owner", () => {
+    expect(() => parseRepo("/repo")).toThrow("Invalid REPO format");
+  });
+});
+</file>
+
+<file path="packages/actions-core/src/parseRepo.ts">
+/**
+ * Split an `owner/repo` slug into its parts, throwing on malformed input.
+ *
+ * Centralizes the `REPO.split("/")` + validation pattern that GitHub Actions in
+ * this repository repeat when reading the `REPO`/`GITHUB_REPOSITORY` environment
+ * variable.
+ *
+ * @example
+ *   const { owner, repo } = parseRepo("awinogradov/code-assistants");
+ */
+
+/** A parsed `owner/repo` pair. */
+export interface Repo {
+  owner: string;
+  repo: string;
+}
+
+export function parseRepo(repository: string): Repo {
+  const [owner, repo] = repository.split("/");
+  if (!owner || !repo) {
+    throw new Error(`Invalid REPO format: ${repository}. Expected owner/repo`);
+  }
+
+  return { owner, repo };
+}
+</file>
+
 <file path="packages/actions-core/package.json">
 {
   "name": "@code-assistants/actions-core",
@@ -28494,10 +29627,13 @@ export async function fetchRawContent({
     "language": "typescript"
   },
   "exports": {
-    "./fetchRawContent": "./src/fetchRawContent.ts"
+    "./fetchRawContent": "./src/fetchRawContent.ts",
+    "./checkStatus": "./src/checkStatus.ts",
+    "./parseRepo": "./src/parseRepo.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test": "bun test",
     "clean": "rm -rf node_modules .turbo"
   },
   "dependencies": {
@@ -30943,6 +32079,7 @@ export default config;
     ".github/actions/files-sync",
     ".github/actions/agents-rules-sync",
     ".github/actions/release-action",
+    ".github/actions/release-automerge",
     ".github/actions/code-review-action",
     "claude-plugins/*",
     "packages/*"
@@ -31008,6 +32145,7 @@ See the [plugin README](./claude-plugins/autopilot/README.md#installation) for s
 - [Workspace structure](./docs/workspace-structure.md) — where new actions, packages, and apps go, and how they wire into Turbo
 - [`agents` field spec](./docs/agents-field.md) — how skills detect a repository's tech stack from `package.json`
 - [`release` field spec](./docs/release-field.md) — how `release-action` picks the right artifacts for npm packages, GitHub Actions, and Claude plugins
+- [Release auto-merge flow](./docs/release-automerge.md) — the event-driven action that merges approved, all-green release PRs, and how its workflow is propagated downstream
 - [Committed Repomix pack](./docs/repomix-pack.md) — the `.repomix/pack.xml` snapshot, the merge-triggered workflow that refreshes it, and the snapshot-first contract skills follow
 - [Stack rule sets](./rules/) — `Bun`, `Bun+React+Tailwind`, `NodeJS+React`, `NodeJS+React+Tailwind`
 
@@ -31018,8 +32156,10 @@ See the [plugin README](./claude-plugins/autopilot/README.md#installation) for s
 - [`contributing-check`](./.github/actions/contributing-check/README.md) — validate branch name, commit messages, and PR title against `CONTRIBUTING.md`
 - [`contributing-sync`](./.github/actions/contributing-sync/README.md) — sync `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, and the contributing workflow from upstream
 - [`release-action`](./.github/actions/release-action/README.md) — conventional-commit-driven release pipeline for npm packages, GitHub Actions, and Claude plugins
+- [`release-automerge`](./.github/actions/release-automerge/README.md) — merge an approved, all-green release PR (`^release-`), driven by an event-based workflow so `release-publish.yml` runs without a manual click
 - [`code-review-action`](./.github/actions/code-review-action/README.md) — AI code review for pull requests via Claude Code, with a react mode for replying to bot mentions
 - [`repomix-sync`](./.github/actions/repomix-sync/README.md) — sync the `repomix-pack` workflow and `repomix.config.json` from upstream so each consumer commits its own codebase snapshot
+- [`release-sync`](./.github/actions/release-sync/README.md) — sync the release pipeline workflows (`release`, `publish`, `release-automerge`) from upstream so each consumer runs the same release flow
 
 ## Contributing
 
