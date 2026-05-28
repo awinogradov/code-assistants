@@ -154,9 +154,18 @@ runs:
           fi
         fi
 
-        # Skip release PRs
+        # Skip release PRs and auto-approve so they aren't blocked on the
+        # requested-reviewer slot. Only post the approval in review mode — react
+        # mode runs on comment events and shouldn't touch review state.
         if [[ "$EVENT_NAME" == "pull_request" && "$EVENT_PR_HEAD_REF" =~ ^(release-|delivery-) ]]; then
           echo "Skipping: release/delivery branch ($EVENT_PR_HEAD_REF)"
+          if [[ "$INPUT_MODE" == "review" ]]; then
+            gh api -X POST \
+              "repos/${GITHUB_REPOSITORY}/pulls/${EVENT_PR_NUMBER}/reviews" \
+              -f event=APPROVE \
+              -f body="Auto-approved: release branch, AI review skipped per workflow policy." \
+              || echo "Auto-approval skipped (already approved or API error)"
+          fi
           echo "skip=true" >> "$GITHUB_OUTPUT"
           exit 0
         fi
