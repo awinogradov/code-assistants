@@ -1,6 +1,6 @@
 {
   "name": "@code-assistants/agents-rules-sync-action",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "Composite GitHub Action that syncs the stack-appropriate agent rules file into CLAUDE.md.",
   "private": true,
   "type": "module",
