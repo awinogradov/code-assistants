@@ -22,9 +22,15 @@ import { assemblePrBody } from "../assemble-pr-body.ts";
 import { runReleaseNotes } from "../generateReleaseNotes.ts";
 import { insertReleaseNotes } from "../insert-release-notes.ts";
 import { appendMigratingSection, readBreakingNotes } from "../migrations/migratingAppend.ts";
-import { bumpVersion, generateChangelog } from "../release.ts";
+import {
+  bumpVersion,
+  generateChangelog,
+  insertTicketsInRelease,
+  processTickets,
+} from "../release.ts";
 import { updateVersionFiles } from "../prepareRelease.ts";
 import { refreshReleaseBadge } from "../updateReleaseBadge.ts";
+import type { TicketSystemEntry } from "../tickets/tickets.types.ts";
 import {
   buildDependentsGraph,
   propagateBumps,
@@ -35,6 +41,7 @@ import { discoverMembers, type DiscoveryResult, type Member } from "./discoverMe
 import {
   getLatestMemberTagReachable,
   getLatestMemberVersion,
+  memberTagPattern,
   memberTagPrefix,
   memberVersionTag,
 } from "./memberTags.ts";
@@ -188,6 +195,43 @@ export interface EmitMemberArtifactsOptions {
   release: MemberRelease;
   /** Repository root (used for git operations and path resolution). */
   cwd: string;
+  /** Auto-detected ticket systems; when empty the ticket blocks are skipped. */
+  ticketSystems?: TicketSystemEntry[];
+  /** GitHub owner for ticket links (from GITHUB_REPOSITORY); skipped when absent. */
+  owner?: string;
+  /** GitHub repo for ticket links (from GITHUB_REPOSITORY); skipped when absent. */
+  repo?: string;
+}
+
+/**
+ * Extract the per-system ticket markdown for one member, scoped to the member's
+ * own commit range (its `<name>@v*` tags and directory). The tag glob comes from
+ * {@link memberTagPattern} (NOT {@link memberTagPrefix}) because
+ * `getCommitsSinceLastTag` feeds it to `git describe --match`, which needs a glob.
+ *
+ * Ticket-fetch failures are non-fatal: a GitHub API error for one member degrades
+ * to an empty section plus a warning, so the remaining members in the release
+ * batch still get their PRs instead of the whole run aborting mid-loop.
+ */
+async function extractMemberTickets(
+  member: Member,
+  cwd: string,
+  config: { ticketSystems?: TicketSystemEntry[]; owner?: string; repo?: string },
+): Promise<string> {
+  try {
+    return await processTickets({
+      ticketSystems: config.ticketSystems,
+      owner: config.owner,
+      repo: config.repo,
+      cwd,
+      releaseBotDir: join(member.path, ".release_bot"),
+      scope: { tagPattern: memberTagPattern(member.name), path: member.relPath },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.log(`::warning::Ticket extraction failed for ${member.name}: ${message}`);
+    return "";
+  }
 }
 
 /**
@@ -200,7 +244,7 @@ export interface EmitMemberArtifactsOptions {
  * this orchestrator to cross-pollinate release commits between PRs.
  */
 export async function emitMemberArtifacts(options: EmitMemberArtifactsOptions): Promise<void> {
-  const { release, cwd } = options;
+  const { release, cwd, ticketSystems, owner, repo } = options;
   const { member, previousVersion, newVersion, bumpLevel, natural, branch } = release;
   const tagPrefix = memberTagPrefix(member.name);
 
@@ -212,7 +256,13 @@ export async function emitMemberArtifacts(options: EmitMemberArtifactsOptions): 
     path: member.relPath,
   });
 
-  await Bun.write(join(member.path, ".release_notes", `${newVersion}.md`), log.release, {
+  // Splice the member-scoped ticket tables into the same files the standalone
+  // path produces, BEFORE `runReleaseNotes` so the AI prompt sees tickets.json.
+  // No-op (releaseWithTickets === log.release) when no ticket systems resolve.
+  const ticketsMarkdown = await extractMemberTickets(member, cwd, { ticketSystems, owner, repo });
+  const releaseWithTickets = insertTicketsInRelease(log.release, ticketsMarkdown);
+
+  await Bun.write(join(member.path, ".release_notes", `${newVersion}.md`), releaseWithTickets, {
     createPath: true,
   });
 
@@ -226,7 +276,7 @@ export async function emitMemberArtifacts(options: EmitMemberArtifactsOptions): 
   const history = priorStart !== -1 ? priorContent.substring(priorStart) : "";
   await Bun.write(
     memberChangelogPath,
-    `${log.header}${log.release}${history}`.replace(/\n+$/, "\n"),
+    `${log.header}${releaseWithTickets}${history}`.replace(/\n+$/, "\n"),
   );
 
   await updateVersionFiles(newVersion, member.path);
@@ -251,7 +301,7 @@ export async function emitMemberArtifacts(options: EmitMemberArtifactsOptions): 
   // PR-body skeleton: the changelog body plus a single-line note for
   // dependent-driven bumps so reviewers can see why the member is moving.
   const bodyPrefix = natural ? "" : "_Workspace dependent bump._\n\n";
-  await Bun.write(join(member.path, ".release_bot", "body"), `${bodyPrefix}${log.release}`, {
+  await Bun.write(join(member.path, ".release_bot", "body"), `${bodyPrefix}${releaseWithTickets}`, {
     createPath: true,
   });
 

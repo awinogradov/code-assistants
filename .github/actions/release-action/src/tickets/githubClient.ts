@@ -7,7 +7,7 @@
  * ```typescript
  * import { getCommitsSinceLastTag, fetchPullRequest } from "./githubClient.ts";
  *
- * const commits = await getCommitsSinceLastTag("v", process.cwd());
+ * const commits = await getCommitsSinceLastTag(process.cwd());
  * const pr = await fetchPullRequest(45, "owner", "repo", "ghp_xxx");
  * ```
  */
@@ -16,36 +16,49 @@ import { $ } from "bun";
 
 import { getLatestReachableTag } from "../gitTags.ts";
 
-import type { CommitInfo, PullRequestInfo } from "./tickets.types.ts";
+import type { CommitInfo, CommitScope, PullRequestInfo } from "./tickets.types.ts";
 import { extractPrNumber } from "./ticketExtractor.ts";
 
 /** GitHub API base URL */
 const githubApiUrl = "https://api.github.com";
 
 /**
- * Get all commits since the last `v*` tag reachable from HEAD.
+ * Get all commits since the last reachable tag, optionally scoped to a member.
  *
  * Uses reachability-based discovery: finds the closest tag reachable from HEAD by commit
  * topology, not version number. This prevents picking a higher-versioned tag that sits on
  * an older commit (e.g. v1.0.0 before v0.16.1).
  *
  * @param cwd - Working directory
+ * @param scope - Optional tag glob + path filter for monorepo per-member extraction.
+ *   `tagPattern` defaults to `"v*"`; when `path` is set the range is restricted to
+ *   commits touching that pathspec (resolved relative to `cwd`).
  * @returns Array of commit info with extracted PR numbers
  *
  * @example
  * ```typescript
  * const commits = await getCommitsSinceLastTag(process.cwd());
  * // → [{ sha: "abc123", message: "feat: add auth (#45)", prNumber: 45 }]
+ *
+ * // Monorepo: only commits touching the member path since its last tag
+ * const memberCommits = await getCommitsSinceLastTag(repoRoot, {
+ *   tagPattern: "release-action@v*",
+ *   path: ".github/actions/release-action",
+ * });
  * ```
  */
-export async function getCommitsSinceLastTag(cwd: string): Promise<CommitInfo[]> {
-  const latestTag = await getLatestReachableTag("v*", cwd);
+export async function getCommitsSinceLastTag(
+  cwd: string,
+  scope: CommitScope = {}
+): Promise<CommitInfo[]> {
+  const latestTag = await getLatestReachableTag(scope.tagPattern ?? "v*", cwd);
 
   // Get commits with format: SHA|message
   const format = "--format=%H|%s";
-  const logResult = latestTag
-    ? await $`git log ${`${latestTag}..HEAD`} ${format}`.cwd(cwd).quiet().nothrow()
-    : await $`git log HEAD ${format}`.cwd(cwd).quiet().nothrow();
+  const range = latestTag ? `${latestTag}..HEAD` : "HEAD";
+  const logResult = scope.path
+    ? await $`git log ${range} ${format} -- ${scope.path}`.cwd(cwd).quiet().nothrow()
+    : await $`git log ${range} ${format}`.cwd(cwd).quiet().nothrow();
 
   const lines = logResult.stdout.toString().trim().split("\n").filter(Boolean);
 

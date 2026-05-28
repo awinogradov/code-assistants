@@ -432,7 +432,7 @@ export function serializePrDescriptionsToYaml(descriptions: PrDescription[]): st
 export async function generateTicketsSection(
   options: GenerateTicketsSectionOptions
 ): Promise<GenerateTicketsSectionResult> {
-  const { config, env, cwd = process.cwd() } = options;
+  const { config, env, cwd = process.cwd(), scope } = options;
   const warnings: string[] = [];
   const ticketsBySystem = new Map<TicketSystemType, TicketInfo[]>();
 
@@ -457,7 +457,7 @@ export async function generateTicketsSection(
 
   // Get commits and fetch associated PRs by commit SHA
   // This works for all merge strategies (squash, rebase, merge commit)
-  const commits = await getCommitsSinceLastTag(cwd);
+  const commits = await getCommitsSinceLastTag(cwd, scope);
   const commitShas = commits.map((c) => c.sha);
 
   let prDetailsBySha = new Map<string, PullRequestInfo>();
