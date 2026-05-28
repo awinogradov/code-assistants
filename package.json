@@ -20,6 +20,7 @@
     ".github/actions/agents-rules-sync",
     ".github/actions/release-action",
     ".github/actions/code-review-action",
+    "claude-plugins/*",
     "packages/*"
   ],
   "scripts": {
