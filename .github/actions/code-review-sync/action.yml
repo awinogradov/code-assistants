@@ -2,10 +2,14 @@ name: Code review sync
 description: Sync the AI code-review workflow from an upstream repository into the current repository.
 
 inputs:
-  token:
+  bot_token:
     description: |
       PAT (classic with `repo`, or fine-grained with `contents: write` + `pull-requests: write` on this repo) or GitHub App installation token. The workflow's default `GITHUB_TOKEN` is not supported — it cannot create pull requests when the repo/org has "Allow GitHub Actions to create and approve pull requests" disabled, and the resulting 403 is opaque. See README for setup.
     required: true
+  bot_username:
+    description: |
+      Git author/committer login for the sync commit. Defaults to `github-actions[bot]` when unset. Pass `${{ vars.BOT_USERNAME }}` to attribute commits to a dedicated bot identity.
+    required: false
   source-repo:
     description: Source repository in `owner/name` form that hosts the canonical `.github/workflows/code-review.yml`.
     required: false
@@ -58,7 +62,8 @@ runs:
       uses: awinogradov/code-assistants/.github/actions/files-sync@main
       with:
         files: ${{ steps.resolve.outputs.files }}
-        token: ${{ inputs.token }}
+        bot_token: ${{ inputs.bot_token }}
+        bot_username: ${{ inputs.bot_username }}
         branch: maintenance-sync-code-review
         title: "MAINTENANCE: Sync code-review workflow from upstream"
         body: Automated code-review workflow sync from upstream.

@@ -11,6 +11,7 @@
 import type { Octokit } from '@octokit/rest';
 import type { RequestError } from '@octokit/request-error';
 
+import type { BotIdentity } from './botIdentity.ts';
 import type { FileChange } from './changeDetector.ts';
 
 interface CreateArgs {
@@ -22,6 +23,7 @@ interface CreateArgs {
   body: string;
   commitMessage: string;
   changes: FileChange[];
+  identity: BotIdentity;
 }
 
 export interface SyncPullRequest {
@@ -38,6 +40,7 @@ export async function createSyncPullRequest({
   body,
   commitMessage,
   changes,
+  identity,
 }: CreateArgs): Promise<SyncPullRequest> {
   const { owner, name: repo } = destRepo;
 
@@ -84,6 +87,8 @@ export async function createSyncPullRequest({
     message: commitMessage,
     tree: newTree.data.sha,
     parents: [baseCommitSha],
+    author: identity,
+    committer: identity,
   });
 
   await upsertBranch({ octokit, owner, repo, branch, sha: newCommit.data.sha });
@@ -188,7 +193,7 @@ async function upsertPullRequest({
     if (requestError.status === 403) {
       throw new Error(
         `Refused to create pull request in ${owner}/${repo}: ${requestError.message}. ` +
-          'Confirm the `token` input is a PAT or GitHub App installation token with `contents: write` + `pull-requests: write` ' +
+          'Confirm the `bot_token` input is a PAT or GitHub App installation token with `contents: write` + `pull-requests: write` ' +
           `on ${owner}/${repo} (not the workflow's default \`GITHUB_TOKEN\`). ` +
           'See https://github.com/awinogradov/code-assistants/blob/main/.github/actions/files-sync/README.md#permissions',
         { cause: error },

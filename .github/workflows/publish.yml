@@ -1,3 +1,9 @@
+# Requires repo secrets and variables:
+#   - `BOT_TOKEN` (secret): PAT or App installation token with `contents: write` and
+#     `pull-requests: write`, used to read PR files and publish the release.
+#   - `BOT_USERNAME` (variable, optional): git author login for release tags and the
+#     GitHub Release. Defaults to `github-actions[bot]` when unset.
+
 name: Publish
 
 on:
@@ -26,7 +32,7 @@ jobs:
 
       - name: Resolve changed files
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.BOT_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           {
@@ -38,4 +44,5 @@ jobs:
       - uses: awinogradov/code-assistants/.github/actions/release-action@main
         with:
           mode: publish
-          github_token: ${{ secrets.GH_TOKEN }}
+          bot_token: ${{ secrets.BOT_TOKEN }}
+          bot_username: ${{ vars.BOT_USERNAME }}

@@ -8,11 +8,15 @@ inputs:
       - create — generate changelog and open a release PR
       - publish — tag and publish the release
     required: true
-  github_token:
+  bot_token:
     description: |
       GitHub token with contents:write and pull-requests:write permissions.
       Required for all modes.
     required: true
+  bot_username:
+    description: |
+      Git author/committer login for release commits, tags, and PRs. Defaults to `github-actions[bot]` when unset. Pass `${{ vars.BOT_USERNAME }}` to attribute release artifacts to a dedicated bot identity.
+    required: false
   npm_token:
     description: |
       NPM token for publishing packages.
@@ -101,9 +105,13 @@ runs:
 
     - name: Configure Git
       shell: bash
+      env:
+        INPUT_BOT_USERNAME: ${{ inputs.bot_username }}
       run: |
-        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-        git config --global user.name "github-actions[bot]"
+        bot_user="${INPUT_BOT_USERNAME:-github-actions[bot]}"
+        git config --global user.name "$bot_user"
+        git config --global user.email "41898282+${bot_user}@users.noreply.github.com"
+        echo "Authoring as: $bot_user <41898282+${bot_user}@users.noreply.github.com>"
 
     - name: Detect release type
       id: detect-type
@@ -117,7 +125,7 @@ runs:
       shell: bash
       env:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
-        GH_TOKEN: ${{ inputs.github_token }}
+        GH_TOKEN: ${{ inputs.bot_token }}
         LINEAR_API_KEY: ${{ inputs.linear_api_key }}
         LINEAR_KEYS: ${{ inputs.linear_keys }}
         JIRA_BASE_URL: ${{ inputs.jira_base_url }}
@@ -147,7 +155,7 @@ runs:
         JIRA_EMAIL: ${{ inputs.jira_email }}
         JIRA_API_TOKEN: ${{ inputs.jira_api_token }}
         JIRA_KEYS: ${{ inputs.jira_keys }}
-        GH_TOKEN: ${{ inputs.github_token }}
+        GH_TOKEN: ${{ inputs.bot_token }}
       run: bun "${{ github.action_path }}/src/release.ts"
 
     - name: Update Version Files
@@ -201,7 +209,7 @@ runs:
       if: inputs.mode == 'create' && steps.detect-type.outputs.mode == 'standalone'
       shell: bash
       env:
-        GH_TOKEN: ${{ inputs.github_token }}
+        GH_TOKEN: ${{ inputs.bot_token }}
         INPUT_NAME: ${{ inputs.name }}
       run: |
         VERSION=$(cat version)
@@ -299,7 +307,7 @@ runs:
       if: inputs.mode == 'publish' && steps.detect-type.outputs.mode == 'standalone'
       shell: bash
       env:
-        GH_TOKEN: ${{ inputs.github_token }}
+        GH_TOKEN: ${{ inputs.bot_token }}
         TAG: ${{ steps.determine-version.outputs.tag }}
         VERSION: ${{ steps.determine-version.outputs.version }}
       run: |

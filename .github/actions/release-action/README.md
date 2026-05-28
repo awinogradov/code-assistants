@@ -34,7 +34,8 @@ jobs:
       - uses: awinogradov/code-assistants/.github/actions/release-action@v1
         with:
           mode: create
-          github_token: ${{ secrets.GH_TOKEN }}
+          bot_token: ${{ secrets.BOT_TOKEN }}
+          bot_username: ${{ vars.BOT_USERNAME }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_RELEASE_KEY }}
           linear_api_key: ${{ secrets.LINEAR_API_KEY }}
           linear_keys: ${{ vars.LINEAR_KEYS }}
@@ -64,28 +65,30 @@ jobs:
       - uses: awinogradov/code-assistants/.github/actions/release-action@v1
         with:
           mode: publish
-          github_token: ${{ secrets.GH_TOKEN }}
+          bot_token: ${{ secrets.BOT_TOKEN }}
+          bot_username: ${{ vars.BOT_USERNAME }}
           npm_token: ${{ secrets.NPM_TOKEN }}
           slack_token: ${{ secrets.SLACK_TOKEN }}
 ```
 
 ## Inputs
 
-| Input               | Required | Default             | Description                                                                                                     |
-| ------------------- | -------- | ------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `mode`              | yes      | —                   | `create` or `publish`.                                                                                          |
-| `github_token`      | yes      | —                   | PAT or App installation token with `contents: write` + `pull-requests: write`. See [Permissions](#permissions). |
-| `npm_token`         | no       | —                   | NPM token. Required for `publish` with `lib-nodejs` or `lib-bun` release types.                                 |
-| `anthropic_api_key` | no       | —                   | Anthropic API key. When set, generates human-readable release-note summaries.                                   |
-| `name`              | no       | —                   | Service or library name for PR titles (e.g. `Dialog Manager` → `Release Dialog Manager 1.2.0`).                 |
-| `branch`            | no       | `release-{version}` | Release branch template. `{version}` is substituted. `create` mode only.                                        |
-| `linear_api_key`    | no       | —                   | Linear API key for ticket integration.                                                                          |
-| `linear_keys`       | no       | —                   | Comma-separated Linear key prefixes (e.g. `TEAM,PROJ`).                                                         |
-| `jira_base_url`     | no       | —                   | Jira instance base URL (used with `jira_email` + `jira_api_token`).                                             |
-| `jira_email`        | no       | —                   | Jira authentication email.                                                                                      |
-| `jira_api_token`    | no       | —                   | Jira API token.                                                                                                 |
-| `jira_keys`         | no       | —                   | Comma-separated Jira key prefixes.                                                                              |
-| `slack_token`       | no       | —                   | Slack bot token. Required to post release notifications.                                                        |
+| Input               | Required | Default               | Description                                                                                                     |
+| ------------------- | -------- | --------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `mode`              | yes      | —                     | `create` or `publish`.                                                                                          |
+| `bot_token`         | yes      | —                     | PAT or App installation token with `contents: write` + `pull-requests: write`. See [Permissions](#permissions). |
+| `bot_username`      | no       | `github-actions[bot]` | Git author/committer login for release commits, tags, and PRs. Pass `${{ vars.BOT_USERNAME }}`.                 |
+| `npm_token`         | no       | —                     | NPM token. Required for `publish` with `lib-nodejs` or `lib-bun` release types.                                 |
+| `anthropic_api_key` | no       | —                     | Anthropic API key. When set, generates human-readable release-note summaries.                                   |
+| `name`              | no       | —                     | Service or library name for PR titles (e.g. `Dialog Manager` → `Release Dialog Manager 1.2.0`).                 |
+| `branch`            | no       | `release-{version}`   | Release branch template. `{version}` is substituted. `create` mode only.                                        |
+| `linear_api_key`    | no       | —                     | Linear API key for ticket integration.                                                                          |
+| `linear_keys`       | no       | —                     | Comma-separated Linear key prefixes (e.g. `TEAM,PROJ`).                                                         |
+| `jira_base_url`     | no       | —                     | Jira instance base URL (used with `jira_email` + `jira_api_token`).                                             |
+| `jira_email`        | no       | —                     | Jira authentication email.                                                                                      |
+| `jira_api_token`    | no       | —                     | Jira API token.                                                                                                 |
+| `jira_keys`         | no       | —                     | Comma-separated Jira key prefixes.                                                                              |
+| `slack_token`       | no       | —                     | Slack bot token. Required to post release notifications.                                                        |
 
 ## Outputs
 
@@ -135,7 +138,7 @@ Extract ticket IDs from PR titles and commit messages, then fetch details via AP
 | ------------- | ---------- | ----------------------------------------------- |
 | Linear        | `TEAM-123` | `LINEAR_API_KEY`                                |
 | Jira          | `PROJ-456` | `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` |
-| GitHub Issues | `#123`     | `GH_TOKEN`                                      |
+| GitHub Issues | `#123`     | `BOT_TOKEN`                                     |
 
 Optional key filtering via `LINEAR_KEYS` / `JIRA_KEYS` (e.g. `TEAM,PROJ`). When multiple ticket systems are configured, prefix keys are required so the action can route each ticket to the right system.
 
@@ -156,7 +159,7 @@ Then pass `slack_token` to the publish workflow. The bot token needs the `chat:w
 
 ## Permissions
 
-The `github_token` input is **required**. The workflow's default `GITHUB_TOKEN` is not supported, because creating pull requests with it can fail with an opaque 403 (`GitHub Actions is not permitted to create or approve pull requests`) whenever the repo or its org disables **Settings → Actions → General → Workflow permissions → "Allow GitHub Actions to create and approve pull requests"**.
+The `bot_token` input is **required**. The workflow's default `GITHUB_TOKEN` is not supported, because creating pull requests with it can fail with an opaque 403 (`GitHub Actions is not permitted to create or approve pull requests`) whenever the repo or its org disables **Settings → Actions → General → Workflow permissions → "Allow GitHub Actions to create and approve pull requests"**.
 
 Pass one of:
 
@@ -164,9 +167,9 @@ Pass one of:
 - A **fine-grained Personal Access Token** scoped to the repo with `Contents: Read and write` and `Pull requests: Read and write`.
 - A **GitHub App installation token** with the same `contents: write` + `pull-requests: write` permissions. (App tokens are not subject to the workflow-permissions toggle above — that toggle gates `GITHUB_TOKEN` only.)
 
-Store the token as a secret (e.g. `GH_TOKEN`) and pass it via `github_token: ${{ secrets.GH_TOKEN }}`.
+Store the token as a secret (e.g. `BOT_TOKEN`) and pass it via `bot_token: ${{ secrets.BOT_TOKEN }}`.
 
-The Configure Git step inside the action commits as `github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>`.
+The Configure Git step inside the action commits as the `bot_username` input, defaulting to `github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>`. Pass `bot_username: ${{ vars.BOT_USERNAME }}` to author releases as a dedicated bot identity.
 
 ## Monorepo mode
 
@@ -231,7 +234,8 @@ jobs:
       - uses: awinogradov/code-assistants/.github/actions/release-action@v1
         with:
           mode: publish
-          github_token: ${{ secrets.GH_TOKEN }}
+          bot_token: ${{ secrets.BOT_TOKEN }}
+          bot_username: ${{ vars.BOT_USERNAME }}
           npm_token: ${{ secrets.NPM_TOKEN }}
           slack_token: ${{ secrets.SLACK_TOKEN }}
         env:
