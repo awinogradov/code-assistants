@@ -36,6 +36,10 @@ runs:
       env:
         GH_TOKEN: ${{ inputs.bot_token }}
         REPO: ${{ github.repository }}
+        # HEAD_SHA and JOB_NAME are derived from the event context, not consumer inputs.
+        # HEAD_SHA is the triggering commit (per event type); the merge is pinned to it.
+        # JOB_NAME tracks the calling job via github.job, so the action excludes its own
+        # check from the green-checks aggregation even if the job is renamed downstream.
         HEAD_SHA: ${{ github.event.check_suite.head_sha || github.event.pull_request.head.sha || github.event.sha }}
         JOB_NAME: ${{ github.job }}
       run: bun run "${{ github.action_path }}/src/automerge.ts"

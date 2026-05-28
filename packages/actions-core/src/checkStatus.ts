@@ -71,18 +71,19 @@ export async function fetchCheckStatuses(
   const allSiblingRuns = checkRuns.filter(
     (run) => normalizeCheckName(run.name) !== normalizedJobName
   );
-  const nonCancelledRuns = allSiblingRuns.filter((run) => run.conclusion !== "cancelled");
-  const siblingRuns = deduplicateCheckRuns(nonCancelledRuns);
-
-  const siblingNames = new Set(siblingRuns.map((run) => run.name));
-  const cancelledOnlyNames = [...new Set(allSiblingRuns.map((run) => run.name))].filter(
-    (name) => !siblingNames.has(name)
+  // A cancelled run carries no pass/fail/pending signal (e.g. a path-filter-skipped
+  // job, or a run superseded by a newer push). Excluding cancelled runs entirely —
+  // rather than treating a cancelled-only check as pending — keeps a permanently
+  // cancelled check from blocking the gate forever. The one-shot merge gate has no
+  // poll loop to recover, and GitHub's merge API still enforces genuinely required
+  // checks regardless.
+  const siblingRuns = deduplicateCheckRuns(
+    allSiblingRuns.filter((run) => run.conclusion !== "cancelled")
   );
 
-  const pendingRuns = [
-    ...siblingRuns.filter((run) => run.status !== "completed").map((run) => run.name),
-    ...cancelledOnlyNames,
-  ];
+  const pendingRuns = siblingRuns
+    .filter((run) => run.status !== "completed")
+    .map((run) => run.name);
   const failedRuns = siblingRuns
     .filter((run) => run.status === "completed" && failedConclusions.has(run.conclusion ?? ""))
     .map((run) => run.name);
