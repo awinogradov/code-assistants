@@ -331,6 +331,7 @@ runs:
 
         echo "mode=react" >> "$GITHUB_OUTPUT"
         echo "skip=false" >> "$GITHUB_OUTPUT"
+        echo "bot_in_thread=${BOT_IN_THREAD}" >> "$GITHUB_OUTPUT"
 
         if [[ -n "$EVENT_ISSUE_NUMBER" ]]; then
           echo "pr_number=${EVENT_ISSUE_NUMBER}" >> "$GITHUB_OUTPUT"
@@ -510,9 +511,20 @@ runs:
 
     # ── React mode ──
 
+    - name: Classify reaction
+      id: classify
+      if: steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.mode == 'react'
+      shell: bash
+      env:
+        BOT_IN_THREAD: ${{ steps.ctx.outputs.bot_in_thread }}
+        PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
+        COMMENT_BODY: ${{ steps.ctx.outputs.comment_body }}
+      run: bun run "${{ github.action_path }}/src/classifyReaction.ts"
+
     - name: React to Comment
       id: reaction
-      if: steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.mode == 'react'
+      if: steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.mode == 'react' && steps.classify.outputs.ack_only != 'true'
       continue-on-error: true
       shell: bash
       env:
@@ -533,7 +545,7 @@ runs:
       run: bun run "${{ github.action_path }}/src/runClaude.ts"
 
     - name: Submit Reaction
-      if: steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.mode == 'react' && always() && (steps.reaction.outcome == 'success' || steps.reaction.outcome == 'failure')
+      if: steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.mode == 'react' && always() && (steps.reaction.outcome == 'success' || steps.reaction.outcome == 'failure' || steps.classify.outputs.ack_only == 'true')
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.bot_token }}
@@ -544,6 +556,7 @@ runs:
         COMMENT_PATH: ${{ steps.ctx.outputs.comment_path }}
         STRUCTURED_OUTPUT: ${{ steps.reaction.outputs.structured_output }}
         EXECUTION_FILE: ${{ steps.reaction.outputs.execution_file }}
+        ACK_ONLY: ${{ steps.classify.outputs.ack_only }}
         RUNNER_TEMP: ${{ runner.temp }}
       run: bun run "${{ github.action_path }}/src/reactToComment.ts"
 

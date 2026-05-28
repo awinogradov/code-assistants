@@ -89,6 +89,31 @@ const { octokit, owner, repoName, pullNumber, reviewer } = parseRepoEnv();
 const structuredOutput = process.env.STRUCTURED_OUTPUT ?? "";
 const commentId = process.env.COMMENT_ID;
 const commentPath = process.env.COMMENT_PATH;
+const ackOnly = process.env.ACK_ONLY === "true";
+
+// PR-author acknowledgement in a bot-authored thread (issue #111): the model
+// step was skipped upstream, so there is no reply to post — just react with 👍
+// so the thread shows the bot saw it. A failed reaction must not fail the run.
+if (ackOnly) {
+  if (commentId) {
+    try {
+      await octokit.rest.reactions.createForPullRequestReviewComment({
+        owner,
+        repo: repoName,
+        comment_id: Number(commentId),
+        content: "+1",
+      });
+      console.log("✓ Acknowledged PR-author reply with 👍 — no model reply needed");
+    } catch (error) {
+      console.warn(
+        `Failed to add 👍 reaction: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  } else {
+    console.log("ACK_ONLY set but no comment ID — nothing to react to");
+  }
+  process.exit(0);
+}
 
 let output = parseReactionOutput(structuredOutput);
 
