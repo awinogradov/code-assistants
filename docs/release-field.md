@@ -44,12 +44,15 @@ interface RootReleaseConfig {
   members?: string[]; // monorepo: explicit member paths (mutually exclusive with `type`)
   type?: ReleaseType; // standalone: same shape as ReleaseConfig
   slack?: string;
+  automerge?: boolean; // root-only opt-in for release-automerge (default false)
 }
 ```
 
 `type` is required on **member** manifests. `slack` is optional — when omitted, `release-action` skips the Slack notification step. When present, it must be a non-empty string.
 
 At the **root** of a monorepo, `release.members` declares the workspace paths to release; `type` is omitted on the root in that case. When neither `members` nor `type` is present, `release-action` falls back to expanding the root's `workspaces` globs and using only members that declare their own `release.type`.
+
+`automerge` is a **root-only**, repo-wide boolean consumed only by [`release-automerge`](../.github/actions/release-automerge/README.md) (default `false`). It opts the repository into auto-merging approved, all-green release PRs; it is independent of `members`/`type` and is never read per member. It is **not** a `release.type` value, so it does not appear in the recognized-`type` table below and does not follow the type-extension workflow.
 
 ### Recognized `type` values
 
@@ -67,10 +70,11 @@ Any other value is treated as unrecognized and fails the action.
 
 ## Consumers
 
-| Tool                                                            | Reads           | Behavior                                                                                                             | Source                                                    |
-| --------------------------------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| [`release-action`](../.github/actions/release-action/README.md) | `release.type`  | Selects version source, npm-publish step, GitHub Release step, and major-version tag based on the value's table row. | `.github/actions/release-action/src/detectReleaseType.ts` |
-| [`release-action`](../.github/actions/release-action/README.md) | `release.slack` | When present, posts a Slack notification to this channel after publish. When absent, the Slack step is skipped.      | `.github/actions/release-action/src/slackNotify.ts`       |
+| Tool                                                                  | Reads               | Behavior                                                                                                                                                                  | Source                                                    |
+| --------------------------------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| [`release-action`](../.github/actions/release-action/README.md)       | `release.type`      | Selects version source, npm-publish step, GitHub Release step, and major-version tag based on the value's table row.                                                      | `.github/actions/release-action/src/detectReleaseType.ts` |
+| [`release-action`](../.github/actions/release-action/README.md)       | `release.slack`     | When present, posts a Slack notification to this channel after publish. When absent, the Slack step is skipped.                                                           | `.github/actions/release-action/src/slackNotify.ts`       |
+| [`release-automerge`](../.github/actions/release-automerge/README.md) | `release.automerge` | Merges an approved, all-green release PR only when `true` (read from the repo-root `package.json` at the PR head SHA). When `false` or absent, leaves the PR for a human. | `packages/actions-core/src/releaseField.ts`               |
 
 ## Detection algorithm
 
@@ -81,7 +85,7 @@ Any other value is treated as unrecognized and fails the action.
 5. Validate `release.slack` is a non-empty string if present.
 6. **No fallback** — missing `release`, missing `release.type`, or an unrecognized value fails the action with a message pointing back to this document.
 
-The reference implementation is `.github/actions/release-action/src/releaseField.ts` (`readReleaseField`). The entry script `detectReleaseType.ts` wires the `type` to the action; `slackNotify.ts` reads `slack` from the same parsed config.
+The reference implementation is `packages/actions-core/src/releaseField.ts` (`readReleaseField` / `readRootRelease`), shared by `release-action` and `release-automerge`. The entry script `detectReleaseType.ts` wires the `type` to the action; `slackNotify.ts` reads `slack` from the same parsed config; `release-automerge` reads `release.automerge` via `readRootRelease`.
 
 ## Examples
 
@@ -146,10 +150,24 @@ Version source switches to `plugin.json`; npm publish is skipped; GitHub Release
 
 `release-action` runs once per member with the per-member `release.type` driving artifacts. Per-member tags use the form `<name>@v<version>` (e.g. `release-action@v1.2.0`) and the floating major tag becomes `<name>@v1`. When `release.members` is omitted, the action falls back to the root `workspaces` array and skips any member that does not declare its own `release` field.
 
+### Repo opting into auto-merge
+
+```json
+{
+  "name": "monorepo",
+  "workspaces": [".github/actions/*", "packages/*"],
+  "release": {
+    "automerge": true
+  }
+}
+```
+
+`release-automerge` merges approved, all-green `release-*` PRs without a manual click. Because `members`/`type` are omitted, `release-action` still discovers members via the `workspaces` fallback — `automerge` only governs the merge step and is read at the PR head SHA. Omitting `automerge` (or setting it `false`) leaves release PRs for a human to merge.
+
 ## Extending
 
 To add a new release type:
 
-1. Add the value to `releaseTypes` in `.github/actions/release-action/src/releaseField.ts`.
+1. Add the value to `releaseTypes` in `packages/actions-core/src/releaseField.ts`.
 2. Extend the release-action publish logic to handle the new value.
 3. Add a row to the table above and mirror it in `.github/actions/release-action/README.md` (keep both tables in the same row order).

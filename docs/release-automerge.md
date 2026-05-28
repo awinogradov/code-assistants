@@ -30,14 +30,15 @@ the merge with no manual step.
  │ on: check_suite[completed] · pull_request_review[submitted]│
  └───────────────────────────┬───────────────────────────────┘
                              ▼
-   ┌─────────────────────────────────────────────────┐
-   │ release-automerge action                         │
-   │ 1. resolve open PR for the head SHA              │
-   │ 2. head ref ~ ^release-  AND  state == open ?    │
-   │ 3. all checks green? (shared aggregation)        │
-   │ 4. reviewDecision == APPROVED ?                  │
-   │ 5. merge (sha-pinned) with an allowed method     │
-   └───────────────────────────┬─────────────────────┘
+   ┌───────────────────────────────────────────────────┐
+   │ release-automerge action                          │
+   │ 1. resolve open PR for the head SHA               │
+   │ 2. head ref ~ ^release-  AND  state == open ?     │
+   │ 3. root package.json release.automerge === true ? │
+   │ 4. all checks green? (shared aggregation)         │
+   │ 5. reviewDecision == APPROVED ?                   │
+   │ 6. merge (sha-pinned) with an allowed method      │
+   └───────────────────────────┬───────────────────────┘
                   ▼ all true                ▼ any false / any error
             merge PR                   no-op (never merge)
                   │
@@ -56,10 +57,21 @@ the merge with no manual step.
   approval already re-evaluates commit statuses, so dropping it avoids running on
   non-release PRs without losing meaningful coverage.)
 - **Merge conditions (all must hold):** the head ref matches `^release-`, the PR
-  is open, every sibling check is green (failed → skip; still pending → skip), and
-  `reviewDecision == APPROVED`. The check aggregation reuses the same logic as the
-  AI-review preflight (see [the shared `checkStatus` helper][checkstatus]),
-  deduplicated by name and excluding the action's own job.
+  is open, the repo opted in via `release.automerge === true`, every sibling check
+  is green (failed → skip; still pending → skip), and `reviewDecision == APPROVED`.
+  The check aggregation reuses the same logic as the AI-review preflight (see
+  [the shared `checkStatus` helper][checkstatus]), deduplicated by name and
+  excluding the action's own job.
+- **Opt-in gate (default off):** the action reads the repo-root `package.json` at
+  the triggering head SHA and merges only when `release.automerge === true` (see
+  the [`release` field spec](./release-field.md)). The flag travels with the
+  release branch — a PR that toggles it changes its own merge eligibility. A
+  missing `package.json` is a clean skip; a malformed one fails closed (no merge);
+  a non-boolean `automerge` is rejected. **Migration:** because downstream repos
+  reference the action via `@main`, this gate ships as a behavior change — every
+  repo that relied on auto-merge must add `release.automerge: true` to its root
+  `package.json`, or its release PRs will stay approved-but-unmerged until a human
+  merges them.
 - **Merge method:** the action reads the repository's allowed merge methods
   (`allow_rebase_merge` / `allow_squash_merge` / `allow_merge_commit`) and prefers
   `rebase`, falling back to `squash` then `merge`. The merge is pinned to the
