@@ -32,6 +32,14 @@ permissions:
 
 jobs:
   automerge:
+    # Run only for release branches. check_suite/status/pull_request_review are
+    # repo-wide events, so without this guard the job would run (and post a check)
+    # on every PR. Each event exposes the head branch in a different place; the
+    # action re-checks ^release- internally as defense in depth.
+    if: >-
+      startsWith(github.event.check_suite.head_branch, 'release-')
+      || startsWith(github.event.pull_request.head.ref, 'release-')
+      || startsWith(github.event.branches[0].name, 'release-')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

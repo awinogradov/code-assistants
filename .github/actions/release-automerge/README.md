@@ -42,6 +42,12 @@ permissions:
 
 jobs:
   automerge:
+    # Run only for release branches — the triggers are repo-wide, so this guard
+    # keeps the job (and its check) off every non-release PR.
+    if: >-
+      startsWith(github.event.check_suite.head_branch, 'release-')
+      || startsWith(github.event.pull_request.head.ref, 'release-')
+      || startsWith(github.event.branches[0].name, 'release-')
     runs-on: ubuntu-latest
     steps:
       - uses: awinogradov/code-assistants/.github/actions/release-automerge@v1
