@@ -1,0 +1,12 @@
+{
+  "output": {
+    "filePath": ".repomix/pack.xml",
+    "style": "xml",
+    "git": {
+      "sortByChanges": false
+    }
+  },
+  "ignore": {
+    "customPatterns": [".repomix/**"]
+  }
+}

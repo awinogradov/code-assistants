@@ -54,11 +54,14 @@ gh pr diff <PR_NUMBER> -R <REPO>
 Launch 2 calls **in parallel** to load codebase context and review history:
 
 ```
-Pack codebase (MCP direct call):
-  Call `mcp__repomix__pack_codebase` with:
-  - `directory`: [repository root absolute path]
-  - `compress`: true
-  - `includePatterns`: ".claude/**, **.md, **.yml, .github/**"
+Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
+  Check whether `.repomix/pack.xml` exists at the repository root.
+  - If it exists, call `mcp__repomix__attach_packed_output` with:
+    - `path`: [repository root absolute path]/.repomix/pack.xml
+  - If it is absent (or the attach fails), fall back to `mcp__repomix__pack_codebase` with:
+    - `directory`: [repository root absolute path]
+    - `compress`: true
+    - `includePatterns`: ".claude/**, **.md, **.yml, .github/**"
 
 Agent 1 (fetch-pr-reviews):
   Use the Agent tool with:
@@ -67,7 +70,7 @@ Agent 1 (fetch-pr-reviews):
   - `description`: "Fetch PR reviews"
 ```
 
-After all calls complete, store the `outputId` from the `pack_codebase` response for use with `grep_repomix_output` and `read_repomix_output`. Use the review data from `fetch-pr-reviews` to understand the full review history, including REVIEWER-specific reviews and comments.
+After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response for use with `grep_repomix_output` and `read_repomix_output`. Use the review data from `fetch-pr-reviews` to understand the full review history, including REVIEWER-specific reviews and comments.
 
 ### 1.3 Extended Context
 

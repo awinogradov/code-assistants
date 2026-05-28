@@ -102,6 +102,10 @@ code-assistants/
 
 All user-invocable entries are skills. Skills natively accept `$ARGUMENTS` and show `argument-hint` autocomplete. Invoke any of the entries below via `/<name>` at the slash prompt.
 
+### Codebase context snapshot
+
+The skills that need whole-codebase context — `/autopilot:plan`, `/autopilot:run`, `/autopilot:issue-create`, `/autopilot:pr-review`, `/autopilot:pr-answer`, `/autopilot:pr-resolve` — read the committed `.repomix/pack.xml` snapshot first (via `attach_packed_output`) and fall back to a live `pack_codebase` when it is absent. The snapshot is refreshed by CI on every merge to `main`; see the consumer host repo's [Committed Repomix pack](../../docs/repomix-pack.md) doc for details.
+
 ### `/autopilot:branch-create`
 
 Create a git branch following repository naming conventions with GitHub issue integration.
@@ -117,7 +121,7 @@ Create a git branch following repository naming conventions with GitHub issue in
 
 ### `/autopilot:issue-create`
 
-Create a GitHub issue with a structured body (Context / What / Why / Scope / Solution) and curated labels via the `gh` CLI. Titles are plain business descriptions — no convention prefixes.
+Create a GitHub issue with a structured body (Context / What / Why / Scope / Solution) and curated labels via the `gh` CLI. Titles are plain business descriptions — no convention prefixes. Uses the [codebase context snapshot](#codebase-context-snapshot).
 
 ```bash
 /autopilot:issue-create                                                # Prompt for hint, generate everything
@@ -170,7 +174,7 @@ Update an existing PR's title and description based on current branch commits.
 
 ### `/autopilot:plan`
 
-Perform deep analysis and create a validated implementation plan. Detects tech stack automatically.
+Perform deep analysis and create a validated implementation plan. Detects tech stack automatically. Uses the [codebase context snapshot](#codebase-context-snapshot).
 
 ```bash
 /autopilot:plan #42                                                      # From GitHub issue
@@ -182,7 +186,7 @@ Perform deep analysis and create a validated implementation plan. Detects tech s
 
 ### `/autopilot:run`
 
-Plan, implement, commit, create PR, and monitor until approved. Same as `/autopilot:plan` but after plan confirmation, automatically commits, creates a PR, and monitors for review approval.
+Plan, implement, commit, create PR, and monitor until approved. Same as `/autopilot:plan` but after plan confirmation, automatically commits, creates a PR, and monitors for review approval. Uses the [codebase context snapshot](#codebase-context-snapshot).
 
 ```bash
 /autopilot:run #42                                                      # From GitHub issue
@@ -210,7 +214,7 @@ Review and merge dependabot PRs safely, one-by-one.
 
 ### `/autopilot:pr-review`
 
-Review a pull request and provide constructive feedback with structured verdict output. Used by the [Code Review Action](https://github.com/awinogradov/code-review-action) action.
+Review a pull request and provide constructive feedback with structured verdict output. Used by the [Code Review Action](https://github.com/awinogradov/code-review-action) action. Uses the [codebase context snapshot](#codebase-context-snapshot).
 
 ```bash
 /autopilot:pr-review REPO: owner/repo PR_NUMBER: 123 REVIEWER: tars-copilot PR_AUTHOR: username
@@ -218,7 +222,7 @@ Review a pull request and provide constructive feedback with structured verdict 
 
 ### `/autopilot:pr-answer`
 
-Answer a user comment on a PR review and update review state if needed. Used by the [Code Review Action](https://github.com/awinogradov/code-review-action) action.
+Answer a user comment on a PR review and update review state if needed. Used by the [Code Review Action](https://github.com/awinogradov/code-review-action) action. Uses the [codebase context snapshot](#codebase-context-snapshot).
 
 ```bash
 /autopilot:pr-answer REPO: owner/repo PR_NUMBER: 123 REVIEWER: tars-copilot COMMENT_BODY: "..." COMMENT_PATH: src/file.ts COMMENT_LINE: 42
@@ -226,7 +230,7 @@ Answer a user comment on a PR review and update review state if needed. Used by 
 
 ### `/autopilot:pr-resolve`
 
-Address PR review comments. Fetches review feedback, categorizes by severity, makes code fixes, replies to comment threads, and updates the PR.
+Address PR review comments. Fetches review feedback, categorizes by severity, makes code fixes, replies to comment threads, and updates the PR. Uses the [codebase context snapshot](#codebase-context-snapshot).
 
 ```bash
 /autopilot:pr-resolve

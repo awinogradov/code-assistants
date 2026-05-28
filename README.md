@@ -21,6 +21,7 @@ See the [plugin README](./claude-plugins/autopilot/README.md#installation) for s
 - [Workspace structure](./docs/workspace-structure.md) — where new actions, packages, and apps go, and how they wire into Turbo
 - [`agents` field spec](./docs/agents-field.md) — how skills detect a repository's tech stack from `package.json`
 - [`release` field spec](./docs/release-field.md) — how `release-action` picks the right artifacts for npm packages, GitHub Actions, and Claude plugins
+- [Committed Repomix pack](./docs/repomix-pack.md) — the `.repomix/pack.xml` snapshot, the merge-triggered workflow that refreshes it, and the snapshot-first contract skills follow
 - [Stack rule sets](./rules/) — `Bun`, `Bun+React+Tailwind`, `NodeJS+React`, `NodeJS+React+Tailwind`
 
 ## GitHub Actions

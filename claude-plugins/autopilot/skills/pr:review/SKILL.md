@@ -61,11 +61,14 @@ Extract the linked issue ID from PR metadata. Check in order, stop at first matc
 Launch context-loading calls **in parallel**. If a linked issue was found, launch 3 calls; otherwise launch 2:
 
 ```
-Pack codebase (MCP direct call):
-  Call `mcp__repomix__pack_codebase` with:
-  - `directory`: [repository root absolute path]
-  - `compress`: true
-  - `includePatterns`: ".claude/**, **.md, **.yml, .github/**"
+Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
+  Check whether `.repomix/pack.xml` exists at the repository root.
+  - If it exists, call `mcp__repomix__attach_packed_output` with:
+    - `path`: [repository root absolute path]/.repomix/pack.xml
+  - If it is absent (or the attach fails), fall back to `mcp__repomix__pack_codebase` with:
+    - `directory`: [repository root absolute path]
+    - `compress`: true
+    - `includePatterns`: ".claude/**, **.md, **.yml, .github/**"
 
 Agent 1 (fetch-pr-reviews):
   Use the Agent tool with:
@@ -84,7 +87,7 @@ If no issue number found, output: "No linked issue — skipping issue comparison
 
 If the `gh` call fails (auth/network error) inside `resolve-issue-context`, skip issue context entirely.
 
-After all calls complete, store the `outputId` from the `pack_codebase` response for use with `grep_repomix_output` and `read_repomix_output`. Store issue context and review data from the agents.
+After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response for use with `grep_repomix_output` and `read_repomix_output`. Store issue context and review data from the agents.
 
 ### 1.4 Review Round Handling
 

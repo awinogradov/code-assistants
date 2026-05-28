@@ -1,0 +1,50 @@
+# Requires repo secret `BOT_TOKEN`: a PAT (classic with `repo`, or fine-grained
+# with `contents: write`) or a GitHub App installation token. The default
+# `GITHUB_TOKEN` cannot push to a protected branch or trigger downstream
+# workflows under our settings — see `upstream.yml` for the same rationale.
+# Optional repo variable `BOT_USERNAME`: git author login for the pack commit.
+# Defaults to `github-actions[bot]` when unset.
+
+name: Repomix pack
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+concurrency:
+  group: repomix-pack-${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  pack:
+    name: Pack codebase snapshot
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          token: ${{ secrets.BOT_TOKEN }}
+
+      - name: Generate pack
+        run: npx --yes repomix@1.14.1
+
+      - name: Commit pack if changed
+        env:
+          BOT_USERNAME: ${{ vars.BOT_USERNAME }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if git diff --quiet -- .repomix/pack.xml; then
+            echo "No pack changes — skipping commit."
+            exit 0
+          fi
+          git config user.name "${BOT_USERNAME:-github-actions[bot]}"
+          git config user.email "${BOT_USERNAME:-github-actions[bot]}@users.noreply.github.com"
+          git add .repomix/pack.xml
+          git commit -m "chore(repomix): refresh pack from #${PR_NUMBER}"
+          git push origin HEAD:main
