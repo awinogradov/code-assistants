@@ -15,15 +15,14 @@ name: Release auto-merge
 on:
   check_suite:
     types: [completed]
-  status:
   pull_request_review:
     types: [submitted]
 
 concurrency:
-  # Keyed on the head commit, not the PR number: status/check_suite payloads
-  # carry no PR number, so a SHA group is the only stable serializer across all
-  # three event types. Do not cancel — let an in-flight merge finish.
-  group: release-automerge-${{ github.event.check_suite.head_sha || github.event.pull_request.head.sha || github.sha }}
+  # Keyed on the head commit, not the PR number: the check_suite payload carries
+  # no PR number, so a SHA group is the stable serializer across both events.
+  # Do not cancel — let an in-flight merge finish.
+  group: release-automerge-${{ github.event.check_suite.head_sha || github.event.pull_request.head.sha }}
   cancel-in-progress: false
 
 permissions:
@@ -32,14 +31,13 @@ permissions:
 
 jobs:
   automerge:
-    # Run only for release branches. check_suite/status/pull_request_review are
-    # repo-wide events, so without this guard the job would run (and post a check)
-    # on every PR. Each event exposes the head branch in a different place; the
-    # action re-checks ^release- internally as defense in depth.
+    # Run only for release branches. Both events are repo-wide, so without this
+    # guard the job would run (and post a check) on every PR. Each event exposes
+    # the head branch reliably (check_suite.head_branch / pull_request.head.ref);
+    # the action re-checks ^release- internally as defense in depth.
     if: >-
       startsWith(github.event.check_suite.head_branch, 'release-')
       || startsWith(github.event.pull_request.head.ref, 'release-')
-      || startsWith(github.event.branches[0].name, 'release-')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

@@ -27,7 +27,7 @@ the merge with no manual step.
    ▼                                  │
  ┌──────────────────────────────────────────────────────────┐
  │ release-automerge.yml  (event-driven)                     │
- │ on: check_suite[completed] · status · pull_request_review │
+ │ on: check_suite[completed] · pull_request_review[submitted]│
  └───────────────────────────┬───────────────────────────────┘
                              ▼
    ┌─────────────────────────────────────────────────┐
@@ -45,14 +45,16 @@ the merge with no manual step.
             release-publish.yml runs on merge
 ```
 
-- **Triggers:** `check_suite: [completed]`, `status`, and
-  `pull_request_review: [submitted]`. The first two cover the case where the last
-  green signal (a check run **or** a commit status) arrives after approval; the
-  third covers a late approval landing after checks are already green. These are
-  repo-wide events, so the job carries an `if:` guard that runs it **only** when
-  the triggering head branch matches `^release-` — on every other PR the job is
-  skipped and posts no check. The action re-checks `^release-` internally as
-  defense in depth.
+- **Triggers:** `check_suite: [completed]` and `pull_request_review: [submitted]`.
+  The first covers checks finishing after approval; the second covers a late
+  approval landing after checks are already green. Both events expose the head
+  branch reliably (`check_suite.head_branch` / `pull_request.head.ref`), so the job
+  carries an `if:` guard that runs it **only** when that branch matches `^release-`
+  — on every other PR the job is skipped and posts no check. The action re-checks
+  `^release-` internally as defense in depth. (The `status` event is intentionally
+  not a trigger: its payload has no reliable release-branch signal to filter on, and
+  approval already re-evaluates commit statuses, so dropping it avoids running on
+  non-release PRs without losing meaningful coverage.)
 - **Merge conditions (all must hold):** the head ref matches `^release-`, the PR
   is open, every sibling check is green (failed → skip; still pending → skip), and
   `reviewDecision == APPROVED`. The check aggregation reuses the same logic as the
