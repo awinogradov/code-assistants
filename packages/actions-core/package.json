@@ -10,10 +10,12 @@
     "language": "typescript"
   },
   "exports": {
-    "./fetchRawContent": "./src/fetchRawContent.ts"
+    "./fetchRawContent": "./src/fetchRawContent.ts",
+    "./checkStatus": "./src/checkStatus.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test": "bun test",
     "clean": "rm -rf node_modules .turbo"
   },
   "dependencies": {

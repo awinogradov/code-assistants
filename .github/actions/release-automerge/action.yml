@@ -1,0 +1,41 @@
+name: "Release auto-merge"
+description: "Merge an approved, all-green release PR (head ref ^release-)."
+author: "Code Assistants"
+
+inputs:
+  bot_token:
+    description: |
+      PAT (classic with `repo`, or fine-grained with `contents: write` + `pull-requests: write`) or GitHub App installation token used to read PR state and perform the merge. The workflow's default `GITHUB_TOKEN` is not supported — a merge it performs does not trigger downstream workflows (e.g. `publish.yml`), and on a protected branch the token must additionally be a ruleset bypass actor. See README.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Validate token
+      shell: bash
+      env:
+        BOT_TOKEN: ${{ inputs.bot_token }}
+      run: |
+        if [[ -z "$BOT_TOKEN" ]]; then
+          echo "::error::bot_token is empty"
+          exit 1
+        fi
+
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: 1.x
+
+    - name: Install action dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: bun install --frozen-lockfile --filter @code-assistants/release-automerge
+
+    - name: Evaluate and merge
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.bot_token }}
+        REPO: ${{ github.repository }}
+        HEAD_SHA: ${{ github.event.check_suite.head_sha || github.event.pull_request.head.sha || github.event.sha }}
+        JOB_NAME: ${{ github.job }}
+      run: bun run "${{ github.action_path }}/src/automerge.ts"
