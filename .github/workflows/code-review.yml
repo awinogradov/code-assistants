@@ -29,4 +29,4 @@ jobs:
         with:
           reviewer: ${{ vars.BOT_USERNAME }}
           bot_token: ${{ secrets.BOT_TOKEN }}
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_CODE_REVIEW }}
