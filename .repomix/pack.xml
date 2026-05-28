@@ -820,7 +820,7 @@ inputs:
     required: true
   bot_username:
     description: |
-      Git author/committer login for the sync commit. Defaults to `github-actions[bot]` when unset. Pass `${{ vars.BOT_USERNAME }}` to attribute commits to a dedicated bot identity.
+      Git author/committer login for the sync commit. Defaults to `github-actions[bot]` when unset. Pass the `vars.BOT_USERNAME` repository variable to attribute commits to a dedicated bot identity.
     required: false
   source-repo:
     description: Source repository in `owner/name` form that hosts the `rules/<stack>.md` files.
@@ -5346,7 +5346,7 @@ inputs:
     required: true
   bot_username:
     description: |
-      Git author/committer login for the sync commit. Defaults to `github-actions[bot]` when unset. Pass `${{ vars.BOT_USERNAME }}` to attribute commits to a dedicated bot identity.
+      Git author/committer login for the sync commit. Defaults to `github-actions[bot]` when unset. Pass the `vars.BOT_USERNAME` repository variable to attribute commits to a dedicated bot identity.
     required: false
   source-repo:
     description: Source repository in `owner/name` form that hosts the canonical `.github/workflows/code-review.yml`.
@@ -5658,7 +5658,7 @@ inputs:
     required: true
   bot_username:
     description: |
-      Git author/committer login for the sync commit. Defaults to `github-actions[bot]` when unset. Pass `${{ vars.BOT_USERNAME }}` to attribute commits to a dedicated bot identity.
+      Git author/committer login for the sync commit. Defaults to `github-actions[bot]` when unset. Pass the `vars.BOT_USERNAME` repository variable to attribute commits to a dedicated bot identity.
     required: false
   source-repo:
     description: Source repository in `owner/name` form that hosts the canonical `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, and `LICENSE.md`.
@@ -7149,7 +7149,7 @@ inputs:
     required: true
   bot_username:
     description: |
-      Git author/committer login for the sync commit. Defaults to `github-actions[bot]` when unset. Pass `${{ vars.BOT_USERNAME }}` to attribute commits to a dedicated bot identity.
+      Git author/committer login for the sync commit. Defaults to `github-actions[bot]` when unset. Pass the `vars.BOT_USERNAME` repository variable to attribute commits to a dedicated bot identity.
     required: false
   base:
     description: Base branch the PR targets.
@@ -17596,7 +17596,7 @@ inputs:
     required: true
   bot_username:
     description: |
-      Git author/committer login for release commits, tags, and PRs. Defaults to `github-actions[bot]` when unset. Pass `${{ vars.BOT_USERNAME }}` to attribute release artifacts to a dedicated bot identity.
+      Git author/committer login for release commits, tags, and PRs. Defaults to `github-actions[bot]` when unset. Pass the `vars.BOT_USERNAME` repository variable to attribute release artifacts to a dedicated bot identity.
     required: false
   npm_token:
     description: |
@@ -18318,7 +18318,7 @@ inputs:
     required: true
   bot_username:
     description: |
-      Git author/committer login for the sync commit. Defaults to `github-actions[bot]` when unset. Pass `${{ vars.BOT_USERNAME }}` to attribute commits to a dedicated bot identity.
+      Git author/committer login for the sync commit. Defaults to `github-actions[bot]` when unset. Pass the `vars.BOT_USERNAME` repository variable to attribute commits to a dedicated bot identity.
     required: false
   source-repo:
     description: Source repository in `owner/name` form that hosts the canonical `.github/workflows/repomix-pack.yml` and `repomix.config.json`.
