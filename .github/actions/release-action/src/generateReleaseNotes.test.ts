@@ -10,6 +10,8 @@ import { withTempDir } from "./testHelpers.ts";
 import {
   type AnthropicMessages,
   callAnthropicApi,
+  generateWithApi,
+  runReleaseNotes,
   verifyReleaseNotes,
 } from "./generateReleaseNotes.ts";
 import {
@@ -368,4 +370,57 @@ describe("callAnthropicApi", () => {
       callAnthropicApi("test-key", "test prompt", "system", mockMessages)
     ).rejects.toThrow("Anthropic API returned no text content");
   });
+});
+
+describe("runReleaseNotes", () => {
+  const originalApiKey = process.env.ANTHROPIC_API_KEY;
+
+  test("falls back to .release_bot/body inside the supplied cwd when no API key", () =>
+    withTempDir(async (dir) => {
+      delete process.env.ANTHROPIC_API_KEY;
+      try {
+        await Bun.write(join(dir, ".release_bot/body"), "## member changelog body");
+
+        await runReleaseNotes(dir);
+
+        const notes = await Bun.file(join(dir, ".release_bot/release_notes.md")).text();
+        expect(notes).toContain("member changelog body");
+      } finally {
+        if (originalApiKey !== undefined) process.env.ANTHROPIC_API_KEY = originalApiKey;
+      }
+    }));
+
+  test("resolves paths under cwd, not process.cwd()", () =>
+    withTempDir(async (dir) => {
+      delete process.env.ANTHROPIC_API_KEY;
+      try {
+        await Bun.write(join(dir, ".release_bot/body"), "isolated body");
+
+        await runReleaseNotes(dir);
+
+        const memberNotes = Bun.file(join(dir, ".release_bot/release_notes.md"));
+        expect(await memberNotes.exists()).toBe(true);
+
+        const cwdNotes = Bun.file(join(process.cwd(), ".release_bot/release_notes.md"));
+        expect(await cwdNotes.exists()).toBe(false);
+      } finally {
+        if (originalApiKey !== undefined) process.env.ANTHROPIC_API_KEY = originalApiKey;
+      }
+    }));
+});
+
+describe("generateWithApi", () => {
+  test("swallows errors and reads paths relative to the supplied cwd", () =>
+    withTempDir(async (dir) => {
+      // Missing body file exercises the catch branch — the function must not
+      // throw and the notes file must not appear. The bodyPath is supplied
+      // absolutely (mirroring runReleaseNotes), so cwd only governs the lookup
+      // of tickets.json / pr_descriptions.yml / service-context files.
+      const notesPath = join(dir, "release_notes.md");
+      const bodyPath = join(dir, "missing-body");
+
+      await generateWithApi("fake-key", notesPath, bodyPath, dir);
+
+      expect(await Bun.file(notesPath).exists()).toBe(false);
+    }));
 });
