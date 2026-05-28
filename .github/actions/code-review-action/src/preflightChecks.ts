@@ -199,7 +199,7 @@ async function pollUntilComplete(config: PreflightConfig): Promise<PreflightOutc
 function buildFailureComment(author: string, failedNames: string[]): string {
   const list = failedNames.map((name) => `- ${name}`).join("\n");
 
-  return `@${author}, I see red flags everywhere 🚩
+  return `@${author}, I see red flags 🚩
 
 These checks have failed:
 ${list}
