@@ -19,6 +19,8 @@ import { join } from "node:path";
 import semver from "semver";
 
 import { assemblePrBody } from "../assemble-pr-body.ts";
+import { runReleaseNotes } from "../generateReleaseNotes.ts";
+import { insertReleaseNotes } from "../insert-release-notes.ts";
 import { appendMigratingSection, readBreakingNotes } from "../migrations/migratingAppend.ts";
 import { bumpVersion, generateChangelog } from "../release.ts";
 import { updateVersionFiles } from "../prepareRelease.ts";
@@ -252,6 +254,14 @@ export async function emitMemberArtifacts(options: EmitMemberArtifactsOptions): 
   await Bun.write(join(member.path, ".release_bot", "body"), `${bodyPrefix}${log.release}`, {
     createPath: true,
   });
+
+  // AI-summarize the changelog into <member>/.release_bot/release_notes.md, then
+  // splice the summary as "## Release Notes" into <member>/CHANGELOG.md and
+  // <member>/.release_notes/<version>.md so the create PR body carries it.
+  // Mirrors the standalone path's `Generate Release Notes` + `Update Release
+  // Notes File` action.yml steps, which never ran in monorepo mode.
+  await runReleaseNotes(member.path);
+  await insertReleaseNotes({ cwd: member.path, version: newVersion });
 
   await assemblePrBody({
     cwd: member.path,

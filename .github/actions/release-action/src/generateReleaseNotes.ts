@@ -10,6 +10,8 @@
  * ANTHROPIC_API_KEY=sk-... bun src/generateReleaseNotes.ts
  * ```
  */
+import { join } from "node:path";
+
 import Anthropic from "@anthropic-ai/sdk";
 
 import {
@@ -102,17 +104,22 @@ export async function verifyReleaseNotes(notesPath: string, bodyPath: string): P
   await Bun.write(notesPath, "- See changelog for detailed changes\n");
 }
 
-async function generateWithApi(apiKey: string, notesPath: string, bodyPath: string): Promise<void> {
+export async function generateWithApi(
+  apiKey: string,
+  notesPath: string,
+  bodyPath: string,
+  cwd = process.cwd(),
+): Promise<void> {
   try {
     const changelog = await Bun.file(bodyPath).text();
 
-    const ticketsFile = Bun.file(".release_bot/tickets.json");
+    const ticketsFile = Bun.file(join(cwd, ".release_bot/tickets.json"));
     const tickets = (await ticketsFile.exists()) ? await ticketsFile.text() : undefined;
 
-    const prDescFile = Bun.file(".release_bot/pr_descriptions.yml");
+    const prDescFile = Bun.file(join(cwd, ".release_bot/pr_descriptions.yml"));
     const prDescriptions = (await prDescFile.exists()) ? await prDescFile.text() : undefined;
 
-    const serviceContext = await readServiceContext();
+    const serviceContext = await readServiceContext(cwd);
 
     if (serviceContext) console.log("Found service documentation context");
     if (tickets) console.log("Found tickets.json with context");
@@ -130,16 +137,29 @@ async function generateWithApi(apiKey: string, notesPath: string, bodyPath: stri
   }
 }
 
-async function main(): Promise<void> {
+/**
+ * Generate and verify release notes for a given working directory. Reads the
+ * full changelog from `<cwd>/.release_bot/body`, writes the AI summary to
+ * `<cwd>/.release_bot/release_notes.md`, and falls back to the full changelog
+ * when the API key is missing or the call fails.
+ *
+ * Used by the standalone `main()` (cwd = repo root) and by the monorepo
+ * `emitMemberArtifacts` (cwd = member path).
+ */
+export async function runReleaseNotes(cwd = process.cwd()): Promise<void> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  const notesPath = ".release_bot/release_notes.md";
-  const bodyPath = ".release_bot/body";
+  const notesPath = join(cwd, ".release_bot/release_notes.md");
+  const bodyPath = join(cwd, ".release_bot/body");
 
   if (apiKey) {
-    await generateWithApi(apiKey, notesPath, bodyPath);
+    await generateWithApi(apiKey, notesPath, bodyPath, cwd);
   }
 
   await verifyReleaseNotes(notesPath, bodyPath);
+}
+
+async function main(): Promise<void> {
+  await runReleaseNotes();
 }
 
 if (import.meta.main) {
