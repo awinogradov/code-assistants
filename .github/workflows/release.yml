@@ -8,9 +8,11 @@
 name: Release
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
+  schedule:
+    # Mondays at 09:00 UTC — keeps the release PR refreshed weekly without
+    # firing on every push. Trigger sooner via `workflow_dispatch` when needed.
+    - cron: "0 9 * * 1"
 
 concurrency:
   group: release-${{ github.workflow }}
