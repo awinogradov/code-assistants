@@ -7,7 +7,7 @@ runs:
     - name: Validate branch name
       uses: deepakputhraya/action-branch-name@v1.0.0
       with:
-        regex: '^(issue-\d+-[a-z0-9]+(-[a-z0-9]+)*|(hotfix|trivial|maintenance|proposal)-[a-z0-9]+(-[a-z0-9]+)*|release-\d+\.\d+\.\d+)$'
+        regex: '^(issue-\d+-[a-z0-9]+(-[a-z0-9]+)*|(hotfix|trivial|maintenance|proposal)-[a-z0-9]+(-[a-z0-9]+)*|release-([a-z0-9]+(-[a-z0-9]+)*-)?\d+\.\d+\.\d+)$'
         min_length: 5
         max_length: 100
         ignore: main,master
