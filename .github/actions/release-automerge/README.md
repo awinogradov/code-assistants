@@ -28,12 +28,11 @@ name: Release auto-merge
 on:
   check_suite:
     types: [completed]
-  status:
   pull_request_review:
     types: [submitted]
 
 concurrency:
-  group: release-automerge-${{ github.event.check_suite.head_sha || github.event.pull_request.head.sha || github.sha }}
+  group: release-automerge-${{ github.event.check_suite.head_sha || github.event.pull_request.head.sha }}
   cancel-in-progress: false
 
 permissions:
@@ -47,7 +46,6 @@ jobs:
     if: >-
       startsWith(github.event.check_suite.head_branch, 'release-')
       || startsWith(github.event.pull_request.head.ref, 'release-')
-      || startsWith(github.event.branches[0].name, 'release-')
     runs-on: ubuntu-latest
     steps:
       - uses: awinogradov/code-assistants/.github/actions/release-automerge@v1
