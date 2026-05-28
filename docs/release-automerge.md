@@ -48,7 +48,11 @@ the merge with no manual step.
 - **Triggers:** `check_suite: [completed]`, `status`, and
   `pull_request_review: [submitted]`. The first two cover the case where the last
   green signal (a check run **or** a commit status) arrives after approval; the
-  third covers a late approval landing after checks are already green.
+  third covers a late approval landing after checks are already green. These are
+  repo-wide events, so the job carries an `if:` guard that runs it **only** when
+  the triggering head branch matches `^release-` — on every other PR the job is
+  skipped and posts no check. The action re-checks `^release-` internally as
+  defense in depth.
 - **Merge conditions (all must hold):** the head ref matches `^release-`, the PR
   is open, every sibling check is green (failed → skip; still pending → skip), and
   `reviewDecision == APPROVED`. The check aggregation reuses the same logic as the
