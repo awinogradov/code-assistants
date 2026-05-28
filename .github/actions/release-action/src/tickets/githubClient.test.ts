@@ -97,4 +97,64 @@ describe("githubClient", () => {
         expect(commits[0]?.message).toBe("feat: new for 0.16.2");
       }));
   });
+
+  describe("getCommitsSinceLastTag() scoping", () => {
+    test("scopes the since-point to a member tag glob", () =>
+      withTempRepo(async (testRepo) => {
+        await createCommit(testRepo, "chore: base");
+        await $`git tag lib-a@v1.0.0`.cwd(testRepo).quiet();
+        await createCommit(testRepo, "feat: after member tag", "file2.txt");
+
+        const scoped = await getCommitsSinceLastTag(testRepo, { tagPattern: "lib-a@v*" });
+        expect(scoped).toHaveLength(1);
+        expect(scoped[0]?.message).toBe("feat: after member tag");
+
+        // No `v*` tag exists, so the default pattern finds none and walks all history.
+        const unscoped = await getCommitsSinceLastTag(testRepo);
+        expect(unscoped).toHaveLength(2);
+      }));
+
+    test("restricts the range to commits touching a path", () =>
+      withTempRepo(async (testRepo) => {
+        await createCommit(testRepo, "feat: lib-a change", "packages/lib-a/x.txt");
+        await createCommit(testRepo, "feat: lib-b change", "packages/lib-b/y.txt");
+
+        const commits = await getCommitsSinceLastTag(testRepo, { path: "packages/lib-a" });
+
+        expect(commits).toHaveLength(1);
+        expect(commits[0]?.message).toBe("feat: lib-a change");
+      }));
+
+    test("combines member tag glob and path filter", () =>
+      withTempRepo(async (testRepo) => {
+        await createCommit(testRepo, "chore: base");
+        await $`git tag lib-a@v1.0.0`.cwd(testRepo).quiet();
+        await createCommit(testRepo, "feat: lib-a after tag", "packages/lib-a/a.txt");
+        await createCommit(testRepo, "feat: lib-b after tag", "packages/lib-b/b.txt");
+
+        const commits = await getCommitsSinceLastTag(testRepo, {
+          tagPattern: "lib-a@v*",
+          path: "packages/lib-a",
+        });
+
+        expect(commits).toHaveLength(1);
+        expect(commits[0]?.message).toBe("feat: lib-a after tag");
+      }));
+
+    test("a non-glob prefix matches no tag and falls back to full history", () =>
+      withTempRepo(async (testRepo) => {
+        // `git describe --match` treats the pattern as an fnmatch glob: the
+        // prefix form `lib-a@v` (no `*`) matches no tag, so callers must pass the
+        // glob `lib-a@v*` (memberTagPattern), not the prefix `lib-a@v`.
+        await createCommit(testRepo, "chore: base");
+        await $`git tag lib-a@v1.0.0`.cwd(testRepo).quiet();
+        await createCommit(testRepo, "feat: after", "file2.txt");
+
+        const prefix = await getCommitsSinceLastTag(testRepo, { tagPattern: "lib-a@v" });
+        expect(prefix).toHaveLength(2);
+
+        const glob = await getCommitsSinceLastTag(testRepo, { tagPattern: "lib-a@v*" });
+        expect(glob).toHaveLength(1);
+      }));
+  });
 });

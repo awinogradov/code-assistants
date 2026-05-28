@@ -14,7 +14,7 @@ import { describe, expect, test } from "bun:test";
 import { $ } from "bun";
 
 import { withTempRepo } from "../testHelpers.ts";
-import { runCreate } from "./runCreate.ts";
+import { emitMemberArtifacts, runCreate } from "./runCreate.ts";
 
 async function writeJson(path: string, value: Record<string, unknown>): Promise<void> {
   await Bun.write(path, `${JSON.stringify(value, null, 2)}\n`);
@@ -125,5 +125,38 @@ describe("runCreate", () => {
       const result = await runCreate({ cwd: repo });
       expect(result.discovery.mode).toBe("standalone");
       expect(result.releases).toEqual([]);
+    }));
+
+  test("emitMemberArtifacts writes member artifacts and skips ticket blocks without ticket env", () =>
+    withTempRepo(async (repo) => {
+      await setupFixture(repo);
+      await $`git tag lib-a@v0.1.0 HEAD`.cwd(repo).quiet();
+      await $`git tag lib-b@v0.1.0 HEAD`.cwd(repo).quiet();
+      await commitInPath(repo, "packages/lib-a", "f1.txt", "feat(lib-a): add foo");
+
+      const result = await runCreate({ cwd: repo });
+      const libA = result.releases.find((r) => r.member.name === "lib-a");
+      if (!libA) throw new Error("expected a lib-a release");
+
+      // Scrub the AI key so runReleaseNotes stays offline; pass no ticket
+      // systems so the ticket pipeline is a no-op (the standalone-parity path).
+      const originalApiKey = process.env.ANTHROPIC_API_KEY;
+      delete process.env.ANTHROPIC_API_KEY;
+      try {
+        await emitMemberArtifacts({ release: libA, cwd: repo });
+      } finally {
+        if (originalApiKey !== undefined) process.env.ANTHROPIC_API_KEY = originalApiKey;
+      }
+
+      const notes = await Bun.file(
+        join(repo, "packages/lib-a", ".release_notes", "0.2.0.md"),
+      ).text();
+      expect(notes).toContain("0.2.0");
+      expect(notes).not.toContain("## GitHub Issues");
+      expect(notes).not.toContain("## Linear");
+
+      const changelog = await Bun.file(join(repo, "packages/lib-a", "CHANGELOG.md")).text();
+      expect(changelog).toContain("# Changelog");
+      expect(changelog).not.toContain("## GitHub Issues");
     }));
 });
