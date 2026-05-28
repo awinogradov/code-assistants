@@ -18457,6 +18457,8 @@ Pass one of the following:
 
 Store the token in a secret (e.g., `BOT_TOKEN`) and pass it via `bot_token: ${{ secrets.BOT_TOKEN }}`. Optionally set a `BOT_USERNAME` repository variable to control the commit author identity.
 
+> **Ruleset bypass for the synced workflow.** This action syncs `repomix-pack.yml`, which pushes the regenerated pack **directly** to your default branch on every merge. If that branch is governed by a ruleset (`pull_request` / `non_fast_forward` push rules), the `BOT_TOKEN` identity must be a **bypass actor** on it — otherwise the pack-on-merge run fails with `GH013` ("Changes must be made through a pull request"), even though the token has `contents: write`. Add the bot to the ruleset's bypass list (Settings → Rules → the branch ruleset → Bypass list).
+
 See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) and [GitHub App installation tokens](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-an-installation-access-token-for-a-github-app).
 
 ## Behavior
@@ -18658,6 +18660,14 @@ jobs:
 # with `contents: write`) or a GitHub App installation token. The default
 # `GITHUB_TOKEN` cannot push to a protected branch or trigger downstream
 # workflows under our settings — see `upstream.yml` for the same rationale.
+#
+# The final step pushes directly to `main`, so the `BOT_TOKEN` identity must
+# ALSO be a bypass actor on the protected-branch ruleset. `contents: write`
+# alone is not enough: when the ruleset requires PRs, a direct push is rejected
+# with `GH013` ("Changes must be made through a pull request") regardless of the
+# token's write scope. Add the bot to the ruleset's bypass list (Settings →
+# Rules → the branch ruleset → Bypass list).
+#
 # Optional repo variable `BOT_USERNAME`: git author login for the pack commit.
 # Defaults to `github-actions[bot]` when unset.
 
@@ -28146,7 +28156,7 @@ The `.github/workflows/repomix-pack.yml` workflow regenerates the pack on every 
 - **Trigger:** `pull_request` `types: [closed]`, `branches: [main]`, gated by `if: github.event.pull_request.merged == true` — runs on the merge, not on every `push`.
 - **Pack:** pinned `npx repomix@<version>` (exact version, no `^`/`~`) so pack diffs reflect codebase drift, not tool-version drift.
 - **Commit:** the pack is staged and committed only when `git diff --cached --quiet -- .repomix/pack.xml` reports a staged change — this covers both a modified file and a brand-new untracked one (e.g. the very first run). The auto-commit uses the Conventional-Commits message `chore(repomix): refresh pack from #<PR>`.
-- **Push:** uses the repo's `BOT_TOKEN` secret (with `BOT_USERNAME` as the git author, matching `upstream.yml`/`release.yml`). The default `GITHUB_TOKEN` cannot push to protected `main` or trigger downstream workflows.
+- **Push:** uses the repo's `BOT_TOKEN` secret (with `BOT_USERNAME` as the git author, matching `upstream.yml`/`release.yml`). The default `GITHUB_TOKEN` cannot push to protected `main` or trigger downstream workflows. Because this step pushes **directly** to `main`, the `BOT_TOKEN` identity must also be a **bypass actor** on the protected-branch ruleset; `contents: write` alone is insufficient. When the ruleset's `pull_request` rule is active, a direct push is rejected with `GH013` ("Changes must be made through a pull request") no matter the token's scope. Add the bot to the ruleset's bypass list to allow it.
 
 ### Determinism
 
