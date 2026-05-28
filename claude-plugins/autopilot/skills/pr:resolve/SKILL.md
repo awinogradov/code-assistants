@@ -89,11 +89,14 @@ gh pr diff <PR_NUMBER>
 Launch 2 calls **in parallel** to load codebase context and fetch review comments:
 
 ```
-Pack codebase (MCP direct call):
-  Call `mcp__repomix__pack_codebase` with:
-  - `directory`: [repository root absolute path]
-  - `compress`: true
-  - `includePatterns`: ".claude/**, **.md, **.yml, .github/**"
+Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
+  Check whether `.repomix/pack.xml` exists at the repository root.
+  - If it exists, call `mcp__repomix__attach_packed_output` with:
+    - `path`: [repository root absolute path]/.repomix/pack.xml
+  - If it is absent (or the attach fails), fall back to `mcp__repomix__pack_codebase` with:
+    - `directory`: [repository root absolute path]
+    - `compress`: true
+    - `includePatterns`: ".claude/**, **.md, **.yml, .github/**"
 
 Agent 1 (fetch-pr-reviews):
   Use the Agent tool with:
@@ -104,7 +107,7 @@ Agent 1 (fetch-pr-reviews):
 
 After all calls complete:
 
-- Store the `outputId` from the `pack_codebase` response — use `grep_repomix_output` and `read_repomix_output` with this ID to search and read codebase content during Phase 4 (code fixes)
+- Store the `outputId` from the snapshot acquisition (attach or pack) response — use `grep_repomix_output` and `read_repomix_output` with this ID to search and read codebase content during Phase 4 (code fixes)
 - Store the categorized review comments from `fetch-pr-reviews` — use in Phase 3
 
 ### 1.5 Project Rules

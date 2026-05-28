@@ -101,10 +101,13 @@ Launch context-gathering calls **in parallel**. The number of parallel calls dep
 **If input type is `github-issue`** — launch 3 calls in parallel:
 
 ```
-Pack codebase (MCP direct call):
-  Call `mcp__repomix__pack_codebase` with:
-  - `directory`: [repository root absolute path]
-  - `compress`: true
+Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
+  Check whether `.repomix/pack.xml` exists at the repository root.
+  - If it exists, call `mcp__repomix__attach_packed_output` with:
+    - `path`: [repository root absolute path]/.repomix/pack.xml
+  - If it is absent (or the attach fails), fall back to `mcp__repomix__pack_codebase` with:
+    - `directory`: [repository root absolute path]
+    - `compress`: true
 
 Agent 1 (resolve-issue-context):
   Use the Agent tool with:
@@ -119,18 +122,21 @@ Agent 2 (search-codebase-todos):
   - `description`: "Search codebase TODOs"
 ```
 
-**If input type is `plain description`** — call `mcp__repomix__pack_codebase` directly (no agents needed):
+**If input type is `plain description`** — acquire the snapshot directly (no agents needed):
 
 ```
-Pack codebase (MCP direct call):
-  Call `mcp__repomix__pack_codebase` with:
-  - `directory`: [repository root absolute path]
-  - `compress`: true
+Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
+  Check whether `.repomix/pack.xml` exists at the repository root.
+  - If it exists, call `mcp__repomix__attach_packed_output` with:
+    - `path`: [repository root absolute path]/.repomix/pack.xml
+  - If it is absent (or the attach fails), fall back to `mcp__repomix__pack_codebase` with:
+    - `directory`: [repository root absolute path]
+    - `compress`: true
 ```
 
 After all calls complete:
 
-1. Store the `outputId` from the `pack_codebase` response for use throughout all phases
+1. Store the `outputId` from the snapshot acquisition (attach or pack) response for use throughout all phases
 2. Use `grep_repomix_output` with the `outputId` to search for task-relevant code (keywords from issue title/description, related module names)
 3. Use `read_repomix_output` with `startLine`/`endLine` only to read specific sections found via grep
 

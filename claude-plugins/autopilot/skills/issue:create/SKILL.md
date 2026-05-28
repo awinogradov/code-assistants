@@ -70,11 +70,16 @@ Every AskUserQuestion call that presents content for review (the issue preview i
 
 Mirror the codebase-packing approach used by `/autopilot:plan` so the generated body reflects real code, not hallucinated structure.
 
-1. Pack the codebase once:
+1. Acquire the codebase snapshot once (prefer the committed pack to avoid re-packing):
    ```
-   mcp__repomix__pack_codebase
-     directory: <repository root>
-     compress: true
+   Check whether `.repomix/pack.xml` exists at the repository root.
+   - If it exists:
+     mcp__repomix__attach_packed_output
+       path: <repository root>/.repomix/pack.xml
+   - If it is absent (or the attach fails), fall back to:
+     mcp__repomix__pack_codebase
+       directory: <repository root>
+       compress: true
    ```
    Store the returned `outputId`.
 2. Use `mcp__repomix__grep_repomix_output` with that `outputId` to find files/symbols related to the hint (keywords from `$ARGUMENTS`).
