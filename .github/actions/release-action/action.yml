@@ -15,7 +15,7 @@ inputs:
     required: true
   bot_username:
     description: |
-      Git author/committer login for release commits, tags, and PRs. Defaults to `github-actions[bot]` when unset. Pass `${{ vars.BOT_USERNAME }}` to attribute release artifacts to a dedicated bot identity.
+      Git author/committer login for release commits, tags, and PRs. Defaults to `github-actions[bot]` when unset. Pass the `vars.BOT_USERNAME` repository variable to attribute release artifacts to a dedicated bot identity.
     required: false
   npm_token:
     description: |

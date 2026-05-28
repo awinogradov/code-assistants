@@ -11,7 +11,7 @@ inputs:
     required: true
   bot_username:
     description: |
-      Git author/committer login for the sync commit. Defaults to `github-actions[bot]` when unset. Pass `${{ vars.BOT_USERNAME }}` to attribute commits to a dedicated bot identity.
+      Git author/committer login for the sync commit. Defaults to `github-actions[bot]` when unset. Pass the `vars.BOT_USERNAME` repository variable to attribute commits to a dedicated bot identity.
     required: false
   base:
     description: Base branch the PR targets.
