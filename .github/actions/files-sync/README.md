@@ -29,7 +29,8 @@ jobs:
     steps:
       - uses: awinogradov/code-assistants/.github/actions/files-sync@v1
         with:
-          token: ${{ secrets.SYNC_PAT }}
+          bot_token: ${{ secrets.BOT_TOKEN }}
+          bot_username: ${{ vars.BOT_USERNAME }}
           files: |
             - repo: awinogradov/code-assistants
               source: CONTRIBUTING.md
@@ -52,7 +53,8 @@ files: |
 | Input            | Required | Default                                           | Description                                                                                                                                                                                                 |
 | ---------------- | -------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `files`          | yes      | —                                                 | YAML list of entries — either a [content entry](#content-entry) or a [symlink entry](#symlink-entry). At least one required.                                                                                |
-| `token`          | yes      | —                                                 | PAT or GitHub App installation token with `contents: write` + `pull-requests: write` on the destination repo. The workflow's default `GITHUB_TOKEN` is **not** supported — see [Permissions](#permissions). |
+| `bot_token`      | yes      | —                                                 | PAT or GitHub App installation token with `contents: write` + `pull-requests: write` on the destination repo. The workflow's default `GITHUB_TOKEN` is **not** supported — see [Permissions](#permissions). |
+| `bot_username`   | no       | `github-actions[bot]`                             | Git author/committer login for the sync commit. Pass `${{ vars.BOT_USERNAME }}`. The PR itself is opened by the `bot_token` owner.                                                                          |
 | `base`           | no       | `${{ github.event.repository.default_branch }}`   | Base branch the PR targets.                                                                                                                                                                                 |
 | `branch`         | no       | `maintenance-sync-files`                          | Head branch the PR uses. Force-updated on subsequent runs.                                                                                                                                                  |
 | `title`          | no       | `MAINTENANCE: Sync files from upstream`           | PR title. Uses the `MAINTENANCE:` prefix per CONTRIBUTING.md.                                                                                                                                               |
@@ -87,7 +89,7 @@ A symlink entry writes a Git mode `120000` blob whose body is the literal `symli
 
 ## Permissions
 
-The `token` input is **required**. The workflow's default `GITHUB_TOKEN` is not supported, because creating pull requests with it can fail with an opaque 403 (`GitHub Actions is not permitted to create or approve pull requests`) whenever the destination repo or its org disables the **Settings → Actions → General → Workflow permissions → "Allow GitHub Actions to create and approve pull requests"** toggle.
+The `bot_token` input is **required**. The workflow's default `GITHUB_TOKEN` is not supported, because creating pull requests with it can fail with an opaque 403 (`GitHub Actions is not permitted to create or approve pull requests`) whenever the destination repo or its org disables the **Settings → Actions → General → Workflow permissions → "Allow GitHub Actions to create and approve pull requests"** toggle.
 
 Pass one of the following:
 
@@ -95,7 +97,7 @@ Pass one of the following:
 - A **fine-grained Personal Access Token** scoped to the destination repository with `Contents: Read and write` and `Pull requests: Read and write`. For private source repositories, the same token also needs `Contents: Read` on each source repo.
 - A **GitHub App installation token** with the same `contents: write` + `pull-requests: write` permissions. (App tokens are not subject to the workflow-permissions toggle above — that toggle gates `GITHUB_TOKEN` only.)
 
-Store the token in a secret (e.g., `SYNC_PAT`) and pass it via `token: ${{ secrets.SYNC_PAT }}`.
+Store the token in a secret (e.g., `BOT_TOKEN`) and pass it via `bot_token: ${{ secrets.BOT_TOKEN }}`. Optionally set a `BOT_USERNAME` repository variable to control the commit author identity.
 
 See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) and [GitHub App installation tokens](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-an-installation-access-token-for-a-github-app).
 

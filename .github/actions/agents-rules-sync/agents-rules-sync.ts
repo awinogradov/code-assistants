@@ -39,7 +39,7 @@ function requiredToken(): string {
 
   if (value === undefined || value === '') {
     throw new Error(
-      'GITHUB_TOKEN is empty. Pass an explicit PAT or GitHub App installation token via the action\'s `token` input — ' +
+      'GITHUB_TOKEN is empty. Pass an explicit PAT or GitHub App installation token via the action\'s `bot_token` input — ' +
         'the workflow\'s default `GITHUB_TOKEN` is not supported because it cannot create pull requests when the repo/org ' +
         'disables "Allow GitHub Actions to create and approve pull requests". ' +
         'See https://github.com/awinogradov/code-assistants/blob/main/.github/actions/agents-rules-sync/README.md#permissions',

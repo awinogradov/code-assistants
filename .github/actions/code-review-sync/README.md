@@ -35,16 +35,18 @@ jobs:
     steps:
       - uses: awinogradov/code-assistants/.github/actions/code-review-sync@v1
         with:
-          token: ${{ secrets.SYNC_PAT }}
+          bot_token: ${{ secrets.BOT_TOKEN }}
+          bot_username: ${{ vars.BOT_USERNAME }}
 ```
 
 ## Inputs
 
-| Input         | Required | Default                       | Description                                                                                                                                                                                      |
-| ------------- | -------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `token`       | yes      | —                             | PAT or GitHub App installation token with `contents: write` + `pull-requests: write` on this repo. The workflow's default `GITHUB_TOKEN` is **not** supported — see [Permissions](#permissions). |
-| `source-repo` | no       | `awinogradov/code-assistants` | Source repository in `owner/name` form that hosts the canonical `.github/workflows/code-review.yml`.                                                                                             |
-| `source-ref`  | no       | _(empty)_                     | Branch, tag, or SHA to read the source file from. Empty → source repository default branch.                                                                                                      |
+| Input          | Required | Default                       | Description                                                                                                                                                                                      |
+| -------------- | -------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `bot_token`    | yes      | —                             | PAT or GitHub App installation token with `contents: write` + `pull-requests: write` on this repo. The workflow's default `GITHUB_TOKEN` is **not** supported — see [Permissions](#permissions). |
+| `bot_username` | no       | `github-actions[bot]`         | Git author/committer login for the sync commit. Pass `${{ vars.BOT_USERNAME }}`. The PR itself is opened by the `bot_token` owner.                                                               |
+| `source-repo`  | no       | `awinogradov/code-assistants` | Source repository in `owner/name` form that hosts the canonical `.github/workflows/code-review.yml`.                                                                                             |
+| `source-ref`   | no       | _(empty)_                     | Branch, tag, or SHA to read the source file from. Empty → source repository default branch.                                                                                                      |
 
 PR-shaping inputs (branch, title, body, commit message) are fixed by design — see
 [Behavior](#behavior).
@@ -59,7 +61,7 @@ PR-shaping inputs (branch, title, body, commit message) are fixed by design — 
 
 ## Permissions
 
-The `token` input is **required**. The workflow's default `GITHUB_TOKEN` is not supported, because creating pull requests with it can fail with an opaque 403 (`GitHub Actions is not permitted to create or approve pull requests`) whenever this repo or its org disables the **Settings → Actions → General → Workflow permissions → "Allow GitHub Actions to create and approve pull requests"** toggle.
+The `bot_token` input is **required**. The workflow's default `GITHUB_TOKEN` is not supported, because creating pull requests with it can fail with an opaque 403 (`GitHub Actions is not permitted to create or approve pull requests`) whenever this repo or its org disables the **Settings → Actions → General → Workflow permissions → "Allow GitHub Actions to create and approve pull requests"** toggle.
 
 Pass one of the following:
 
@@ -67,7 +69,7 @@ Pass one of the following:
 - A **fine-grained Personal Access Token** scoped to this repository with `Contents: Read and write` and `Pull requests: Read and write`. For private source repositories, the same token also needs `Contents: Read` on the source repo.
 - A **GitHub App installation token** with the same `contents: write` + `pull-requests: write` permissions. (App tokens are not subject to the workflow-permissions toggle above — that toggle gates `GITHUB_TOKEN` only.)
 
-Store the token in a secret (e.g., `SYNC_PAT`) and pass it via `token: ${{ secrets.SYNC_PAT }}`.
+Store the token in a secret (e.g., `BOT_TOKEN`) and pass it via `bot_token: ${{ secrets.BOT_TOKEN }}`. Optionally set a `BOT_USERNAME` repository variable to control the commit author identity.
 
 See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) and [GitHub App installation tokens](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-an-installation-access-token-for-a-github-app).
 

@@ -1,8 +1,10 @@
-# Requires repo secrets:
-#   - `GH_TOKEN`: PAT or App installation token with `contents: write` and
+# Requires repo secrets and variables:
+#   - `BOT_TOKEN` (secret): PAT or App installation token with `contents: write` and
 #     `pull-requests: write`. The default `GITHUB_TOKEN` cannot create PRs.
 #     See `.github/actions/release-action/README.md` for the rationale.
-#   - `ANTHROPIC_RELEASE`: Anthropic API key used to generate human-readable
+#   - `BOT_USERNAME` (variable, optional): git author login for release commits, tags,
+#     and PRs. Defaults to `github-actions[bot]` when unset.
+#   - `ANTHROPIC_RELEASE` (secret): Anthropic API key used to generate human-readable
 #     release-note summaries from the changelog (optional but recommended).
 
 name: Release
@@ -34,5 +36,6 @@ jobs:
       - uses: awinogradov/code-assistants/.github/actions/release-action@main
         with:
           mode: create
-          github_token: ${{ secrets.GH_TOKEN }}
+          bot_token: ${{ secrets.BOT_TOKEN }}
+          bot_username: ${{ vars.BOT_USERNAME }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_RELEASE }}

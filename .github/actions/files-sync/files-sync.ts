@@ -19,6 +19,7 @@
 import * as core from '@actions/core';
 import { Octokit } from '@octokit/rest';
 
+import { resolveBotIdentity, type BotIdentity } from './src/botIdentity.ts';
 import { computeChanges } from './src/changeDetector.ts';
 import { createSyncPullRequest } from './src/createSyncPullRequest.ts';
 import {
@@ -37,6 +38,7 @@ interface Env {
   title: string;
   body: string;
   commitMessage: string;
+  identity: BotIdentity;
 }
 
 function readEnv(): Env {
@@ -48,6 +50,7 @@ function readEnv(): Env {
   const title = required('INPUT_TITLE');
   const body = required('INPUT_BODY');
   const commitMessage = required('INPUT_COMMIT_MESSAGE');
+  const identity = resolveBotIdentity(process.env.INPUT_BOT_USERNAME);
 
   const { owner, name } = parseRepoSlug(repository);
 
@@ -60,6 +63,7 @@ function readEnv(): Env {
     title,
     body,
     commitMessage,
+    identity,
   };
 }
 
@@ -78,7 +82,7 @@ function requiredToken(): string {
 
   if (value === undefined || value === '') {
     throw new Error(
-      'GITHUB_TOKEN is empty. Pass an explicit PAT or GitHub App installation token via the action\'s `token` input — ' +
+      'GITHUB_TOKEN is empty. Pass an explicit PAT or GitHub App installation token via the action\'s `bot_token` input — ' +
         'the workflow\'s default `GITHUB_TOKEN` is not supported because it cannot create pull requests when the destination ' +
         'repo/org disables "Allow GitHub Actions to create and approve pull requests". ' +
         'See https://github.com/awinogradov/code-assistants/blob/main/.github/actions/files-sync/README.md#permissions',
@@ -167,6 +171,8 @@ async function main(): Promise<void> {
   const paths = changes.map((change) => change.path);
   const body = composeBody(env.body, paths);
 
+  core.info(`Authoring sync commit as ${env.identity.name} <${env.identity.email}>`);
+
   const pr = await createSyncPullRequest({
     octokit,
     destRepo: env.destRepo,
@@ -176,6 +182,7 @@ async function main(): Promise<void> {
     body,
     commitMessage: env.commitMessage,
     changes,
+    identity: env.identity,
   });
 
   core.setOutput('changed-files', paths.join('\n'));

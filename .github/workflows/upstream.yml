@@ -1,7 +1,9 @@
-# Requires repo secret `GH_TOKEN`: a PAT (classic with `repo`, or fine-grained
+# Requires repo secret `BOT_TOKEN`: a PAT (classic with `repo`, or fine-grained
 # with `contents: write` + `pull-requests: write`) or a GitHub App installation
 # token. The default `GITHUB_TOKEN` is not supported — see the action README
 # in `.github/actions/agents-rules-sync` for the rationale.
+# Optional repo variable `BOT_USERNAME`: git author login for sync commits.
+# Defaults to `github-actions[bot]` when unset.
 
 name: Upstream
 
@@ -29,7 +31,8 @@ jobs:
     steps:
       - uses: awinogradov/code-assistants/.github/actions/agents-rules-sync@main
         with:
-          token: ${{ secrets.GH_TOKEN }}
+          bot_token: ${{ secrets.BOT_TOKEN }}
+          bot_username: ${{ vars.BOT_USERNAME }}
 
   sync-code-review:
     name: Sync code-review workflow
@@ -38,4 +41,5 @@ jobs:
     steps:
       - uses: awinogradov/code-assistants/.github/actions/code-review-sync@main
         with:
-          token: ${{ secrets.GH_TOKEN }}
+          bot_token: ${{ secrets.BOT_TOKEN }}
+          bot_username: ${{ vars.BOT_USERNAME }}
