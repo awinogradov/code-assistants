@@ -158,12 +158,8 @@ export async function runReleaseNotes(cwd = process.cwd()): Promise<void> {
   await verifyReleaseNotes(notesPath, bodyPath);
 }
 
-async function main(): Promise<void> {
-  await runReleaseNotes();
-}
-
 if (import.meta.main) {
-  main().catch((error: Error) => {
+  runReleaseNotes().catch((error: Error) => {
     console.log(`::error::${error.message}`);
     process.exit(1);
   });
