@@ -88,25 +88,28 @@ token for the same reason.
 
 ## Downstream propagation
 
-The workflow is distributed to downstream repositories exactly like the
+`release-automerge.yml` is one of three workflows that form the release pipeline,
+and all three are distributed to downstream repositories together — exactly like the
 code-review and repomix workflows:
 
 ```
-   upstream.yml ──hourly──> release-automerge-sync ──> files-sync
-     (cron)                  (wraps files-sync)          │
-                                                         ▼
-                  PR: sync .github/workflows/release-automerge.yml
-                  (action dir NOT synced — referenced via @main)
+   upstream.yml ──hourly──> release-sync ──> files-sync
+     (cron)                  (wraps files-sync)   │
+                                                  ▼
+              PR: sync .github/workflows/{release,publish,release-automerge}.yml
+              (action dirs NOT synced — referenced via @main)
 ```
 
-The [`release-automerge-sync`](../.github/actions/release-automerge-sync/README.md)
-action wraps [`files-sync`](../.github/actions/files-sync/README.md) to sync only
-`.github/workflows/release-automerge.yml` to a `maintenance-sync-release-automerge`
-branch and open (or reuse) a single PR. The `release-automerge` action directory
-itself is **not** synced — downstream repos reference it via `@main`, the same way
-`code-review.yml` references `code-review-action`. A new `sync-release-automerge`
-job in [`upstream.yml`](../.github/workflows/upstream.yml) runs it on the existing
-hourly schedule.
+The [`release-sync`](../.github/actions/release-sync/README.md) action wraps
+[`files-sync`](../.github/actions/files-sync/README.md) to sync the full pipeline —
+`release.yml` (opens the release PR), `publish.yml` (publishes on merge), and
+`release-automerge.yml` (merges the approved, green PR) — to a
+`maintenance-sync-release` branch and open (or reuse) a single PR. The action
+directories these workflows invoke (`release-action`, `release-automerge`) are
+**not** synced — downstream repos reference them via `@main`, the same way
+`code-review.yml` references `code-review-action`. A `sync-release` job in
+[`upstream.yml`](../.github/workflows/upstream.yml) runs it on the existing hourly
+schedule.
 
 The merge this action performs is what feeds the publish step; see the
 [`release` field spec](./release-field.md) for how `release-action` then selects

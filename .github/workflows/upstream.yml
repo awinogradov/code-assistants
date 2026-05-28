@@ -54,12 +54,12 @@ jobs:
           bot_token: ${{ secrets.BOT_TOKEN }}
           bot_username: ${{ vars.BOT_USERNAME }}
 
-  sync-release-automerge:
-    name: Sync release-automerge workflow
+  sync-release:
+    name: Sync release workflows
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: awinogradov/code-assistants/.github/actions/release-automerge-sync@main
+      - uses: awinogradov/code-assistants/.github/actions/release-sync@main
         with:
           bot_token: ${{ secrets.BOT_TOKEN }}
           bot_username: ${{ vars.BOT_USERNAME }}

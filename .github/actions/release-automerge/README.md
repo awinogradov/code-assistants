@@ -56,8 +56,8 @@ jobs:
 ```
 
 Most consumers receive this workflow automatically from
-[`release-automerge-sync`](../release-automerge-sync/README.md) and never write it
-by hand.
+[`release-sync`](../release-sync/README.md) — which syncs the whole release pipeline
+(`release.yml`, `publish.yml`, `release-automerge.yml`) — and never write it by hand.
 
 ## Inputs
 

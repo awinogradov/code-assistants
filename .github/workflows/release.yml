@@ -1,3 +1,8 @@
+# Source: https://github.com/awinogradov/code-assistants/blob/main/.github/workflows/release.yml
+# This file is distributed to downstream repositories by an automated sync.
+# Edits made downstream are overwritten on the next run.
+# To change it, open a pull request against the source file above.
+#
 # Requires repo secrets and variables:
 #   - `BOT_TOKEN` (secret): PAT or App installation token with `contents: write` and
 #     `pull-requests: write`. The default `GITHUB_TOKEN` cannot create PRs.

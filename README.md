@@ -35,7 +35,7 @@ See the [plugin README](./claude-plugins/autopilot/README.md#installation) for s
 - [`release-automerge`](./.github/actions/release-automerge/README.md) — merge an approved, all-green release PR (`^release-`), driven by an event-based workflow so `publish.yml` runs without a manual click
 - [`code-review-action`](./.github/actions/code-review-action/README.md) — AI code review for pull requests via Claude Code, with a react mode for replying to bot mentions
 - [`repomix-sync`](./.github/actions/repomix-sync/README.md) — sync the `repomix-pack` workflow and `repomix.config.json` from upstream so each consumer commits its own codebase snapshot
-- [`release-automerge-sync`](./.github/actions/release-automerge-sync/README.md) — sync the `release-automerge` workflow from upstream so each consumer auto-merges its own release PRs
+- [`release-sync`](./.github/actions/release-sync/README.md) — sync the release pipeline workflows (`release`, `publish`, `release-automerge`) from upstream so each consumer runs the same release flow
 
 ## Contributing
 
