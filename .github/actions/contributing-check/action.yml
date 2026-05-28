@@ -5,7 +5,7 @@ runs:
   using: composite
   steps:
     - name: Validate branch name
-      uses: deepakputhraya/action-branch-name@e0f8db53a8e289f1ae6f6c3e8dc70a3d366fd876 # v1.0.0
+      uses: deepakputhraya/action-branch-name@v1.0.0
       with:
         regex: '^(issue-\d+-[a-z0-9]+(-[a-z0-9]+)*|(hotfix|trivial|maintenance|proposal)-[a-z0-9]+(-[a-z0-9]+)*|release-\d+\.\d+\.\d+)$'
         min_length: 5
@@ -13,18 +13,18 @@ runs:
         ignore: main,master
 
     - name: Checkout
-      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
     - name: Validate commit messages
-      uses: wagoid/commitlint-github-action@b948419dd99f3fd78a6548d48f94e3df7f6bf3ed # v6
+      uses: wagoid/commitlint-github-action@v6
       with:
         configFile: ./commitlint.config.mjs
         failOnWarnings: false
 
     - name: Validate PR title (semantic)
-      uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6
+      uses: amannn/action-semantic-pull-request@v6
       env:
         GITHUB_TOKEN: ${{ github.token }}
       with:
