@@ -1,0 +1,131 @@
+# Changelog
+
+All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
+
+## 0.1.0 (2026-05-28)
+
+## Release Notes
+
+Autopilot Claude Plugin brings streamlined AI development workflows with smart automation and enhanced code review capabilities. The --autopilot flag now lets you skip sub-skill confirmations for faster execution.
+
+## ✨ What's New
+
+### Automatic plan generation with expert insights
+Your development plans now include pre-mortem analysis and steelman intent reviews, following Karpathy's best practices. Every plan starts with a clear title for better organization.
+
+<details><summary>Related issues</summary>
+
+- [add pre-mortem expert and steelman intent to plan](https://github.com/awinogradov/code-assistants/commit/eab9db00207b3ec47771fbaeaac6a259927396e7)
+- [adopt karpathy guidelines in rules and plan skills](https://github.com/awinogradov/code-assistants/commit/2c066890a74a59c67d4b2ec601445bc0be62c82c)
+- [require h1 title at top of every plan file](https://github.com/awinogradov/code-assistants/commit/6974b3e89aff350318b9ad292cb39bd7510d35c3)
+</details>
+
+### Skip sub-skill prompts with --autopilot flag
+Run complex workflows without interruption by adding the --autopilot flag to any command. Perfect for CI/CD pipelines or when you trust the AI's judgment.
+
+<details><summary>Related issues</summary>
+
+- [add --autopilot flag to skip sub-skill prompts](https://github.com/awinogradov/code-assistants/commit/f29dbbdb51e98375b701048e74013202461f8e62)
+</details>
+
+### Smart GitHub issue creation
+Create well-structured GitHub issues with automatic duplicate detection and relevant documentation lookup from Context7, Perplexity, and other sources. The system checks for similar issues before creating new ones.
+
+<details><summary>Related issues</summary>
+
+- [add skill for filing structured github issues](https://github.com/awinogradov/code-assistants/commit/eaff31d6e962cd6311515fbd66cddac695c6a181)
+- [pull docs from context7, ref, exa, perplexity](https://github.com/awinogradov/code-assistants/commit/fcbd133c77fb944ceaaf8aa3fd6d787ccdefc6e0)
+</details>
+
+### Traceable code review rules
+PR review feedback now includes direct links to the source agent files for each rule, making it easier to understand and customize review criteria.
+
+<details><summary>Related issues</summary>
+
+- [link rule codes to source agent files](https://github.com/awinogradov/code-assistants/commit/f2648901468eabcfd7355df7447111436e1f988f)
+</details>
+
+### Contributing guidelines enforcement
+New GitHub Action automatically checks that contributions follow project standards, ensuring consistent quality across the codebase.
+
+<details><summary>Related issues</summary>
+
+- [add action and workflow](https://github.com/awinogradov/code-assistants/commit/7b4d5fe91f309dc1b584c6c281a9251d470888fc)
+</details>
+
+## 🐛 Bug Fixes
+
+### Smart issue creation workflow improvements
+The issue creation process now generates titles before checking for duplicates, preventing false matches. Empty keyword sets no longer crash the overlap calculation, and the system correctly uses the perplexity_ prefix for API calls.
+
+<details><summary>Related issues</summary>
+
+- [run duplicate check after title generation](https://github.com/awinogradov/code-assistants/commit/5cbe413284045abcbec2f3e397294f8e3ab2550f)
+- [guard overlap formula against empty keyword sets](https://github.com/awinogradov/code-assistants/commit/baac42eb40412d3aa38d9a83f9d0a82afe78c3e8)
+- [use perplexity_ prefix, drop deprecated exa tool](https://github.com/awinogradov/code-assistants/commit/a26e8c004e706fbd72055e9c492016528cef0566)
+</details>
+
+### Autopilot feature refinements
+The automatic user assignment feature is now properly gated behind a configuration flag, and the verify pipeline works correctly. PR review fan-out now aligns with the autopilot prefix naming convention.
+
+<details><summary>Related issues</summary>
+
+- [gate auto-assign behind flag, fix verify pipe](https://github.com/awinogradov/code-assistants/commit/4b86d02745811b26cc28c37e651f7d7f76d81791)
+- [align fan-out on autopilot prefix](https://github.com/awinogradov/code-assistants/commit/8e36b8be95e3312f7feda730d8bcd94b49429d81)
+</details>
+
+### Cleaner plan generation
+Issue inputs no longer include unnecessary prefixes, resulting in cleaner and more focused development plans.
+
+<details><summary>Related issues</summary>
+
+- [drop prefix prompt for issue inputs](https://github.com/awinogradov/code-assistants/commit/22fd744154caba2adbcf0d5e4d7bd546a0b525eb)
+</details>
+
+## 📚 Documentation & Settings Updates
+
+### Visual change planning
+The planning skill now recommends using the ascii-schemas skill when your changes involve visual modifications, helping teams better communicate UI/UX updates.
+
+<details><summary>Related issues</summary>
+
+- [recommend ascii-schemas skill for visual changes](https://github.com/awinogradov/code-assistants/commit/050d6c0a7a0f6d80bbc92077ae0f91119853ef91)
+</details>
+
+
+### Features
+
+* **autopilot:** add --autopilot flag to skip sub-skill prompts ([f29dbbd](https://github.com/awinogradov/code-assistants/commit/f29dbbdb51e98375b701048e74013202461f8e62))
+* **autopilot:** add pre-mortem expert and steelman intent to plan ([eab9db0](https://github.com/awinogradov/code-assistants/commit/eab9db00207b3ec47771fbaeaac6a259927396e7))
+* **autopilot:** adopt karpathy guidelines in rules and plan skills ([2c06689](https://github.com/awinogradov/code-assistants/commit/2c066890a74a59c67d4b2ec601445bc0be62c82c))
+* **autopilot:** auto-assign user when resolving issue context ([f88b55d](https://github.com/awinogradov/code-assistants/commit/f88b55d4ce007e3747882cc31a65b390b06821ef))
+* **autopilot:** require h1 title at top of every plan file ([6974b3e](https://github.com/awinogradov/code-assistants/commit/6974b3e89aff350318b9ad292cb39bd7510d35c3))
+* **contributing-check:** add action and workflow ([7b4d5fe](https://github.com/awinogradov/code-assistants/commit/7b4d5fe91f309dc1b584c6c281a9251d470888fc))
+* **issue-create:** add skill for filing structured github issues ([eaff31d](https://github.com/awinogradov/code-assistants/commit/eaff31d6e962cd6311515fbd66cddac695c6a181))
+* **issue-create:** pull docs from context7, ref, exa, perplexity ([fcbd133](https://github.com/awinogradov/code-assistants/commit/fcbd133c77fb944ceaaf8aa3fd6d787ccdefc6e0))
+* **pr-review:** link rule codes to source agent files ([f264890](https://github.com/awinogradov/code-assistants/commit/f2648901468eabcfd7355df7447111436e1f988f))
+
+### Bug Fixes
+
+* **autopilot:** gate auto-assign behind flag, fix verify pipe ([4b86d02](https://github.com/awinogradov/code-assistants/commit/4b86d02745811b26cc28c37e651f7d7f76d81791))
+* **issue-create:** guard overlap formula against empty keyword sets ([baac42e](https://github.com/awinogradov/code-assistants/commit/baac42eb40412d3aa38d9a83f9d0a82afe78c3e8))
+* **issue-create:** run duplicate check after title generation ([5cbe413](https://github.com/awinogradov/code-assistants/commit/5cbe413284045abcbec2f3e397294f8e3ab2550f))
+* **issue-create:** use perplexity_ prefix, drop deprecated exa tool ([a26e8c0](https://github.com/awinogradov/code-assistants/commit/a26e8c004e706fbd72055e9c492016528cef0566))
+* **plan:** drop prefix prompt for issue inputs ([22fd744](https://github.com/awinogradov/code-assistants/commit/22fd744154caba2adbcf0d5e4d7bd546a0b525eb))
+* **pr-review:** align fan-out on autopilot prefix ([8e36b8b](https://github.com/awinogradov/code-assistants/commit/8e36b8be95e3312f7feda730d8bcd94b49429d81))
+
+### Documentation
+
+* **autopilot:** dedupe verify line in plan step template ([071b9e4](https://github.com/awinogradov/code-assistants/commit/071b9e47557e5331057a61fbfb3a3d2d78d13d35))
+* **plan:** recommend ascii-schemas skill for visual changes ([050d6c0](https://github.com/awinogradov/code-assistants/commit/050d6c0a7a0f6d80bbc92077ae0f91119853ef91))
+
+### Chores
+
+* add local hooks and plugin validators ([ca7425c](https://github.com/awinogradov/code-assistants/commit/ca7425cbf4938e6ce36dcd0e20435ce035756e03))
+* **autopilot:** bump plugin version to 0.5.0 ([ca35946](https://github.com/awinogradov/code-assistants/commit/ca359464d28e161cc767638ab5a2edd86ec05b50))
+* bump version from 0.1.0 to 0.2.0 ([c114394](https://github.com/awinogradov/code-assistants/commit/c1143947a9306004580bf9864b11e013a59d750a))
+* bump version from 0.5.0 to 0.5.1 ([cf9922d](https://github.com/awinogradov/code-assistants/commit/cf9922d4cd2455ba1be78c72c6392c235b265d81))
+* bump version from 0.5.1 to 0.5.2 ([11a6bbb](https://github.com/awinogradov/code-assistants/commit/11a6bbb666cb4c261091f8b36cdb2c7d1d8c728a))
+* bump version from 0.5.2 to 0.5.3 ([fbb517c](https://github.com/awinogradov/code-assistants/commit/fbb517caa44a906b30595437714396568f2124a8))
+* initial commit ([433c180](https://github.com/awinogradov/code-assistants/commit/433c180bd515189ebc447ec88ccea908e92ca3c9))
+* **plugin:** declare release.type claude-plugin ([3761e45](https://github.com/awinogradov/code-assistants/commit/3761e458df7c4adaadac3d46faa4cf7895ee993e))
