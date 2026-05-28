@@ -35,6 +35,9 @@ inputs:
   bot_username:
     description: "Bot username for skipping CI-author PRs. When set, PRs authored by this user with the 'ci-skip-review' label are skipped. Falls back to reviewer if omitted."
     required: false
+  release_pr_authors:
+    description: "Comma-separated list of trusted authors whose release-branch PRs get an auto-approval after review is skipped. Empty (default) disables auto-approval; the action still skips review for any release-branch PR. Set this only to identities you trust to open release PRs (e.g., 'github-actions[bot]', 'my-org-bot')."
+    required: false
   bot_token:
     description: "GitHub token for bot operations"
     required: true
@@ -117,6 +120,7 @@ runs:
         INPUT_COMMENT_LINE: ${{ inputs.comment_line }}
         INPUT_REVIEWER: ${{ inputs.reviewer }}
         INPUT_BOT_USERNAME: ${{ inputs.bot_username }}
+        INPUT_RELEASE_PR_AUTHORS: ${{ inputs.release_pr_authors }}
         EVENT_NAME: ${{ github.event_name }}
         EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
         EVENT_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -154,17 +158,23 @@ runs:
           fi
         fi
 
-        # Skip release PRs and auto-approve so they aren't blocked on the
-        # requested-reviewer slot. Only post the approval in review mode — react
-        # mode runs on comment events and shouldn't touch review state.
+        # Skip release PRs. Optionally auto-approve them so they aren't blocked
+        # on the requested-reviewer slot — but only when the author is in the
+        # explicit `release_pr_authors` trust list AND the action is in review
+        # mode. The branch-name check alone is NOT a security boundary; anyone
+        # with push access could open a `release-pwn-1.0.0` PR otherwise.
         if [[ "$EVENT_NAME" == "pull_request" && "$EVENT_PR_HEAD_REF" =~ ^(release-|delivery-) ]]; then
           echo "Skipping: release/delivery branch ($EVENT_PR_HEAD_REF)"
-          if [[ "$INPUT_MODE" == "review" ]]; then
-            gh api -X POST \
-              "repos/${GITHUB_REPOSITORY}/pulls/${EVENT_PR_NUMBER}/reviews" \
-              -f event=APPROVE \
-              -f body="Auto-approved: release branch, AI review skipped per workflow policy." \
-              || echo "Auto-approval skipped (already approved or API error)"
+          if [[ "$INPUT_MODE" == "review" && -n "$INPUT_RELEASE_PR_AUTHORS" ]]; then
+            if [[ ",${INPUT_RELEASE_PR_AUTHORS//[[:space:]]/}," == *",${EVENT_PR_AUTHOR},"* ]]; then
+              gh api -X POST \
+                "repos/${GITHUB_REPOSITORY}/pulls/${EVENT_PR_NUMBER}/reviews" \
+                -f event=APPROVE \
+                -f body="Auto-approved: release branch by trusted author, AI review skipped per workflow policy." \
+                || echo "Auto-approval skipped (already approved or API error)"
+            else
+              echo "Auto-approval skipped: author '$EVENT_PR_AUTHOR' not in release_pr_authors"
+            fi
           fi
           echo "skip=true" >> "$GITHUB_OUTPUT"
           exit 0

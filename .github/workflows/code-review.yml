@@ -30,3 +30,4 @@ jobs:
           reviewer: ${{ vars.BOT_USERNAME }}
           bot_token: ${{ secrets.BOT_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_CODE_REVIEW }}
+          release_pr_authors: ${{ vars.RELEASE_PR_AUTHORS }}
