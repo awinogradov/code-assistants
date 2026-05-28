@@ -14,6 +14,7 @@ import {
   changelogHeader,
   generateChangelog,
   getCurrentVersion,
+  insertTicketsInRelease,
   main,
   startOfLastReleasePattern,
 } from "./release.ts";
@@ -93,6 +94,37 @@ describe("release CLI", () => {
 
     test("contains conventional commits link", () => {
       expect(changelogHeader).toContain("conventionalcommits.org");
+    });
+  });
+
+  describe("insertTicketsInRelease()", () => {
+    const tickets =
+      "## GitHub Issues\n\n| Issue | PR | Author |\n| --- | --- | --- |\n| #40 | [#42](url) | @dev |\n";
+
+    test("inserts tickets between the version header and the first section", () => {
+      const release = "## [1.1.0] (2025-01-01)\n\n### Features\n\n* feat\n";
+
+      const result = insertTicketsInRelease(release, tickets);
+
+      expect(result).toContain("## GitHub Issues");
+      // header → tickets → changelog sections
+      expect(result.indexOf("## [1.1.0]")).toBeLessThan(result.indexOf("## GitHub Issues"));
+      expect(result.indexOf("## GitHub Issues")).toBeLessThan(result.indexOf("### Features"));
+    });
+
+    test("returns release unchanged when tickets is empty", () => {
+      const release = "## [1.1.0] (2025-01-01)\n\n### Features\n\n* feat\n";
+
+      expect(insertTicketsInRelease(release, "")).toBe(release);
+    });
+
+    test("prepends tickets when there is no version header", () => {
+      const release = "### Features\n\n* feat\n";
+
+      const result = insertTicketsInRelease(release, tickets);
+
+      expect(result.startsWith("## GitHub Issues")).toBe(true);
+      expect(result).toContain("### Features");
     });
   });
 
