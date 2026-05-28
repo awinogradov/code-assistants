@@ -109,6 +109,7 @@ export async function generateWithApi(
   notesPath: string,
   bodyPath: string,
   cwd = process.cwd(),
+  messages?: AnthropicMessages,
 ): Promise<void> {
   try {
     const changelog = await Bun.file(bodyPath).text();
@@ -127,7 +128,7 @@ export async function generateWithApi(
 
     const filtered = filterChangelogForAi(changelog);
     const userMessage = buildUserMessage(filtered, serviceContext, tickets, prDescriptions);
-    const notes = await callAnthropicApi(apiKey, userMessage, systemPrompt);
+    const notes = await callAnthropicApi(apiKey, userMessage, systemPrompt, messages);
 
     await Bun.write(notesPath, notes, { createPath: true });
     console.log("Release notes generated");
@@ -146,13 +147,16 @@ export async function generateWithApi(
  * Used by the standalone `main()` (cwd = repo root) and by the monorepo
  * `emitMemberArtifacts` (cwd = member path).
  */
-export async function runReleaseNotes(cwd = process.cwd()): Promise<void> {
+export async function runReleaseNotes(
+  cwd = process.cwd(),
+  messages?: AnthropicMessages,
+): Promise<void> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   const notesPath = join(cwd, ".release_bot/release_notes.md");
   const bodyPath = join(cwd, ".release_bot/body");
 
   if (apiKey) {
-    await generateWithApi(apiKey, notesPath, bodyPath, cwd);
+    await generateWithApi(apiKey, notesPath, bodyPath, cwd, messages);
   }
 
   await verifyReleaseNotes(notesPath, bodyPath);
