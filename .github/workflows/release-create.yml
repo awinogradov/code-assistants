@@ -1,4 +1,4 @@
-# Source: https://github.com/awinogradov/code-assistants/blob/main/.github/workflows/release.yml
+# Source: https://github.com/awinogradov/code-assistants/blob/main/.github/workflows/release-create.yml
 # This file is distributed to downstream repositories by an automated sync.
 # Edits made downstream are overwritten on the next run.
 # To change it, open a pull request against the source file above.
@@ -12,7 +12,7 @@
 #   - `ANTHROPIC_RELEASE` (secret): Anthropic API key used to generate human-readable
 #     release-note summaries from the changelog (optional but recommended).
 
-name: Release
+name: Release create
 
 on:
   workflow_dispatch:

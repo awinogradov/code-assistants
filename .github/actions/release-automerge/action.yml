@@ -5,7 +5,7 @@ author: "Code Assistants"
 inputs:
   bot_token:
     description: |
-      PAT (classic with `repo`, or fine-grained with `contents: write` + `pull-requests: write`) or GitHub App installation token used to read PR state and perform the merge. The workflow's default `GITHUB_TOKEN` is not supported — a merge it performs does not trigger downstream workflows (e.g. `publish.yml`), and on a protected branch the token must additionally be a ruleset bypass actor. See README.
+      PAT (classic with `repo`, or fine-grained with `contents: write` + `pull-requests: write`) or GitHub App installation token used to read PR state and perform the merge. The workflow's default `GITHUB_TOKEN` is not supported — a merge it performs does not trigger downstream workflows (e.g. `release-publish.yml`), and on a protected branch the token must additionally be a ruleset bypass actor. See README.
     required: true
 
 runs:

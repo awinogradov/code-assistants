@@ -57,7 +57,7 @@ jobs:
 
 Most consumers receive this workflow automatically from
 [`release-sync`](../release-sync/README.md) — which syncs the whole release pipeline
-(`release.yml`, `publish.yml`, `release-automerge.yml`) — and never write it by hand.
+(`release-create.yml`, `release-publish.yml`, `release-automerge.yml`) — and never write it by hand.
 
 ## Inputs
 
@@ -69,7 +69,7 @@ Most consumers receive this workflow automatically from
 
 The `bot_token` input is **required**. The workflow's default `GITHUB_TOKEN` is not
 supported because a merge it performs **does not trigger downstream workflows** —
-[`publish.yml`](../../workflows/publish.yml) (which runs on
+[`release-publish.yml`](../../workflows/release-publish.yml) (which runs on
 `pull_request_target: [closed]` for `**/.release_notes/**`) would never fire, so the
 release would not publish. Pass one of:
 

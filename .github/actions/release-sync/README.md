@@ -4,13 +4,13 @@ Composite GitHub Action that syncs the release pipeline workflows from an upstre
 repository into the current repository and opens a single pull request with the
 difference. The synced set is:
 
-- `.github/workflows/release.yml` — opens the release PR
-- `.github/workflows/publish.yml` — publishes on merge of the release PR
+- `.github/workflows/release-create.yml` — opens the release PR
+- `.github/workflows/release-publish.yml` — publishes on merge of the release PR
 - `.github/workflows/release-automerge.yml` — merges the approved, all-green release PR
 
-Together these are the full release pipeline: `release.yml` creates the release PR,
-`release-automerge.yml` merges it once it is approved and green, and `publish.yml`
-runs on the merge. See the [Release auto-merge flow](../../../docs/release-automerge.md)
+Together these are the full release pipeline: `release-create.yml` creates the release
+PR, `release-automerge.yml` merges it once it is approved and green, and
+`release-publish.yml` runs on the merge. See the [Release auto-merge flow](../../../docs/release-automerge.md)
 doc for how the merge gate works. The actions these workflows invoke
 ([`release-action`](../release-action/README.md),
 [`release-automerge`](../release-automerge/README.md)) are **not** synced — downstream
@@ -88,8 +88,8 @@ variable to control the commit author identity.
 
 ## Behavior
 
-- Delegates to `files-sync` with a fixed sync list — `.github/workflows/release.yml`,
-  `.github/workflows/publish.yml`, and `.github/workflows/release-automerge.yml` —
+- Delegates to `files-sync` with a fixed sync list — `.github/workflows/release-create.yml`,
+  `.github/workflows/release-publish.yml`, and `.github/workflows/release-automerge.yml` —
   sourced from `source-repo` at `source-ref`.
 - The PR is opened on the fixed branch `maintenance-sync-release` with the title
   `MAINTENANCE: Sync release workflows from upstream` and the commit message

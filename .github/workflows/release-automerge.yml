@@ -6,7 +6,7 @@
 # Repository secrets/variables consumed by this workflow:
 #   - `BOT_TOKEN` (secret, required): PAT or App installation token with
 #     `contents: write` + `pull-requests: write`. The default `GITHUB_TOKEN` is
-#     not supported — a merge it performs does not trigger `publish.yml`, and on a
+#     not supported — a merge it performs does not trigger `release-publish.yml`, and on a
 #     protected `main` the token must also be a ruleset bypass actor.
 #     See `.github/actions/release-automerge/README.md`.
 
