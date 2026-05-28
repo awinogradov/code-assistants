@@ -1,5 +1,8 @@
 # Release action
 
+[![GitHub Release](https://img.shields.io/badge/release-v0.1.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
+
 Composite GitHub Action that automates the release pipeline for npm packages, GitHub Actions, and Claude plugins.
 
 The action drives a two-phase flow — **create** opens a release PR that bumps the version, generates the changelog from [conventional commits](https://www.conventionalcommits.org/), enriches it with ticket details (Linear, Jira, GitHub Issues) and an optional AI-generated summary; **publish** runs when the release PR is merged and creates the git tag, npm publish, GitHub Release, floating major-version tag, and Slack notification — selecting the right artifacts based on the `release` field in `package.json` (see [`docs/release-field.md`](../../../docs/release-field.md)).
