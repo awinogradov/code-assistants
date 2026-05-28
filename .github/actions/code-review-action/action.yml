@@ -166,12 +166,41 @@ runs:
         if [[ "$EVENT_NAME" == "pull_request" && "$EVENT_PR_HEAD_REF" =~ ^(release-|delivery-) ]]; then
           echo "Skipping: release/delivery branch ($EVENT_PR_HEAD_REF)"
           if [[ "$INPUT_MODE" == "review" && -n "$INPUT_RELEASE_PR_AUTHORS" ]]; then
-            if [[ ",${INPUT_RELEASE_PR_AUTHORS//[[:space:]]/}," == *",${EVENT_PR_AUTHOR},"* ]]; then
-              gh api -X POST \
+            # Iterate the comma-separated list and compare each entry literally
+            # to the PR author. Quoted RHS in `[[ x == "y" ]]` forces literal
+            # comparison, so GitHub usernames containing glob metacharacters
+            # (e.g. `github-actions[bot]`) are matched as strings, not as
+            # bracket-expression patterns.
+            author_match=false
+            IFS=',' read -ra trusted_authors <<< "$INPUT_RELEASE_PR_AUTHORS"
+            for entry in "${trusted_authors[@]}"; do
+              trimmed="${entry#"${entry%%[![:space:]]*}"}"
+              trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
+              if [[ -n "$trimmed" && "$EVENT_PR_AUTHOR" == "$trimmed" ]]; then
+                author_match=true
+                break
+              fi
+            done
+            if [[ "$author_match" == "true" ]]; then
+              approve_stderr="$(mktemp)"
+              if gh api -X POST \
                 "repos/${GITHUB_REPOSITORY}/pulls/${EVENT_PR_NUMBER}/reviews" \
                 -f event=APPROVE \
                 -f body="Auto-approved: release branch by trusted author, AI review skipped per workflow policy." \
-                || echo "Auto-approval skipped (already approved or API error)"
+                2> "$approve_stderr"; then
+                echo "Auto-approval posted for trusted author '$EVENT_PR_AUTHOR'"
+              else
+                # Distinguish the benign "already approved" case (HTTP 422 with
+                # `Can not approve` in the body) from a real misconfiguration
+                # (auth, scope, network) so workflow owners can act on the
+                # latter without grepping every successful run.
+                if grep -q "Can not approve" "$approve_stderr"; then
+                  echo "Auto-approval skipped: PR already approved by bot for current HEAD"
+                else
+                  echo "::warning::Auto-approval failed for '$EVENT_PR_AUTHOR' on release PR ${EVENT_PR_NUMBER}: $(cat "$approve_stderr")"
+                fi
+              fi
+              rm -f "$approve_stderr"
             else
               echo "Auto-approval skipped: author '$EVENT_PR_AUTHOR' not in release_pr_authors"
             fi

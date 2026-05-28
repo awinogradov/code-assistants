@@ -2,6 +2,14 @@
 # This file is distributed to downstream repositories by an automated sync.
 # Edits made downstream are overwritten on the next run.
 # To change it, open a pull request against the source file above.
+#
+# Repository variables consumed by this workflow:
+#   - `BOT_USERNAME` (required): GitHub login of the AI reviewer bot. Without this the
+#     `ai-review` job is skipped entirely.
+#   - `RELEASE_PR_AUTHORS` (optional): comma-separated list of trusted authors whose
+#     `release-*` / `delivery-*` branch PRs get an auto-approval after AI review is
+#     skipped. Leave unset to keep the previous skip-only behaviour. Set this only
+#     for identities you trust to open release PRs (e.g. `github-actions[bot]`).
 
 name: AI Code Review
 
