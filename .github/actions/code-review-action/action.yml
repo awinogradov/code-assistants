@@ -197,7 +197,7 @@ runs:
                 if grep -q "Can not approve" "$approve_stderr"; then
                   echo "Auto-approval skipped: PR already approved by bot for current HEAD"
                 else
-                  echo "::warning::Auto-approval failed for '$EVENT_PR_AUTHOR' on release PR ${EVENT_PR_NUMBER}: $(cat "$approve_stderr")"
+                  echo "::error::Auto-approval failed for '$EVENT_PR_AUTHOR' on release PR ${EVENT_PR_NUMBER}: $(cat "$approve_stderr")"
                 fi
               fi
               rm -f "$approve_stderr"
