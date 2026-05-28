@@ -3,7 +3,7 @@
  */
 import { join } from "node:path";
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { withTempDir } from "./testHelpers.ts";
 
@@ -373,43 +373,76 @@ describe("callAnthropicApi", () => {
 });
 
 describe("runReleaseNotes", () => {
-  const originalApiKey = process.env.ANTHROPIC_API_KEY;
+  let savedApiKey: string | undefined;
+
+  beforeEach(() => {
+    savedApiKey = process.env.ANTHROPIC_API_KEY;
+  });
+
+  afterEach(() => {
+    if (savedApiKey === undefined) {
+      delete process.env.ANTHROPIC_API_KEY;
+    } else {
+      process.env.ANTHROPIC_API_KEY = savedApiKey;
+    }
+  });
 
   test("falls back to .release_bot/body inside the supplied cwd when no API key", () =>
     withTempDir(async (dir) => {
       delete process.env.ANTHROPIC_API_KEY;
-      try {
-        await Bun.write(join(dir, ".release_bot/body"), "## member changelog body");
+      await Bun.write(join(dir, ".release_bot/body"), "## member changelog body");
 
-        await runReleaseNotes(dir);
+      await runReleaseNotes(dir);
 
-        const notes = await Bun.file(join(dir, ".release_bot/release_notes.md")).text();
-        expect(notes).toContain("member changelog body");
-      } finally {
-        if (originalApiKey !== undefined) process.env.ANTHROPIC_API_KEY = originalApiKey;
-      }
+      const notes = await Bun.file(join(dir, ".release_bot/release_notes.md")).text();
+      expect(notes).toContain("member changelog body");
     }));
 
   test("resolves paths under cwd, not process.cwd()", () =>
     withTempDir(async (dir) => {
       delete process.env.ANTHROPIC_API_KEY;
-      try {
-        await Bun.write(join(dir, ".release_bot/body"), "isolated body");
+      await Bun.write(join(dir, ".release_bot/body"), "isolated body");
 
-        await runReleaseNotes(dir);
+      await runReleaseNotes(dir);
 
-        const memberNotes = Bun.file(join(dir, ".release_bot/release_notes.md"));
-        expect(await memberNotes.exists()).toBe(true);
+      const memberNotes = Bun.file(join(dir, ".release_bot/release_notes.md"));
+      expect(await memberNotes.exists()).toBe(true);
 
-        const cwdNotes = Bun.file(join(process.cwd(), ".release_bot/release_notes.md"));
-        expect(await cwdNotes.exists()).toBe(false);
-      } finally {
-        if (originalApiKey !== undefined) process.env.ANTHROPIC_API_KEY = originalApiKey;
-      }
+      const cwdNotes = Bun.file(join(process.cwd(), ".release_bot/release_notes.md"));
+      expect(await cwdNotes.exists()).toBe(false);
+    }));
+
+  test("writes AI summary when API key is set and the call succeeds", () =>
+    withTempDir(async (dir) => {
+      process.env.ANTHROPIC_API_KEY = "test-key";
+      await Bun.write(join(dir, ".release_bot/body"), "### Features\n\n- new endpoint");
+
+      const mockMessages: AnthropicMessages = {
+        create: async () => ({ content: [{ type: "text", text: "AI-summarized release" }] }),
+      };
+
+      await runReleaseNotes(dir, mockMessages);
+
+      const notes = await Bun.file(join(dir, ".release_bot/release_notes.md")).text();
+      expect(notes).toContain("AI-summarized release");
     }));
 });
 
 describe("generateWithApi", () => {
+  let savedApiKey: string | undefined;
+
+  beforeEach(() => {
+    savedApiKey = process.env.ANTHROPIC_API_KEY;
+  });
+
+  afterEach(() => {
+    if (savedApiKey === undefined) {
+      delete process.env.ANTHROPIC_API_KEY;
+    } else {
+      process.env.ANTHROPIC_API_KEY = savedApiKey;
+    }
+  });
+
   test("swallows errors and reads paths relative to the supplied cwd", () =>
     withTempDir(async (dir) => {
       // Missing body file exercises the catch branch — the function must not
@@ -422,5 +455,47 @@ describe("generateWithApi", () => {
       await generateWithApi("fake-key", notesPath, bodyPath, dir);
 
       expect(await Bun.file(notesPath).exists()).toBe(false);
+    }));
+
+  test("writes notes file on the happy path", () =>
+    withTempDir(async (dir) => {
+      const notesPath = join(dir, "release_notes.md");
+      const bodyPath = join(dir, "body.md");
+      await Bun.write(bodyPath, "### Features\n\n- new endpoint");
+
+      const mockMessages: AnthropicMessages = {
+        create: async () => ({ content: [{ type: "text", text: "Summary" }] }),
+      };
+
+      await generateWithApi("test-key", notesPath, bodyPath, dir, mockMessages);
+
+      const notes = await Bun.file(notesPath).text();
+      expect(notes).toBe("Summary");
+    }));
+
+  test("forwards tickets.json and pr_descriptions.yml from cwd into the user message", () =>
+    withTempDir(async (dir) => {
+      await Bun.write(join(dir, ".release_bot/tickets.json"), '{"MEM-1":"first ticket"}');
+      await Bun.write(join(dir, ".release_bot/pr_descriptions.yml"), "pr1: described");
+      await Bun.write(join(dir, "body.md"), "### Features\n\n- thing");
+
+      let captured: string | undefined;
+      const mockMessages: AnthropicMessages = {
+        create: async (params) => {
+          captured = params.messages[0]?.content;
+          return { content: [{ type: "text", text: "ok" }] };
+        },
+      };
+
+      await generateWithApi(
+        "test-key",
+        join(dir, "notes.md"),
+        join(dir, "body.md"),
+        dir,
+        mockMessages,
+      );
+
+      expect(captured).toContain("first ticket");
+      expect(captured).toContain("pr1: described");
     }));
 });
