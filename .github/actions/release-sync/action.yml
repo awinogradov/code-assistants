@@ -1,5 +1,5 @@
-name: Release auto-merge sync
-description: Sync the release auto-merge workflow from an upstream repository into the current repository.
+name: Release workflows sync
+description: Sync the release pipeline workflows (release, publish, auto-merge) from an upstream repository into the current repository.
 
 inputs:
   bot_token:
@@ -11,11 +11,11 @@ inputs:
       Git author/committer login for the sync commit. Defaults to `github-actions[bot]` when unset. Pass the `vars.BOT_USERNAME` repository variable to attribute commits to a dedicated bot identity.
     required: false
   source-repo:
-    description: Source repository in `owner/name` form that hosts the canonical `.github/workflows/release-automerge.yml`.
+    description: Source repository in `owner/name` form that hosts the canonical release workflows.
     required: false
     default: awinogradov/code-assistants
   source-ref:
-    description: Branch, tag, or SHA to read the source file from. Defaults to the source repository's default branch.
+    description: Branch, tag, or SHA to read the source files from. Defaults to the source repository's default branch.
     required: false
     default: ""
 
@@ -42,6 +42,8 @@ runs:
       run: |
         set -euo pipefail
         paths=(
+          .github/workflows/release.yml
+          .github/workflows/publish.yml
           .github/workflows/release-automerge.yml
         )
         {
@@ -64,7 +66,7 @@ runs:
         files: ${{ steps.resolve.outputs.files }}
         bot_token: ${{ inputs.bot_token }}
         bot_username: ${{ inputs.bot_username }}
-        branch: maintenance-sync-release-automerge
-        title: "MAINTENANCE: Sync release-automerge workflow from upstream"
-        body: Automated release auto-merge workflow sync from upstream.
-        commit-message: "chore: sync release-automerge workflow from upstream"
+        branch: maintenance-sync-release
+        title: "MAINTENANCE: Sync release workflows from upstream"
+        body: Automated release pipeline workflow sync (release, publish, auto-merge) from upstream.
+        commit-message: "chore: sync release workflows from upstream"
