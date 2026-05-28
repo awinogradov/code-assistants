@@ -16,9 +16,8 @@
  */
 import { join, relative } from "node:path";
 
+import { readReleaseField, readRootRelease, type ReleaseType } from "@code-assistants/actions-core/releaseField";
 import { Glob } from "bun";
-
-import { readReleaseField, readRootRelease, type ReleaseType } from "../releaseField.ts";
 
 /** Workspace member eligible for an independent release. */
 export interface Member {

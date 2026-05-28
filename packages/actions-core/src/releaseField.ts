@@ -5,11 +5,12 @@
  *
  * - `type` — picks publish targets, version source, and the major-version tag.
  * - `slack` — optional Slack channel for the post-publish notification.
+ * - `automerge` — root-only opt-in for `release-automerge` (default `false`).
  *
  * Detection is fail-closed for `type`: a missing field or an unrecognized
  * value throws an `Error` referencing the spec doc.
  *
- * @see ../../../../docs/release-field.md
+ * @see ../../../docs/release-field.md
  *
  * @example
  * ```typescript
@@ -54,11 +55,16 @@ export interface ReleaseConfig {
  * a standalone repo declares `type` and behaves like a member. Both forms may
  * carry `slack`. `members` and `type` are mutually exclusive at the root —
  * mixing them is a configuration error.
+ *
+ * `automerge` is a repo-wide opt-in consumed only by `release-automerge`
+ * (default `false`); it is independent of `members`/`type` and is never read
+ * per member.
  */
 export interface RootReleaseConfig {
   members?: readonly string[];
   type?: ReleaseType;
   slack?: string;
+  automerge?: boolean;
 }
 
 function fail(message: string): never {
@@ -192,6 +198,22 @@ function readMembers(release: Record<string, unknown>): readonly string[] | unde
   return value as readonly string[];
 }
 
+function readAutomerge(release: Record<string, unknown>): boolean | undefined {
+  if (!("automerge" in release)) {
+    return undefined;
+  }
+
+  const value: unknown = release.automerge;
+
+  if (typeof value !== "boolean") {
+    fail(
+      `'release.automerge' in package.json must be a boolean (true to opt into release auto-merge); got ${typeof value}.`,
+    );
+  }
+
+  return value;
+}
+
 /**
  * Read and validate the top-level `release` object on a parsed repository-root
  * `package.json`.
@@ -202,8 +224,9 @@ function readMembers(release: Record<string, unknown>): readonly string[] | unde
  * `workspaces` discovery).
  *
  * @throws when both `members` and `type` are declared (ambiguous root mode),
- *   when `members` is not a non-empty `string[]`, or when `type`/`slack` are
- *   present but invalid (same rules as {@link readReleaseField}).
+ *   when `members` is not a non-empty `string[]`, when `automerge` is present
+ *   but not a boolean, or when `type`/`slack` are present but invalid (same
+ *   rules as {@link readReleaseField}).
  *
  * @example
  * ```typescript
@@ -212,6 +235,9 @@ function readMembers(release: Record<string, unknown>): readonly string[] | unde
  *
  * readRootRelease({ release: { type: "lib-nodejs", slack: "#releases" } });
  * // → { type: "lib-nodejs", slack: "#releases" }
+ *
+ * readRootRelease({ release: { automerge: true } });
+ * // → { automerge: true }
  *
  * readRootRelease({ name: "monorepo" });
  * // → {}
@@ -247,6 +273,7 @@ export function readRootRelease(packageJson: unknown): RootReleaseConfig {
   }
 
   const slack = readSlack(release);
+  const automerge = readAutomerge(release);
   const config: RootReleaseConfig = {};
 
   if (members) {
@@ -257,6 +284,10 @@ export function readRootRelease(packageJson: unknown): RootReleaseConfig {
 
   if (slack !== undefined) {
     config.slack = slack;
+  }
+
+  if (automerge !== undefined) {
+    config.automerge = automerge;
   }
 
   return config;

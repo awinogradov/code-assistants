@@ -15,8 +15,9 @@
  */
 import { appendFile } from "node:fs/promises";
 
+import { readReleaseField } from "@code-assistants/actions-core/releaseField";
+
 import { discoverMembers } from "./monorepo/discoverMembers.ts";
-import { readReleaseField } from "./releaseField.ts";
 
 const DOCS_LINK = "docs/release-field.md";
 const PACKAGE_JSON = "package.json";
