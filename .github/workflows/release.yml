@@ -1,3 +1,10 @@
+# Requires repo secrets:
+#   - `GH_TOKEN`: PAT or App installation token with `contents: write` and
+#     `pull-requests: write`. The default `GITHUB_TOKEN` cannot create PRs.
+#     See `.github/actions/release-action/README.md` for the rationale.
+#   - `ANTHROPIC_RELEASE`: Anthropic API key used to generate human-readable
+#     release-note summaries from the changelog (optional but recommended).
+
 name: Release
 
 on:
