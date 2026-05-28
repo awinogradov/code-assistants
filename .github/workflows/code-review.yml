@@ -25,7 +25,7 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: awinogradov/code-assistants/.github/actions/code-review-action@v1
+      - uses: awinogradov/code-assistants/.github/actions/code-review-action@main
         with:
           reviewer: ${{ vars.BOT_USERNAME }}
           bot_token: ${{ secrets.BOT_TOKEN }}
