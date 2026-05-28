@@ -8,17 +8,10 @@
  */
 import { appendFile } from "node:fs/promises";
 
+import { fetchCheckStatuses } from "@code-assistants/actions-core/checkStatus";
 import type { Octokit } from "@octokit/rest";
 
 import { parseRepoEnv } from "./github/githubReview.ts";
-
-/** Aggregated check status result from both GitHub APIs */
-interface CheckResult {
-  allCompleted: boolean;
-  hasFailed: boolean;
-  failedNames: string[];
-  pendingNames: string[];
-}
 
 /** Outcome of the preflight polling loop */
 type PreflightOutcome =
@@ -39,9 +32,6 @@ interface PreflightConfig {
   timeoutMs: number;
   prAuthor: string;
 }
-
-const failedConclusions = new Set(["failure", "timed_out"]);
-const failedStatuses = new Set(["failure", "error"]);
 
 /** Parse and validate preflight-specific environment variables. */
 function parsePreflightEnv(): PreflightConfig {
@@ -71,87 +61,6 @@ function parsePreflightEnv(): PreflightConfig {
     pollIntervalMs,
     timeoutMs,
     prAuthor,
-  };
-}
-
-/**
- * Normalize name for self-exclusion comparison.
- * Strips non-alphanumeric characters so "code-review" matches "Code Review".
- */
-function normalizeCheckName(name: string): string {
-  return name.toLowerCase().replaceAll(/[^a-z0-9]/g, "");
-}
-
-/**
- * Deduplicate check runs by name, keeping only the most recent run per name.
- * GitHub's Check Runs API returns all runs including superseded ones from previous pushes.
- * Uses the auto-incrementing `id` field as the recency indicator.
- */
-function deduplicateCheckRuns<T extends { id: number; name: string }>(runs: T[]): T[] {
-  const latestByName = new Map<string, T>();
-
-  for (const run of runs) {
-    const existing = latestByName.get(run.name);
-    if (!existing || run.id > existing.id) {
-      latestByName.set(run.name, run);
-    }
-  }
-
-  return [...latestByName.values()];
-}
-
-/**
- * Fetch and aggregate check statuses from both Check Runs and Commit Status APIs.
- * Excludes the current job's own check run by normalized name comparison.
- */
-async function fetchCheckStatuses(
-  octokit: Octokit,
-  owner: string,
-  repo: string,
-  ref: string,
-  jobName: string
-): Promise<CheckResult> {
-  const normalizedJobName = normalizeCheckName(jobName);
-
-  const [checkRuns, commitStatus] = await Promise.all([
-    octokit.paginate(octokit.rest.checks.listForRef, { owner, repo, ref, per_page: 100 }),
-    octokit.rest.repos.getCombinedStatusForRef({ owner, repo, ref }),
-  ]);
-
-  const allSiblingRuns = checkRuns.filter(
-    (run) => normalizeCheckName(run.name) !== normalizedJobName
-  );
-  const nonCancelledRuns = allSiblingRuns.filter((run) => run.conclusion !== "cancelled");
-  const siblingRuns = deduplicateCheckRuns(nonCancelledRuns);
-
-  const siblingNames = new Set(siblingRuns.map((run) => run.name));
-  const cancelledOnlyNames = [...new Set(allSiblingRuns.map((run) => run.name))].filter(
-    (name) => !siblingNames.has(name)
-  );
-
-  const pendingRuns = [
-    ...siblingRuns.filter((run) => run.status !== "completed").map((run) => run.name),
-    ...cancelledOnlyNames,
-  ];
-  const failedRuns = siblingRuns
-    .filter((run) => run.status === "completed" && failedConclusions.has(run.conclusion ?? ""))
-    .map((run) => run.name);
-
-  const pendingStatuses = commitStatus.data.statuses
-    .filter((s) => s.state === "pending")
-    .map((s) => s.context);
-  const failedCommitStatuses = commitStatus.data.statuses
-    .filter((s) => failedStatuses.has(s.state))
-    .map((s) => s.context);
-
-  const allPending = [...pendingRuns, ...pendingStatuses];
-  const allFailed = [...failedRuns, ...failedCommitStatuses];
-
-  return {
-    allCompleted: allPending.length === 0,
-    hasFailed: allFailed.length > 0,
-    failedNames: allFailed,
-    pendingNames: allPending,
   };
 }
 

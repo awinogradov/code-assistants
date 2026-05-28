@@ -19,6 +19,7 @@
     ".github/actions/files-sync",
     ".github/actions/agents-rules-sync",
     ".github/actions/release-action",
+    ".github/actions/release-automerge",
     ".github/actions/code-review-action",
     "claude-plugins/*",
     "packages/*"

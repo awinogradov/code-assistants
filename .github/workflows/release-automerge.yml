@@ -1,0 +1,40 @@
+# Source: https://github.com/awinogradov/code-assistants/blob/main/.github/workflows/release-automerge.yml
+# This file is distributed to downstream repositories by an automated sync.
+# Edits made downstream are overwritten on the next run.
+# To change it, open a pull request against the source file above.
+#
+# Repository secrets/variables consumed by this workflow:
+#   - `BOT_TOKEN` (secret, required): PAT or App installation token with
+#     `contents: write` + `pull-requests: write`. The default `GITHUB_TOKEN` is
+#     not supported — a merge it performs does not trigger `publish.yml`, and on a
+#     protected `main` the token must also be a ruleset bypass actor.
+#     See `.github/actions/release-automerge/README.md`.
+
+name: Release auto-merge
+
+on:
+  check_suite:
+    types: [completed]
+  status:
+  pull_request_review:
+    types: [submitted]
+
+concurrency:
+  # Keyed on the head commit, not the PR number: status/check_suite payloads
+  # carry no PR number, so a SHA group is the only stable serializer across all
+  # three event types. Do not cancel — let an in-flight merge finish.
+  group: release-automerge-${{ github.event.check_suite.head_sha || github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: awinogradov/code-assistants/.github/actions/release-automerge@main
+        with:
+          bot_token: ${{ secrets.BOT_TOKEN }}
