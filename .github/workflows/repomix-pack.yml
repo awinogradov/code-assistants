@@ -2,6 +2,14 @@
 # with `contents: write`) or a GitHub App installation token. The default
 # `GITHUB_TOKEN` cannot push to a protected branch or trigger downstream
 # workflows under our settings — see `upstream.yml` for the same rationale.
+#
+# The final step pushes directly to `main`, so the `BOT_TOKEN` identity must
+# ALSO be a bypass actor on the protected-branch ruleset. `contents: write`
+# alone is not enough: when the ruleset requires PRs, a direct push is rejected
+# with `GH013` ("Changes must be made through a pull request") regardless of the
+# token's write scope. Add the bot to the ruleset's bypass list (Settings →
+# Rules → the branch ruleset → Bypass list).
+#
 # Optional repo variable `BOT_USERNAME`: git author login for the pack commit.
 # Defaults to `github-actions[bot]` when unset.
 
