@@ -216,7 +216,7 @@ export interface EmitMemberArtifactsOptions {
 async function extractMemberTickets(
   member: Member,
   cwd: string,
-  config: { ticketSystems?: TicketSystemEntry[]; owner?: string; repo?: string },
+  config: Pick<EmitMemberArtifactsOptions, "ticketSystems" | "owner" | "repo">,
 ): Promise<string> {
   try {
     return await processTickets({
