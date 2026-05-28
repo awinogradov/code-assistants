@@ -1,5 +1,8 @@
 # Code review action
 
+[![GitHub Release](https://img.shields.io/badge/release-v0.1.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
+
 Composite GitHub Action that runs AI code review on pull requests using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Has two modes:
 
 - **`review`** — runs the `/autopilot:pr-review` skill against the PR diff and submits a structured review (approve / request changes / comment) with optional inline findings.
