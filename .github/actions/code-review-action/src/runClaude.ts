@@ -218,7 +218,21 @@ async function tryResolveBinary(pkg: string, binary: string): Promise<string | u
   try {
     const packageJson = require.resolve(`${pkg}/package.json`);
     const binPath = join(packageJson, "..", binary);
-    return (await pathExists(binPath)) ? binPath : undefined;
+    if (await pathExists(binPath)) return binPath;
+  } catch {
+    // Standard resolution failed — fall through to the Bun isolated-install lookup.
+  }
+
+  // Bun's isolated linker keeps optional platform subpackages in `.bun/` without
+  // symlinking them into the consumer's node_modules. Locate the cache via the
+  // already-resolvable SDK package and compute the flat path directly.
+  try {
+    const sdkPkgPath = require.resolve("@anthropic-ai/claude-agent-sdk/package.json");
+    const bunRoot = join(sdkPkgPath, "..", "..", "..", "..", "..");
+    const { version } = (await Bun.file(sdkPkgPath).json()) as { version: string };
+    const flatName = pkg.replace("/", "+");
+    const candidate = join(bunRoot, `${flatName}@${version}`, "node_modules", pkg, binary);
+    return (await pathExists(candidate)) ? candidate : undefined;
   } catch {
     return undefined;
   }
