@@ -28,7 +28,9 @@ const longRunMs = 5 * 60 * 1000;
 
 /** Create pino logger configured per platform logging standard. */
 async function createLogger(): Promise<pino.Logger> {
-  const version = (await Bun.file(`${import.meta.dirname}/../version`).text()).trim();
+  const { version } = (await Bun.file(`${import.meta.dirname}/../package.json`).json()) as {
+    version: string;
+  };
 
   return pino(
     {
