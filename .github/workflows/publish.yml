@@ -1,0 +1,42 @@
+name: Publish
+
+on:
+  pull_request_target:
+    types: [closed]
+    paths:
+      - "**/.release_notes/**"
+
+concurrency:
+  group: publish-${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Publish release
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve changed files
+        id: changed
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          {
+            echo 'files<<EOF'
+            gh pr view "$PR_NUMBER" --json files --jq '.files[].path'
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: awinogradov/code-assistants/.github/actions/release-action@main
+        with:
+          mode: publish
+          github_token: ${{ secrets.GH_TOKEN }}
+        env:
+          PR_CHANGED_FILES: ${{ steps.changed.outputs.files }}
