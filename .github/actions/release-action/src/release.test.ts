@@ -106,10 +106,7 @@ describe("release CLI", () => {
 
       const result = insertTicketsInRelease(release, tickets);
 
-      expect(result).toContain("## GitHub Issues");
-      // header → tickets → changelog sections
-      expect(result.indexOf("## [1.1.0]")).toBeLessThan(result.indexOf("## GitHub Issues"));
-      expect(result.indexOf("## GitHub Issues")).toBeLessThan(result.indexOf("### Features"));
+      expect(result).toBe(`## [1.1.0] (2025-01-01)\n\n${tickets}\n### Features\n\n* feat\n`);
     });
 
     test("returns release unchanged when tickets is empty", () => {
