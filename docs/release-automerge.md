@@ -42,7 +42,7 @@ the merge with no manual step.
             merge PR                   no-op (never merge)
                   │
                   ▼ merge cascades (PAT bot_token)
-            publish.yml runs on merge
+            release-publish.yml runs on merge
 ```
 
 - **Triggers:** `check_suite: [completed]`, `status`, and
@@ -72,7 +72,7 @@ the merge with no manual step.
 The action merges with the repository's `BOT_TOKEN` (a PAT or GitHub App
 installation token), **not** the default `GITHUB_TOKEN`. A merge performed with
 `GITHUB_TOKEN` does not trigger downstream workflows, so
-[`publish.yml`](../.github/workflows/publish.yml) — which runs on
+[`release-publish.yml`](../.github/workflows/release-publish.yml) — which runs on
 `pull_request_target: [closed]` for `**/.release_notes/**` — would never fire and
 the release would not publish. The upstream auto-approval is posted with the same
 token for the same reason.
@@ -102,8 +102,8 @@ code-review and repomix workflows:
 
 The [`release-sync`](../.github/actions/release-sync/README.md) action wraps
 [`files-sync`](../.github/actions/files-sync/README.md) to sync the full pipeline —
-`release.yml` (opens the release PR), `publish.yml` (publishes on merge), and
-`release-automerge.yml` (merges the approved, green PR) — to a
+`release-create.yml` (opens the release PR), `release-publish.yml` (publishes on
+merge), and `release-automerge.yml` (merges the approved, green PR) — to a
 `maintenance-sync-release` branch and open (or reuse) a single PR. The action
 directories these workflows invoke (`release-action`, `release-automerge`) are
 **not** synced — downstream repos reference them via `@main`, the same way

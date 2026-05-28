@@ -42,8 +42,8 @@ runs:
       run: |
         set -euo pipefail
         paths=(
-          .github/workflows/release.yml
-          .github/workflows/publish.yml
+          .github/workflows/release-create.yml
+          .github/workflows/release-publish.yml
           .github/workflows/release-automerge.yml
         )
         {
