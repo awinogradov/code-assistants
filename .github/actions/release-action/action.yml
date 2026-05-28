@@ -107,11 +107,17 @@ runs:
       shell: bash
       env:
         INPUT_BOT_USERNAME: ${{ inputs.bot_username }}
+        GH_TOKEN: ${{ inputs.bot_token }}
       run: |
         bot_user="${INPUT_BOT_USERNAME:-github-actions[bot]}"
+        if [ "$bot_user" = "github-actions[bot]" ]; then
+          bot_uid=41898282
+        else
+          bot_uid=$(gh api "users/${bot_user}" --jq '.id' 2>/dev/null || echo 41898282)
+        fi
         git config --global user.name "$bot_user"
-        git config --global user.email "41898282+${bot_user}@users.noreply.github.com"
-        echo "Authoring as: $bot_user <41898282+${bot_user}@users.noreply.github.com>"
+        git config --global user.email "${bot_uid}+${bot_user}@users.noreply.github.com"
+        echo "Authoring as: $bot_user <${bot_uid}+${bot_user}@users.noreply.github.com>"
 
     - name: Detect release type
       id: detect-type

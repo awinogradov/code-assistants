@@ -79,6 +79,7 @@ describe('createSyncPullRequest', () => {
 
     await createSyncPullRequest({ ...baseArgs, octokit, identity });
 
+    expect(captured).toBeDefined();
     expect(captured?.author).toEqual(identity);
     expect(captured?.committer).toEqual(identity);
   });

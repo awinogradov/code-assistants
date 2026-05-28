@@ -8,28 +8,50 @@ export interface BotIdentity {
   email: string;
 }
 
+/** Minimal Octokit surface needed to resolve a GitHub user's numeric id. */
+interface UserLookup {
+  rest: {
+    users: {
+      getByUsername: (args: { username: string }) => Promise<{ data: { id: number } }>;
+    };
+  };
+}
+
 const defaultUsername = 'github-actions[bot]';
 const defaultUserId = '41898282';
 
+function buildIdentity(name: string, userId: string): BotIdentity {
+  return { name, email: `${userId}+${name}@users.noreply.github.com` };
+}
+
 /**
- * Resolves the git identity used to author sync commits.
+ * Resolves the git identity used to author sync commits, decoupling attribution
+ * from the `bot_token` owner.
  *
- * Decouples commit attribution from the `bot_token` owner: regardless of whose PAT
- * authenticates the Git Data API call, commits are authored by the configured
- * `bot_username`, falling back to GitHub's native `github-actions[bot]` when unset.
+ * The numeric id in the noreply email is read from the live GitHub API so a custom
+ * `bot_username` links to its real account. `github-actions[bot]` uses its well-known
+ * id without a lookup, and any lookup failure falls back to that id.
  *
- * @param username - The `bot_username` action input (`INPUT_BOT_USERNAME`). Empty or
- *   whitespace-only values fall back to `github-actions[bot]`.
- * @returns The resolved `{ name, email }`, where `email` is the `<uid>+<name>` GitHub noreply address.
+ * @param octokit - Authenticated client used to look up the user id.
+ * @param username - The `bot_username` action input. Empty/whitespace falls back to `github-actions[bot]`.
  *
  * @example
- *   resolveBotIdentity('symbiot-bot');
- *   // → { name: 'symbiot-bot', email: '41898282+symbiot-bot@users.noreply.github.com' }
- *   resolveBotIdentity();
+ *   await resolveBotIdentity(octokit, 'symbiot-bot');
+ *   // → { name: 'symbiot-bot', email: '123456+symbiot-bot@users.noreply.github.com' }
+ *   await resolveBotIdentity(octokit);
  *   // → { name: 'github-actions[bot]', email: '41898282+github-actions[bot]@users.noreply.github.com' }
  */
-export function resolveBotIdentity(username?: string): BotIdentity {
+export async function resolveBotIdentity(octokit: UserLookup, username?: string): Promise<BotIdentity> {
   const name = username?.trim() || defaultUsername;
 
-  return { name, email: `${defaultUserId}+${name}@users.noreply.github.com` };
+  if (name === defaultUsername) {
+    return buildIdentity(name, defaultUserId);
+  }
+
+  try {
+    const { data } = await octokit.rest.users.getByUsername({ username: name });
+    return buildIdentity(name, String(data.id));
+  } catch {
+    return buildIdentity(name, defaultUserId);
+  }
 }

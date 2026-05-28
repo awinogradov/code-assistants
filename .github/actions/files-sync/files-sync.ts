@@ -19,7 +19,7 @@
 import * as core from '@actions/core';
 import { Octokit } from '@octokit/rest';
 
-import { resolveBotIdentity, type BotIdentity } from './src/botIdentity.ts';
+import { resolveBotIdentity } from './src/botIdentity.ts';
 import { computeChanges } from './src/changeDetector.ts';
 import { createSyncPullRequest } from './src/createSyncPullRequest.ts';
 import {
@@ -38,7 +38,6 @@ interface Env {
   title: string;
   body: string;
   commitMessage: string;
-  identity: BotIdentity;
 }
 
 function readEnv(): Env {
@@ -50,7 +49,6 @@ function readEnv(): Env {
   const title = required('INPUT_TITLE');
   const body = required('INPUT_BODY');
   const commitMessage = required('INPUT_COMMIT_MESSAGE');
-  const identity = resolveBotIdentity(process.env.INPUT_BOT_USERNAME);
 
   const { owner, name } = parseRepoSlug(repository);
 
@@ -63,7 +61,6 @@ function readEnv(): Env {
     title,
     body,
     commitMessage,
-    identity,
   };
 }
 
@@ -148,6 +145,7 @@ async function main(): Promise<void> {
   core.info(`Resolved ${entries.length} sync entr${entries.length === 1 ? 'y' : 'ies'}.`);
 
   const octokit = new Octokit({ auth: env.token });
+  const identity = await resolveBotIdentity(octokit, process.env.INPUT_BOT_USERNAME);
 
   const changes = await computeChanges({
     octokit,
@@ -171,7 +169,7 @@ async function main(): Promise<void> {
   const paths = changes.map((change) => change.path);
   const body = composeBody(env.body, paths);
 
-  core.info(`Authoring sync commit as ${env.identity.name} <${env.identity.email}>`);
+  core.info(`Authoring sync commit as ${identity.name} <${identity.email}>`);
 
   const pr = await createSyncPullRequest({
     octokit,
@@ -182,7 +180,7 @@ async function main(): Promise<void> {
     body,
     commitMessage: env.commitMessage,
     changes,
-    identity: env.identity,
+    identity,
   });
 
   core.setOutput('changed-files', paths.join('\n'));
