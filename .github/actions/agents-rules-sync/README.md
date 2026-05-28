@@ -1,5 +1,8 @@
 # Agents rules sync
 
+[![GitHub Release](https://img.shields.io/badge/release-v1.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
+
 Composite GitHub Action that syncs the stack-appropriate agent rules file from an upstream
 repository into the current repository's `CLAUDE.md` and opens a single pull request with
 the difference.
