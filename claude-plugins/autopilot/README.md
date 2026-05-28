@@ -1,5 +1,8 @@
 # Autopilot Claude Plugin
 
+[![GitHub Release](https://img.shields.io/badge/release-v0.1.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
+
 > Part of the [code-assistants](../../README.md) marketplace repository.
 
 Slash commands, skills, and agents for AI-assisted development workflows.
