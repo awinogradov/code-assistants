@@ -21,22 +21,21 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
 
       - name: Resolve changed files
-        id: changed
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           {
-            echo 'files<<EOF'
-            gh pr view "$PR_NUMBER" --json files --jq '.files[].path'
+            echo 'PR_CHANGED_FILES<<EOF'
+            gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER/files" --paginate --jq '.[].filename'
             echo EOF
-          } >> "$GITHUB_OUTPUT"
+          } >> "$GITHUB_ENV"
 
       - uses: awinogradov/code-assistants/.github/actions/release-action@main
         with:
           mode: publish
           github_token: ${{ secrets.GH_TOKEN }}
-        env:
-          PR_CHANGED_FILES: ${{ steps.changed.outputs.files }}
