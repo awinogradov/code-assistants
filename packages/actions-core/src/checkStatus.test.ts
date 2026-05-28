@@ -2,8 +2,9 @@
  * Contract tests for the shared check-status aggregation.
  *
  * These pin the subtle behaviors both consumers (code-review preflight poll and
- * release-automerge merge gate) rely on: dedup by run id, cancelled-only runs
- * counting as pending, combined-status classification, and self-exclusion.
+ * release-automerge merge gate) rely on: dedup by run id, cancelled runs carrying
+ * no signal, combined-status classification, self-exclusion, and that the API args
+ * (owner/repo/ref) are forwarded unchanged.
  */
 import type { Octokit } from "@octokit/rest";
 
@@ -23,19 +24,37 @@ interface FakeStatus {
   state: string;
 }
 
-/** Build a minimal Octokit stand-in returning the supplied runs and statuses. */
-function fakeOctokit(runs: FakeRun[], statuses: FakeStatus[]): Octokit {
+interface CapturedCalls {
+  paginate: Array<Record<string, unknown>>;
+  combined: Array<Record<string, unknown>>;
+}
+
+/**
+ * Build a minimal Octokit stand-in returning the supplied runs and statuses, and
+ * recording the params each API received so tests can assert they are forwarded.
+ */
+function fakeOctokit(
+  runs: FakeRun[],
+  statuses: FakeStatus[]
+): { octokit: Octokit; calls: CapturedCalls } {
+  const calls: CapturedCalls = { paginate: [], combined: [] };
   const octokit = {
-    paginate: async () => runs,
+    paginate: async (_fn: unknown, params: Record<string, unknown>) => {
+      calls.paginate.push(params);
+      return runs;
+    },
     rest: {
       checks: { listForRef: () => undefined },
       repos: {
-        getCombinedStatusForRef: async () => ({ data: { statuses } }),
+        getCombinedStatusForRef: async (params: Record<string, unknown>) => {
+          calls.combined.push(params);
+          return { data: { statuses } };
+        },
       },
     },
   };
 
-  return octokit as unknown as Octokit;
+  return { octokit: octokit as unknown as Octokit, calls };
 }
 
 describe("normalizeCheckName", () => {
@@ -61,7 +80,7 @@ describe("deduplicateCheckRuns", () => {
 
 describe("fetchCheckStatuses", () => {
   test("all green completed runs pass", async () => {
-    const octokit = fakeOctokit(
+    const { octokit } = fakeOctokit(
       [{ id: 1, name: "build", status: "completed", conclusion: "success" }],
       []
     );
@@ -74,8 +93,15 @@ describe("fetchCheckStatuses", () => {
     });
   });
 
+  test("forwards owner, repo, and ref to both APIs", async () => {
+    const { octokit, calls } = fakeOctokit([], []);
+    await fetchCheckStatuses(octokit, "acme", "widgets", "deadbeef", "automerge");
+    expect(calls.combined[0]).toMatchObject({ owner: "acme", repo: "widgets", ref: "deadbeef" });
+    expect(calls.paginate[0]).toMatchObject({ owner: "acme", repo: "widgets", ref: "deadbeef" });
+  });
+
   test("excludes its own check by normalized name", async () => {
-    const octokit = fakeOctokit(
+    const { octokit } = fakeOctokit(
       [{ id: 1, name: "Release Automerge", status: "in_progress", conclusion: null }],
       []
     );
@@ -85,7 +111,7 @@ describe("fetchCheckStatuses", () => {
   });
 
   test("incomplete sibling run counts as pending", async () => {
-    const octokit = fakeOctokit(
+    const { octokit } = fakeOctokit(
       [{ id: 1, name: "build", status: "in_progress", conclusion: null }],
       []
     );
@@ -95,7 +121,7 @@ describe("fetchCheckStatuses", () => {
   });
 
   test("superseded failed run is ignored when a newer success exists", async () => {
-    const octokit = fakeOctokit(
+    const { octokit } = fakeOctokit(
       [
         { id: 1, name: "build", status: "completed", conclusion: "failure" },
         { id: 2, name: "build", status: "completed", conclusion: "success" },
@@ -107,18 +133,19 @@ describe("fetchCheckStatuses", () => {
     expect(result.allCompleted).toBe(true);
   });
 
-  test("cancelled-only run counts as pending, not green", async () => {
-    const octokit = fakeOctokit(
+  test("cancelled-only run carries no signal and does not block the gate", async () => {
+    const { octokit } = fakeOctokit(
       [{ id: 1, name: "flaky", status: "completed", conclusion: "cancelled" }],
       []
     );
     const result = await fetchCheckStatuses(octokit, "o", "r", "sha", "automerge");
-    expect(result.allCompleted).toBe(false);
-    expect(result.pendingNames).toEqual(["flaky"]);
+    expect(result.allCompleted).toBe(true);
+    expect(result.hasFailed).toBe(false);
+    expect(result.pendingNames).toEqual([]);
   });
 
   test("failed conclusion is reported", async () => {
-    const octokit = fakeOctokit(
+    const { octokit } = fakeOctokit(
       [{ id: 1, name: "lint", status: "completed", conclusion: "timed_out" }],
       []
     );
@@ -128,7 +155,7 @@ describe("fetchCheckStatuses", () => {
   });
 
   test("combined commit statuses classify pending and failure", async () => {
-    const octokit = fakeOctokit(
+    const { octokit } = fakeOctokit(
       [],
       [
         { context: "ci/pending", state: "pending" },

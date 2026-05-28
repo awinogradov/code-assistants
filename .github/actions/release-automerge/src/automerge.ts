@@ -12,6 +12,7 @@
  * GH_TOKEN=xxx REPO=owner/repo HEAD_SHA=abc JOB_NAME=automerge bun run src/automerge.ts
  */
 import { fetchCheckStatuses } from "@code-assistants/actions-core/checkStatus";
+import { parseRepo } from "@code-assistants/actions-core/parseRepo";
 import { Octokit } from "@octokit/rest";
 
 /** Minimal PR shape needed to pick the release PR for a commit. */
@@ -32,6 +33,8 @@ export interface MergeMethodFlags {
 export type MergeMethod = "rebase" | "squash" | "merge";
 
 const releaseBranch = /^release-/;
+// GitHub merge-API responses that mean "nothing to do" rather than a real error:
+// 405 not mergeable / already merged, 409 head SHA moved (sha mismatch), 422 unprocessable.
 const idempotentMergeStatuses = new Set([405, 409, 422]);
 
 /** Configuration parsed from environment. */
@@ -54,10 +57,7 @@ function parseEnv(): AutomergeConfig {
     throw new Error("Missing required environment variables: GH_TOKEN, REPO, HEAD_SHA, JOB_NAME");
   }
 
-  const [owner, repo] = repository.split("/");
-  if (!owner || !repo) {
-    throw new Error(`Invalid REPO format: ${repository}. Expected owner/repo`);
-  }
+  const { owner, repo } = parseRepo(repository);
 
   return { octokit: new Octokit({ auth: token }), owner, repo, headSha, jobName };
 }

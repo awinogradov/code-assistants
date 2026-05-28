@@ -11,7 +11,8 @@
   },
   "exports": {
     "./fetchRawContent": "./src/fetchRawContent.ts",
-    "./checkStatus": "./src/checkStatus.ts"
+    "./checkStatus": "./src/checkStatus.ts",
+    "./parseRepo": "./src/parseRepo.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
