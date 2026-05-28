@@ -39,12 +39,12 @@ jobs:
           BOT_USERNAME: ${{ vars.BOT_USERNAME }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          if git diff --quiet -- .repomix/pack.xml; then
+          git add .repomix/pack.xml
+          if git diff --cached --quiet -- .repomix/pack.xml; then
             echo "No pack changes — skipping commit."
             exit 0
           fi
           git config user.name "${BOT_USERNAME:-github-actions[bot]}"
           git config user.email "${BOT_USERNAME:-github-actions[bot]}@users.noreply.github.com"
-          git add .repomix/pack.xml
           git commit -m "chore(repomix): refresh pack from #${PR_NUMBER}"
           git push origin HEAD:main
