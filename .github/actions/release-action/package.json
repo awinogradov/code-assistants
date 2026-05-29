@@ -1,6 +1,6 @@
 {
   "name": "@code-assistants/release-action",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Composite GitHub Action that automates conventional-commit releases for npm packages, GitHub Actions, and Claude plugins.",
   "private": true,
   "type": "module",

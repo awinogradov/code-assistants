@@ -2,6 +2,40 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.0.1](https://github.com/awinogradov/code-assistants/compare/release-action@v1.0.0...release-action@v1.0.1) (2026-05-29)
+
+## Release Notes
+
+The release action now properly respects manually-set versions in manifests, preventing regressions during multi-package releases.
+
+## 🐛 Bug Fixes
+
+### Version protection for multi-package releases
+Release automation no longer overwrites higher version numbers that have been manually set in manifest files. Previously, if you bumped a package version in a manifest but hadn't created a tag yet, the release process would revert it to match the latest tag version. This protection ensures your carefully planned version updates remain intact throughout the release pipeline.
+
+<details><summary>Related issues</summary>
+
+- [#163: release-action regresses manually-set manifest versions (tag-only base) — add version floor + monotonicity guard](https://github.com/awinogradov/code-assistants/issues/163)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #163 | [#164](https://github.com/awinogradov/code-assistants/pull/164) | @awinogradov |
+
+### Bug Fixes
+
+* **release-action:** floor member version on manifest, not just tags ([08499a9](https://github.com/awinogradov/code-assistants/commit/08499a95108a71dd3c727ace9fe6f43925f17928))
+
+### Refactoring
+
+* **release-action:** share version readers, bound pyproject parse ([fe7a272](https://github.com/awinogradov/code-assistants/commit/fe7a272b9d92a0b41bcc68346c6dc31d9627c54e))
+
+### Tests
+
+* **release-action:** add unit tests for version-file readers ([f65ca5f](https://github.com/awinogradov/code-assistants/commit/f65ca5f7d157f6d9f9e1c18227c101d869d56ff5))
 ## [1.0.0](https://github.com/awinogradov/code-assistants/compare/release-action@v0.1.0...release-action@v1.0.0) (2026-05-29)
 
 ## Release Notes
