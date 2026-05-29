@@ -9,7 +9,11 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import {
+  countToolUses,
+  deriveMode,
   detectLinuxLibc,
+  extractUsage,
+  findResultMessage,
   loadMcpServers,
   mcpConfigFileSchema,
   parseConfig,
@@ -197,6 +201,101 @@ describe("loadMcpServers", () => {
 
     const result = await loadMcpServers(filePath);
     expect(result).toEqual({});
+  });
+});
+
+describe("deriveMode", () => {
+  test("detects review mode from the pr-review prompt", () => {
+    expect(deriveMode("/autopilot:pr-review REPO: o/r PR_NUMBER: 1")).toBe("review");
+  });
+
+  test("detects react mode from the pr-answer prompt", () => {
+    expect(deriveMode("/autopilot:pr-answer REPO: o/r PR_NUMBER: 1")).toBe("react");
+  });
+
+  test("returns unknown for unrecognized prompts", () => {
+    expect(deriveMode("do something else")).toBe("unknown");
+  });
+});
+
+describe("findResultMessage", () => {
+  test("returns the last result message", () => {
+    const messages = [
+      { type: "assistant" },
+      { type: "result", subtype: "success", duration_ms: 10 },
+      { type: "result", subtype: "success", duration_ms: 20 },
+    ];
+    expect(findResultMessage(messages)).toEqual({
+      type: "result",
+      subtype: "success",
+      duration_ms: 20,
+    });
+  });
+
+  test("returns undefined when no result message exists", () => {
+    expect(findResultMessage([{ type: "assistant" }, "noise", null])).toBeUndefined();
+  });
+});
+
+describe("countToolUses", () => {
+  test("counts tool_use blocks across assistant messages", () => {
+    const messages = [
+      { type: "assistant", message: { content: [{ type: "text" }, { type: "tool_use" }] } },
+      { type: "assistant", message: { content: [{ type: "tool_use" }, { type: "tool_use" }] } },
+      { type: "user", message: { content: [{ type: "tool_result" }] } },
+      { type: "result", subtype: "success" },
+    ];
+    expect(countToolUses(messages)).toBe(3);
+  });
+
+  test("returns 0 for messages without tool_use blocks", () => {
+    expect(countToolUses([{ type: "assistant", message: { content: [{ type: "text" }] } }])).toBe(
+      0
+    );
+  });
+
+  test("ignores malformed entries", () => {
+    expect(countToolUses([null, "noise", { type: "assistant" }, 42])).toBe(0);
+  });
+});
+
+describe("extractUsage", () => {
+  test("extracts usage and cost from a result message", () => {
+    const result = {
+      type: "result",
+      total_cost_usd: 0.42,
+      num_turns: 7,
+      usage: {
+        input_tokens: 1000,
+        output_tokens: 200,
+        cache_read_input_tokens: 800,
+        cache_creation_input_tokens: 50,
+      },
+    };
+    expect(extractUsage(result)).toEqual({
+      tokensIn: 1000,
+      tokensOut: 200,
+      cacheReadTokens: 800,
+      cacheCreationTokens: 50,
+      costUsd: 0.42,
+      numTurns: 7,
+    });
+  });
+
+  test("defaults all fields to 0 when usage is absent", () => {
+    expect(extractUsage(undefined)).toEqual({
+      tokensIn: 0,
+      tokensOut: 0,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      costUsd: 0,
+      numTurns: 0,
+    });
+  });
+
+  test("coerces non-numeric fields to 0", () => {
+    const result = { usage: { input_tokens: "lots" }, total_cost_usd: null };
+    expect(extractUsage(result)).toMatchObject({ tokensIn: 0, costUsd: 0 });
   });
 });
 
