@@ -283,7 +283,7 @@ async function runSubagent(
  * or a schema-invalid payload degrades to a skipped dimension — same policy as a
  * failed in-model sub-agent — with the raw payload kept for diagnostics.
  */
-async function collectStructuredFindings(
+export async function collectStructuredFindings(
   log: pino.Logger,
   stream: AsyncIterable<SDKMessage>,
 ): Promise<CollectedFindings> {
