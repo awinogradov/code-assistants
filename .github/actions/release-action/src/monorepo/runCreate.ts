@@ -16,7 +16,6 @@
  */
 import { join } from "node:path";
 
-import { Glob } from "bun";
 import semver from "semver";
 
 import { assemblePrBody } from "../assemble-pr-body.ts";
@@ -28,6 +27,9 @@ import {
   generateChangelog,
   insertTicketsInRelease,
   processTickets,
+  readPackageJsonVersion,
+  readPluginVersions,
+  readPyprojectVersion,
 } from "../release.ts";
 import { updateVersionFiles } from "../prepareRelease.ts";
 import { refreshReleaseBadge } from "../updateReleaseBadge.ts";
@@ -204,49 +206,24 @@ function maxVersion(a: string | null, b: string | null): string | null {
 }
 
 /**
- * Read the `version` declared in every `**\/.claude-plugin/plugin.json` under a
- * member directory (`.claude-plugin` is a dot dir, hence `dot: true`).
- */
-async function readPluginVersions(memberPath: string): Promise<(string | null)[]> {
-  const versions: (string | null)[] = [];
-  const glob = new Glob("**/.claude-plugin/plugin.json");
-  for await (const match of glob.scan({ cwd: memberPath, dot: true, absolute: false })) {
-    if (match.includes("node_modules")) continue;
-    const plugin = (await Bun.file(join(memberPath, match)).json()) as Record<string, unknown>;
-    versions.push(typeof plugin.version === "string" ? plugin.version : null);
-  }
-  return versions;
-}
-
-/**
  * Compute a member's version floor: the highest valid semver declared across
  * the same files {@link updateVersionFiles} writes — `package.json`,
  * `pyproject.toml` `[project]`, and every `.claude-plugin/plugin.json`. This is
  * the seam that closes issue #163: a manual bump in any of these files is
- * respected instead of being overwritten by a tag-derived version.
+ * respected instead of being overwritten by a tag-derived version. The per-file
+ * readers are shared with {@link getCurrentVersion} so the parsing stays in one
+ * place.
  *
  * `uv.lock` is omitted (it always mirrors `pyproject [project]`) and so is the
  * plain `version` file (auto-written each release, not a manual source of
  * truth). Returns `null` when no version-bearing file declares one.
  */
 async function readMemberVersionFloor(memberPath: string): Promise<string | null> {
-  const candidates: (string | null)[] = [];
-
-  const pkgFile = Bun.file(join(memberPath, "package.json"));
-  if (await pkgFile.exists()) {
-    const pkg = (await pkgFile.json()) as Record<string, unknown>;
-    candidates.push(typeof pkg.version === "string" ? pkg.version : null);
-  }
-
-  const pyFile = Bun.file(join(memberPath, "pyproject.toml"));
-  if (await pyFile.exists()) {
-    const match = (await pyFile.text()).match(
-      /^\[project\][\s\S]*?^version\s*=\s*"([^"]*)"/m,
-    );
-    candidates.push(match ? match[1] : null);
-  }
-
-  candidates.push(...(await readPluginVersions(memberPath)));
+  const candidates: (string | null)[] = [
+    await readPackageJsonVersion(memberPath),
+    await readPyprojectVersion(memberPath),
+    ...(await readPluginVersions(memberPath)),
+  ];
 
   return candidates.reduce<string | null>(maxVersion, null);
 }

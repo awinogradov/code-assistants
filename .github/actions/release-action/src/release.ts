@@ -108,6 +108,49 @@ export const changelogHeader =
   "# Changelog\n\nAll notable changes to this project will be documented in this file. " +
   "See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.\n\n";
 
+/** Read `.version` from a directory's `package.json`, or `null` when absent. */
+export async function readPackageJsonVersion(dir: string): Promise<string | null> {
+  const file = Bun.file(join(dir, "package.json"));
+  if (!(await file.exists())) return null;
+  const pkg = (await file.json()) as { version?: unknown };
+  return typeof pkg.version === "string" ? pkg.version : null;
+}
+
+/**
+ * Read the `version` from every `**\/.claude-plugin/plugin.json` under a
+ * directory (`.claude-plugin` is a dot dir, hence `dot: true`), skipping
+ * `node_modules` so a dependency's manifest is never picked up.
+ */
+export async function readPluginVersions(dir: string): Promise<string[]> {
+  const versions: string[] = [];
+  const glob = new Glob("**/.claude-plugin/plugin.json");
+  for await (const match of glob.scan({ cwd: dir, dot: true, absolute: true })) {
+    if (match.includes("node_modules")) continue;
+    const plugin = (await Bun.file(match).json()) as { version?: unknown };
+    if (typeof plugin.version === "string") versions.push(plugin.version);
+  }
+  return versions;
+}
+
+/**
+ * Read the `version` from a directory's `pyproject.toml` `[project]` table, or
+ * `null`. The lookup is bounded to the `[project]` section so a missing version
+ * there cannot borrow a `version` key from a later table (e.g. `[tool.poetry]`).
+ * Both quote styles are accepted.
+ */
+export async function readPyprojectVersion(dir: string): Promise<string | null> {
+  const file = Bun.file(join(dir, "pyproject.toml"));
+  if (!(await file.exists())) return null;
+  const content = await file.text();
+  const start = content.search(/^\[project\]/m);
+  if (start === -1) return null;
+  const rest = content.slice(start + "[project]".length);
+  const nextSection = rest.search(/^\[/m);
+  const section = nextSection === -1 ? rest : rest.slice(0, nextSection);
+  const match = section.match(/^[ \t]*version\s*=\s*["']([^"']+)["']/m);
+  return match ? match[1] : null;
+}
+
 /**
  * Get current version using a fallback chain
  *
@@ -135,33 +178,22 @@ export async function getCurrentVersion(cwd: string): Promise<VersionResult> {
   }
 
   // 2. package.json
-  const pkgFile = Bun.file(join(cwd, "package.json"));
-  if (await pkgFile.exists()) {
-    const pkg = (await pkgFile.json()) as { version?: string };
-    if (pkg.version) {
-      return { version: pkg.version, source: "package-json" };
-    }
+  const pkgVersion = await readPackageJsonVersion(cwd);
+  if (pkgVersion) {
+    return { version: pkgVersion, source: "package-json" };
   }
 
   // 3. First plugin.json found via glob (skip node_modules to avoid picking
   // a dependency's plugin.json instead of one belonging to this repo)
-  const glob = new Glob("**/.claude-plugin/plugin.json");
-  for await (const match of glob.scan({ cwd, dot: true, absolute: true })) {
-    if (match.includes("node_modules")) continue;
-    const plugin = (await Bun.file(match).json()) as { version?: string };
-    if (plugin.version) {
-      return { version: plugin.version, source: "plugin-json" };
-    }
+  const [pluginVersion] = await readPluginVersions(cwd);
+  if (pluginVersion) {
+    return { version: pluginVersion, source: "plugin-json" };
   }
 
   // 4. pyproject.toml
-  const pyFile = Bun.file(join(cwd, "pyproject.toml"));
-  if (await pyFile.exists()) {
-    const content = await pyFile.text();
-    const versionMatch = content.match(/^\[project\][\s\S]*?^version\s*=\s*["']([^"']+)["']/m);
-    if (versionMatch?.[1]) {
-      return { version: versionMatch[1], source: "pyproject-toml" };
-    }
+  const pyVersion = await readPyprojectVersion(cwd);
+  if (pyVersion) {
+    return { version: pyVersion, source: "pyproject-toml" };
   }
 
   // No manifest found — derive version from git tags, default to 0.0.0
