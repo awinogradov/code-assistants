@@ -77,6 +77,8 @@ The content is organized as follows:
           reviewOutput.ts
         actionsOutput.test.ts
         actionsOutput.ts
+        aggregateReviews.test.ts
+        aggregateReviews.ts
         classifyReaction.test.ts
         classifyReaction.ts
         logClaudeMessage.test.ts
@@ -87,6 +89,7 @@ The content is organized as follows:
         reactToComment.ts
         reviewFanout.test.ts
         reviewFanout.ts
+        reviewFindings.ts
         ruleUrls.test.ts
         ruleUrls.ts
         runClaude.test.ts
@@ -2677,6 +2680,196 @@ export async function setOutput(key: string, value: string): Promise<void> {
 }
 </file>
 
+<file path=".github/actions/code-review-action/src/aggregateReviews.test.ts">
+/**
+ * Tests for aggregateReviews.ts — deterministic dedupe/merge/order of the
+ * structured findings emitted by the parallel review sub-agents.
+ */
+import { describe, expect, test } from "bun:test";
+
+import { aggregateReviews } from "./aggregateReviews.ts";
+import type { AgentReview, ReviewFinding } from "./reviewFindings.ts";
+
+const finding = (over: Partial<ReviewFinding>): ReviewFinding => ({
+  severity: "suggestion",
+  file: "src/a.ts",
+  line: 1,
+  rule: null,
+  title: "title",
+  detail: "detail",
+  ...over,
+});
+
+const review = (category: string, findings: ReviewFinding[]): AgentReview => ({
+  category,
+  findings,
+});
+
+describe("aggregateReviews", () => {
+  test("returns an empty list for no reviews and for empty findings", () => {
+    expect(aggregateReviews([])).toEqual([]);
+    expect(aggregateReviews([review("correctness", [])])).toEqual([]);
+  });
+
+  test("orders blockers, then suggestions, then nitpicks", () => {
+    const merged = aggregateReviews([
+      review("a", [
+        finding({ severity: "nitpick", line: 1 }),
+        finding({ severity: "blocker", line: 2 }),
+        finding({ severity: "suggestion", line: 3 }),
+      ]),
+    ]);
+    expect(merged.map((f) => f.severity)).toEqual(["blocker", "suggestion", "nitpick"]);
+  });
+
+  test("dedupes the same (file,line) keeping the higher severity", () => {
+    const merged = aggregateReviews([
+      review("surface", [finding({ severity: "suggestion", line: 5 })]),
+      review("correctness", [finding({ severity: "blocker", line: 5 })]),
+    ]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.severity).toBe("blocker");
+  });
+
+  test("merges rule codes at a shared location into one ordered, de-duplicated list", () => {
+    const merged = aggregateReviews([
+      review("correctness", [finding({ severity: "blocker", line: 5, rule: "CHECK-BUG-002" })]),
+      review("ai-smells", [finding({ severity: "suggestion", line: 5, rule: "CHECK-AI-002" })]),
+      review("surface", [finding({ severity: "nitpick", line: 5, rule: "CHECK-BUG-002" })]),
+    ]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.rule).toBe("CHECK-BUG-002, CHECK-AI-002");
+  });
+
+  test("keeps the non-null rule when merging a finding that has no rule", () => {
+    const merged = aggregateReviews([
+      review("surface", [finding({ severity: "suggestion", line: 5, rule: null })]),
+      review("correctness", [finding({ severity: "blocker", line: 5, rule: "CHECK-BUG-002" })]),
+    ]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.rule).toBe("CHECK-BUG-002");
+  });
+
+  test("treats the same line in different files as distinct findings", () => {
+    const merged = aggregateReviews([
+      review("a", [finding({ file: "src/a.ts", line: 5 })]),
+      review("b", [finding({ file: "src/b.ts", line: 5 })]),
+    ]);
+    expect(merged).toHaveLength(2);
+  });
+
+  test("never merges null-line (out-of-diff) findings", () => {
+    const merged = aggregateReviews([
+      review("a", [finding({ severity: "blocker", line: null })]),
+      review("b", [finding({ severity: "suggestion", line: null })]),
+    ]);
+    expect(merged).toHaveLength(2);
+  });
+
+  test("is stable within a severity (preserves first-seen order)", () => {
+    const merged = aggregateReviews([
+      review("a", [
+        finding({ severity: "suggestion", line: 1, title: "first" }),
+        finding({ severity: "suggestion", line: 2, title: "second" }),
+      ]),
+    ]);
+    expect(merged.map((f) => f.title)).toEqual(["first", "second"]);
+  });
+
+  test("orders across severity buckets while preserving order within each", () => {
+    const merged = aggregateReviews([
+      review("a", [
+        finding({ severity: "nitpick", line: 1, title: "n1" }),
+        finding({ severity: "blocker", line: 2, title: "b1" }),
+        finding({ severity: "suggestion", line: 3, title: "s1" }),
+        finding({ severity: "blocker", line: 4, title: "b2" }),
+        finding({ severity: "nitpick", line: 5, title: "n2" }),
+        finding({ severity: "suggestion", line: 6, title: "s2" }),
+      ]),
+    ]);
+    expect(merged.map((f) => f.title)).toEqual(["b1", "b2", "s1", "s2", "n1", "n2"]);
+  });
+});
+</file>
+
+<file path=".github/actions/code-review-action/src/aggregateReviews.ts">
+/**
+ * Deterministically merge the structured findings from all `pr:review:*`
+ * sub-agents into a single severity-ordered list — in code, not in the model.
+ *
+ * Previously the root review model re-parsed 12 markdown blocks and deduped them
+ * per run (~18k output tokens). The sub-agents now emit structured findings and
+ * this module does the dedupe/merge/order, mirroring the in-code rule→URL
+ * resolution in `ruleUrls.ts`.
+ *
+ * @example
+ * const merged = aggregateReviews([
+ *   { category: "correctness", findings: [...] },
+ *   { category: "security", findings: [...] },
+ * ]);
+ * // merged: blockers first, then suggestions, then nitpicks; same (file,line) deduped.
+ */
+import type { AgentReview, ReviewFinding, ReviewSeverity } from "./reviewFindings.ts";
+
+/** Lower rank = higher severity, so it sorts first and wins a dedupe tie. */
+const severityRank: Record<ReviewSeverity, number> = {
+  blocker: 0,
+  suggestion: 1,
+  nitpick: 2,
+};
+
+/** Split a (possibly comma-joined) rule field into trimmed, non-empty codes. */
+function splitRules(rule: string | null): string[] {
+  return rule
+    ? rule
+        .split(",")
+        .map((code) => code.trim())
+        .filter(Boolean)
+    : [];
+}
+
+/** Merge two findings' rule codes into one ordered, de-duplicated comma list (or null). */
+function mergeRules(a: string | null, b: string | null): string | null {
+  const unique = [...new Set([...splitRules(a), ...splitRules(b)])];
+  return unique.length > 0 ? unique.join(", ") : null;
+}
+
+/**
+ * Combine two findings at the same `(file, line)`: keep the higher-severity one
+ * (ties keep the first seen) and merge both rule codes onto it.
+ */
+function mergeFindings(existing: ReviewFinding, next: ReviewFinding): ReviewFinding {
+  const higher = severityRank[existing.severity] <= severityRank[next.severity] ? existing : next;
+  return { ...higher, rule: mergeRules(existing.rule, next.rule) };
+}
+
+/**
+ * Merge all sub-agent findings into a single list: dedupe by `(file, line)`
+ * keeping the higher severity and merging rule codes, then order blockers →
+ * suggestions → nitpicks (stable within a severity). Findings with a null line
+ * (out-of-diff) are never merged and pass through individually.
+ */
+export function aggregateReviews(reviews: AgentReview[]): ReviewFinding[] {
+  const byLocation = new Map<string, ReviewFinding>();
+  const standalone: ReviewFinding[] = [];
+
+  for (const finding of reviews.flatMap((review) => review.findings)) {
+    if (finding.line === null) {
+      standalone.push(finding);
+      continue;
+    }
+    const key = `${finding.file}:${finding.line}`;
+    const existing = byLocation.get(key);
+    byLocation.set(key, existing ? mergeFindings(existing, finding) : finding);
+  }
+
+  // Array.sort is stable (ES2019+), so equal-severity findings keep insertion order.
+  return [...byLocation.values(), ...standalone].sort(
+    (a, b) => severityRank[a.severity] - severityRank[b.severity],
+  );
+}
+</file>
+
 <file path=".github/actions/code-review-action/src/classifyReaction.test.ts">
 /**
  * Tests for classifyReaction.ts pure classification helpers.
@@ -4007,32 +4200,58 @@ console.log("✓ Reaction processed successfully");
 /**
  * Tests for reviewFanout.ts pure helpers.
  *
- * SDK-driven invocations (`runReviewFanout`, `runSubagent`) aren't covered here
- * because mocking the Agent SDK's streaming `query()` is brittle and the logic
- * inside those functions is a thin wrapper over the SDK. They're exercised by
- * the end-to-end review in CI.
+ * The SDK-driven `runReviewFanout` / `runSubagent` wrappers aren't covered here
+ * (mocking the streaming `query()` is brittle), but `collectStructuredFindings`
+ * takes a plain async iterable, so its parse/fail-open branches are tested below.
  */
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import type pino from "pino";
 
 import type { FanoutContext, SubagentResult } from "./reviewFanout.ts";
 import {
   buildFanoutStats,
   buildSubagentPrompt,
+  collectStructuredFindings,
   detectStack,
   loadReviewAgents,
   parseAgentFrontmatter,
   resolveModel,
   splitFrontmatter,
+  toAgentReviews,
 } from "./reviewFanout.ts";
+import type { ReviewFinding } from "./reviewFindings.ts";
+
+/** No-op logger satisfying the pino surface `logMessage` touches. */
+const noopLog = {
+  info() {},
+  debug() {},
+  warn() {},
+  error() {},
+  trace() {},
+  fatal() {},
+  child() {
+    return noopLog;
+  },
+} as unknown as pino.Logger;
+
+/** Yield the given messages as the SDK stream `collectStructuredFindings` consumes. */
+async function* streamOf(...messages: unknown[]): AsyncGenerator<SDKMessage> {
+  for (const message of messages) yield message as SDKMessage;
+}
 
 describe("buildFanoutStats", () => {
-  const result = (duration_ms: number, error?: string): SubagentResult => ({
-    subagent_type: "autopilot:pr:review:correctness",
-    markdown: "",
+  const result = (
+    duration_ms: number,
+    error?: string,
+    subagent_type = "autopilot:pr:review:correctness",
+  ): SubagentResult => ({
+    subagent_type,
+    findings: [],
     duration_ms,
     error,
   });
@@ -4051,12 +4270,148 @@ describe("buildFanoutStats", () => {
     expect(buildFanoutStats([result(100)], 0).parallelSpeedup).toBe(0);
   });
 
+  test("surfaces the top 3 slowest agents (descending) keyed by bare category", () => {
+    const stats = buildFanoutStats(
+      [
+        result(100, undefined, "autopilot:pr:review:standards"),
+        result(400, undefined, "autopilot:pr:review:common-sense"),
+        result(200, undefined, "autopilot:pr:review:testing"),
+        result(300, undefined, "autopilot:pr:review:surface-testing"),
+      ],
+      400,
+    );
+    expect(stats.agentDurations).toEqual([
+      { category: "common-sense", durationMs: 400 },
+      { category: "surface-testing", durationMs: 300 },
+      { category: "testing", durationMs: 200 },
+    ]);
+  });
+
+  test("includes errored agents in the slowest list (a failing agent can be the long pole)", () => {
+    const stats = buildFanoutStats(
+      [
+        result(400, "timed out", "autopilot:pr:review:common-sense"),
+        result(100, undefined, "autopilot:pr:review:standards"),
+      ],
+      400,
+    );
+    expect(stats.agentDurations[0]).toEqual({ category: "common-sense", durationMs: 400 });
+  });
+
   test("handles an empty result set", () => {
     expect(buildFanoutStats([], 100)).toEqual({
       agentCount: 0,
       failedCount: 0,
       parallelSpeedup: 0,
+      agentDurations: [],
     });
+  });
+});
+
+describe("toAgentReviews", () => {
+  const finding: ReviewFinding = {
+    severity: "blocker",
+    file: "src/a.ts",
+    line: 1,
+    rule: null,
+    title: "t",
+    detail: "d",
+  };
+
+  test("drops errored agents and tags survivors with their bare category", () => {
+    const reviews = toAgentReviews([
+      { subagent_type: "autopilot:pr:review:correctness", findings: [finding], duration_ms: 10 },
+      {
+        subagent_type: "autopilot:pr:review:security",
+        findings: [],
+        duration_ms: 5,
+        error: "boom",
+      },
+    ]);
+    expect(reviews).toEqual([{ category: "correctness", findings: [finding] }]);
+  });
+
+  test("returns an empty list for no results", () => {
+    expect(toAgentReviews([])).toEqual([]);
+  });
+
+  test("returns an empty list when every agent errored", () => {
+    expect(
+      toAgentReviews([
+        {
+          subagent_type: "autopilot:pr:review:correctness",
+          findings: [],
+          duration_ms: 5,
+          error: "boom",
+        },
+        {
+          subagent_type: "autopilot:pr:review:security",
+          findings: [],
+          duration_ms: 5,
+          error: "boom",
+        },
+      ]),
+    ).toEqual([]);
+  });
+
+  test("leaves a subagent_type without the review prefix unchanged as the category", () => {
+    expect(toAgentReviews([{ subagent_type: "weird-name", findings: [], duration_ms: 1 }])).toEqual(
+      [{ category: "weird-name", findings: [] }],
+    );
+  });
+});
+
+describe("collectStructuredFindings", () => {
+  const validFinding: ReviewFinding = {
+    severity: "blocker",
+    file: "src/a.ts",
+    line: 1,
+    rule: "CHECK-BUG-001",
+    title: "t",
+    detail: "d",
+  };
+
+  // logResult (via logMessage) reads permission_denials.length, so the mock
+  // result messages carry an empty array alongside the fields under test.
+  const resultMessage = (fields: Record<string, unknown>): unknown => ({
+    type: "result",
+    permission_denials: [],
+    ...fields,
+  });
+
+  test("returns parsed findings from a successful result", async () => {
+    const result = await collectStructuredFindings(
+      noopLog,
+      streamOf(
+        resultMessage({ subtype: "success", structured_output: { findings: [validFinding] } }),
+      ),
+    );
+    expect(result).toEqual({ findings: [validFinding] });
+  });
+
+  test("skips the dimension when no result message arrives", async () => {
+    const result = await collectStructuredFindings(noopLog, streamOf());
+    expect(result.findings).toEqual([]);
+    expect(result.error).toContain("No result message");
+  });
+
+  test("skips the dimension on a non-success result subtype", async () => {
+    const result = await collectStructuredFindings(
+      noopLog,
+      streamOf(resultMessage({ subtype: "error_max_structured_output_retries" })),
+    );
+    expect(result.findings).toEqual([]);
+    expect(result.error).toContain("error_max_structured_output_retries");
+  });
+
+  test("records the zod issues and raw payload on a schema mismatch", async () => {
+    const result = await collectStructuredFindings(
+      noopLog,
+      streamOf(resultMessage({ subtype: "success", structured_output: { findings: "nope" } })),
+    );
+    expect(result.findings).toEqual([]);
+    expect(result.error).toContain("findings");
+    expect(result.raw).toBe(JSON.stringify({ findings: "nope" }));
   });
 });
 
@@ -4253,20 +4608,27 @@ describe("loadReviewAgents", () => {
  *
  * Reads the 12 `pr:review:*` sub-agent definitions from the installed autopilot
  * plugin, spawns them as parallel headless `query()` calls via the Agent SDK,
- * and returns their markdown output. The results are written to disk so the
- * root `/autopilot:pr-review` command can consume them instead of attempting
- * its own (unreliable) in-model fan-out.
+ * and returns each sub-agent's structured findings (enforced via the SDK
+ * `outputFormat: json_schema` contract). The caller (`runClaude.ts`) merges them
+ * deterministically with `aggregateReviews` and writes the result to disk so the
+ * root `/autopilot:pr-review` command can format it without re-deduping blocks.
  *
  * @see runClaude.ts — wires this module into review mode
  */
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { McpServerConfig, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { McpServerConfig, SDKMessage, SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type pino from "pino";
 
 import { logMessage } from "./logClaudeMessage.ts";
+import {
+  agentOutputJsonSchema,
+  agentOutputSchema,
+  type AgentReview,
+  type ReviewFinding,
+} from "./reviewFindings.ts";
 
 /** Filename prefix that identifies the 12 review sub-agents in the plugin. */
 const reviewAgentPrefix = "pr:review:";
@@ -4291,12 +4653,21 @@ export interface FanoutContext {
   subagentTimeoutMs: number;
 }
 
-/** Result of a single sub-agent invocation, written to the shared JSON file. */
+/** Result of a single sub-agent invocation, collected by the orchestrator. */
 export interface SubagentResult {
   subagent_type: string;
-  markdown: string;
+  /** Structured findings parsed from the sub-agent's output; empty on error. */
+  findings: ReviewFinding[];
   duration_ms: number;
   error?: string;
+  /** Raw structured output, kept only on the error branch for diagnostics. */
+  raw?: string;
+}
+
+/** One sub-agent's wall-clock duration, keyed by bare review category. */
+export interface AgentDuration {
+  category: string;
+  durationMs: number;
 }
 
 /** Aggregate fan-out counters surfaced in the per-run summary footer. */
@@ -4304,7 +4675,12 @@ export interface FanoutStats {
   agentCount: number;
   failedCount: number;
   parallelSpeedup: number;
+  /** Slowest sub-agents (top {@link slowestAgentCount}), descending — the long pole(s) gating fan-out. */
+  agentDurations: AgentDuration[];
 }
+
+/** How many of the slowest sub-agents to surface in the run-summary footer. */
+const slowestAgentCount = 3;
 
 /** In-memory representation of one loaded agent definition file. */
 interface AgentDefinition {
@@ -4398,10 +4774,22 @@ export async function loadReviewAgents(pluginDir: string): Promise<AgentDefiniti
   );
 }
 
+/** Strip the `autopilot:pr:review:` prefix down to the bare review category. */
+function bareCategory(subagentType: string): string {
+  return subagentType.replace("autopilot:pr:review:", "");
+}
+
 /** Resolve a sub-agent's model: per-category override > frontmatter > fallback. */
 export function resolveModel(ctx: FanoutContext, agent: AgentDefinition): string {
-  const category = agent.subagent_type.replace("autopilot:pr:review:", "");
+  const category = bareCategory(agent.subagent_type);
   return ctx.modelOverrides[category] ?? agent.model ?? ctx.fallbackModel;
+}
+
+/** Tag each successful sub-agent's findings with its bare category for aggregation. */
+export function toAgentReviews(results: SubagentResult[]): AgentReview[] {
+  return results
+    .filter((r) => !r.error)
+    .map((r) => ({ category: bareCategory(r.subagent_type), findings: r.findings }));
 }
 
 /** Build the `Stack: ... Diff: ...` user prompt each review sub-agent expects. */
@@ -4439,39 +4827,17 @@ export async function detectStack(cwd: string = process.cwd()): Promise<string> 
   }
 }
 
-interface TextBlock {
-  type: "text";
-  text: string;
-}
-
-function isTextBlock(block: unknown): block is TextBlock {
-  return (
-    typeof block === "object" &&
-    block !== null &&
-    (block as { type?: unknown }).type === "text" &&
-    typeof (block as { text?: unknown }).text === "string"
-  );
+/** Findings (or a skip reason) extracted from a sub-agent's SDK stream. */
+interface CollectedFindings {
+  findings: ReviewFinding[];
+  error?: string;
+  raw?: string;
 }
 
 /**
- * Capture the final assistant text block from an SDK message stream.
- *
- * The review sub-agents are instructed to emit a single structured markdown
- * block as their last assistant message; later text wins to cover the case
- * where the model emits intermediate narration before the final block.
- */
-function extractFinalText(message: SDKMessage): string | undefined {
-  if (message.type !== "assistant") return undefined;
-  const content = (message as { message: { content?: unknown[] } }).message.content ?? [];
-  const texts = content.filter(isTextBlock);
-  return texts.at(-1)?.text;
-}
-
-/**
- * Run one review sub-agent as a headless SDK query.
- *
- * Uses a child logger bound with `orchestrator_subagent` so the debug-log
- * analyzer can group interleaved messages from the parallel streams.
+ * Run one review sub-agent as a headless SDK query and parse its structured
+ * output. Uses a child logger bound with `orchestrator_subagent` so the
+ * debug-log analyzer can group interleaved messages from the parallel streams.
  */
 async function runSubagent(
   ctx: FanoutContext,
@@ -4484,13 +4850,11 @@ async function runSubagent(
   const timeout = setTimeout(() => abortController.abort(), ctx.subagentTimeoutMs);
 
   const model = resolveModel(ctx, agent);
-  let markdown = "";
-  let error: string | undefined;
-
   childLog.info({ model }, "Sub-agent query starting.");
 
+  let collected: CollectedFindings;
   try {
-    markdown = await streamAssistantText(
+    collected = await collectStructuredFindings(
       childLog,
       query({
         prompt: userPrompt,
@@ -4498,32 +4862,59 @@ async function runSubagent(
       }),
     );
   } catch (err) {
-    error = err instanceof Error ? err.message : String(err);
+    const error = err instanceof Error ? err.message : String(err);
     childLog.error({ error }, "Sub-agent invocation failed.");
+    collected = { findings: [], error };
   } finally {
     clearTimeout(timeout);
   }
 
   const durationMs = Math.round(performance.now() - start);
-  childLog.info(
-    { duration_ms: durationMs, markdown_bytes: markdown.length, error },
+  // Log a partial failure at warn so skipped dimensions show at standard filter levels.
+  const finished = collected.error ? childLog.warn : childLog.info;
+  finished.call(
+    childLog,
+    { duration_ms: durationMs, finding_count: collected.findings.length, error: collected.error },
     "Sub-agent query finished.",
   );
-  return { subagent_type: agent.subagent_type, markdown, duration_ms: durationMs, error };
+  return { subagent_type: agent.subagent_type, duration_ms: durationMs, ...collected };
 }
 
-/** Stream SDK messages through the logger; return the last assistant text. */
-async function streamAssistantText(
+/**
+ * Drain the SDK stream and parse the terminal result's structured output.
+ *
+ * `structured_output` exists only on a `subtype: "success"` result; any error
+ * subtype (including `error_max_structured_output_retries`), a missing result,
+ * or a schema-invalid payload degrades to a skipped dimension — same policy as a
+ * failed in-model sub-agent — with the raw payload kept for diagnostics.
+ */
+export async function collectStructuredFindings(
   log: pino.Logger,
   stream: AsyncIterable<SDKMessage>,
-): Promise<string> {
-  let markdown = "";
+): Promise<CollectedFindings> {
+  let resultMessage: SDKResultMessage | undefined;
   for await (const message of stream) {
     logMessage(log, message);
-    const text = extractFinalText(message);
-    if (text !== undefined) markdown = text;
+    if (message.type === "result") resultMessage = message;
   }
-  return markdown;
+
+  if (!resultMessage) return { findings: [], error: "No result message from sub-agent." };
+  if (resultMessage.subtype !== "success") {
+    return { findings: [], error: `Sub-agent ended with ${resultMessage.subtype}.` };
+  }
+
+  const parsed = agentOutputSchema.safeParse(resultMessage.structured_output);
+  if (!parsed.success) {
+    const issues = parsed.error.issues
+      .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
+      .join("; ");
+    return {
+      findings: [],
+      error: `Sub-agent structured output did not match the findings schema: ${issues}`,
+      raw: JSON.stringify(resultMessage.structured_output),
+    };
+  }
+  return { findings: parsed.data.findings };
 }
 
 /** Build the SDK `query()` options for a single sub-agent. */
@@ -4536,6 +4927,9 @@ function buildSubagentOptions(
     model: resolveModel(ctx, agent),
     allowedTools: agent.allowedTools ?? ctx.inheritedAllowedTools,
     disallowedTools: ctx.inheritedDisallowedTools,
+    // Force schema-valid structured findings so the orchestrator parses objects,
+    // not free-form markdown (the long-pole / aggregation latency fix, #161).
+    outputFormat: { type: "json_schema" as const, schema: agentOutputJsonSchema },
     plugins: [{ type: "local" as const, path: ctx.pluginDir }],
     mcpServers: ctx.mcpServers,
     permissionMode: "bypassPermissions" as const,
@@ -4564,10 +4958,15 @@ function buildSubagentOptions(
  */
 export function buildFanoutStats(results: SubagentResult[], totalMs: number): FanoutStats {
   const totalAgentMs = results.reduce((sum, r) => sum + r.duration_ms, 0);
+  const agentDurations = results
+    .map((r) => ({ category: bareCategory(r.subagent_type), durationMs: r.duration_ms }))
+    .sort((a, b) => b.durationMs - a.durationMs)
+    .slice(0, slowestAgentCount);
   return {
     agentCount: results.length,
     failedCount: results.filter((r) => r.error).length,
     parallelSpeedup: totalMs > 0 ? +(totalAgentMs / totalMs).toFixed(2) : 0,
+    agentDurations,
   };
 }
 
@@ -4620,6 +5019,68 @@ export async function runReviewFanout(
 
   return { results, stats };
 }
+</file>
+
+<file path=".github/actions/code-review-action/src/reviewFindings.ts">
+/**
+ * Shared schema for the structured findings each `pr:review:*` sub-agent emits.
+ *
+ * Sub-agents used to return a markdown review block that the root model
+ * re-parsed; they now emit a compact JSON object validated by these schemas via
+ * the Agent SDK `outputFormat: json_schema` contract. Keeping the schema in one
+ * place lets both the orchestrator (`reviewFanout.ts`) and the deterministic
+ * merge (`aggregateReviews.ts`) share the same validated shape.
+ *
+ * @example
+ * const parsed = agentOutputSchema.safeParse(resultMessage.structured_output);
+ * if (parsed.success) writeFindings(parsed.data.findings);
+ */
+import { z } from "zod";
+
+/** Severity ladder shared by every review finding (maps to 🚧 / 🙋‍♂️ / 💡). */
+export const reviewSeveritySchema = z.enum(["blocker", "suggestion", "nitpick"]);
+
+/**
+ * One reviewer finding. `line` is null for out-of-diff issues (rendered in the
+ * review body only); `rule` is null when the finding maps to no `CHECK-` code.
+ */
+export const reviewFindingSchema = z.object({
+  severity: reviewSeveritySchema,
+  file: z.string(),
+  line: z.number().nullable(),
+  rule: z.string().nullable(),
+  title: z.string(),
+  detail: z.string(),
+});
+
+/** The JSON object the SDK enforces on each sub-agent — the category is known by the orchestrator. */
+export const agentOutputSchema = z.object({
+  findings: z.array(reviewFindingSchema),
+});
+
+/** One sub-agent's findings tagged with its bare review category, fed to the aggregator. */
+export const agentReviewSchema = z.object({
+  category: z.string(),
+  findings: z.array(reviewFindingSchema),
+});
+
+/** Finding severity (`blocker` | `suggestion` | `nitpick`). */
+export type ReviewSeverity = z.infer<typeof reviewSeveritySchema>;
+
+/** A single validated reviewer finding. */
+export type ReviewFinding = z.infer<typeof reviewFindingSchema>;
+
+/** A sub-agent's structured output as enforced by the SDK. */
+export type AgentOutput = z.infer<typeof agentOutputSchema>;
+
+/** A sub-agent's findings tagged with its category. */
+export type AgentReview = z.infer<typeof agentReviewSchema>;
+
+/**
+ * JSON Schema handed to the SDK `outputFormat` so each sub-agent query is forced
+ * to return a schema-valid {@link AgentOutput}. Derived once from the Zod schema.
+ */
+export const agentOutputJsonSchema = z.toJSONSchema(agentOutputSchema) as Record<string, unknown>;
 </file>
 
 <file path=".github/actions/code-review-action/src/ruleUrls.test.ts">
@@ -5284,14 +5745,19 @@ describe("withFanoutStats", () => {
   });
 
   test("merges fan-out counters under snake_case keys", () => {
-    expect(
-      withFanoutStats(summary, { agentCount: 12, failedCount: 1, parallelSpeedup: 8.5 })
-    ).toEqual({
+    const stats = {
+      agentCount: 12,
+      failedCount: 1,
+      parallelSpeedup: 8.5,
+      agentDurations: [{ category: "common-sense", durationMs: 158000 }],
+    };
+    expect(withFanoutStats(summary, stats)).toEqual({
       mode: "review",
       cost_usd: 0.1,
       agent_count: 12,
       failed_count: 1,
       parallel_speedup: 8.5,
+      agent_durations: [{ category: "common-sense", duration_ms: 158000 }],
     });
   });
 });
@@ -5355,8 +5821,15 @@ import pino from "pino";
 import { z } from "zod";
 
 import { setOutput } from "./actionsOutput.ts";
+import { aggregateReviews } from "./aggregateReviews.ts";
 import { logMessage } from "./logClaudeMessage.ts";
-import { runReviewFanout, type FanoutContext, type FanoutStats } from "./reviewFanout.ts";
+import {
+  runReviewFanout,
+  toAgentReviews,
+  type FanoutContext,
+  type FanoutStats,
+} from "./reviewFanout.ts";
+import type { AgentDurationSummary } from "./runSummaryFooter.ts";
 
 /** Duration above which a Claude session is considered long-running (triggers artifact upload). */
 const longRunMs = 5 * 60 * 1000;
@@ -5671,9 +6144,15 @@ async function runFanoutIfEnabled(
   };
 
   const { results, stats } = await runReviewFanout(fanoutCtx);
+  // Merge the per-agent findings deterministically in code so the root model
+  // receives a single ready-to-format list instead of re-deduping 12 blocks.
+  const findings = aggregateReviews(toAgentReviews(results));
   const outputPath = `${process.env.RUNNER_TEMP ?? "/tmp"}/precomputed-reviews.json`;
-  await Bun.write(outputPath, JSON.stringify(results, null, 2));
-  log.info({ output_path: outputPath, count: results.length }, "Fan-out results written.");
+  await Bun.write(outputPath, JSON.stringify({ findings }, null, 2));
+  log.info(
+    { output_path: outputPath, finding_count: findings.length, failed_count: stats.failedCount },
+    "Aggregated review findings written."
+  );
   return { outputPath, stats };
 }
 
@@ -5879,13 +6358,17 @@ export function buildRunSummary(
 export function withFanoutStats(
   summary: Record<string, number | string>,
   stats: FanoutStats | undefined
-): Record<string, number | string> {
+): Record<string, number | string | AgentDurationSummary[]> {
   if (!stats) return summary;
   return {
     ...summary,
     agent_count: stats.agentCount,
     failed_count: stats.failedCount,
     parallel_speedup: stats.parallelSpeedup,
+    agent_durations: stats.agentDurations.map((d) => ({
+      category: d.category,
+      duration_ms: d.durationMs,
+    })),
   };
 }
 
@@ -5990,6 +6473,10 @@ const fanoutSummary: RunSummary = {
   agent_count: 12,
   failed_count: 1,
   parallel_speedup: 8.5,
+  agent_durations: [
+    { category: "common-sense", duration_ms: 158000 },
+    { category: "surface-testing", duration_ms: 127000 },
+  ],
 };
 
 describe("parseRunSummary", () => {
@@ -6058,6 +6545,19 @@ describe("renderRunSummaryFooter", () => {
     expect(footer).toContain("| Failed agents | 1 |");
     expect(footer).toContain("| Parallel speedup | 8.5× |");
   });
+
+  test("renders the slowest-agents row as a category/seconds list", () => {
+    expect(renderRunSummaryFooter(fanoutSummary)).toContain(
+      "| Slowest agents | common-sense 158.0s · surface-testing 127.0s |",
+    );
+  });
+
+  test("omits the slowest-agents row when durations are absent or empty", () => {
+    expect(renderRunSummaryFooter(coreSummary)).not.toContain("Slowest agents");
+    expect(renderRunSummaryFooter({ ...fanoutSummary, agent_durations: [] })).not.toContain(
+      "Slowest agents",
+    );
+  });
 });
 
 describe("stripRunSummaryFooter", () => {
@@ -6073,7 +6573,7 @@ describe("stripRunSummaryFooter", () => {
   test("round-trips: stripping an appended footer yields the original content", () => {
     const reviewComment = "### Review\n\nLGTM";
     expect(stripRunSummaryFooter(reviewComment + renderRunSummaryFooter(coreSummary))).toBe(
-      reviewComment
+      reviewComment,
     );
   });
 
@@ -6118,6 +6618,15 @@ const footerEndMarker = "<!-- run-summary-end -->";
  * known literal, so a malformed value can never reach the rendered markdown.
  * Fan-out fields are present only when the parallel fan-out ran.
  */
+/**
+ * One slowest-agent entry in the run summary. Keyed in snake_case to match the
+ * serialized `run_summary` step-output contract the rest of this schema uses.
+ */
+const agentDurationSchema = z.object({
+  category: z.string(),
+  duration_ms: z.number(),
+});
+
 export const runSummarySchema = z.object({
   mode: z.enum(["review", "react", "unknown"]),
   fanout_ms: z.number(),
@@ -6132,10 +6641,14 @@ export const runSummarySchema = z.object({
   agent_count: z.number().optional(),
   failed_count: z.number().optional(),
   parallel_speedup: z.number().optional(),
+  agent_durations: z.array(agentDurationSchema).optional(),
 });
 
 /** Validated per-run summary rendered into the review footer. */
 export type RunSummary = z.infer<typeof runSummarySchema>;
+
+/** Serialized slowest-agent entry merged into the run summary by `withFanoutStats`. */
+export type AgentDurationSummary = z.infer<typeof agentDurationSchema>;
 
 /**
  * Parse the untrusted `RUN_SUMMARY` env value into a {@link RunSummary}.
@@ -6179,6 +6692,12 @@ function buildRows(summary: RunSummary): string[] {
     rows.push(["Failed agents", String(summary.failed_count ?? 0)]);
     if (summary.parallel_speedup !== undefined) {
       rows.push(["Parallel speedup", `${summary.parallel_speedup}×`]);
+    }
+    if (summary.agent_durations && summary.agent_durations.length > 0) {
+      const slowest = summary.agent_durations
+        .map((d) => `${d.category} ${formatSeconds(d.duration_ms)}`)
+        .join(" · ");
+      rows.push(["Slowest agents", slowest]);
     }
   }
 
@@ -23225,7 +23744,7 @@ description: Review PR diff for AI-generated code anti-patterns. Use as sub-agen
 model: sonnet
 ---
 
-You are an AI code smell reviewer. Detect anti-patterns specific to AI-generated code — meaningless wrappers, over-engineering, excessive boilerplate, and other telltale signs of LLM-generated code that adds no value. Do not output intermediate steps — only the final structured block.
+You are an AI code smell reviewer. Detect anti-patterns specific to AI-generated code — meaningless wrappers, over-engineering, excessive boilerplate, and other telltale signs of LLM-generated code that adds no value. Do not output intermediate steps — only the final JSON object.
 
 ## Review Principles
 
@@ -23287,41 +23806,55 @@ Debug logging at entry, exit, and every intermediate step of a function. Logs sh
 
 - Example violation: `logger.debug("entering function")`, `logger.debug("checking condition")`, `logger.debug("condition true")`, `logger.debug("exiting function")`.
 
+### D. Type Noise and Placeholders
+
+**CHECK-AI-005: Excessive type annotations on obvious code** — Severity: suggestion
+
+Type annotations on every local variable, including trivially obvious ones, adding visual noise without aiding understanding.
+
+- Example violation: `items: list[str] = []; count: int = 0; result: bool = len(items) > count`.
+- Example violation: `const items: string[] = []; const count: number = 0;`.
+
+**CHECK-AI-006: Placeholder implementation left in production code** — Severity: blocker
+
+`pass`, `...`, `NotImplementedError`, or `TODO` placeholder in code that should be fully implemented.
+
+- Example violation: `def handle_error(self, error): pass` in a production error handler.
+- Example violation: `function handleError(error: Error) { throw new Error("Not implemented"); }` in production.
+
 ## Stack-Specific Guidance
 
-- **Bun / NodeJS+React**: Check for unnecessary `async function` without `await`, output parameters via object mutation, interface with single implementation
+- **Bun / NodeJS+React**: Check for unnecessary `async function` without `await`, output parameters via object mutation, interface with single implementation, verbose TypeScript annotations on obvious assignments, and `throw new Error("Not implemented")` placeholders
 - **unknown**: Apply language-agnostic AI smell checks only
 
 ## Output
 
-For each finding, `[Rule]` is the identifier from this agent's Checks section (e.g. `CHECK-AI-001`). Use `UNSPECIFIED` only when a finding does not map to any defined check.
+Return ONLY a JSON object matching this schema — no preamble, no markdown, no commentary:
 
-Output ONLY the structured block. No preamble or commentary:
-
-```
-## Review: AI Code Smells
-
-### Findings
-
-#### [emoji] [Title]
-- **File:** `path/to/file`
-- **Line:** N
-- **Rule:** CHECK-AI-XXX
-- **Detail:** [1-2 sentence description]
-
-### Summary
-- Blockers: N
-- Suggestions: N
-- Nitpicks: N
+```json
+{
+  "findings": [
+    {
+      "severity": "blocker",
+      "file": "path/to/file",
+      "line": 42,
+      "rule": "CHECK-XXX-NNN",
+      "title": "Short finding title",
+      "detail": "1-2 sentence description"
+    }
+  ]
+}
 ```
 
-If no findings:
+Field rules:
 
-```
-## Review: AI Code Smells
+- `severity`: `blocker`, `suggestion`, or `nitpick` — use the severity declared by the matched check in this agent's Checks section.
+- `file` / `line`: location of the finding; set `line` to `null` when the finding is out of diff.
+- `rule`: the `CHECK-` identifier from this agent's Checks section (e.g. `CHECK-XXX-NNN`); use `null` when the finding maps to no defined check.
+- `title`: concise finding title.
+- `detail`: 1-2 sentence description.
 
-No issues found.
-```
+If there are no findings, return `{ "findings": [] }`.
 </file>
 
 <file path="claude-plugins/autopilot/agents/pr:review:architecture.md">
@@ -23332,7 +23865,7 @@ tools: Grep
 model: sonnet
 ---
 
-You are an architecture and patterns reviewer. Analyze the PR diff for code reuse failures, dependency problems, coupling violations, and pattern inconsistencies. Compare new code against existing patterns in the codebase using Grep when needed. Do not output intermediate steps — only the final structured block.
+You are an architecture and patterns reviewer. Analyze the PR diff for code reuse failures, dependency problems, coupling violations, and pattern inconsistencies. Compare new code against existing patterns in the codebase using Grep when needed. Do not output intermediate steps — only the final JSON object.
 
 ## Review Principles
 
@@ -23418,34 +23951,32 @@ Mixing sync and async code in the same layer. If the module is async, new code s
 
 ## Output
 
-For each finding, `[Rule]` is the identifier from this agent's Checks section (e.g. `CHECK-ARCH-001`). Use `UNSPECIFIED` only when a finding does not map to any defined check.
+Return ONLY a JSON object matching this schema — no preamble, no markdown, no commentary:
 
-Output ONLY the structured block. No preamble or commentary:
-
-```
-## Review: Architecture & Patterns
-
-### Findings
-
-#### [emoji] [Title]
-- **File:** `path/to/file`
-- **Line:** N
-- **Rule:** CHECK-ARCH-XXX
-- **Detail:** [1-2 sentence description]
-
-### Summary
-- Blockers: N
-- Suggestions: N
-- Nitpicks: N
+```json
+{
+  "findings": [
+    {
+      "severity": "blocker",
+      "file": "path/to/file",
+      "line": 42,
+      "rule": "CHECK-XXX-NNN",
+      "title": "Short finding title",
+      "detail": "1-2 sentence description"
+    }
+  ]
+}
 ```
 
-If no findings:
+Field rules:
 
-```
-## Review: Architecture & Patterns
+- `severity`: `blocker`, `suggestion`, or `nitpick` — use the severity declared by the matched check in this agent's Checks section.
+- `file` / `line`: location of the finding; set `line` to `null` when the finding is out of diff.
+- `rule`: the `CHECK-` identifier from this agent's Checks section (e.g. `CHECK-XXX-NNN`); use `null` when the finding maps to no defined check.
+- `title`: concise finding title.
+- `detail`: 1-2 sentence description.
 
-No issues found.
-```
+If there are no findings, return `{ "findings": [] }`.
 </file>
 
 <file path="claude-plugins/autopilot/agents/pr:review:common-sense.md">
@@ -23455,7 +23986,7 @@ description: Review PR diff for common sense issues requiring domain knowledge. 
 model: sonnet
 ---
 
-You are a common sense reviewer. Catch issues that require domain knowledge, real-world reasoning, and practical judgment — constants with wrong values, suspicious configurations, and operational concerns. Do not output intermediate steps — only the final structured block.
+You are a common sense reviewer. Catch issues that require domain knowledge, real-world reasoning, and practical judgment — constants with wrong values, suspicious configurations, and operational concerns. Do not output intermediate steps — only the final JSON object.
 
 ## Review Principles
 
@@ -23521,57 +24052,39 @@ New environment variable or feature flag added without documenting it in README,
 
 - Example violation: Code reads `ENABLE_CANARY_ROUTING` from env but no documentation mentions this variable.
 
-### D. Performance
-
-**CHECK-PERF-001: Repeated I/O or query inside a loop (N+1)** — Severity: suggestion
-
-A network call, database query, or filesystem read issued once per item in a loop where a single batched call would do. Cost scales with input and is a common latency/cost regression.
-
-- Example violation: `for (const id of ids) { await db.user(id) }` instead of one `db.users(ids)` batch.
-- Example violation: `await fetch(...)` per array element in a `for...of` with no batching or concurrency limit.
-
-**CHECK-PERF-002: Quadratic or unbounded per-item work** — Severity: suggestion
-
-An operation whose cost grows super-linearly with input — a nested scan (`Array.find`/`includes` inside a loop over a large collection) where a `Map`/`Set` would give O(1) lookup.
-
-- Example violation: `items.filter((a) => others.find((b) => b.id === a.id))` with a large `others` (build a `Set` of ids).
-- Skip: collections known to be small and fixed by the surrounding code.
-
 ## Stack-Specific Guidance
 
-- **Bun / NodeJS+React**: Check for `process.env` without docs, `setTimeout`/`setInterval` values, memory-unbounded Maps/Sets, `Array.find`/`includes` inside loops, `await` inside `for...of` over large arrays
+- **Bun / NodeJS+React**: Check for `process.env` without docs, `setTimeout`/`setInterval` values, memory-unbounded Maps/Sets
 - **unknown**: Apply language-agnostic common sense checks only
 
 ## Output
 
-For each finding, `[Rule]` is the identifier from this agent's Checks section (e.g. `CHECK-CS-001`). Use `UNSPECIFIED` only when a finding does not map to any defined check.
+Return ONLY a JSON object matching this schema — no preamble, no markdown, no commentary:
 
-Output ONLY the structured block. No preamble or commentary:
-
-```
-## Review: Common Sense
-
-### Findings
-
-#### [emoji] [Title]
-- **File:** `path/to/file`
-- **Line:** N
-- **Rule:** CHECK-CS-XXX
-- **Detail:** [1-2 sentence description]
-
-### Summary
-- Blockers: N
-- Suggestions: N
-- Nitpicks: N
+```json
+{
+  "findings": [
+    {
+      "severity": "blocker",
+      "file": "path/to/file",
+      "line": 42,
+      "rule": "CHECK-XXX-NNN",
+      "title": "Short finding title",
+      "detail": "1-2 sentence description"
+    }
+  ]
+}
 ```
 
-If no findings:
+Field rules:
 
-```
-## Review: Common Sense
+- `severity`: `blocker`, `suggestion`, or `nitpick` — use the severity declared by the matched check in this agent's Checks section.
+- `file` / `line`: location of the finding; set `line` to `null` when the finding is out of diff.
+- `rule`: the `CHECK-` identifier from this agent's Checks section (e.g. `CHECK-XXX-NNN`); use `null` when the finding maps to no defined check.
+- `title`: concise finding title.
+- `detail`: 1-2 sentence description.
 
-No issues found.
-```
+If there are no findings, return `{ "findings": [] }`.
 </file>
 
 <file path="claude-plugins/autopilot/agents/pr:review:complexity.md">
@@ -23581,7 +24094,7 @@ description: Review PR diff for complexity and readability issues. Use as sub-ag
 model: haiku
 ---
 
-You are a complexity and readability reviewer. Analyze the PR diff for excessive cognitive load, poor naming, structural problems, and readability issues. Do not output intermediate steps — only the final structured block.
+You are a complexity and readability reviewer. Analyze the PR diff for excessive cognitive load, poor naming, structural problems, and readability issues. Do not output intermediate steps — only the final JSON object.
 
 ## Review Principles
 
@@ -23670,34 +24183,32 @@ Comments that describe what the code does (which should be obvious from the code
 
 ## Output
 
-For each finding, `[Rule]` is the identifier from this agent's Checks section (e.g. `CHECK-CPLX-001`). Use `UNSPECIFIED` only when a finding does not map to any defined check.
+Return ONLY a JSON object matching this schema — no preamble, no markdown, no commentary:
 
-Output ONLY the structured block. No preamble or commentary:
-
-```
-## Review: Complexity & Readability
-
-### Findings
-
-#### [emoji] [Title]
-- **File:** `path/to/file`
-- **Line:** N
-- **Rule:** CHECK-CPLX-XXX
-- **Detail:** [1-2 sentence description]
-
-### Summary
-- Blockers: N
-- Suggestions: N
-- Nitpicks: N
+```json
+{
+  "findings": [
+    {
+      "severity": "blocker",
+      "file": "path/to/file",
+      "line": 42,
+      "rule": "CHECK-XXX-NNN",
+      "title": "Short finding title",
+      "detail": "1-2 sentence description"
+    }
+  ]
+}
 ```
 
-If no findings:
+Field rules:
 
-```
-## Review: Complexity & Readability
+- `severity`: `blocker`, `suggestion`, or `nitpick` — use the severity declared by the matched check in this agent's Checks section.
+- `file` / `line`: location of the finding; set `line` to `null` when the finding is out of diff.
+- `rule`: the `CHECK-` identifier from this agent's Checks section (e.g. `CHECK-XXX-NNN`); use `null` when the finding maps to no defined check.
+- `title`: concise finding title.
+- `detail`: 1-2 sentence description.
 
-No issues found.
-```
+If there are no findings, return `{ "findings": [] }`.
 </file>
 
 <file path="claude-plugins/autopilot/agents/pr:review:correctness.md">
@@ -23707,7 +24218,7 @@ description: Review PR diff for correctness and bug patterns. Use as sub-agent o
 model: sonnet
 ---
 
-You are a code correctness reviewer. Analyze the PR diff for logic errors, concurrency bugs, and data integrity issues. Do not output intermediate steps — only the final structured block.
+You are a code correctness reviewer. Analyze the PR diff for logic errors, concurrency bugs, data integrity issues, and performance regressions (N+1 I/O, quadratic per-item work). Do not output intermediate steps — only the final JSON object.
 
 ## Review Principles
 
@@ -23769,41 +24280,55 @@ For PRs touching sensitive areas, check for:
 - **File operations** — path traversal (user input in file paths)
 - **Secrets** — hardcoded credentials, API keys, tokens in code
 
+### E. Performance
+
+**CHECK-PERF-001: Repeated I/O or query inside a loop (N+1)** — Severity: suggestion
+
+A network call, database query, or filesystem read issued once per item in a loop where a single batched call would do. Cost scales with input and is a common latency/cost regression.
+
+- Example violation: `for (const id of ids) { await db.user(id) }` instead of one `db.users(ids)` batch.
+- Example violation: `await fetch(...)` per array element in a `for...of` with no batching or concurrency limit.
+
+**CHECK-PERF-002: Quadratic or unbounded per-item work** — Severity: suggestion
+
+An operation whose cost grows super-linearly with input — a nested scan (`Array.find`/`includes` inside a loop over a large collection) where a `Map`/`Set` would give O(1) lookup.
+
+- Example violation: `items.filter((a) => others.find((b) => b.id === a.id))` with a large `others` (build a `Set` of ids).
+- Skip: collections known to be small and fixed by the surrounding code.
+
 ## Stack-Specific Guidance
 
-- **Bun / NodeJS+React / Bun+React+Tailwind / NodeJS+React+Tailwind**: Check for unhandled Promise rejections, missing `.catch()`, AbortController signal handling, EventEmitter `error` event subscriptions, XSS via unsanitized HTML
+- **Bun / NodeJS+React / Bun+React+Tailwind / NodeJS+React+Tailwind**: Check for unhandled Promise rejections, missing `.catch()`, AbortController signal handling, EventEmitter `error` event subscriptions, XSS via unsanitized HTML, `await` inside `for...of` over large arrays (N+1), `Array.find`/`includes` inside loops (quadratic)
 - **unknown**: Apply language-agnostic correctness and security checks only
 
 ## Output
 
-For each finding, `[Rule]` is the identifier from this agent's Checks section (e.g. `CHECK-BUG-002`). Use `UNSPECIFIED` only when a finding does not map to any defined check.
+Return ONLY a JSON object matching this schema — no preamble, no markdown, no commentary:
 
-Output ONLY the structured block. No preamble or commentary:
-
-```
-## Review: Correctness & Bugs
-
-### Findings
-
-#### [emoji] [Title]
-- **File:** `path/to/file`
-- **Line:** N
-- **Rule:** CHECK-BUG-XXX
-- **Detail:** [1-2 sentence description]
-
-### Summary
-- Blockers: N
-- Suggestions: N
-- Nitpicks: N
+```json
+{
+  "findings": [
+    {
+      "severity": "blocker",
+      "file": "path/to/file",
+      "line": 42,
+      "rule": "CHECK-XXX-NNN",
+      "title": "Short finding title",
+      "detail": "1-2 sentence description"
+    }
+  ]
+}
 ```
 
-If no findings:
+Field rules:
 
-```
-## Review: Correctness & Bugs
+- `severity`: `blocker`, `suggestion`, or `nitpick` — use the severity declared by the matched check in this agent's Checks section.
+- `file` / `line`: location of the finding; set `line` to `null` when the finding is out of diff.
+- `rule`: the `CHECK-` identifier from this agent's Checks section (e.g. `CHECK-XXX-NNN`); use `null` when the finding maps to no defined check.
+- `title`: concise finding title.
+- `detail`: 1-2 sentence description.
 
-No issues found.
-```
+If there are no findings, return `{ "findings": [] }`.
 </file>
 
 <file path="claude-plugins/autopilot/agents/pr:review:pr-hygiene.md">
@@ -23813,7 +24338,7 @@ description: Review PR for hygiene issues — diff coherence, commit structure, 
 model: sonnet
 ---
 
-You are a PR hygiene reviewer. Evaluate the PR as a whole — does the diff make sense as a unit of work? Is it reviewable? Does it match the claimed purpose? Can a new team member understand it a year from now? Do not output intermediate steps — only the final structured block.
+You are a PR hygiene reviewer. Evaluate the PR as a whole — does the diff make sense as a unit of work? Is it reviewable? Does it match the claimed purpose? Can a new team member understand it a year from now? Do not output intermediate steps — only the final JSON object.
 
 ## Review Principles
 
@@ -23915,34 +24440,32 @@ Stack is not relevant for PR hygiene checks — these apply universally.
 
 ## Output
 
-For each finding, `[Rule]` is the identifier from this agent's Checks section (e.g. `CHECK-PR-001`). Use `UNSPECIFIED` only when a finding does not map to any defined check.
+Return ONLY a JSON object matching this schema — no preamble, no markdown, no commentary:
 
-Output ONLY the structured block. No preamble or commentary:
-
-```
-## Review: PR Hygiene
-
-### Findings
-
-#### [emoji] [Title]
-- **File:** `path/to/file`
-- **Line:** N
-- **Rule:** CHECK-PR-XXX
-- **Detail:** [1-2 sentence description]
-
-### Summary
-- Blockers: N
-- Suggestions: N
-- Nitpicks: N
+```json
+{
+  "findings": [
+    {
+      "severity": "blocker",
+      "file": "path/to/file",
+      "line": 42,
+      "rule": "CHECK-XXX-NNN",
+      "title": "Short finding title",
+      "detail": "1-2 sentence description"
+    }
+  ]
+}
 ```
 
-If no findings:
+Field rules:
 
-```
-## Review: PR Hygiene
+- `severity`: `blocker`, `suggestion`, or `nitpick` — use the severity declared by the matched check in this agent's Checks section.
+- `file` / `line`: location of the finding; set `line` to `null` when the finding is out of diff.
+- `rule`: the `CHECK-` identifier from this agent's Checks section (e.g. `CHECK-XXX-NNN`); use `null` when the finding maps to no defined check.
+- `title`: concise finding title.
+- `detail`: 1-2 sentence description.
 
-No issues found.
-```
+If there are no findings, return `{ "findings": [] }`.
 </file>
 
 <file path="claude-plugins/autopilot/agents/pr:review:security.md">
@@ -23952,7 +24475,7 @@ description: Review PR diff for security vulnerabilities. Use as sub-agent of pr
 model: sonnet
 ---
 
-You are a security reviewer. Analyze the PR diff for secrets, injection, broken access control, weak cryptography, unsafe deserialization, and sensitive-data exposure. Do not output intermediate steps — only the final structured block.
+You are a security reviewer. Analyze the PR diff for secrets, injection, broken access control, weak cryptography, unsafe deserialization, and sensitive-data exposure. Do not output intermediate steps — only the final JSON object.
 
 ## Review Principles
 
@@ -24039,34 +24562,32 @@ Tokens, passwords, full request bodies with credentials, or personal data logged
 
 ## Output
 
-For each finding, `[Rule]` is the identifier from this agent's Checks section (e.g. `CHECK-SEC-002`). Use `UNSPECIFIED` only when a finding does not map to any defined check.
+Return ONLY a JSON object matching this schema — no preamble, no markdown, no commentary:
 
-Output ONLY the structured block. No preamble or commentary:
-
-```
-## Review: Security
-
-### Findings
-
-#### [emoji] [Title]
-- **File:** `path/to/file`
-- **Line:** N
-- **Rule:** CHECK-SEC-XXX
-- **Detail:** [1-2 sentence description]
-
-### Summary
-- Blockers: N
-- Suggestions: N
-- Nitpicks: N
+```json
+{
+  "findings": [
+    {
+      "severity": "blocker",
+      "file": "path/to/file",
+      "line": 42,
+      "rule": "CHECK-XXX-NNN",
+      "title": "Short finding title",
+      "detail": "1-2 sentence description"
+    }
+  ]
+}
 ```
 
-If no findings:
+Field rules:
 
-```
-## Review: Security
+- `severity`: `blocker`, `suggestion`, or `nitpick` — use the severity declared by the matched check in this agent's Checks section.
+- `file` / `line`: location of the finding; set `line` to `null` when the finding is out of diff.
+- `rule`: the `CHECK-` identifier from this agent's Checks section (e.g. `CHECK-XXX-NNN`); use `null` when the finding maps to no defined check.
+- `title`: concise finding title.
+- `detail`: 1-2 sentence description.
 
-No issues found.
-```
+If there are no findings, return `{ "findings": [] }`.
 </file>
 
 <file path="claude-plugins/autopilot/agents/pr:review:standards.md">
@@ -24076,7 +24597,7 @@ description: Review PR diff for platform standards compliance. Use as sub-agent 
 model: haiku
 ---
 
-You are a platform standards reviewer. Verify compliance with platform conventions, lint rules, and toolchain requirements. Do not output intermediate steps — only the final structured block.
+You are a platform standards reviewer. Verify compliance with platform conventions, lint rules, and toolchain requirements. Do not output intermediate steps — only the final JSON object.
 
 ## Review Principles
 
@@ -24135,34 +24656,32 @@ Skip this check if the diff does not add or modify validation logic.
 
 ## Output
 
-For each finding, `[Rule]` is the identifier from this agent's Checks section (e.g. `CHECK-PLAT-001`). Use `UNSPECIFIED` only when a finding does not map to any defined check.
+Return ONLY a JSON object matching this schema — no preamble, no markdown, no commentary:
 
-Output ONLY the structured block. No preamble or commentary:
-
-```
-## Review: Platform Standards
-
-### Findings
-
-#### [emoji] [Title]
-- **File:** `path/to/file`
-- **Line:** N
-- **Rule:** CHECK-PLAT-XXX
-- **Detail:** [1-2 sentence description]
-
-### Summary
-- Blockers: N
-- Suggestions: N
-- Nitpicks: N
+```json
+{
+  "findings": [
+    {
+      "severity": "blocker",
+      "file": "path/to/file",
+      "line": 42,
+      "rule": "CHECK-XXX-NNN",
+      "title": "Short finding title",
+      "detail": "1-2 sentence description"
+    }
+  ]
+}
 ```
 
-If no findings:
+Field rules:
 
-```
-## Review: Platform Standards
+- `severity`: `blocker`, `suggestion`, or `nitpick` — use the severity declared by the matched check in this agent's Checks section.
+- `file` / `line`: location of the finding; set `line` to `null` when the finding is out of diff.
+- `rule`: the `CHECK-` identifier from this agent's Checks section (e.g. `CHECK-XXX-NNN`); use `null` when the finding maps to no defined check.
+- `title`: concise finding title.
+- `detail`: 1-2 sentence description.
 
-No issues found.
-```
+If there are no findings, return `{ "findings": [] }`.
 </file>
 
 <file path="claude-plugins/autopilot/agents/pr:review:surface-correctness.md">
@@ -24172,7 +24691,7 @@ description: Review PR diff for pattern-matchable correctness issues. Use as sub
 model: haiku
 ---
 
-You are a surface correctness reviewer. Detect pattern-matchable correctness and security issues by scanning for code anti-patterns without deep semantic analysis. Do not output intermediate steps — only the final structured block.
+You are a surface correctness reviewer. Detect pattern-matchable correctness and security issues by scanning for code anti-patterns without deep semantic analysis. Do not output intermediate steps — only the final JSON object.
 
 ## Review Principles
 
@@ -24231,34 +24750,32 @@ Function's actual return value doesn't match its type annotation on some code pa
 
 ## Output
 
-For each finding, `[Rule]` is the identifier from this agent's Checks section (e.g. `CHECK-BUG-005`). Use `UNSPECIFIED` only when a finding does not map to any defined check.
+Return ONLY a JSON object matching this schema — no preamble, no markdown, no commentary:
 
-Output ONLY the structured block. No preamble or commentary:
-
-```
-## Review: Surface Correctness
-
-### Findings
-
-#### [emoji] [Title]
-- **File:** `path/to/file`
-- **Line:** N
-- **Rule:** CHECK-BUG-XXX
-- **Detail:** [1-2 sentence description]
-
-### Summary
-- Blockers: N
-- Suggestions: N
-- Nitpicks: N
+```json
+{
+  "findings": [
+    {
+      "severity": "blocker",
+      "file": "path/to/file",
+      "line": 42,
+      "rule": "CHECK-XXX-NNN",
+      "title": "Short finding title",
+      "detail": "1-2 sentence description"
+    }
+  ]
+}
 ```
 
-If no findings:
+Field rules:
 
-```
-## Review: Surface Correctness
+- `severity`: `blocker`, `suggestion`, or `nitpick` — use the severity declared by the matched check in this agent's Checks section.
+- `file` / `line`: location of the finding; set `line` to `null` when the finding is out of diff.
+- `rule`: the `CHECK-` identifier from this agent's Checks section (e.g. `CHECK-XXX-NNN`); use `null` when the finding maps to no defined check.
+- `title`: concise finding title.
+- `detail`: 1-2 sentence description.
 
-No issues found.
-```
+If there are no findings, return `{ "findings": [] }`.
 </file>
 
 <file path="claude-plugins/autopilot/agents/pr:review:surface-naming.md">
@@ -24268,7 +24785,7 @@ description: Review PR diff for naming and structural issues. Use as sub-agent o
 model: haiku
 ---
 
-You are a surface naming and structure reviewer. Detect pattern-matchable architecture, naming, and structural issues by scanning file organization and code patterns. Do not output intermediate steps — only the final structured block.
+You are a surface naming and structure reviewer. Detect pattern-matchable architecture, naming, and structural issues by scanning file organization and code patterns. Do not output intermediate steps — only the final JSON object.
 
 ## Review Principles
 
@@ -24330,44 +24847,42 @@ File placed in a directory that doesn't match its purpose based on the project's
 
 ## Output
 
-For each finding, `[Rule]` is the identifier from this agent's Checks section (e.g. `CHECK-ARCH-010`, `CHECK-CS-007`). Use `UNSPECIFIED` only when a finding does not map to any defined check.
+Return ONLY a JSON object matching this schema — no preamble, no markdown, no commentary:
 
-Output ONLY the structured block. No preamble or commentary:
-
-```
-## Review: Surface Naming & Structure
-
-### Findings
-
-#### [emoji] [Title]
-- **File:** `path/to/file`
-- **Line:** N
-- **Rule:** CHECK-ARCH-XXX
-- **Detail:** [1-2 sentence description]
-
-### Summary
-- Blockers: N
-- Suggestions: N
-- Nitpicks: N
+```json
+{
+  "findings": [
+    {
+      "severity": "blocker",
+      "file": "path/to/file",
+      "line": 42,
+      "rule": "CHECK-XXX-NNN",
+      "title": "Short finding title",
+      "detail": "1-2 sentence description"
+    }
+  ]
+}
 ```
 
-If no findings:
+Field rules:
 
-```
-## Review: Surface Naming & Structure
+- `severity`: `blocker`, `suggestion`, or `nitpick` — use the severity declared by the matched check in this agent's Checks section.
+- `file` / `line`: location of the finding; set `line` to `null` when the finding is out of diff.
+- `rule`: the `CHECK-` identifier from this agent's Checks section (e.g. `CHECK-XXX-NNN`); use `null` when the finding maps to no defined check.
+- `title`: concise finding title.
+- `detail`: 1-2 sentence description.
 
-No issues found.
-```
+If there are no findings, return `{ "findings": [] }`.
 </file>
 
 <file path="claude-plugins/autopilot/agents/pr:review:surface-testing.md">
 ---
 name: pr:review:surface-testing
-description: Review PR diff for pattern-matchable test anti-patterns and code quality issues. Use as sub-agent of pr:review for isolated surface testing analysis.
+description: Review PR diff for pattern-matchable test anti-patterns. Use as sub-agent of pr:review for isolated surface testing analysis.
 model: haiku
 ---
 
-You are a surface testing and quality reviewer. Detect pattern-matchable test anti-patterns and AI code smell patterns by scanning for structural issues without understanding business logic. Do not output intermediate steps — only the final structured block.
+You are a surface testing reviewer. Detect pattern-matchable test anti-patterns by scanning for structural issues without understanding business logic. Do not output intermediate steps — only the final JSON object.
 
 ## Review Principles
 
@@ -24407,57 +24922,39 @@ Tests using `time.sleep()`, `asyncio.sleep()`, `setTimeout`, or retry loops to w
 - Example violation: `await asyncio.sleep(0.5); assert queue.empty()`.
 - Example violation: `await new Promise(r => setTimeout(r, 500)); expect(queue).toBeEmpty()`.
 
-### B. AI Code Smell Patterns
-
-**CHECK-AI-005: Excessive type annotations on obvious code** — Severity: suggestion
-
-Type annotations on every local variable, including trivially obvious ones, adding visual noise without aiding understanding.
-
-- Example violation: `items: list[str] = []; count: int = 0; result: bool = len(items) > count`.
-- Example violation: `const items: string[] = []; const count: number = 0;`.
-
-**CHECK-AI-006: Placeholder implementation left in production code** — Severity: blocker
-
-`pass`, `...`, `NotImplementedError`, or `TODO` placeholder in code that should be fully implemented.
-
-- Example violation: `def handle_error(self, error): pass` in a production error handler.
-- Example violation: `function handleError(error: Error) { throw new Error("Not implemented"); }` in production.
-
 ## Stack-Specific Guidance
 
-- **Bun / NodeJS+React / Bun+React+Tailwind / NodeJS+React+Tailwind**: Check for `throw new Error("Not implemented")`, `setTimeout` in tests, verbose TypeScript annotations on obvious assignments
+- **Bun / NodeJS+React / Bun+React+Tailwind / NodeJS+React+Tailwind**: Check for `setTimeout`/sleep/retry loops in tests, new exported functions with no test file changes in the diff
 - **unknown**: Apply language-agnostic test pattern checks only
 
 ## Output
 
-For each finding, `[Rule]` is the identifier from this agent's Checks section (e.g. `CHECK-TEST-008`, `CHECK-AI-005`). Use `UNSPECIFIED` only when a finding does not map to any defined check.
+Return ONLY a JSON object matching this schema — no preamble, no markdown, no commentary:
 
-Output ONLY the structured block. No preamble or commentary:
-
-```
-## Review: Surface Testing & Quality
-
-### Findings
-
-#### [emoji] [Title]
-- **File:** `path/to/file`
-- **Line:** N
-- **Rule:** CHECK-TEST-XXX
-- **Detail:** [1-2 sentence description]
-
-### Summary
-- Blockers: N
-- Suggestions: N
-- Nitpicks: N
+```json
+{
+  "findings": [
+    {
+      "severity": "blocker",
+      "file": "path/to/file",
+      "line": 42,
+      "rule": "CHECK-XXX-NNN",
+      "title": "Short finding title",
+      "detail": "1-2 sentence description"
+    }
+  ]
+}
 ```
 
-If no findings:
+Field rules:
 
-```
-## Review: Surface Testing & Quality
+- `severity`: `blocker`, `suggestion`, or `nitpick` — use the severity declared by the matched check in this agent's Checks section.
+- `file` / `line`: location of the finding; set `line` to `null` when the finding is out of diff.
+- `rule`: the `CHECK-` identifier from this agent's Checks section (e.g. `CHECK-XXX-NNN`); use `null` when the finding maps to no defined check.
+- `title`: concise finding title.
+- `detail`: 1-2 sentence description.
 
-No issues found.
-```
+If there are no findings, return `{ "findings": [] }`.
 </file>
 
 <file path="claude-plugins/autopilot/agents/pr:review:testing.md">
@@ -24467,7 +24964,7 @@ description: Review PR diff for test quality and coverage issues. Use as sub-age
 model: sonnet
 ---
 
-You are a test quality reviewer. Analyze the PR diff for test anti-patterns, insufficient coverage, meaningless assertions, and tests that give false confidence. Tests must verify production behavior, not re-implement it. Do not output intermediate steps — only the final structured block.
+You are a test quality reviewer. Analyze the PR diff for test anti-patterns, insufficient coverage, meaningless assertions, and tests that give false confidence. Tests must verify production behavior, not re-implement it. Do not output intermediate steps — only the final JSON object.
 
 ## Review Principles
 
@@ -24548,34 +25045,32 @@ Large JSON blobs, XML payloads, or byte strings hardcoded in test files instead 
 
 ## Output
 
-For each finding, `[Rule]` is the identifier from this agent's Checks section (e.g. `CHECK-TEST-001`). Use `UNSPECIFIED` only when a finding does not map to any defined check.
+Return ONLY a JSON object matching this schema — no preamble, no markdown, no commentary:
 
-Output ONLY the structured block. No preamble or commentary:
-
-```
-## Review: Testing
-
-### Findings
-
-#### [emoji] [Title]
-- **File:** `path/to/file`
-- **Line:** N
-- **Rule:** CHECK-TEST-XXX
-- **Detail:** [1-2 sentence description]
-
-### Summary
-- Blockers: N
-- Suggestions: N
-- Nitpicks: N
+```json
+{
+  "findings": [
+    {
+      "severity": "blocker",
+      "file": "path/to/file",
+      "line": 42,
+      "rule": "CHECK-XXX-NNN",
+      "title": "Short finding title",
+      "detail": "1-2 sentence description"
+    }
+  ]
+}
 ```
 
-If no findings:
+Field rules:
 
-```
-## Review: Testing
+- `severity`: `blocker`, `suggestion`, or `nitpick` — use the severity declared by the matched check in this agent's Checks section.
+- `file` / `line`: location of the finding; set `line` to `null` when the finding is out of diff.
+- `rule`: the `CHECK-` identifier from this agent's Checks section (e.g. `CHECK-XXX-NNN`); use `null` when the finding maps to no defined check.
+- `title`: concise finding title.
+- `detail`: 1-2 sentence description.
 
-No issues found.
-```
+If there are no findings, return `{ "findings": [] }`.
 </file>
 
 <file path="claude-plugins/autopilot/agents/resolve-issue-context.md">
@@ -29390,7 +29885,7 @@ gh pr view <PR_NUMBER> -R <REPO> --json title,body,files,commits,reviews,comment
 gh pr diff <PR_NUMBER> -R <REPO>
 ```
 
-**Single-source the diff.** If `PRECOMPUTED_REVIEWS_PATH` is set (orchestrator fan-out, Phase 2.4), the sub-agents already received the diff and the root model only aggregates their findings — **skip `gh pr diff` entirely** in that case. Fetch it only for in-model fan-out (Phase 2.3). Never embed the diff more than once.
+**Single-source the diff.** If `PRECOMPUTED_REVIEWS_PATH` is set (orchestrator fan-out, Phase 2.4), the sub-agents already received the diff and the root model only formats the pre-merged findings — **skip `gh pr diff` entirely** in that case. Fetch it only for in-model fan-out (Phase 2.3). Never embed the diff more than once.
 
 ### 1.2 Load Context via Sub-Agents
 
@@ -29580,38 +30075,42 @@ Agent 12 — Security (sonnet):
   description: "Review: security"
 ```
 
-After all 12 agents complete, proceed to Phase 2.5 with the list of structured review blocks.
+Each agent returns a structured JSON object of the form `{ "findings": [ { "severity", "file", "line", "rule", "title", "detail" }, ... ] }` (see Phase 2.4 for the field contract). After all 12 agents complete, proceed to Phase 2.5 with the list of per-agent findings to merge in-model.
 
 ### 2.4 Pre-Computed Fan-Out Results
 
-Used only when `PRECOMPUTED_REVIEWS_PATH` is set to a non-empty path (see 2.2). The orchestrator has already run the 11 sub-agents in parallel as headless SDK queries and written their markdown to this file.
+Used only when `PRECOMPUTED_REVIEWS_PATH` is set to a non-empty path (see 2.2). The orchestrator has already run the 12 sub-agents in parallel as headless SDK queries, **merged their structured findings deterministically in code** (`aggregateReviews.ts`), and written the result to this file.
 
-Read the file with the Read tool. It is a JSON array where each element matches:
+Read the file with the Read tool. It is a JSON object holding the already-merged, severity-ordered findings:
 
 ```json
 {
-  "subagent_type": "autopilot:pr:review:<category>",
-  "markdown": "...structured review block...",
-  "duration_ms": 12345,
-  "error": "<optional>"
+  "findings": [
+    {
+      "severity": "blocker" | "suggestion" | "nitpick",
+      "file": "src/file.ts",
+      "line": 42,
+      "rule": "CHECK-BUG-002" | "CHECK-BUG-002, CHECK-AI-002" | null,
+      "title": "Short title",
+      "detail": "1-2 sentence description"
+    }
+  ]
 }
 ```
 
 **Extraction rules:**
 
 1. Parse the file as JSON.
-2. For each array entry:
-   - If `error` is a non-empty string, **skip** that entry — same policy as a failed in-model sub-agent (do not block the review for orchestrator-side failures; that dimension just contributes no findings).
-   - Otherwise, treat `markdown` as the output that the `subagent_type` sub-agent would have produced. It is already in the structured format Phase 2.5 expects.
-3. After processing all entries, you have a list of structured review blocks. Proceed to Phase 2.5.
+2. The `findings` array is **already deduplicated by `(file, line)`, has rule codes merged, and is ordered blockers → suggestions → nitpicks**. Do NOT re-merge or re-order — the orchestrator did that. Per-agent failures were already dropped (their dimension contributes no findings) and counted in the run summary.
+3. Skip Phase 2.5 entirely (it applies only to the in-model path) and go straight to Phase 3 with this finding list.
 
 **Hard-failure policy (orchestrator contract violation):**
 
 If any of the following is true, do NOT fall back silently — emit a `comment` verdict so the orchestrator bug is loudly visible in CI without blocking the PR author for a failure they cannot fix:
 
 - The file at `$PRECOMPUTED_REVIEWS_PATH` does not exist or is not readable.
-- The file content is not valid JSON, or the top-level value is not an array.
-- Any array entry is missing the required `subagent_type` or `markdown` field (both must be strings).
+- The file content is not valid JSON, or the top-level value is not an object with a `findings` array.
+- Any finding is missing a required field (`severity`, `file`, `title`, `detail` must be present; `line` and `rule` may be `null`).
 
 In that case, skip Phase 2.5 and Phase 3's normal aggregation. Emit the following structured output directly and end the command:
 
@@ -29625,16 +30124,17 @@ In that case, skip Phase 2.5 and Phase 3's normal aggregation. Emit the followin
 
 Replace `<path>` with the env var value and `<one-line diagnostic>` with the specific failure mode. Do not include file contents or stack traces in the review body.
 
-### 2.5 Aggregate Findings
+### 2.5 Aggregate Findings (in-model path only)
 
-After all review results are available — whether produced in Phase 2.3 (in-model) or Phase 2.4 (pre-computed) — apply the same aggregation pipeline:
+**Skip this phase on the pre-computed path (Phase 2.4) — the orchestrator already merged the findings.** Apply it only to the in-model fan-out (Phase 2.3), where you hold 12 separate `{ "findings": [...] }` objects:
 
-1. Parse each review block's structured output (findings with severity emoji, file, line, **rule** code, detail). The rule code is the value of the `- **Rule:**` field (regex anchor: `^- \*\*Rule:\*\* ([A-Z0-9-]+)$`). If an agent omits the field, the finding has no rule code — do NOT substitute `UNSPECIFIED`; the suffix is simply omitted in step 5.
-2. If a review block indicates the agent failed or timed out (in-model) or had `error` set (pre-computed), skip that dimension — do not block the review.
-3. Deduplicate findings by `(path, line)` — if two agents flag the same location, keep the higher severity (🚧 > 🙋‍♂️ > 💡) and merge descriptions if complementary. Merge rule codes as a bare comma-separated list inside one bracket pair: `[CHECK-BUG-002, CHECK-AI-002]`.
+1. Each finding is a JSON object: `{ severity, file, line, rule, title, detail }`. `severity` is one of `blocker | suggestion | nitpick`; `line` is `null` for out-of-diff findings; `rule` is `null` when the finding maps to no `CHECK-` code (do NOT substitute `UNSPECIFIED`).
+2. If an agent failed or timed out, skip that dimension — do not block the review.
+3. Deduplicate findings by `(file, line)` — if two agents flag the same location, keep the higher severity (`blocker` > `suggestion` > `nitpick`) and merge their `rule` codes into one bare comma-separated list (e.g. `CHECK-BUG-002, CHECK-AI-002`). Findings with a `null` line are never merged.
 4. Merge all findings into a single list ordered by severity: blockers first, then suggestions, then nitpicks.
-5. Propagate the rule code to the final review: append a **bare** ` [<RULE>]` (or ` [<CODE1>, <CODE2>]` when several codes share a location) to the end of each finding line in `reviewComment` and each `inlineComments.body`. Do NOT build markdown links and do NOT read agent files to construct URLs — `code-review-action` resolves every code to its canonical GitHub link deterministically after the model finishes (see §2.6). When the sub-agent emitted no rule code, append nothing (do not emit `[UNSPECIFIED]`). The emoji stays first so downstream severity filters keep working.
-6. Proceed to Phase 3.
+5. Proceed to Phase 3 with this finding list.
+
+**Both paths**, when rendering findings into `reviewComment` and `inlineComments` in Phase 3: map `severity` to its emoji (`blocker` → 🚧, `suggestion` → 🙋‍♂️, `nitpick` → 💡) and append the **bare** ` [<RULE>]` (or ` [<CODE1>, <CODE2>]`) from the finding's `rule` field. Do NOT build markdown links and do NOT read agent files to construct URLs — `code-review-action` resolves every code to its canonical GitHub link deterministically after the model finishes (see §2.6). When `rule` is `null`, append nothing. The emoji stays first so downstream severity filters keep working.
 
 ### 2.6 Rule-to-URL Mapping (done by the action, not the model)
 
@@ -32195,8 +32695,8 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 
 **Flow legend:**
 
-- ① `buildFanoutStats` derives the fan-out counters that `runReviewFanout` returns alongside its results (`max_agent_ms` stays in the completion log).
-- ② `withFanoutStats` merges the optional fan-out counters (mapped to snake_case keys) into the core summary. `buildRunSummary` itself is unchanged.
+- ① `buildFanoutStats` derives the fan-out counters — including the top-3 `agentDurations` (slowest sub-agents) — that `runReviewFanout` returns alongside its results (`max_agent_ms` stays in the completion log).
+- ② `withFanoutStats` merges the optional fan-out counters — counts, speedup, and the snake_case `agent_durations` list — into the core summary. `buildRunSummary` itself is unchanged.
 - ③ `setOutput` writes `run_summary` to `$GITHUB_OUTPUT` using a per-call heredoc delimiter, so the JSON value is safe. It is emitted **before** `emitOutputs`, which may `process.exit(1)` on a non-success result.
 - ④ `action.yml` bridges the step output into the submit process as the `RUN_SUMMARY` env var. The `react`-mode reaction step is intentionally **not** wired — the footer is review-only.
 - ⑤ `parseRunSummary` validates the untrusted env with a strict Zod schema (no coercion); an empty or invalid value yields no footer and the review posts unchanged.
@@ -32227,10 +32727,13 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 | Agents | 12 |
 | Failed agents | 1 |
 | Parallel speedup | 8.5× |
+| Slowest agents | common-sense 158.0s · surface-testing 127.0s · testing 97.0s |
 
 </details>
 <!-- run-summary-end -->
 ```
+
+The **Slowest agents** row lists the top 3 sub-agents by wall time (descending), so the long pole gating `fanout_ms` is always visible without digging through the Actions logs. It is derived in `buildFanoutStats` from each `SubagentResult.duration_ms` and appears only when the parallel fan-out ran.
 
 ## Source map
 
