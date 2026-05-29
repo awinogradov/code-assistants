@@ -265,7 +265,10 @@ async function runSubagent(
   }
 
   const durationMs = Math.round(performance.now() - start);
-  childLog.info(
+  // Log a partial failure at warn so skipped dimensions show at standard filter levels.
+  const finished = collected.error ? childLog.warn : childLog.info;
+  finished.call(
+    childLog,
     { duration_ms: durationMs, finding_count: collected.findings.length, error: collected.error },
     "Sub-agent query finished.",
   );
@@ -297,9 +300,12 @@ async function collectStructuredFindings(
 
   const parsed = agentOutputSchema.safeParse(resultMessage.structured_output);
   if (!parsed.success) {
+    const issues = parsed.error.issues
+      .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
+      .join("; ");
     return {
       findings: [],
-      error: "Sub-agent structured output did not match the findings schema.",
+      error: `Sub-agent structured output did not match the findings schema: ${issues}`,
       raw: JSON.stringify(resultMessage.structured_output),
     };
   }

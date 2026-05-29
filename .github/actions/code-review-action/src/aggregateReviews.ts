@@ -58,16 +58,14 @@ export function aggregateReviews(reviews: AgentReview[]): ReviewFinding[] {
   const byLocation = new Map<string, ReviewFinding>();
   const standalone: ReviewFinding[] = [];
 
-  for (const review of reviews) {
-    for (const finding of review.findings) {
-      if (finding.line === null) {
-        standalone.push(finding);
-        continue;
-      }
-      const key = `${finding.file}:${finding.line}`;
-      const existing = byLocation.get(key);
-      byLocation.set(key, existing ? mergeFindings(existing, finding) : finding);
+  for (const finding of reviews.flatMap((review) => review.findings)) {
+    if (finding.line === null) {
+      standalone.push(finding);
+      continue;
     }
+    const key = `${finding.file}:${finding.line}`;
+    const existing = byLocation.get(key);
+    byLocation.set(key, existing ? mergeFindings(existing, finding) : finding);
   }
 
   return [...byLocation.values(), ...standalone]
