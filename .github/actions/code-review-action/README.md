@@ -49,29 +49,30 @@ The `if` condition prevents runner provisioning for non-PR issue comments. All o
 
 ## Inputs
 
-| Input                | Required | Default                  | Description                                                                         |
-| -------------------- | -------- | ------------------------ | ----------------------------------------------------------------------------------- |
-| `reviewer`           | yes      | —                        | GitHub username added as reviewer and used for `@mention` triggering.               |
-| `bot_token`          | yes      | —                        | GitHub token for bot operations (`contents: read`, `pull-requests: write`).         |
-| `anthropic_api_key`  | no       | —                        | Anthropic API key. One of `anthropic_api_key` or `claude_oauth_token` is required.  |
-| `claude_oauth_token` | no       | —                        | Claude Code OAuth token. Alternative to `anthropic_api_key`.                        |
-| `mode`               | no       | `review`                 | Action mode: `review` or `react`. Auto-detected when `react_to_comments` is `true`. |
-| `react_to_comments`  | no       | `true`                   | Auto-detect comment events and route to `react` mode.                               |
-| `bot_username`       | no       | falls back to `reviewer` | Username for skipping CI-author PRs labeled `ci-skip-review`.                       |
-| `model`              | no       | `claude-sonnet-4-6`      | Claude model to use.                                                                |
-| `settings`           | no       | —                        | Claude Code settings JSON (e.g., env vars for MCP servers).                         |
-| `mcp_config`         | no       | —                        | Additional MCP server configuration JSON, merged with repo `.mcp.json`.             |
-| `parallel_fanout`    | no       | `false`                  | Run the PR-review sub-agents as parallel headless SDK calls. Opt-in until stable.   |
-| `preflight_checks`   | no       | `true`                   | Wait for PR checks to pass before running review (review mode only).                |
-| `poll_interval`      | no       | `10`                     | Seconds between check status polls.                                                 |
-| `checks_timeout`     | no       | `600`                    | Maximum seconds to wait for checks.                                                 |
-| `debug_logs`         | no       | `false`                  | Enable DEBUG-level Claude trace logging and always upload the execution artifact.   |
-| `pr_number`          | no       | event context            | Override auto-detected PR number.                                                   |
-| `pr_head_sha`        | no       | event context            | Override auto-detected PR head SHA.                                                 |
-| `comment_id`         | no       | event context            | Comment ID (react mode, explicit-input setups).                                     |
-| `comment_body`       | no       | event context            | Comment body (react mode, explicit-input setups).                                   |
-| `comment_path`       | no       | event context            | File path for review-thread comments.                                               |
-| `comment_line`       | no       | event context            | Line number for review-thread comments.                                             |
+| Input                | Required | Default                  | Description                                                                                                                                                         |
+| -------------------- | -------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `reviewer`           | yes      | —                        | GitHub username added as reviewer and used for `@mention` triggering.                                                                                               |
+| `bot_token`          | yes      | —                        | GitHub token for bot operations (`contents: read`, `pull-requests: write`).                                                                                         |
+| `anthropic_api_key`  | no       | —                        | Anthropic API key. One of `anthropic_api_key` or `claude_oauth_token` is required.                                                                                  |
+| `claude_oauth_token` | no       | —                        | Claude Code OAuth token. Alternative to `anthropic_api_key`.                                                                                                        |
+| `mode`               | no       | `review`                 | Action mode: `review` or `react`. Auto-detected when `react_to_comments` is `true`.                                                                                 |
+| `react_to_comments`  | no       | `true`                   | Auto-detect comment events and route to `react` mode.                                                                                                               |
+| `bot_username`       | no       | falls back to `reviewer` | Username for skipping CI-author PRs labeled `ci-skip-review`.                                                                                                       |
+| `release_pr_authors` | no       | —                        | Comma-separated trusted authors whose `release-*`/`delivery-*` PRs are auto-approved. Empty disables it. See [Release PR auto-approval](#release-pr-auto-approval). |
+| `model`              | no       | `claude-sonnet-4-6`      | Claude model to use.                                                                                                                                                |
+| `settings`           | no       | —                        | Claude Code settings JSON (e.g., env vars for MCP servers).                                                                                                         |
+| `mcp_config`         | no       | —                        | Additional MCP server configuration JSON, merged with repo `.mcp.json`.                                                                                             |
+| `parallel_fanout`    | no       | `false`                  | Run the PR-review sub-agents as parallel headless SDK calls. Opt-in until stable.                                                                                   |
+| `preflight_checks`   | no       | `true`                   | Wait for PR checks to pass before running review (review mode only).                                                                                                |
+| `poll_interval`      | no       | `10`                     | Seconds between check status polls.                                                                                                                                 |
+| `checks_timeout`     | no       | `600`                    | Maximum seconds to wait for checks.                                                                                                                                 |
+| `debug_logs`         | no       | `false`                  | Enable DEBUG-level Claude trace logging and always upload the execution artifact.                                                                                   |
+| `pr_number`          | no       | event context            | Override auto-detected PR number.                                                                                                                                   |
+| `pr_head_sha`        | no       | event context            | Override auto-detected PR head SHA.                                                                                                                                 |
+| `comment_id`         | no       | event context            | Comment ID (react mode, explicit-input setups).                                                                                                                     |
+| `comment_body`       | no       | event context            | Comment body (react mode, explicit-input setups).                                                                                                                   |
+| `comment_path`       | no       | event context            | File path for review-thread comments.                                                                                                                               |
+| `comment_line`       | no       | event context            | Line number for review-thread comments.                                                                                                                             |
 
 ## Skills consumed
 
@@ -85,6 +86,14 @@ When `parallel_fanout: true`, the action's orchestrator fans out the `pr:review:
 ## Labels
 
 PRs authored by the configured `bot_username` (or `reviewer` if `bot_username` is unset) and carrying the `ci-skip-review` label are skipped — useful for automated CI updates that don't need review.
+
+## Release PR auto-approval
+
+The action always **skips AI review** for `release-*` / `delivery-*` branch PRs. When `release_pr_authors` is set and the PR author is in that trusted list, it additionally posts an **auto-approval** so the PR is not blocked on the requested-reviewer slot — this is what unblocks [`release-automerge`](../release-automerge/README.md).
+
+> **The author must differ from the reviewer.** The approval is posted with `bot_token` as the `reviewer` identity, and GitHub forbids approving your own PR. If the release PR is authored by that same identity, the `APPROVE` call fails with `422 Can not approve your own pull request`. Author release PRs with a separate identity (e.g. `release-create.yml` uses a `GH_TOKEN` distinct from the reviewer's `BOT_TOKEN`) and list that author in `release_pr_authors`. A failed approval is surfaced as a workflow `::error::`, never silently skipped.
+
+The branch-name match alone is **not** a security boundary — anyone with push access could open a `release-pwn-1.0.0` branch — which is why auto-approval is gated on the explicit `release_pr_authors` trust list.
 
 ## Versioning
 

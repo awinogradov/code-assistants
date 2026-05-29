@@ -15,6 +15,8 @@ false`, read at the PR head SHA,
   and
 - the PR's `reviewDecision` is `APPROVED`.
 
+> **The `APPROVED` decision comes from auto-approval.** [`code-review-action`](../code-review-action/README.md) posts it for trusted release-PR authors. That requires the release PR to be authored by an identity **distinct** from the reviewer (GitHub forbids approving your own PR); see [Author and approver must be distinct identities](../../../docs/release-automerge.md#author-and-approver-must-be-distinct-identities). Without a recorded approval this action never merges.
+
 > **Opt-in (default off).** Auto-merge is disabled unless `release.automerge`
 > resolves to `true` (see the [`release` field spec](../../../docs/release-field.md)).
 > A monorepo opens one release PR per member (`release-<member>-<version>`), so the

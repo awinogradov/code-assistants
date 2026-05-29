@@ -104,6 +104,24 @@ token for the same reason.
 > conclusion or be marked non-required, or it will block the merge. Add the bot to
 > the ruleset's bypass list (Settings → Rules → the branch ruleset → Bypass list).
 
+### Author and approver must be distinct identities
+
+GitHub forbids a user from approving its own pull request. The auto-approval is
+posted by the `code-review-action` reviewer (`BOT_USERNAME`, authenticated with
+`BOT_TOKEN`), so the release PR must be **authored by a different identity** —
+otherwise the `APPROVE` call fails with `422 Can not approve your own pull
+request`, no approval is recorded, and the PR never reaches the
+`reviewDecision == APPROVED` gate above.
+
+[`release-create.yml`](../.github/workflows/release-create.yml) therefore opens
+the release PR with a `GH_TOKEN` secret whose identity is **not** the reviewer,
+and that identity is listed in the `RELEASE_PR_AUTHORS` variable
+`code-review-action` trusts for auto-approval. The reviewer (`BOT_TOKEN`) then
+approves it, and because that approval is posted by a real PAT — not
+`GITHUB_TOKEN` — it triggers this action via `pull_request_review`. A failed
+auto-approval is surfaced as a workflow `::error::` rather than silently
+skipped, so a shared-identity misconfiguration cannot hide.
+
 ## Downstream propagation
 
 `release-automerge.yml` is one of three workflows that form the release pipeline,

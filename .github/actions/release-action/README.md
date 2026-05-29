@@ -171,6 +171,8 @@ Store the token as a secret (e.g. `BOT_TOKEN`) and pass it via `bot_token: ${{ s
 
 The Configure Git step inside the action commits as the `bot_username` input, defaulting to `github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>`. Pass `bot_username: ${{ vars.BOT_USERNAME }}` to author releases as a dedicated bot identity.
 
+> **Distinct identity when auto-approval is enabled.** If release PRs are auto-approved by [`code-review-action`](../code-review-action/README.md) (to feed [`release-automerge`](../release-automerge/README.md)), the `bot_token` identity that opens the PR must **differ** from the reviewer identity that approves it — GitHub forbids approving your own PR. In this repo, `release-create.yml` opens PRs with `GH_TOKEN` while the reviewer/merge token is `BOT_TOKEN`. See [Author and approver must be distinct identities](../../../docs/release-automerge.md#author-and-approver-must-be-distinct-identities).
+
 ## Monorepo mode
 
 When the repository root declares either `release.members` or a `workspaces` array, `release-action` switches to **monorepo mode** and runs the create/publish flow once per release-eligible workspace member.
