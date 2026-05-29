@@ -2,6 +2,104 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.0.0](https://github.com/awinogradov/code-assistants/compare/release-action@v0.1.0...release-action@v1.0.0) (2026-05-29)
+
+## Release Notes
+
+Release-action v1.0.0 brings opt-in auto-merge control, standardized bot authentication, and enhanced monorepo ticket tracking.
+
+## ✨ What's New
+
+### Auto-merge control for release PRs
+Release auto-merge is now opt-in, giving teams control over when releases go live. Add `"release": { "automerge": true }` to your root `package.json` to enable automatic merging of release PRs. Without this flag, release PRs will be approved but wait for manual merge, allowing final review before deployment.
+
+<details><summary>Related issues</summary>
+
+- [#112: Gate release auto-merge behind a release.automerge flag in package.json](https://github.com/awinogradov/code-assistants/issues/112)
+</details>
+
+### Enhanced monorepo release notes
+Monorepo releases now include the same ticket tracking tables as standalone releases. Each member package shows its relevant GitHub Issues, Linear tickets, and Jira items based on the commits included. The action automatically detects which ticket systems you're using from your existing credentials.
+
+<details><summary>Related issues</summary>
+
+- [#102: Monorepo release notes are missing the GitHub Issues / Linear / Jira blocks](https://github.com/awinogradov/code-assistants/issues/102)
+</details>
+
+## 🐛 Bug Fixes
+
+### Bot identity resolution
+The action now properly derives the bot's GitHub user ID when generating commits, ensuring the correct noreply email format for bot accounts. This fixes issues where commits appeared as unverified or from the wrong author.
+
+### Action loading errors
+Fixed an issue where the sync and release composite actions would fail to load due to invalid variable expressions in input descriptions. Actions now load reliably across all workflow contexts.
+
+## ⚙️ Configuration Required
+
+### Bot username configuration
+You can now customize the git author for release and sync commits by setting a `bot_username` input. If not specified, it defaults to `github-actions[bot]`. Store your bot's username in `vars.BOT_USERNAME` for consistent identity across workflows.
+
+## ⚠️ Breaking Changes
+
+### Renamed authentication inputs
+The `token` and `github_token` inputs are now `bot_token` for consistency across all actions. Update your workflow files:
+
+**Before:**
+```yaml
+with:
+  token: ${{ secrets.GH_TOKEN }}
+  # or
+  github_token: ${{ secrets.GH_TOKEN }}
+```
+
+**After:**
+```yaml
+with:
+  bot_token: ${{ secrets.BOT_TOKEN }}
+  bot_username: ${{ vars.BOT_USERNAME }}  # optional
+```
+
+Also update your repository secrets from `GH_TOKEN` to `BOT_TOKEN`.
+
+<details><summary>Related issues</summary>
+
+- [#96: Standardize actions on bot_token and bot_username](https://github.com/awinogradov/code-assistants/issues/96)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #112 | [#114](https://github.com/awinogradov/code-assistants/pull/114) | @awinogradov |
+| #102 | [#104](https://github.com/awinogradov/code-assistants/pull/104) | @awinogradov |
+| #96 | [#103](https://github.com/awinogradov/code-assistants/pull/103) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **actions:** inputs token and github_token are renamed to bot_token; consumers must
+update with: blocks to pass bot_token (and optional bot_username), and workflows now read
+secrets.BOT_TOKEN and vars.BOT_USERNAME instead of secrets.GH_TOKEN.
+
+### Features
+
+* **actions:** rename token inputs to bot_token, add bot_username ([160049b](https://github.com/awinogradov/code-assistants/commit/160049b998131e2e5c503559bf5d8e70e7ea8d5a))
+* **release-automerge:** gate auto-merge behind release.automerge flag ([dcb51c8](https://github.com/awinogradov/code-assistants/commit/dcb51c87f6026728a9baf6c40837859c3b10d31f))
+
+### Bug Fixes
+
+* **actions:** derive bot uid from github api for noreply email ([cd9b047](https://github.com/awinogradov/code-assistants/commit/cd9b0475830816e1be8f5e5d62362acf289d166e))
+* **actions:** remove vars expr from descriptions ([f5b2c74](https://github.com/awinogradov/code-assistants/commit/f5b2c74aef1561ca8366ed31da938ef6e7bfb514))
+* **release-action:** add per-system ticket tables to monorepo releases ([72e0eb9](https://github.com/awinogradov/code-assistants/commit/72e0eb9599bcebe170a1b54422de811bfe9ff3f9))
+
+### Refactoring
+
+* **release-action:** share ticket-config shape with member options ([0126223](https://github.com/awinogradov/code-assistants/commit/01262238212277ebf23e8e8dd3b5a213c42581e5))
+
+### Tests
+
+* **release-action:** assert ticket-insertion output as exact string ([582eacf](https://github.com/awinogradov/code-assistants/commit/582eacf28f413b24cbae9fa6cd053129a4df3cc6))
+* **release-action:** cover ticket scoping and monorepo splice ([86f3c07](https://github.com/awinogradov/code-assistants/commit/86f3c07b04b1ae3c97d4cf3b0ef4addb80bfdbdb))
 ## 0.1.0 (2026-05-28)
 
 ## Release Notes
