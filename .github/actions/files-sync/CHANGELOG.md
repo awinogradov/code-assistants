@@ -2,6 +2,64 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [2.0.0](https://github.com/awinogradov/code-assistants/compare/files-sync-action@v1.0.0...files-sync-action@v2.0.0) (2026-05-29)
+
+## Release Notes
+
+The Files Sync action now requires clearer, more standardized authentication configuration and automatically determines GitHub bot user IDs for proper commit attribution.
+
+## ⚙️ Configuration Required
+
+### Bot authentication inputs renamed
+The action's authentication inputs have been renamed for clarity. Update your workflow files to use `bot_token` instead of `token` or `github_token`, and optionally specify `bot_username` to customize the Git author for sync commits.
+
+```yaml
+# Before:
+with:
+  token: ${{ secrets.GH_TOKEN }}
+
+# After:
+with:
+  bot_token: ${{ secrets.BOT_TOKEN }}
+  bot_username: ${{ vars.BOT_USERNAME }}  # Optional, defaults to github-actions[bot]
+```
+
+<details><summary>Related issues</summary>
+
+- [#96: Standardize actions on bot_token and bot_username](https://github.com/awinogradov/code-assistants/issues/96)
+</details>
+
+## 🐛 Bug Fixes
+
+### GitHub bot email generation
+The action now correctly derives GitHub bot user IDs from the GitHub API when generating noreply email addresses, ensuring commits are properly attributed to bot accounts.
+
+## ⚠️ Breaking Changes
+
+### Authentication input names changed
+Workflows using this action must update their input names from `token` or `github_token` to `bot_token`. This change affects all consumers of the Files Sync action and requires updating your workflow YAML files before upgrading to v2.0.0.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #96 | [#103](https://github.com/awinogradov/code-assistants/pull/103) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **actions:** inputs token and github_token are renamed to bot_token; consumers must
+update with: blocks to pass bot_token (and optional bot_username), and workflows now read
+secrets.BOT_TOKEN and vars.BOT_USERNAME instead of secrets.GH_TOKEN.
+
+### Features
+
+* **actions:** rename token inputs to bot_token, add bot_username ([160049b](https://github.com/awinogradov/code-assistants/commit/160049b998131e2e5c503559bf5d8e70e7ea8d5a))
+
+### Bug Fixes
+
+* **actions:** derive bot uid from github api for noreply email ([cd9b047](https://github.com/awinogradov/code-assistants/commit/cd9b0475830816e1be8f5e5d62362acf289d166e))
+* **actions:** remove vars expr from descriptions ([f5b2c74](https://github.com/awinogradov/code-assistants/commit/f5b2c74aef1561ca8366ed31da938ef6e7bfb514))
 ## 1.0.0 (2026-05-28)
 
 ## Release Notes

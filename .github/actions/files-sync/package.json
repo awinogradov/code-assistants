@@ -1,6 +1,6 @@
 {
   "name": "@code-assistants/files-sync-action",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Composite GitHub Action that syncs declared files from upstream repositories.",
   "private": true,
   "type": "module",
