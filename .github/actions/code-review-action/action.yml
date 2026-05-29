@@ -495,6 +495,7 @@ runs:
         REVIEWER: ${{ inputs.reviewer }}
         STRUCTURED_OUTPUT: ${{ steps.review.outputs.structured_output }}
         EXECUTION_FILE: ${{ steps.review.outputs.execution_file }}
+        RUN_SUMMARY: ${{ steps.review.outputs.run_summary }}
         PR_HEAD_SHA: ${{ steps.ctx.outputs.pr_head_sha }}
         RUNNER_TEMP: ${{ runner.temp }}
         CLAUDE_PLUGIN_DIR: ${{ steps.plugin.outputs.dir }}
