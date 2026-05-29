@@ -4930,15 +4930,13 @@ runs:
                 2> "$approve_stderr"; then
                 echo "Auto-approval posted for trusted author '$EVENT_PR_AUTHOR'"
               else
-                # Distinguish the benign "already approved" case (HTTP 422 with
-                # `Can not approve` in the body) from a real misconfiguration
-                # (auth, scope, network) so workflow owners can act on the
-                # latter without grepping every successful run.
-                if grep -q "Can not approve" "$approve_stderr"; then
-                  echo "Auto-approval skipped: PR already approved by bot for current HEAD"
-                else
-                  echo "::error::Auto-approval failed for '$EVENT_PR_AUTHOR' on release PR ${EVENT_PR_NUMBER}: $(cat "$approve_stderr")"
-                fi
+                # A failed APPROVE is always a misconfiguration to surface — most
+                # commonly a self-approval attempt (the release PR author is also
+                # the reviewer), which GitHub rejects with "Can not approve your
+                # own pull request". Author release PRs with an identity distinct
+                # from the reviewer's `bot_token`. Never swallow this: a silent
+                # skip is exactly what let the auto-approval fail unnoticed.
+                echo "::error::Auto-approval failed for '$EVENT_PR_AUTHOR' on release PR ${EVENT_PR_NUMBER}: $(cat "$approve_stderr")"
               fi
               rm -f "$approve_stderr"
             else
@@ -5469,29 +5467,30 @@ The `if` condition prevents runner provisioning for non-PR issue comments. All o
 
 ## Inputs
 
-| Input                | Required | Default                  | Description                                                                         |
-| -------------------- | -------- | ------------------------ | ----------------------------------------------------------------------------------- |
-| `reviewer`           | yes      | —                        | GitHub username added as reviewer and used for `@mention` triggering.               |
-| `bot_token`          | yes      | —                        | GitHub token for bot operations (`contents: read`, `pull-requests: write`).         |
-| `anthropic_api_key`  | no       | —                        | Anthropic API key. One of `anthropic_api_key` or `claude_oauth_token` is required.  |
-| `claude_oauth_token` | no       | —                        | Claude Code OAuth token. Alternative to `anthropic_api_key`.                        |
-| `mode`               | no       | `review`                 | Action mode: `review` or `react`. Auto-detected when `react_to_comments` is `true`. |
-| `react_to_comments`  | no       | `true`                   | Auto-detect comment events and route to `react` mode.                               |
-| `bot_username`       | no       | falls back to `reviewer` | Username for skipping CI-author PRs labeled `ci-skip-review`.                       |
-| `model`              | no       | `claude-sonnet-4-6`      | Claude model to use.                                                                |
-| `settings`           | no       | —                        | Claude Code settings JSON (e.g., env vars for MCP servers).                         |
-| `mcp_config`         | no       | —                        | Additional MCP server configuration JSON, merged with repo `.mcp.json`.             |
-| `parallel_fanout`    | no       | `false`                  | Run the PR-review sub-agents as parallel headless SDK calls. Opt-in until stable.   |
-| `preflight_checks`   | no       | `true`                   | Wait for PR checks to pass before running review (review mode only).                |
-| `poll_interval`      | no       | `10`                     | Seconds between check status polls.                                                 |
-| `checks_timeout`     | no       | `600`                    | Maximum seconds to wait for checks.                                                 |
-| `debug_logs`         | no       | `false`                  | Enable DEBUG-level Claude trace logging and always upload the execution artifact.   |
-| `pr_number`          | no       | event context            | Override auto-detected PR number.                                                   |
-| `pr_head_sha`        | no       | event context            | Override auto-detected PR head SHA.                                                 |
-| `comment_id`         | no       | event context            | Comment ID (react mode, explicit-input setups).                                     |
-| `comment_body`       | no       | event context            | Comment body (react mode, explicit-input setups).                                   |
-| `comment_path`       | no       | event context            | File path for review-thread comments.                                               |
-| `comment_line`       | no       | event context            | Line number for review-thread comments.                                             |
+| Input                | Required | Default                  | Description                                                                                                                                                         |
+| -------------------- | -------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `reviewer`           | yes      | —                        | GitHub username added as reviewer and used for `@mention` triggering.                                                                                               |
+| `bot_token`          | yes      | —                        | GitHub token for bot operations (`contents: read`, `pull-requests: write`).                                                                                         |
+| `anthropic_api_key`  | no       | —                        | Anthropic API key. One of `anthropic_api_key` or `claude_oauth_token` is required.                                                                                  |
+| `claude_oauth_token` | no       | —                        | Claude Code OAuth token. Alternative to `anthropic_api_key`.                                                                                                        |
+| `mode`               | no       | `review`                 | Action mode: `review` or `react`. Auto-detected when `react_to_comments` is `true`.                                                                                 |
+| `react_to_comments`  | no       | `true`                   | Auto-detect comment events and route to `react` mode.                                                                                                               |
+| `bot_username`       | no       | falls back to `reviewer` | Username for skipping CI-author PRs labeled `ci-skip-review`.                                                                                                       |
+| `release_pr_authors` | no       | —                        | Comma-separated trusted authors whose `release-*`/`delivery-*` PRs are auto-approved. Empty disables it. See [Release PR auto-approval](#release-pr-auto-approval). |
+| `model`              | no       | `claude-sonnet-4-6`      | Claude model to use.                                                                                                                                                |
+| `settings`           | no       | —                        | Claude Code settings JSON (e.g., env vars for MCP servers).                                                                                                         |
+| `mcp_config`         | no       | —                        | Additional MCP server configuration JSON, merged with repo `.mcp.json`.                                                                                             |
+| `parallel_fanout`    | no       | `false`                  | Run the PR-review sub-agents as parallel headless SDK calls. Opt-in until stable.                                                                                   |
+| `preflight_checks`   | no       | `true`                   | Wait for PR checks to pass before running review (review mode only).                                                                                                |
+| `poll_interval`      | no       | `10`                     | Seconds between check status polls.                                                                                                                                 |
+| `checks_timeout`     | no       | `600`                    | Maximum seconds to wait for checks.                                                                                                                                 |
+| `debug_logs`         | no       | `false`                  | Enable DEBUG-level Claude trace logging and always upload the execution artifact.                                                                                   |
+| `pr_number`          | no       | event context            | Override auto-detected PR number.                                                                                                                                   |
+| `pr_head_sha`        | no       | event context            | Override auto-detected PR head SHA.                                                                                                                                 |
+| `comment_id`         | no       | event context            | Comment ID (react mode, explicit-input setups).                                                                                                                     |
+| `comment_body`       | no       | event context            | Comment body (react mode, explicit-input setups).                                                                                                                   |
+| `comment_path`       | no       | event context            | File path for review-thread comments.                                                                                                                               |
+| `comment_line`       | no       | event context            | Line number for review-thread comments.                                                                                                                             |
 
 ## Skills consumed
 
@@ -5505,6 +5504,14 @@ When `parallel_fanout: true`, the action's orchestrator fans out the `pr:review:
 ## Labels
 
 PRs authored by the configured `bot_username` (or `reviewer` if `bot_username` is unset) and carrying the `ci-skip-review` label are skipped — useful for automated CI updates that don't need review.
+
+## Release PR auto-approval
+
+The action always **skips AI review** for `release-*` / `delivery-*` branch PRs. When `release_pr_authors` is set and the PR author is in that trusted list, it additionally posts an **auto-approval** so the PR is not blocked on the requested-reviewer slot — this is what unblocks [`release-automerge`](../release-automerge/README.md).
+
+> **The author must differ from the reviewer.** The approval is posted with `bot_token` as the `reviewer` identity, and GitHub forbids approving your own PR. If the release PR is authored by that same identity, the `APPROVE` call fails with `422 Can not approve your own pull request`. Author release PRs with a separate identity (e.g. `release-create.yml` uses a `GH_TOKEN` distinct from the reviewer's `BOT_TOKEN`) and list that author in `release_pr_authors`. A failed approval is surfaced as a workflow `::error::`, never silently skipped.
+
+The branch-name match alone is **not** a security boundary — anyone with push access could open a `release-pwn-1.0.0` branch — which is why auto-approval is gated on the explicit `release_pr_authors` trust list.
 
 ## Versioning
 
@@ -17845,6 +17852,11 @@ jobs:
       - uses: awinogradov/code-assistants/.github/actions/release-action@v1
         with:
           mode: create
+          # Authors the release PR. When release PRs are auto-approved by
+          # code-review-action, this token's identity must differ from the
+          # reviewer's — GitHub forbids approving your own PR. This repo passes a
+          # separate GH_TOKEN here while the reviewer/publish steps use BOT_TOKEN
+          # (see Permissions). Repos without auto-approval can reuse one token.
           bot_token: ${{ secrets.BOT_TOKEN }}
           bot_username: ${{ vars.BOT_USERNAME }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_RELEASE_KEY }}
@@ -17981,6 +17993,8 @@ Pass one of:
 Store the token as a secret (e.g. `BOT_TOKEN`) and pass it via `bot_token: ${{ secrets.BOT_TOKEN }}`.
 
 The Configure Git step inside the action commits as the `bot_username` input, defaulting to `github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>`. Pass `bot_username: ${{ vars.BOT_USERNAME }}` to author releases as a dedicated bot identity.
+
+> **Distinct identity when auto-approval is enabled.** If release PRs are auto-approved by [`code-review-action`](../code-review-action/README.md) (to feed [`release-automerge`](../release-automerge/README.md)), the `bot_token` identity that opens the PR must **differ** from the reviewer identity that approves it — GitHub forbids approving your own PR. In this repo, `release-create.yml` opens PRs with `GH_TOKEN` while the reviewer/merge token is `BOT_TOKEN`. See [Author and approver must be distinct identities](../../../docs/release-automerge.md#author-and-approver-must-be-distinct-identities).
 
 ## Monorepo mode
 
@@ -18689,6 +18703,8 @@ false`, read at the PR head SHA,
   and
 - the PR's `reviewDecision` is `APPROVED`.
 
+> **The `APPROVED` decision comes from auto-approval.** [`code-review-action`](../code-review-action/README.md) posts it for trusted release-PR authors. That requires the release PR to be authored by an identity **distinct** from the reviewer (GitHub forbids approving your own PR); see [Author and approver must be distinct identities](../../../docs/release-automerge.md#author-and-approver-must-be-distinct-identities). Without a recorded approval this action never merges.
+
 > **Opt-in (default off).** Auto-merge is disabled unless `release.automerge`
 > resolves to `true` (see the [`release` field spec](../../../docs/release-field.md)).
 > A monorepo opens one release PR per member (`release-<member>-<version>`), so the
@@ -19316,9 +19332,12 @@ jobs:
 # To change it, open a pull request against the source file above.
 #
 # Requires repo secrets and variables:
-#   - `BOT_TOKEN` (secret): PAT or App installation token with `contents: write` and
-#     `pull-requests: write`. The default `GITHUB_TOKEN` cannot create PRs.
-#     See `.github/actions/release-action/README.md` for the rationale.
+#   - `GH_TOKEN` (secret): PAT with `contents: write` and `pull-requests: write`,
+#     belonging to a DIFFERENT identity than the `code-review-action` reviewer
+#     (`BOT_USERNAME`). The release PR's author is this token's identity, and
+#     GitHub forbids a user approving its own PR — so authoring with the reviewer's
+#     token would make the auto-approval impossible. The default `GITHUB_TOKEN`
+#     cannot create PRs. See `.github/actions/release-action/README.md`.
 #   - `BOT_USERNAME` (variable, optional): git author login for release commits, tags,
 #     and PRs. Defaults to `github-actions[bot]` when unset.
 #   - `ANTHROPIC_RELEASE` (secret): Anthropic API key used to generate human-readable
@@ -19353,7 +19372,10 @@ jobs:
       - uses: awinogradov/code-assistants/.github/actions/release-action@main
         with:
           mode: create
-          bot_token: ${{ secrets.BOT_TOKEN }}
+          # Authors the release PR. Must be a different identity than the
+          # code-review-action reviewer (BOT_USERNAME) so that reviewer can
+          # auto-approve it — GitHub forbids approving your own PR.
+          bot_token: ${{ secrets.GH_TOKEN }}
           bot_username: ${{ vars.BOT_USERNAME }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_RELEASE }}
 </file>
@@ -28832,6 +28854,24 @@ token for the same reason.
 > _skipped_ on release branches (e.g. the AI review) must report a neutral/success
 > conclusion or be marked non-required, or it will block the merge. Add the bot to
 > the ruleset's bypass list (Settings → Rules → the branch ruleset → Bypass list).
+
+### Author and approver must be distinct identities
+
+GitHub forbids a user from approving its own pull request. The auto-approval is
+posted by the `code-review-action` reviewer (`BOT_USERNAME`, authenticated with
+`BOT_TOKEN`), so the release PR must be **authored by a different identity** —
+otherwise the `APPROVE` call fails with `422 Can not approve your own pull
+request`, no approval is recorded, and the PR never reaches the
+`reviewDecision == APPROVED` gate above.
+
+[`release-create.yml`](../.github/workflows/release-create.yml) therefore opens
+the release PR with a `GH_TOKEN` secret whose identity is **not** the reviewer,
+and that identity is listed in the `RELEASE_PR_AUTHORS` variable
+`code-review-action` trusts for auto-approval. The reviewer (`BOT_TOKEN`) then
+approves it, and because that approval is posted by a real PAT — not
+`GITHUB_TOKEN` — it triggers this action via `pull_request_review`. A failed
+auto-approval is surfaced as a workflow `::error::` rather than silently
+skipped, so a shared-identity misconfiguration cannot hide.
 
 ## Downstream propagation
 
