@@ -55,8 +55,8 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 
 **Flow legend:**
 
-- ① `buildFanoutStats` derives the fan-out counters that `runReviewFanout` returns alongside its results (`max_agent_ms` stays in the completion log).
-- ② `withFanoutStats` merges the optional fan-out counters (mapped to snake_case keys) into the core summary. `buildRunSummary` itself is unchanged.
+- ① `buildFanoutStats` derives the fan-out counters — including the top-3 `agentDurations` (slowest sub-agents) — that `runReviewFanout` returns alongside its results (`max_agent_ms` stays in the completion log).
+- ② `withFanoutStats` merges the optional fan-out counters — counts, speedup, and the snake_case `agent_durations` list — into the core summary. `buildRunSummary` itself is unchanged.
 - ③ `setOutput` writes `run_summary` to `$GITHUB_OUTPUT` using a per-call heredoc delimiter, so the JSON value is safe. It is emitted **before** `emitOutputs`, which may `process.exit(1)` on a non-success result.
 - ④ `action.yml` bridges the step output into the submit process as the `RUN_SUMMARY` env var. The `react`-mode reaction step is intentionally **not** wired — the footer is review-only.
 - ⑤ `parseRunSummary` validates the untrusted env with a strict Zod schema (no coercion); an empty or invalid value yields no footer and the review posts unchanged.
@@ -87,10 +87,13 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 | Agents | 12 |
 | Failed agents | 1 |
 | Parallel speedup | 8.5× |
+| Slowest agents | common-sense 158.0s · surface-testing 127.0s · testing 97.0s |
 
 </details>
 <!-- run-summary-end -->
 ```
+
+The **Slowest agents** row lists the top 3 sub-agents by wall time (descending), so the long pole gating `fanout_ms` is always visible without digging through the Actions logs. It is derived in `buildFanoutStats` from each `SubagentResult.duration_ms` and appears only when the parallel fan-out ran.
 
 ## Source map
 
