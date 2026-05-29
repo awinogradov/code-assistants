@@ -35,8 +35,8 @@ the merge with no manual step.
    │ 1. resolve open PR for the head SHA               │
    │ 2. head ref ~ ^release-  AND  state == open ?     │
    │ 3. release.automerge === true (member|root) ?     │
-   │ 4. all checks green? (shared aggregation)         │
-   │ 5. reviewDecision == APPROVED ?                   │
+   │ 4. reviewDecision == APPROVED ?                   │
+   │ 5. all checks green? (poll until settled)         │
    │ 6. merge (sha-pinned) with an allowed method      │
    └───────────────────────────┬───────────────────────┘
                   ▼ all true                ▼ any false / any error
@@ -46,22 +46,30 @@ the merge with no manual step.
             release-publish.yml runs on merge
 ```
 
-- **Triggers:** `check_suite: [completed]` and `pull_request_review: [submitted]`.
-  The first covers checks finishing after approval; the second covers a late
-  approval landing after checks are already green. Both events expose the head
-  branch reliably (`check_suite.head_branch` / `pull_request.head.ref`), so the job
-  carries an `if:` guard that runs it **only** when that branch matches `^release-`
-  — on every other PR the job is skipped and posts no check. The action re-checks
-  `^release-` internally as defense in depth. (The `status` event is intentionally
-  not a trigger: its payload has no reliable release-branch signal to filter on, and
-  approval already re-evaluates commit statuses, so dropping it avoids running on
-  non-release PRs without losing meaningful coverage.)
-- **Merge conditions (all must hold):** the head ref matches `^release-`, the PR
-  is open, the repo opted in via `release.automerge === true`, every sibling check
-  is green (failed → skip; still pending → skip), and `reviewDecision == APPROVED`.
-  The check aggregation reuses the same logic as the AI-review preflight (see
-  [the shared `checkStatus` helper][checkstatus]), deduplicated by name and
-  excluding the action's own job.
+- **Triggers:** `pull_request_review: [submitted]` and `check_suite: [completed]`.
+  `pull_request_review` is the primary trigger — the approval that unblocks a
+  release PR is posted by `code-review-action` as a real PAT, so it fires reliably.
+  `check_suite` is only a best-effort backstop: GitHub does **not** redeliver
+  `check_suite` events for check suites produced by the `GITHUB_TOKEN` CI workflows,
+  so on a release branch it cannot be relied on to fire when the last check turns
+  green. Because an approval routinely lands while CI is still running, the action
+  **polls** for the pending checks to settle rather than skipping (see Merge
+  conditions) — that, not `check_suite`, is what covers "checks finishing after
+  approval," and it needs no consumer-specific workflow names. Both events expose
+  the head branch reliably (`pull_request.head.ref` / `check_suite.head_branch`), so
+  the job carries an `if:` guard that runs it **only** when that branch matches
+  `^release-`; the action re-checks `^release-` internally as defense in depth. (The
+  `status` event is intentionally not a trigger: its payload has no reliable
+  release-branch signal to filter on.)
+- **Merge conditions (all must hold):** the head ref matches `^release-`, the PR is
+  open, the repo opted in via `release.automerge === true`,
+  `reviewDecision == APPROVED`, and every sibling check is green. Approval is checked
+  **first** so non-approval review events skip immediately; only then does the action
+  wait on checks. Pending checks are **polled** (15s interval) until they complete or
+  an 8-minute timeout elapses — within the job's 10-minute limit — then failed → skip,
+  still-pending → skip. The check aggregation reuses the same logic as the AI-review
+  preflight (see [the shared `checkStatus` helper][checkstatus]), deduplicated by name
+  and excluding the action's own job.
 - **Opt-in gate (default off):** the action merges only when `release.automerge`
   resolves to `true` (see the [`release` field spec](./release-field.md)). Because
   a monorepo opens one release PR **per member** (`release-<member>-<version>`),
