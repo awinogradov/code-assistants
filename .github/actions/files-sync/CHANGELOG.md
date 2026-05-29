@@ -2,6 +2,88 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [2.0.0](https://github.com/awinogradov/code-assistants/compare/files-sync-action@v1.0.0...files-sync-action@v2.0.0) (2026-05-29)
+
+## Release Notes
+
+Major changes to authentication and configuration for smoother deployment
+
+## ⚠️ Breaking Changes
+
+### Authentication inputs renamed
+The action's authentication configuration has been standardized. Your workflow files must be updated to use the new input names. The `token` and `github_token` inputs are now consolidated into `bot_token`.
+
+**Migration steps:**
+1. In your workflow files, find all uses of this action
+2. Update the `with:` section to use `bot_token` instead of `token` or `github_token`
+3. Update your secrets references from `secrets.GH_TOKEN` to `secrets.BOT_TOKEN`
+
+**Before:**
+```yaml
+- uses: awinogradov/code-assistants/.github/actions/files-sync@v1
+  with:
+    token: ${{ secrets.GH_TOKEN }}
+```
+
+**After:**
+```yaml
+- uses: awinogradov/code-assistants/.github/actions/files-sync@v2
+  with:
+    bot_token: ${{ secrets.BOT_TOKEN }}
+```
+
+<details><summary>Related issues</summary>
+
+- [#96: Standardize actions on bot_token and bot_username](https://github.com/awinogradov/code-assistants/issues/96)
+</details>
+
+## ✨ What's New
+
+### Customizable bot username
+You can now configure which bot user appears as the author of sync commits. This helps teams identify automated changes more clearly in their commit history. The new `bot_username` input accepts any valid GitHub username and defaults to `github-actions[bot]` if not specified.
+
+To use a custom bot account, add the `bot_username` input to your workflow:
+```yaml
+- uses: awinogradov/code-assistants/.github/actions/files-sync@v2
+  with:
+    bot_token: ${{ secrets.BOT_TOKEN }}
+    bot_username: ${{ vars.BOT_USERNAME }}
+```
+
+<details><summary>Related issues</summary>
+
+- [#96: Standardize actions on bot_token and bot_username](https://github.com/awinogradov/code-assistants/issues/96)
+</details>
+
+## 🐛 Bug Fixes
+
+### Bot email generation
+The action now correctly generates the bot's email address by querying the GitHub API for the user ID, ensuring commits have properly formatted noreply email addresses that GitHub recognizes.
+
+### Action loading errors
+Composite actions were failing to load due to invalid variable expressions in their input descriptions. The action now loads correctly without errors during workflow initialization.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #96 | [#103](https://github.com/awinogradov/code-assistants/pull/103) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **actions:** inputs token and github_token are renamed to bot_token; consumers must
+update with: blocks to pass bot_token (and optional bot_username), and workflows now read
+secrets.BOT_TOKEN and vars.BOT_USERNAME instead of secrets.GH_TOKEN.
+
+### Features
+
+* **actions:** rename token inputs to bot_token, add bot_username ([160049b](https://github.com/awinogradov/code-assistants/commit/160049b998131e2e5c503559bf5d8e70e7ea8d5a))
+
+### Bug Fixes
+
+* **actions:** derive bot uid from github api for noreply email ([cd9b047](https://github.com/awinogradov/code-assistants/commit/cd9b0475830816e1be8f5e5d62362acf289d166e))
+* **actions:** remove vars expr from descriptions ([f5b2c74](https://github.com/awinogradov/code-assistants/commit/f5b2c74aef1561ca8366ed31da938ef6e7bfb514))
 ## 1.0.0 (2026-05-28)
 
 ## Release Notes
