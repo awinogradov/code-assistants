@@ -122,6 +122,7 @@ The content is organized as follows:
     release-action/
       .release_notes/
         0.1.0.md
+        1.0.0.md
       src/
         migrations/
           migratingAppend.test.ts
@@ -173,6 +174,7 @@ The content is organized as follows:
         updateReleaseBadge.ts
       action.yml
       CHANGELOG.md
+      MIGRATING.md
       package.json
       README.md
       tsconfig.json
@@ -8291,6 +8293,103 @@ Add a `release` field to your package.json to configure release behavior. See th
 ### CI
 
 * pin actions with floating semver tags ([d1e0af8](https://github.com/awinogradov/code-assistants/commit/d1e0af8ce106b938140a5d6f42d31a8055909c73))
+</file>
+
+<file path=".github/actions/release-action/.release_notes/1.0.0.md">
+## [1.0.0](https://github.com/awinogradov/code-assistants/compare/release-action@v0.1.0...release-action@v1.0.0) (2026-05-29)
+
+## Release Notes
+
+Major update brings release auto-merge control, monorepo ticket tracking improvements, and simplified bot authentication configuration.
+
+## ✨ What's New
+
+### Auto-merge control for release PRs
+Release PRs no longer merge automatically by default, giving teams control over when releases go live. Enable auto-merge by adding `"automerge": true` to the `release` section in your root `package.json`. Without this flag, release PRs stay approved but require manual merging, allowing final reviews or coordinated deployments.
+
+<details><summary>Related issues</summary>
+
+- [#112: Gate release auto-merge behind a release.automerge flag in package.json](https://github.com/awinogradov/code-assistants/issues/112)
+</details>
+
+### Monorepo ticket tables
+Monorepo releases now show ticket information (GitHub Issues, Linear, Jira) for each package being released, making it easier to track what issues were fixed in which components. The tables appear automatically when the release action detects your configured ticket systems, scoped to show only tickets relevant to each package's changes.
+
+<details><summary>Related issues</summary>
+
+- [#102: Monorepo release notes are missing the GitHub Issues / Linear / Jira blocks](https://github.com/awinogradov/code-assistants/issues/102)
+</details>
+
+## 🐛 Bug Fixes
+
+### Bot email generation
+The release action now correctly generates GitHub's noreply email addresses for bot accounts by looking up the user ID through the API, ensuring commits show the proper bot identity instead of failing with invalid email formats.
+
+### Action loading errors
+Fixed composite actions failing to start due to invalid variable references in their configuration, which was preventing the sync and release workflows from running at all.
+
+## ⚠️ Breaking Changes
+
+### Bot token configuration
+All action inputs named `token` or `github_token` are now `bot_token` for consistency. Update your workflow files to use the new input name. Additionally, workflows now expect `secrets.BOT_TOKEN` and `vars.BOT_USERNAME` instead of `secrets.GH_TOKEN`.
+
+<details><summary>Related issues</summary>
+
+- [#96: Standardize actions on bot_token and bot_username](https://github.com/awinogradov/code-assistants/issues/96)
+</details>
+
+**Migration steps:**
+1. In your workflow files, change `token:` or `github_token:` to `bot_token:` in the `with:` section
+2. Update secret references from `${{ secrets.GH_TOKEN }}` to `${{ secrets.BOT_TOKEN }}`
+3. Optionally add `bot_username: ${{ vars.BOT_USERNAME }}` to customize the git author name
+
+## 📚 Documentation & Settings Updates
+
+### Release PR authentication
+Added documentation explaining why release PRs must be authored by a different identity than the reviewer when using auto-approval. The release action's create mode now clearly shows which token to use for authoring versus reviewing, preventing the silent failure that occurred when the same account tried to approve its own PR.
+
+### Auto-merge setup guide
+New documentation in `docs/release-automerge.md` explains the complete auto-merge setup, including the identity requirements, the new `release.automerge` flag, and integration with the code review action's auto-approval feature.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #112 | [#114](https://github.com/awinogradov/code-assistants/pull/114) | @awinogradov |
+| #102 | [#104](https://github.com/awinogradov/code-assistants/pull/104) | @awinogradov |
+| #96 | [#103](https://github.com/awinogradov/code-assistants/pull/103) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **actions:** inputs token and github_token are renamed to bot_token; consumers must
+update with: blocks to pass bot_token (and optional bot_username), and workflows now read
+secrets.BOT_TOKEN and vars.BOT_USERNAME instead of secrets.GH_TOKEN.
+
+### Features
+
+* **actions:** rename token inputs to bot_token, add bot_username ([160049b](https://github.com/awinogradov/code-assistants/commit/160049b998131e2e5c503559bf5d8e70e7ea8d5a))
+* **release-automerge:** gate auto-merge behind release.automerge flag ([dcb51c8](https://github.com/awinogradov/code-assistants/commit/dcb51c87f6026728a9baf6c40837859c3b10d31f))
+
+### Bug Fixes
+
+* **actions:** derive bot uid from github api for noreply email ([cd9b047](https://github.com/awinogradov/code-assistants/commit/cd9b0475830816e1be8f5e5d62362acf289d166e))
+* **actions:** remove vars expr from descriptions ([f5b2c74](https://github.com/awinogradov/code-assistants/commit/f5b2c74aef1561ca8366ed31da938ef6e7bfb514))
+* **release-action:** add per-system ticket tables to monorepo releases ([72e0eb9](https://github.com/awinogradov/code-assistants/commit/72e0eb9599bcebe170a1b54422de811bfe9ff3f9))
+
+### Documentation
+
+* **release:** document distinct release-pr author identity ([eb99546](https://github.com/awinogradov/code-assistants/commit/eb995467a7fad1f4408c6cbf8736e8a4e8d2097c))
+* **release:** note distinct create-mode token identity ([c270aaa](https://github.com/awinogradov/code-assistants/commit/c270aaaa543c5f1c78aaccc7b4b2198715e82a64))
+
+### Refactoring
+
+* **release-action:** share ticket-config shape with member options ([0126223](https://github.com/awinogradov/code-assistants/commit/01262238212277ebf23e8e8dd3b5a213c42581e5))
+
+### Tests
+
+* **release-action:** assert ticket-insertion output as exact string ([582eacf](https://github.com/awinogradov/code-assistants/commit/582eacf28f413b24cbae9fa6cd053129a4df3cc6))
+* **release-action:** cover ticket scoping and monorepo splice ([86f3c07](https://github.com/awinogradov/code-assistants/commit/86f3c07b04b1ae3c97d4cf3b0ef4addb80bfdbdb))
 </file>
 
 <file path=".github/actions/release-action/src/migrations/migratingAppend.test.ts">
@@ -17994,6 +18093,100 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.0.0](https://github.com/awinogradov/code-assistants/compare/release-action@v0.1.0...release-action@v1.0.0) (2026-05-29)
+
+## Release Notes
+
+Major update brings release auto-merge control, monorepo ticket tracking improvements, and simplified bot authentication configuration.
+
+## ✨ What's New
+
+### Auto-merge control for release PRs
+Release PRs no longer merge automatically by default, giving teams control over when releases go live. Enable auto-merge by adding `"automerge": true` to the `release` section in your root `package.json`. Without this flag, release PRs stay approved but require manual merging, allowing final reviews or coordinated deployments.
+
+<details><summary>Related issues</summary>
+
+- [#112: Gate release auto-merge behind a release.automerge flag in package.json](https://github.com/awinogradov/code-assistants/issues/112)
+</details>
+
+### Monorepo ticket tables
+Monorepo releases now show ticket information (GitHub Issues, Linear, Jira) for each package being released, making it easier to track what issues were fixed in which components. The tables appear automatically when the release action detects your configured ticket systems, scoped to show only tickets relevant to each package's changes.
+
+<details><summary>Related issues</summary>
+
+- [#102: Monorepo release notes are missing the GitHub Issues / Linear / Jira blocks](https://github.com/awinogradov/code-assistants/issues/102)
+</details>
+
+## 🐛 Bug Fixes
+
+### Bot email generation
+The release action now correctly generates GitHub's noreply email addresses for bot accounts by looking up the user ID through the API, ensuring commits show the proper bot identity instead of failing with invalid email formats.
+
+### Action loading errors
+Fixed composite actions failing to start due to invalid variable references in their configuration, which was preventing the sync and release workflows from running at all.
+
+## ⚠️ Breaking Changes
+
+### Bot token configuration
+All action inputs named `token` or `github_token` are now `bot_token` for consistency. Update your workflow files to use the new input name. Additionally, workflows now expect `secrets.BOT_TOKEN` and `vars.BOT_USERNAME` instead of `secrets.GH_TOKEN`.
+
+<details><summary>Related issues</summary>
+
+- [#96: Standardize actions on bot_token and bot_username](https://github.com/awinogradov/code-assistants/issues/96)
+</details>
+
+**Migration steps:**
+1. In your workflow files, change `token:` or `github_token:` to `bot_token:` in the `with:` section
+2. Update secret references from `${{ secrets.GH_TOKEN }}` to `${{ secrets.BOT_TOKEN }}`
+3. Optionally add `bot_username: ${{ vars.BOT_USERNAME }}` to customize the git author name
+
+## 📚 Documentation & Settings Updates
+
+### Release PR authentication
+Added documentation explaining why release PRs must be authored by a different identity than the reviewer when using auto-approval. The release action's create mode now clearly shows which token to use for authoring versus reviewing, preventing the silent failure that occurred when the same account tried to approve its own PR.
+
+### Auto-merge setup guide
+New documentation in `docs/release-automerge.md` explains the complete auto-merge setup, including the identity requirements, the new `release.automerge` flag, and integration with the code review action's auto-approval feature.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #112 | [#114](https://github.com/awinogradov/code-assistants/pull/114) | @awinogradov |
+| #102 | [#104](https://github.com/awinogradov/code-assistants/pull/104) | @awinogradov |
+| #96 | [#103](https://github.com/awinogradov/code-assistants/pull/103) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **actions:** inputs token and github_token are renamed to bot_token; consumers must
+update with: blocks to pass bot_token (and optional bot_username), and workflows now read
+secrets.BOT_TOKEN and vars.BOT_USERNAME instead of secrets.GH_TOKEN.
+
+### Features
+
+* **actions:** rename token inputs to bot_token, add bot_username ([160049b](https://github.com/awinogradov/code-assistants/commit/160049b998131e2e5c503559bf5d8e70e7ea8d5a))
+* **release-automerge:** gate auto-merge behind release.automerge flag ([dcb51c8](https://github.com/awinogradov/code-assistants/commit/dcb51c87f6026728a9baf6c40837859c3b10d31f))
+
+### Bug Fixes
+
+* **actions:** derive bot uid from github api for noreply email ([cd9b047](https://github.com/awinogradov/code-assistants/commit/cd9b0475830816e1be8f5e5d62362acf289d166e))
+* **actions:** remove vars expr from descriptions ([f5b2c74](https://github.com/awinogradov/code-assistants/commit/f5b2c74aef1561ca8366ed31da938ef6e7bfb514))
+* **release-action:** add per-system ticket tables to monorepo releases ([72e0eb9](https://github.com/awinogradov/code-assistants/commit/72e0eb9599bcebe170a1b54422de811bfe9ff3f9))
+
+### Documentation
+
+* **release:** document distinct release-pr author identity ([eb99546](https://github.com/awinogradov/code-assistants/commit/eb995467a7fad1f4408c6cbf8736e8a4e8d2097c))
+* **release:** note distinct create-mode token identity ([c270aaa](https://github.com/awinogradov/code-assistants/commit/c270aaaa543c5f1c78aaccc7b4b2198715e82a64))
+
+### Refactoring
+
+* **release-action:** share ticket-config shape with member options ([0126223](https://github.com/awinogradov/code-assistants/commit/01262238212277ebf23e8e8dd3b5a213c42581e5))
+
+### Tests
+
+* **release-action:** assert ticket-insertion output as exact string ([582eacf](https://github.com/awinogradov/code-assistants/commit/582eacf28f413b24cbae9fa6cd053129a4df3cc6))
+* **release-action:** cover ticket scoping and monorepo splice ([86f3c07](https://github.com/awinogradov/code-assistants/commit/86f3c07b04b1ae3c97d4cf3b0ef4addb80bfdbdb))
 ## 0.1.0 (2026-05-28)
 
 ## Release Notes
@@ -18070,10 +18263,20 @@ Add a `release` field to your package.json to configure release behavior. See th
 * pin actions with floating semver tags ([d1e0af8](https://github.com/awinogradov/code-assistants/commit/d1e0af8ce106b938140a5d6f42d31a8055909c73))
 </file>
 
+<file path=".github/actions/release-action/MIGRATING.md">
+# MIGRATING
+
+## From 0.1.0 to 1.0.0
+
+### Breaking changes
+
+- inputs token and github_token are renamed to bot_token; consumers must
+</file>
+
 <file path=".github/actions/release-action/package.json">
 {
   "name": "@code-assistants/release-action",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Composite GitHub Action that automates conventional-commit releases for npm packages, GitHub Actions, and Claude plugins.",
   "private": true,
   "type": "module",
@@ -18112,7 +18315,7 @@ Add a `release` field to your package.json to configure release behavior. See th
 <file path=".github/actions/release-action/README.md">
 # Release action
 
-[![GitHub Release](https://img.shields.io/badge/release-v0.1.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that automates the release pipeline for npm packages, GitHub Actions, and Claude plugins.
@@ -18389,7 +18592,7 @@ uses: awinogradov/code-assistants/.github/actions/release-action@v1
 </file>
 
 <file path=".github/actions/release-action/version">
-0.1.0
+1.0.0
 </file>
 
 <file path=".github/actions/release-automerge/src/automerge.test.ts">
