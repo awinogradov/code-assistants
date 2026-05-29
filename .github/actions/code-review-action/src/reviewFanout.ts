@@ -3,20 +3,27 @@
  *
  * Reads the 12 `pr:review:*` sub-agent definitions from the installed autopilot
  * plugin, spawns them as parallel headless `query()` calls via the Agent SDK,
- * and returns their markdown output. The results are written to disk so the
- * root `/autopilot:pr-review` command can consume them instead of attempting
- * its own (unreliable) in-model fan-out.
+ * and returns each sub-agent's structured findings (enforced via the SDK
+ * `outputFormat: json_schema` contract). The caller (`runClaude.ts`) merges them
+ * deterministically with `aggregateReviews` and writes the result to disk so the
+ * root `/autopilot:pr-review` command can format it without re-deduping blocks.
  *
  * @see runClaude.ts — wires this module into review mode
  */
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { McpServerConfig, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { McpServerConfig, SDKMessage, SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type pino from "pino";
 
 import { logMessage } from "./logClaudeMessage.ts";
+import {
+  agentOutputJsonSchema,
+  agentOutputSchema,
+  type AgentReview,
+  type ReviewFinding,
+} from "./reviewFindings.ts";
 
 /** Filename prefix that identifies the 12 review sub-agents in the plugin. */
 const reviewAgentPrefix = "pr:review:";
@@ -41,12 +48,21 @@ export interface FanoutContext {
   subagentTimeoutMs: number;
 }
 
-/** Result of a single sub-agent invocation, written to the shared JSON file. */
+/** Result of a single sub-agent invocation, collected by the orchestrator. */
 export interface SubagentResult {
   subagent_type: string;
-  markdown: string;
+  /** Structured findings parsed from the sub-agent's output; empty on error. */
+  findings: ReviewFinding[];
   duration_ms: number;
   error?: string;
+  /** Raw structured output, kept only on the error branch for diagnostics. */
+  raw?: string;
+}
+
+/** One sub-agent's wall-clock duration, keyed by bare review category. */
+export interface AgentDuration {
+  category: string;
+  durationMs: number;
 }
 
 /** Aggregate fan-out counters surfaced in the per-run summary footer. */
@@ -54,7 +70,12 @@ export interface FanoutStats {
   agentCount: number;
   failedCount: number;
   parallelSpeedup: number;
+  /** Slowest sub-agents (top {@link slowestAgentCount}), descending — the long pole(s) gating fan-out. */
+  agentDurations: AgentDuration[];
 }
+
+/** How many of the slowest sub-agents to surface in the run-summary footer. */
+const slowestAgentCount = 3;
 
 /** In-memory representation of one loaded agent definition file. */
 interface AgentDefinition {
@@ -148,10 +169,22 @@ export async function loadReviewAgents(pluginDir: string): Promise<AgentDefiniti
   );
 }
 
+/** Strip the `autopilot:pr:review:` prefix down to the bare review category. */
+function bareCategory(subagentType: string): string {
+  return subagentType.replace("autopilot:pr:review:", "");
+}
+
 /** Resolve a sub-agent's model: per-category override > frontmatter > fallback. */
 export function resolveModel(ctx: FanoutContext, agent: AgentDefinition): string {
-  const category = agent.subagent_type.replace("autopilot:pr:review:", "");
+  const category = bareCategory(agent.subagent_type);
   return ctx.modelOverrides[category] ?? agent.model ?? ctx.fallbackModel;
+}
+
+/** Tag each successful sub-agent's findings with its bare category for aggregation. */
+export function toAgentReviews(results: SubagentResult[]): AgentReview[] {
+  return results
+    .filter((r) => !r.error)
+    .map((r) => ({ category: bareCategory(r.subagent_type), findings: r.findings }));
 }
 
 /** Build the `Stack: ... Diff: ...` user prompt each review sub-agent expects. */
@@ -189,39 +222,17 @@ export async function detectStack(cwd: string = process.cwd()): Promise<string> 
   }
 }
 
-interface TextBlock {
-  type: "text";
-  text: string;
-}
-
-function isTextBlock(block: unknown): block is TextBlock {
-  return (
-    typeof block === "object" &&
-    block !== null &&
-    (block as { type?: unknown }).type === "text" &&
-    typeof (block as { text?: unknown }).text === "string"
-  );
+/** Findings (or a skip reason) extracted from a sub-agent's SDK stream. */
+interface CollectedFindings {
+  findings: ReviewFinding[];
+  error?: string;
+  raw?: string;
 }
 
 /**
- * Capture the final assistant text block from an SDK message stream.
- *
- * The review sub-agents are instructed to emit a single structured markdown
- * block as their last assistant message; later text wins to cover the case
- * where the model emits intermediate narration before the final block.
- */
-function extractFinalText(message: SDKMessage): string | undefined {
-  if (message.type !== "assistant") return undefined;
-  const content = (message as { message: { content?: unknown[] } }).message.content ?? [];
-  const texts = content.filter(isTextBlock);
-  return texts.at(-1)?.text;
-}
-
-/**
- * Run one review sub-agent as a headless SDK query.
- *
- * Uses a child logger bound with `orchestrator_subagent` so the debug-log
- * analyzer can group interleaved messages from the parallel streams.
+ * Run one review sub-agent as a headless SDK query and parse its structured
+ * output. Uses a child logger bound with `orchestrator_subagent` so the
+ * debug-log analyzer can group interleaved messages from the parallel streams.
  */
 async function runSubagent(
   ctx: FanoutContext,
@@ -234,13 +245,11 @@ async function runSubagent(
   const timeout = setTimeout(() => abortController.abort(), ctx.subagentTimeoutMs);
 
   const model = resolveModel(ctx, agent);
-  let markdown = "";
-  let error: string | undefined;
-
   childLog.info({ model }, "Sub-agent query starting.");
 
+  let collected: CollectedFindings;
   try {
-    markdown = await streamAssistantText(
+    collected = await collectStructuredFindings(
       childLog,
       query({
         prompt: userPrompt,
@@ -248,32 +257,53 @@ async function runSubagent(
       }),
     );
   } catch (err) {
-    error = err instanceof Error ? err.message : String(err);
+    const error = err instanceof Error ? err.message : String(err);
     childLog.error({ error }, "Sub-agent invocation failed.");
+    collected = { findings: [], error };
   } finally {
     clearTimeout(timeout);
   }
 
   const durationMs = Math.round(performance.now() - start);
   childLog.info(
-    { duration_ms: durationMs, markdown_bytes: markdown.length, error },
+    { duration_ms: durationMs, finding_count: collected.findings.length, error: collected.error },
     "Sub-agent query finished.",
   );
-  return { subagent_type: agent.subagent_type, markdown, duration_ms: durationMs, error };
+  return { subagent_type: agent.subagent_type, duration_ms: durationMs, ...collected };
 }
 
-/** Stream SDK messages through the logger; return the last assistant text. */
-async function streamAssistantText(
+/**
+ * Drain the SDK stream and parse the terminal result's structured output.
+ *
+ * `structured_output` exists only on a `subtype: "success"` result; any error
+ * subtype (including `error_max_structured_output_retries`), a missing result,
+ * or a schema-invalid payload degrades to a skipped dimension — same policy as a
+ * failed in-model sub-agent — with the raw payload kept for diagnostics.
+ */
+async function collectStructuredFindings(
   log: pino.Logger,
   stream: AsyncIterable<SDKMessage>,
-): Promise<string> {
-  let markdown = "";
+): Promise<CollectedFindings> {
+  let resultMessage: SDKResultMessage | undefined;
   for await (const message of stream) {
     logMessage(log, message);
-    const text = extractFinalText(message);
-    if (text !== undefined) markdown = text;
+    if (message.type === "result") resultMessage = message;
   }
-  return markdown;
+
+  if (!resultMessage) return { findings: [], error: "No result message from sub-agent." };
+  if (resultMessage.subtype !== "success") {
+    return { findings: [], error: `Sub-agent ended with ${resultMessage.subtype}.` };
+  }
+
+  const parsed = agentOutputSchema.safeParse(resultMessage.structured_output);
+  if (!parsed.success) {
+    return {
+      findings: [],
+      error: "Sub-agent structured output did not match the findings schema.",
+      raw: JSON.stringify(resultMessage.structured_output),
+    };
+  }
+  return { findings: parsed.data.findings };
 }
 
 /** Build the SDK `query()` options for a single sub-agent. */
@@ -286,6 +316,9 @@ function buildSubagentOptions(
     model: resolveModel(ctx, agent),
     allowedTools: agent.allowedTools ?? ctx.inheritedAllowedTools,
     disallowedTools: ctx.inheritedDisallowedTools,
+    // Force schema-valid structured findings so the orchestrator parses objects,
+    // not free-form markdown (the long-pole / aggregation latency fix, #161).
+    outputFormat: { type: "json_schema" as const, schema: agentOutputJsonSchema },
     plugins: [{ type: "local" as const, path: ctx.pluginDir }],
     mcpServers: ctx.mcpServers,
     permissionMode: "bypassPermissions" as const,
@@ -314,10 +347,15 @@ function buildSubagentOptions(
  */
 export function buildFanoutStats(results: SubagentResult[], totalMs: number): FanoutStats {
   const totalAgentMs = results.reduce((sum, r) => sum + r.duration_ms, 0);
+  const agentDurations = results
+    .map((r) => ({ category: bareCategory(r.subagent_type), durationMs: r.duration_ms }))
+    .sort((a, b) => b.durationMs - a.durationMs)
+    .slice(0, slowestAgentCount);
   return {
     agentCount: results.length,
     failedCount: results.filter((r) => r.error).length,
     parallelSpeedup: totalMs > 0 ? +(totalAgentMs / totalMs).toFixed(2) : 0,
+    agentDurations,
   };
 }
 
