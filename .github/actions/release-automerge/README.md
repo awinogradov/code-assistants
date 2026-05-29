@@ -11,9 +11,13 @@ A PR is merged only when **all** of the following hold:
 - the releasing member opted in: `release.automerge` resolves to `true`, taking
   the member's own value and falling back to the root default — `member ?? root ??
 false`, read at the PR head SHA,
-- every sibling check is green (a failed check skips; a still-pending check skips),
-  and
-- the PR's `reviewDecision` is `APPROVED`.
+- the PR's `reviewDecision` is `APPROVED` (checked first, so non-approval review
+  events skip without waiting), and
+- every sibling check is green. Because an approval commonly fires this action
+  before CI finishes — and GitHub does not redeliver `check_suite` events for
+  `GITHUB_TOKEN` check suites — pending checks are **polled** until they settle
+  (15s interval, 8-minute cap inside the 10-minute job) rather than skipped; a
+  failed check skips, as does one still pending after the cap.
 
 > **The `APPROVED` decision comes from auto-approval.** [`code-review-action`](../code-review-action/README.md) posts it for trusted release-PR authors. That requires the release PR to be authored by an identity **distinct** from the reviewer (GitHub forbids approving your own PR); see [Author and approver must be distinct identities](../../../docs/release-automerge.md#author-and-approver-must-be-distinct-identities). Without a recorded approval this action never merges.
 

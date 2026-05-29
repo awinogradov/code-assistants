@@ -14,7 +14,7 @@
  * @example
  * GH_TOKEN=xxx REPO=owner/repo HEAD_SHA=abc JOB_NAME=automerge bun run src/automerge.ts
  */
-import { fetchCheckStatuses } from "@code-assistants/actions-core/checkStatus";
+import { fetchCheckStatuses, type CheckResult } from "@code-assistants/actions-core/checkStatus";
 import { fetchRawContent } from "@code-assistants/actions-core/fetchRawContent";
 import { parseRepo } from "@code-assistants/actions-core/parseRepo";
 import { readRootRelease } from "@code-assistants/actions-core/releaseField";
@@ -45,6 +45,13 @@ const releaseNotesFile = /(?:^|\/)\.release_notes\/[^/]+\.md$/;
 // GitHub merge-API responses that mean "nothing to do" rather than a real error:
 // 405 not mergeable / already merged, 409 head SHA moved (sha mismatch), 422 unprocessable.
 const idempotentMergeStatuses = new Set([405, 409, 422]);
+// An approval usually triggers this action while CI is still running, and GitHub
+// does not redeliver `check_suite` events for `GITHUB_TOKEN` check suites — so no
+// later event would re-run the merge once CI turns green. Poll until checks settle
+// instead of skipping on the first pending read. Bounded well inside the workflow's
+// 10-minute job timeout. Repo-agnostic: no consumer-specific workflow names.
+const checksPollIntervalMs = 15_000;
+const checksTimeoutMs = 480_000;
 
 /** Configuration parsed from environment. */
 interface AutomergeConfig {
@@ -265,9 +272,32 @@ async function mergeRelease(config: AutomergeConfig, pullNumber: number): Promis
   }
 }
 
+/**
+ * Poll the aggregated check status until every sibling check completes, fails, or
+ * the timeout elapses. Mirrors code-review-action's preflight poll loop: an
+ * approval commonly fires this action before CI finishes, so wait for the checks
+ * to settle rather than skip (no later event reliably re-runs the merge).
+ */
+async function waitForChecks(config: AutomergeConfig): Promise<CheckResult> {
+  const { octokit, owner, repo, headSha, jobName } = config;
+  let elapsed = 0;
+  let result = await fetchCheckStatuses(octokit, owner, repo, headSha, jobName);
+
+  while (!result.hasFailed && !result.allCompleted && elapsed < checksTimeoutMs) {
+    console.log(
+      `Waiting for checks: ${result.pendingNames.join(", ")} (${Math.round(elapsed / 1000)}s / ${checksTimeoutMs / 1000}s)`,
+    );
+    await Bun.sleep(checksPollIntervalMs);
+    elapsed += checksPollIntervalMs;
+    result = await fetchCheckStatuses(octokit, owner, repo, headSha, jobName);
+  }
+
+  return result;
+}
+
 /** Evaluate the merge gate for the triggering commit and merge when satisfied. */
 async function run(config: AutomergeConfig): Promise<void> {
-  const { octokit, owner, repo, headSha, jobName } = config;
+  const { octokit, owner, repo, headSha } = config;
 
   const { data: associated } = await octokit.rest.repos.listPullRequestsAssociatedWithCommit({
     owner,
@@ -288,19 +318,24 @@ async function run(config: AutomergeConfig): Promise<void> {
     return;
   }
 
-  const checks = await fetchCheckStatuses(octokit, owner, repo, headSha, jobName);
+  // Gate on approval before waiting on checks: pull_request_review fires for every
+  // review (comment, changes-requested, approval), so non-approval events skip
+  // immediately instead of holding a runner polling their checks.
+  const decision = await fetchReviewDecision(octokit, owner, repo, pr.number);
+  if (!isApprovedDecision(decision)) {
+    console.log(`Skip: review decision is ${decision ?? "none"}, not APPROVED`);
+    return;
+  }
+
+  const checks = await waitForChecks(config);
   if (checks.hasFailed) {
     console.log(`Skip: failed checks — ${checks.failedNames.join(", ")}`);
     return;
   }
   if (!checks.allCompleted) {
-    console.log(`Skip: pending checks — ${checks.pendingNames.join(", ")}`);
-    return;
-  }
-
-  const decision = await fetchReviewDecision(octokit, owner, repo, pr.number);
-  if (!isApprovedDecision(decision)) {
-    console.log(`Skip: review decision is ${decision ?? "none"}, not APPROVED`);
+    console.log(
+      `Skip: checks still pending after ${checksTimeoutMs / 1000}s — ${checks.pendingNames.join(", ")}`,
+    );
     return;
   }
 
