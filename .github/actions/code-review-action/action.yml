@@ -190,15 +190,13 @@ runs:
                 2> "$approve_stderr"; then
                 echo "Auto-approval posted for trusted author '$EVENT_PR_AUTHOR'"
               else
-                # Distinguish the benign "already approved" case (HTTP 422 with
-                # `Can not approve` in the body) from a real misconfiguration
-                # (auth, scope, network) so workflow owners can act on the
-                # latter without grepping every successful run.
-                if grep -q "Can not approve" "$approve_stderr"; then
-                  echo "Auto-approval skipped: PR already approved by bot for current HEAD"
-                else
-                  echo "::error::Auto-approval failed for '$EVENT_PR_AUTHOR' on release PR ${EVENT_PR_NUMBER}: $(cat "$approve_stderr")"
-                fi
+                # A failed APPROVE is always a misconfiguration to surface — most
+                # commonly a self-approval attempt (the release PR author is also
+                # the reviewer), which GitHub rejects with "Can not approve your
+                # own pull request". Author release PRs with an identity distinct
+                # from the reviewer's `bot_token`. Never swallow this: a silent
+                # skip is exactly what let the auto-approval fail unnoticed.
+                echo "::error::Auto-approval failed for '$EVENT_PR_AUTHOR' on release PR ${EVENT_PR_NUMBER}: $(cat "$approve_stderr")"
               fi
               rm -f "$approve_stderr"
             else

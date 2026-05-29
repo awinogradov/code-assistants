@@ -4,9 +4,12 @@
 # To change it, open a pull request against the source file above.
 #
 # Requires repo secrets and variables:
-#   - `BOT_TOKEN` (secret): PAT or App installation token with `contents: write` and
-#     `pull-requests: write`. The default `GITHUB_TOKEN` cannot create PRs.
-#     See `.github/actions/release-action/README.md` for the rationale.
+#   - `GH_TOKEN` (secret): PAT with `contents: write` and `pull-requests: write`,
+#     belonging to a DIFFERENT identity than the `code-review-action` reviewer
+#     (`BOT_USERNAME`). The release PR's author is this token's identity, and
+#     GitHub forbids a user approving its own PR — so authoring with the reviewer's
+#     token would make the auto-approval impossible. The default `GITHUB_TOKEN`
+#     cannot create PRs. See `.github/actions/release-action/README.md`.
 #   - `BOT_USERNAME` (variable, optional): git author login for release commits, tags,
 #     and PRs. Defaults to `github-actions[bot]` when unset.
 #   - `ANTHROPIC_RELEASE` (secret): Anthropic API key used to generate human-readable
@@ -41,6 +44,9 @@ jobs:
       - uses: awinogradov/code-assistants/.github/actions/release-action@main
         with:
           mode: create
-          bot_token: ${{ secrets.BOT_TOKEN }}
+          # Authors the release PR. Must be a different identity than the
+          # code-review-action reviewer (BOT_USERNAME) so that reviewer can
+          # auto-approve it — GitHub forbids approving your own PR.
+          bot_token: ${{ secrets.GH_TOKEN }}
           bot_username: ${{ vars.BOT_USERNAME }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_RELEASE }}
