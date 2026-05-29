@@ -30,6 +30,8 @@ ISSUE_JSON=$(gh issue view "$NUMBER" -R "$REPO" --json title,body,comments,label
 
 ## Phase 2: Auto-Assign Current User (opt-in)
 
+<!-- Canonical self-assign logic. Mirrored in skills/branch:create/SKILL.md Phase 2. Keep in sync. -->
+
 Run this phase ONLY when the caller's prompt contains `Auto-assign current user: true`. Otherwise skip directly to Phase 3 and omit the `**Assignee:**` line from the output.
 
 The agent emits exactly one of the status strings below into the Phase 3 `**Assignee:**` line:
@@ -56,7 +58,7 @@ Resolve the status with these steps:
 3. Check whether `LOGIN` is already in the assignees array from Phase 1, with an explicit `jq` variable binding:
 
    ```bash
-   ALREADY=$(printf '%s' "$ISSUE_JSON" | jq -r --arg login "$LOGIN" 'any(.assignees[]; .login == $login)')
+   ALREADY=$(printf '%s' "$ISSUE_JSON" | jq -r --arg login "$LOGIN" 'any(.assignees[]?; .login == $login)')
    ```
 
    If `ALREADY == "true"`, set status to `@<LOGIN> (already assigned)` and skip to Phase 3.
@@ -71,7 +73,7 @@ Resolve the status with these steps:
 5. Post-verify via a fresh read, because `gh issue edit --add-assignee` returns exit 0 even when GitHub silently drops the addition (caller lacks `triage`/`write` permission, or the issue is already at the 10-assignee limit). `gh --jq` only accepts a single expression and cannot pass `--arg` through to `jq`, so pipe the JSON to `jq` directly:
 
    ```bash
-   VERIFIED=$(gh issue view "$NUMBER" -R "$REPO" --json assignees 2>/dev/null | jq -r --arg login "$LOGIN" 'any(.assignees[]; .login == $login)' 2>/dev/null)
+   VERIFIED=$(gh issue view "$NUMBER" -R "$REPO" --json assignees 2>/dev/null | jq -r --arg login "$LOGIN" 'any(.assignees[]?; .login == $login)' 2>/dev/null)
    ```
 
    - `EDIT_EXIT == 0` AND `VERIFIED == "true"` → `@<LOGIN> (just assigned)`

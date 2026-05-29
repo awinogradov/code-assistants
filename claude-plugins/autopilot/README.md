@@ -108,7 +108,7 @@ The skills that need whole-codebase context — `/autopilot:plan`, `/autopilot:r
 
 ### `/autopilot:branch-create`
 
-Create a git branch following repository naming conventions with GitHub issue integration.
+Create a git branch following repository naming conventions with GitHub issue integration. For an issue branch it also self-assigns the issue to you when possible (best-effort; never blocks branch creation).
 
 ```bash
 /autopilot:branch-create 123                                     # Auto-generate slug from GitHub issue title
@@ -284,15 +284,15 @@ Specialized review sub-agents launched in parallel by the `pr:review` skill. Eac
 
 Context-isolating workers invoked by other skills to keep the parent conversation small. Each returns a structured summary only.
 
-| Agent                    | Model   | Used by                        | Purpose                                                                               |
-| ------------------------ | ------- | ------------------------------ | ------------------------------------------------------------------------------------- |
-| `analyze-pr-commits`     | sonnet  | `pr:create`, `pr:update`       | Summarize branch commits, diff, and linked issue for PR context                       |
-| `analyze-staged-changes` | haiku   | `commits:create`               | Categorize staged files and recommend a commit strategy                               |
-| `expert-review`          | inherit | `plan`, `plan-*`               | Score an implementation plan as a domain expert                                       |
-| `fetch-pr-reviews`       | sonnet  | `pr:answer`, `pr:resolve`      | Fetch, filter, and categorize PR review comments by severity                          |
-| `resolve-issue-context`  | sonnet  | `plan`, `run`, `branch:create` | Fetch GitHub issue context; optionally auto-assign current user (idempotent) via `gh` |
-| `scan-and-analyze-todos` | sonnet  | `todo-cleanup`                 | Scan codebase for TODOs and check linked GitHub issue statuses                        |
-| `search-codebase-todos`  | haiku   | `plan`                         | Search the codebase for TODOs and references to a specific issue                      |
+| Agent                    | Model   | Used by                   | Purpose                                                                               |
+| ------------------------ | ------- | ------------------------- | ------------------------------------------------------------------------------------- |
+| `analyze-pr-commits`     | sonnet  | `pr:create`, `pr:update`  | Summarize branch commits, diff, and linked issue for PR context                       |
+| `analyze-staged-changes` | haiku   | `commits:create`          | Categorize staged files and recommend a commit strategy                               |
+| `expert-review`          | inherit | `plan`, `plan-*`          | Score an implementation plan as a domain expert                                       |
+| `fetch-pr-reviews`       | sonnet  | `pr:answer`, `pr:resolve` | Fetch, filter, and categorize PR review comments by severity                          |
+| `resolve-issue-context`  | sonnet  | `plan`, `run`             | Fetch GitHub issue context; optionally auto-assign current user (idempotent) via `gh` |
+| `scan-and-analyze-todos` | sonnet  | `todo-cleanup`            | Scan codebase for TODOs and check linked GitHub issue statuses                        |
+| `search-codebase-todos`  | haiku   | `plan`                    | Search the codebase for TODOs and references to a specific issue                      |
 
 ## Internal Skills (not in slash menu)
 
