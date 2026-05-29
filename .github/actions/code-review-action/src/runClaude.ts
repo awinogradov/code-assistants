@@ -72,7 +72,7 @@ async function createLogger(): Promise<pino.Logger> {
       },
     },
     // Synchronous stdout so no trace lines are lost on abort / 30-min timeout.
-    pino.destination({ sync: true }),
+    pino.destination({ sync: true })
   );
 }
 
@@ -104,7 +104,7 @@ export interface RunClaudeConfig {
  */
 export function safeParseJson(
   value: string | undefined,
-  label: string,
+  label: string
 ): Record<string, unknown> | undefined {
   if (!value) return undefined;
 
@@ -157,7 +157,7 @@ export function parseConfig(): RunClaudeConfig {
  * Uses Zod to validate the external input at the system boundary.
  */
 export async function loadMcpServers(
-  configPath: string | undefined,
+  configPath: string | undefined
 ): Promise<Record<string, McpServerConfig>> {
   if (!configPath) return {};
 
@@ -256,7 +256,7 @@ async function tryResolveBinary(pkg: string, binary: string): Promise<string | u
  */
 export async function resolveClaudeBinary(
   platform: NodeJS.Platform = process.platform,
-  arch: string = process.arch,
+  arch: string = process.arch
 ): Promise<string | undefined> {
   const binary = platform === "win32" ? "claude.exe" : "claude";
   const candidates =
@@ -295,7 +295,7 @@ const modelOverridesSchema = z.record(z.string(), z.string());
  */
 export function parseModelOverrides(
   raw: string | undefined,
-  logger?: pino.Logger,
+  logger?: pino.Logger
 ): Record<string, string> {
   if (!raw) return {};
 
@@ -310,7 +310,7 @@ export function parseModelOverrides(
   const result = modelOverridesSchema.safeParse(parsed);
   if (!result.success) {
     logger?.warn(
-      "Ignoring REVIEW_MODEL_OVERRIDES: expected a JSON object of category→model strings.",
+      "Ignoring REVIEW_MODEL_OVERRIDES: expected a JSON object of category→model strings."
     );
     return {};
   }
@@ -322,7 +322,7 @@ async function runFanoutIfEnabled(
   config: RunClaudeConfig,
   settingSources: ("user" | "project")[],
   mcpServers: Record<string, McpServerConfig>,
-  pathToClaudeCodeExecutable: string | undefined,
+  pathToClaudeCodeExecutable: string | undefined
 ): Promise<{ outputPath: string; stats: FanoutStats } | undefined> {
   if (!log || !shouldRunFanout(config)) return undefined;
 
@@ -350,7 +350,7 @@ async function runFanoutIfEnabled(
   await Bun.write(outputPath, JSON.stringify({ findings }, null, 2));
   log.info(
     { output_path: outputPath, finding_count: findings.length, failed_count: stats.failedCount },
-    "Aggregated review findings written.",
+    "Aggregated review findings written."
   );
   return { outputPath, stats };
 }
@@ -373,7 +373,7 @@ async function run(): Promise<void> {
       timeout_min: config.timeoutMs / 60_000,
       claude_binary: pathToClaudeCodeExecutable,
     },
-    "Starting Claude execution.",
+    "Starting Claude execution."
   );
 
   const fanoutStart = performance.now();
@@ -381,7 +381,7 @@ async function run(): Promise<void> {
     config,
     settingSources as ("user" | "project")[],
     mcpServers,
-    pathToClaudeCodeExecutable,
+    pathToClaudeCodeExecutable
   );
   const fanoutMs = Math.round(performance.now() - fanoutStart);
 
@@ -441,12 +441,12 @@ async function run(): Promise<void> {
 async function writeExecutionFile(
   log: pino.Logger,
   outputFilePath: string,
-  messages: unknown[],
+  messages: unknown[]
 ): Promise<void> {
   await Bun.write(outputFilePath, JSON.stringify(messages));
   log.info(
     { output_file_path: outputFilePath, message_count: messages.length },
-    "Execution file written.",
+    "Execution file written."
   );
 }
 
@@ -461,7 +461,7 @@ export function deriveMode(prompt: string): "review" | "react" | "unknown" {
 export function findResultMessage(messages: unknown[]): Record<string, unknown> | undefined {
   return messages.findLast(
     (m): m is Record<string, unknown> =>
-      typeof m === "object" && m !== null && (m as Record<string, unknown>).type === "result",
+      typeof m === "object" && m !== null && (m as Record<string, unknown>).type === "result"
   );
 }
 
@@ -472,7 +472,7 @@ function hasToolUseBlock(content: unknown): boolean {
     (block) =>
       typeof block === "object" &&
       block !== null &&
-      (block as Record<string, unknown>).type === "tool_use",
+      (block as Record<string, unknown>).type === "tool_use"
   );
 }
 
@@ -531,7 +531,7 @@ export interface PhaseTimings {
 export function buildRunSummary(
   mode: string,
   messages: unknown[],
-  timings: PhaseTimings,
+  timings: PhaseTimings
 ): Record<string, number | string> {
   const usage = extractUsage(findResultMessage(messages));
 
@@ -556,7 +556,7 @@ export function buildRunSummary(
  */
 export function withFanoutStats(
   summary: Record<string, number | string>,
-  stats: FanoutStats | undefined,
+  stats: FanoutStats | undefined
 ): Record<string, number | string | AgentDurationSummary[]> {
   if (!stats) return summary;
   return {
@@ -578,7 +578,7 @@ export function withFanoutStats(
 async function emitOutputs(
   log: pino.Logger,
   outputFilePath: string,
-  messages: unknown[],
+  messages: unknown[]
 ): Promise<void> {
   const resultMessage = findResultMessage(messages);
 
@@ -594,7 +594,7 @@ async function emitOutputs(
     await setOutput("long_run", "true");
     log.info(
       { duration_ms: durationMs, threshold_ms: longRunMs },
-      "Long-running Claude session detected.",
+      "Long-running Claude session detected."
     );
   }
 

@@ -223,18 +223,15 @@ describe("resolveModel", () => {
     ({ subagent_type, model }) as Parameters<typeof resolveModel>[1];
 
   test("prefers a per-category override over the frontmatter model", () => {
-    expect(
-      resolveModel(
-        ctx({ correctness: "opus" }),
-        agent("autopilot:pr:review:correctness", "sonnet"),
-      ),
-    ).toBe("opus");
+    expect(resolveModel(ctx({ correctness: "opus" }), agent("autopilot:pr:review:correctness", "sonnet"))).toBe(
+      "opus"
+    );
   });
 
   test("falls back to the frontmatter model when no override matches", () => {
-    expect(
-      resolveModel(ctx({ testing: "opus" }), agent("autopilot:pr:review:correctness", "sonnet")),
-    ).toBe("sonnet");
+    expect(resolveModel(ctx({ testing: "opus" }), agent("autopilot:pr:review:correctness", "sonnet"))).toBe(
+      "sonnet"
+    );
   });
 
   test("falls back to the context model when neither override nor frontmatter is set", () => {
@@ -242,12 +239,9 @@ describe("resolveModel", () => {
   });
 
   test("keys overrides by the bare category (autopilot:pr:review: stripped)", () => {
-    expect(
-      resolveModel(
-        ctx({ "surface-naming": "haiku" }),
-        agent("autopilot:pr:review:surface-naming", "sonnet"),
-      ),
-    ).toBe("haiku");
+    expect(resolveModel(ctx({ "surface-naming": "haiku" }), agent("autopilot:pr:review:surface-naming", "sonnet"))).toBe(
+      "haiku"
+    );
   });
 });
 

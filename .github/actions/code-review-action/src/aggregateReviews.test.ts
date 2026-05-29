@@ -58,6 +58,15 @@ describe("aggregateReviews", () => {
     expect(merged[0]?.rule).toBe("CHECK-BUG-002, CHECK-AI-002");
   });
 
+  test("keeps the non-null rule when merging a finding that has no rule", () => {
+    const merged = aggregateReviews([
+      review("surface", [finding({ severity: "suggestion", line: 5, rule: null })]),
+      review("correctness", [finding({ severity: "blocker", line: 5, rule: "CHECK-BUG-002" })]),
+    ]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.rule).toBe("CHECK-BUG-002");
+  });
+
   test("treats the same line in different files as distinct findings", () => {
     const merged = aggregateReviews([
       review("a", [finding({ file: "src/a.ts", line: 5 })]),
