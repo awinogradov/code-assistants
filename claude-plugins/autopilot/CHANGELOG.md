@@ -2,6 +2,43 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [0.2.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v0.1.0...autopilot@v0.2.0) (2026-05-29)
+
+## Release Notes
+
+Streamlined codebase snapshots now auto-update on every merge, making project analysis faster and more consistent.
+
+## ✨ What's New
+
+### Automatic codebase snapshots on merge
+Every time changes are merged into your main branch, a fresh codebase snapshot is automatically generated and committed as `.repomix/pack.xml`. This means autopilot skills analyzing your codebase always have an up-to-date reference without needing to regenerate snapshots on-demand, speeding up operations like code searches and architecture analysis.
+
+<details><summary>Related issues</summary>
+
+- [#62: Run repomix pack on PR merge and commit snapshot to repo](https://github.com/awinogradov/code-assistants/issues/62)
+</details>
+
+### Smart snapshot reading
+Autopilot skills now intelligently check for a committed codebase snapshot first before falling back to live packing. This optimization means faster response times when using codebase analysis features, as the pre-generated snapshot loads instantly.
+
+### Repository sync action
+A new `repomix-sync` action helps propagate the pack workflow and configuration to downstream repositories, ensuring consistent snapshot generation across your entire project ecosystem.
+
+## ⚙️ Configuration Required
+
+### Enable automatic snapshots
+To activate automatic snapshot generation in your repository, you'll need the pack-on-merge workflow. The repomix-sync action can help set this up across multiple repositories automatically.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #62 | [#106](https://github.com/awinogradov/code-assistants/pull/106) | @awinogradov |
+
+### Features
+
+* **repomix:** add pack-on-merge workflow and snapshot reader ([cfa4065](https://github.com/awinogradov/code-assistants/commit/cfa4065de142e776428ba65e9adaafa8c05e20f7))
 ## 0.1.0 (2026-05-28)
 
 ## Release Notes
