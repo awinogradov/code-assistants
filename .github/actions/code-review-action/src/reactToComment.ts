@@ -7,6 +7,7 @@
  */
 import type { ReviewEvent } from "./github/githubReview.ts";
 import { buildRuleUrlMap, linkRuleCodes } from "./ruleUrls.ts";
+import { parseReactionOutput } from "./reviewOutput.ts";
 import {
   deletePendingReviews,
   fetchReviewThreads,
@@ -18,44 +19,6 @@ import {
   resolveThread,
   verdictToEvent,
 } from "./github/githubReview.ts";
-
-/** Target for thread resolution by file location */
-interface ResolveTarget {
-  path: string;
-  line: number;
-}
-
-/** Structured output from Claude reaction */
-interface ReactionOutput {
-  reply: string;
-  resolveComments?: ResolveTarget[];
-  updatedVerdict?: "approve" | "requestChanges" | "comment" | null;
-  updatedReviewComment?: string | null;
-}
-
-/**
- * Parse and validate structured reaction output from Claude.
- * Returns null if output is empty, null string, or invalid JSON.
- */
-function parseReactionOutput(rawOutput: string): ReactionOutput | null {
-  const trimmed = rawOutput.trim();
-  if (!trimmed || trimmed === "null") {
-    return null;
-  }
-
-  const parsed: unknown = JSON.parse(trimmed);
-  if (typeof parsed !== "object" || parsed === null) {
-    return null;
-  }
-
-  const obj = parsed as Record<string, unknown>;
-  return {
-    reply: (obj.reply as string) ?? "",
-    resolveComments: (obj.resolveComments as ResolveTarget[]) ?? [],
-    updatedVerdict: (obj.updatedVerdict as ReactionOutput["updatedVerdict"]) ?? null,
-    updatedReviewComment: (obj.updatedReviewComment as string | null) ?? null,
-  };
-}
 
 /**
  * Resolve all unresolved bot review threads on a PR.
