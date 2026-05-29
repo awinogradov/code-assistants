@@ -234,6 +234,17 @@ Run multiple `resolve-library-id` calls in parallel, then multiple `query-docs` 
 
 Use all available documentation sources. If a source is unavailable or returns no results, continue with remaining sources. Each tool provides different information (structured docs, official references, real-world patterns, reasoning).
 
+### Repository Documentation (MANDATORY)
+
+Before planning, read the repository's own documentation as the project's source of truth (it overrides defaults per CLAUDE.md):
+
+- Read the root `README.md`.
+- Inspect every file under `docs/` and its subfolders, and read those relevant to the task.
+
+Feed the project-specific conventions found there into analysis and the plan.
+
+The generated plan MUST update this documentation after implementation: its `## Post-Implementation` block must require updating any `README.md` and `docs/*` affected by the change so the documented source of truth stays current. When such an update needs a diagram, the plan must generate it via `Skill(autopilot:ascii-schemas)` and embed the output verbatim — never hand-draw.
+
 ### Plan File Header (MANDATORY)
 
 Every plan file written by any stack skill MUST begin with a single `# <Title>` line on line 1, followed by a blank line. This rule is stack-agnostic and supersedes any stack-specific Phase 5 template that omits the header.

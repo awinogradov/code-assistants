@@ -51,8 +51,9 @@ Use these IDs for all TaskUpdate calls in the phases below.
    - **Ref** — For official documentation: `mcp__Ref__ref_search_documentation` with the technology name and topic, then `mcp__Ref__ref_read_url` to read specific pages from results.
    - **Exa** — For real-world patterns and examples: `mcp__exa__web_search_exa` for API patterns, migration guides, changelogs. `mcp__exa__get_code_context_exa` for code examples.
    - **Perplexity** — For general and architectural questions: `mcp__perplexity__search` for factual lookups. `mcp__perplexity__reason` for trade-off analysis.
-4. **CLAUDE.md Compliance** - Map each planned change to project rules
-5. **Repomix** - Search codebase via `mcp__repomix__grep_repomix_output` (outputId from Phase 0). Use `mcp__repomix__read_repomix_output` with `startLine`/`endLine` for specific sections only.
+4. **Repository Documentation** (MANDATORY) - Read the repo's own docs as the project's source of truth: read the root `README.md` and inspect/read all files under `docs/` and its subfolders. Feed project-specific conventions into the plan.
+5. **CLAUDE.md Compliance** - Map each planned change to project rules
+6. **Repomix** - Search codebase via `mcp__repomix__grep_repomix_output` (outputId from Phase 0). Use `mcp__repomix__read_repomix_output` with `startLine`/`endLine` for specific sections only.
 
 After completing all context gathering, call TaskUpdate to set task 2 ("Gather context") to `status: "completed"`.
 
@@ -162,7 +163,10 @@ Every step MUST include a `verify:` line — an observable check (test name, com
 
 ## Post-Implementation
 
-After all implementation steps and verification are complete, present next actions using AskUserQuestion.
+After all implementation steps and verification are complete:
+
+1. **Update documentation (MANDATORY)** — update any `README.md` and `docs/*` affected by these changes so the documented source of truth stays current. When an update needs a diagram, generate it via `Skill(autopilot:ascii-schemas)` and embed the output verbatim — do not hand-draw.
+2. Present next actions using AskUserQuestion.
 
 **If the implementation included user-facing changes** (feat: or fix: commits created during this session), use `--release-notes` in the "Create PR" option. Otherwise, use the plain option.
 
