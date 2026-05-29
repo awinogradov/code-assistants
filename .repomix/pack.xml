@@ -130,6 +130,7 @@ The content is organized as follows:
       .release_notes/
         0.1.0.md
         1.0.0.md
+        1.0.1.md
       src/
         migrations/
           migratingAppend.test.ts
@@ -9645,6 +9646,43 @@ secrets.BOT_TOKEN and vars.BOT_USERNAME instead of secrets.GH_TOKEN.
 
 * **release-action:** assert ticket-insertion output as exact string ([582eacf](https://github.com/awinogradov/code-assistants/commit/582eacf28f413b24cbae9fa6cd053129a4df3cc6))
 * **release-action:** cover ticket scoping and monorepo splice ([86f3c07](https://github.com/awinogradov/code-assistants/commit/86f3c07b04b1ae3c97d4cf3b0ef4addb80bfdbdb))
+</file>
+
+<file path=".github/actions/release-action/.release_notes/1.0.1.md">
+## [1.0.1](https://github.com/awinogradov/code-assistants/compare/release-action@v1.0.0...release-action@v1.0.1) (2026-05-29)
+
+## Release Notes
+
+The release action now properly respects manually-set versions in manifests, preventing regressions during multi-package releases.
+
+## 🐛 Bug Fixes
+
+### Version protection for multi-package releases
+Release automation no longer overwrites higher version numbers that have been manually set in manifest files. Previously, if you bumped a package version in a manifest but hadn't created a tag yet, the release process would revert it to match the latest tag version. This protection ensures your carefully planned version updates remain intact throughout the release pipeline.
+
+<details><summary>Related issues</summary>
+
+- [#163: release-action regresses manually-set manifest versions (tag-only base) — add version floor + monotonicity guard](https://github.com/awinogradov/code-assistants/issues/163)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #163 | [#164](https://github.com/awinogradov/code-assistants/pull/164) | @awinogradov |
+
+### Bug Fixes
+
+* **release-action:** floor member version on manifest, not just tags ([08499a9](https://github.com/awinogradov/code-assistants/commit/08499a95108a71dd3c727ace9fe6f43925f17928))
+
+### Refactoring
+
+* **release-action:** share version readers, bound pyproject parse ([fe7a272](https://github.com/awinogradov/code-assistants/commit/fe7a272b9d92a0b41bcc68346c6dc31d9627c54e))
+
+### Tests
+
+* **release-action:** add unit tests for version-file readers ([f65ca5f](https://github.com/awinogradov/code-assistants/commit/f65ca5f7d157f6d9f9e1c18227c101d869d56ff5))
 </file>
 
 <file path=".github/actions/release-action/src/migrations/migratingAppend.test.ts">
@@ -19636,6 +19674,40 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.0.1](https://github.com/awinogradov/code-assistants/compare/release-action@v1.0.0...release-action@v1.0.1) (2026-05-29)
+
+## Release Notes
+
+The release action now properly respects manually-set versions in manifests, preventing regressions during multi-package releases.
+
+## 🐛 Bug Fixes
+
+### Version protection for multi-package releases
+Release automation no longer overwrites higher version numbers that have been manually set in manifest files. Previously, if you bumped a package version in a manifest but hadn't created a tag yet, the release process would revert it to match the latest tag version. This protection ensures your carefully planned version updates remain intact throughout the release pipeline.
+
+<details><summary>Related issues</summary>
+
+- [#163: release-action regresses manually-set manifest versions (tag-only base) — add version floor + monotonicity guard](https://github.com/awinogradov/code-assistants/issues/163)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #163 | [#164](https://github.com/awinogradov/code-assistants/pull/164) | @awinogradov |
+
+### Bug Fixes
+
+* **release-action:** floor member version on manifest, not just tags ([08499a9](https://github.com/awinogradov/code-assistants/commit/08499a95108a71dd3c727ace9fe6f43925f17928))
+
+### Refactoring
+
+* **release-action:** share version readers, bound pyproject parse ([fe7a272](https://github.com/awinogradov/code-assistants/commit/fe7a272b9d92a0b41bcc68346c6dc31d9627c54e))
+
+### Tests
+
+* **release-action:** add unit tests for version-file readers ([f65ca5f](https://github.com/awinogradov/code-assistants/commit/f65ca5f7d157f6d9f9e1c18227c101d869d56ff5))
 ## [1.0.0](https://github.com/awinogradov/code-assistants/compare/release-action@v0.1.0...release-action@v1.0.0) (2026-05-29)
 
 ## Release Notes
@@ -19819,7 +19891,7 @@ Add a `release` field to your package.json to configure release behavior. See th
 <file path=".github/actions/release-action/package.json">
 {
   "name": "@code-assistants/release-action",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Composite GitHub Action that automates conventional-commit releases for npm packages, GitHub Actions, and Claude plugins.",
   "private": true,
   "type": "module",
@@ -19858,7 +19930,7 @@ Add a `release` field to your package.json to configure release behavior. See th
 <file path=".github/actions/release-action/README.md">
 # Release action
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.0.1-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that automates the release pipeline for npm packages, GitHub Actions, and Claude plugins.
@@ -20135,7 +20207,7 @@ uses: awinogradov/code-assistants/.github/actions/release-action@v1
 </file>
 
 <file path=".github/actions/release-action/version">
-1.0.0
+1.0.1
 </file>
 
 <file path=".github/actions/release-automerge/.release_notes/0.1.0.md">
