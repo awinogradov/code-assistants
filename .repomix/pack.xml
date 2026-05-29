@@ -81,6 +81,8 @@ The content is organized as follows:
         reactToComment.ts
         reviewFanout.test.ts
         reviewFanout.ts
+        reviewOutput.test.ts
+        reviewOutput.ts
         ruleUrls.test.ts
         ruleUrls.ts
         runClaude.test.ts
@@ -1653,13 +1655,21 @@ Your release workflow must use a different token for creating release PRs than t
 
 <file path=".github/actions/code-review-action/src/github/githubReview.test.ts">
 /**
- * Tests for githubReview.ts pure helpers.
- * Octokit-backed functions (fetch/resolve threads, getLastBotReview) are exercised
- * by the end-to-end review in CI and by the Phase 5 fake-Octokit suite (#149).
+ * Tests for githubReview.ts. Pure helpers (normalizeBody) plus the Octokit-backed
+ * functions exercised with a fake Octokit — no network, no real GitHub.
  */
+import type { Octokit } from "@octokit/rest";
+
 import { describe, expect, test } from "bun:test";
 
-import { normalizeBody } from "./githubReview.ts";
+import {
+  deletePendingReviews,
+  fetchReviewThreads,
+  getLastBotReview,
+  hasRecentBotReply,
+  hasRecentBotReview,
+  normalizeBody,
+} from "./githubReview.ts";
 
 describe("normalizeBody", () => {
   test("strips per-line trailing whitespace", () => {
@@ -1677,12 +1687,141 @@ describe("normalizeBody", () => {
   });
 
   test("preserves line breaks — structurally different bodies stay different", () => {
-    // The old collapse-all-whitespace approach wrongly made these identical.
     expect(normalizeBody("a\nb")).not.toBe(normalizeBody("a b"));
   });
 
   test("trims leading and trailing newlines", () => {
     expect(normalizeBody("\n\nbody\n\n")).toBe("body");
+  });
+});
+
+/** Build a GraphQL review-thread node in the shape fetchReviewThreads expects. */
+function threadNode(id: string, path: string, line: number, author: string) {
+  return {
+    id,
+    path,
+    line,
+    isOutdated: false,
+    isResolved: false,
+    comments: { nodes: [{ author: { login: author }, body: "b", pullRequestReview: { id: "rev1" } }] },
+  };
+}
+
+describe("fetchReviewThreads", () => {
+  test("paginates across pages and flattens nodes", async () => {
+    const pages = [
+      { nodes: [threadNode("t1", "a.ts", 1, "bot")], pageInfo: { hasNextPage: true, endCursor: "c1" } },
+      { nodes: [threadNode("t2", "b.ts", 2, "alice")], pageInfo: { hasNextPage: false, endCursor: null } },
+    ];
+    const cursors: Array<string | null> = [];
+    let call = 0;
+    const octokit = {
+      graphql: async (_q: string, vars: { cursor: string | null }) => {
+        cursors.push(vars.cursor);
+        return { repository: { pullRequest: { reviewThreads: pages[call++] } } };
+      },
+    } as unknown as Octokit;
+
+    const threads = await fetchReviewThreads(octokit, "o", "r", 1);
+
+    expect(threads.map((t) => t.id)).toEqual(["t1", "t2"]);
+    expect(threads[0]?.firstCommentAuthor).toBe("bot");
+    expect(cursors).toEqual([null, "c1"]); // second page requested with the prior endCursor
+  });
+});
+
+describe("getLastBotReview", () => {
+  test("returns the last non-pending review by the reviewer", async () => {
+    const octokit = {
+      rest: {
+        pulls: {
+          listReviews: async () => ({
+            data: [
+              { user: { login: "alice" }, state: "COMMENTED", body: "x" },
+              { user: { login: "bot" }, state: "APPROVED", body: "first" },
+              { user: { login: "bot" }, state: "PENDING", body: "pending" },
+              { user: { login: "bot" }, state: "CHANGES_REQUESTED", body: "last" },
+            ],
+          }),
+        },
+      },
+    } as unknown as Octokit;
+
+    expect((await getLastBotReview(octokit, "o", "r", 1, "bot"))?.body).toBe("last");
+  });
+
+  test("returns undefined when the bot has no review", async () => {
+    const octokit = {
+      rest: { pulls: { listReviews: async () => ({ data: [{ user: { login: "alice" }, state: "APPROVED" }] }) } },
+    } as unknown as Octokit;
+    expect(await getLastBotReview(octokit, "o", "r", 1, "bot")).toBeUndefined();
+  });
+});
+
+describe("deletePendingReviews", () => {
+  test("deletes only PENDING reviews", async () => {
+    const deleted: number[] = [];
+    const octokit = {
+      rest: {
+        pulls: {
+          listReviews: async () => ({
+            data: [
+              { id: 1, state: "PENDING" },
+              { id: 2, state: "APPROVED" },
+              { id: 3, state: "PENDING" },
+            ],
+          }),
+          deletePendingReview: async ({ review_id }: { review_id: number }) => {
+            deleted.push(review_id);
+            return {};
+          },
+        },
+      },
+    } as unknown as Octokit;
+
+    await deletePendingReviews(octokit, "o", "r", 1);
+    expect(deleted).toEqual([1, 3]);
+  });
+});
+
+describe("hasRecentBotReview", () => {
+  const reviews = (data: unknown[]) =>
+    ({ rest: { pulls: { listReviews: async () => ({ data }) } } }) as unknown as Octokit;
+
+  test("matches the bot's review on the given head SHA", async () => {
+    const o = reviews([{ user: { login: "bot" }, state: "APPROVED", commit_id: "sha1" }]);
+    expect(await hasRecentBotReview(o, "o", "r", 1, "bot", "sha1")).toBe(true);
+    expect(await hasRecentBotReview(o, "o", "r", 1, "bot", "sha2")).toBe(false);
+  });
+
+  test("returns false when the bot has no review", async () => {
+    const o = reviews([{ user: { login: "alice" }, state: "APPROVED", commit_id: "sha1" }]);
+    expect(await hasRecentBotReview(o, "o", "r", 1, "bot", "sha1")).toBe(false);
+  });
+});
+
+describe("hasRecentBotReply", () => {
+  test("detects an inline reply by the bot to the given comment", async () => {
+    const octokit = {
+      rest: {
+        pulls: { listReviewComments: async () => ({ data: [{ in_reply_to_id: 42, user: { login: "bot" } }] }) },
+        issues: { listComments: async () => ({ data: [] }) },
+      },
+    } as unknown as Octokit;
+
+    expect(await hasRecentBotReply(octokit, "o", "r", 1, "bot", "42", "a.ts")).toBe(true);
+    expect(await hasRecentBotReply(octokit, "o", "r", 1, "bot", "99", "a.ts")).toBe(false);
+  });
+
+  test("detects a bot issue comment when no path is given", async () => {
+    const octokit = {
+      rest: {
+        issues: { listComments: async () => ({ data: [{ user: { login: "bot" } }] }) },
+        pulls: { listReviewComments: async () => ({ data: [] }) },
+      },
+    } as unknown as Octokit;
+
+    expect(await hasRecentBotReply(octokit, "o", "r", 1, "bot", undefined, undefined)).toBe(true);
   });
 });
 </file>
@@ -3167,6 +3306,7 @@ try {
  */
 import type { ReviewEvent } from "./github/githubReview.ts";
 import { buildRuleUrlMap, linkRuleCodes } from "./ruleUrls.ts";
+import { parseReactionOutput } from "./reviewOutput.ts";
 import {
   deletePendingReviews,
   fetchReviewThreads,
@@ -3178,44 +3318,6 @@ import {
   resolveThread,
   verdictToEvent,
 } from "./github/githubReview.ts";
-
-/** Target for thread resolution by file location */
-interface ResolveTarget {
-  path: string;
-  line: number;
-}
-
-/** Structured output from Claude reaction */
-interface ReactionOutput {
-  reply: string;
-  resolveComments?: ResolveTarget[];
-  updatedVerdict?: "approve" | "requestChanges" | "comment" | null;
-  updatedReviewComment?: string | null;
-}
-
-/**
- * Parse and validate structured reaction output from Claude.
- * Returns null if output is empty, null string, or invalid JSON.
- */
-function parseReactionOutput(rawOutput: string): ReactionOutput | null {
-  const trimmed = rawOutput.trim();
-  if (!trimmed || trimmed === "null") {
-    return null;
-  }
-
-  const parsed: unknown = JSON.parse(trimmed);
-  if (typeof parsed !== "object" || parsed === null) {
-    return null;
-  }
-
-  const obj = parsed as Record<string, unknown>;
-  return {
-    reply: (obj.reply as string) ?? "",
-    resolveComments: (obj.resolveComments as ResolveTarget[]) ?? [],
-    updatedVerdict: (obj.updatedVerdict as ReactionOutput["updatedVerdict"]) ?? null,
-    updatedReviewComment: (obj.updatedReviewComment as string | null) ?? null,
-  };
-}
 
 /**
  * Resolve all unresolved bot review threads on a PR.
@@ -3942,6 +4044,295 @@ export async function runReviewFanout(ctx: FanoutContext): Promise<SubagentResul
   );
 
   return results;
+}
+</file>
+
+<file path=".github/actions/code-review-action/src/reviewOutput.test.ts">
+/**
+ * Tests for reviewOutput.ts — pure parsing and diff-hunk validation.
+ */
+import { describe, expect, test } from "bun:test";
+
+import {
+  extractValidLines,
+  formatInvalidComments,
+  isAlreadyMentioned,
+  isValidComment,
+  parseReactionOutput,
+  parseStructuredOutput,
+} from "./reviewOutput.ts";
+
+describe("parseStructuredOutput", () => {
+  test("returns null for empty or literal-null input", () => {
+    expect(parseStructuredOutput("")).toBeNull();
+    expect(parseStructuredOutput("  null  ")).toBeNull();
+  });
+
+  test("returns null for non-object JSON", () => {
+    expect(parseStructuredOutput('"a string"')).toBeNull();
+    expect(parseStructuredOutput("42")).toBeNull();
+  });
+
+  test("parses a full review object", () => {
+    const out = parseStructuredOutput(
+      '{"verdict":"requestChanges","reviewComment":"x","inlineComments":[{"path":"a.ts","line":3,"body":"b"}]}'
+    );
+    expect(out).toEqual({
+      verdict: "requestChanges",
+      reviewComment: "x",
+      inlineComments: [{ path: "a.ts", line: 3, body: "b" }],
+    });
+  });
+
+  test("defaults missing fields", () => {
+    expect(parseStructuredOutput("{}")).toEqual({
+      verdict: "comment",
+      reviewComment: "Review completed.",
+      inlineComments: [],
+    });
+  });
+});
+
+describe("parseReactionOutput", () => {
+  test("returns null for empty / literal-null / non-object", () => {
+    expect(parseReactionOutput("")).toBeNull();
+    expect(parseReactionOutput("null")).toBeNull();
+    expect(parseReactionOutput("3")).toBeNull();
+  });
+
+  test("parses a reply with defaults", () => {
+    expect(parseReactionOutput('{"reply":"thanks"}')).toEqual({
+      reply: "thanks",
+      resolveComments: [],
+      updatedVerdict: null,
+      updatedReviewComment: null,
+    });
+  });
+
+  test("parses a verdict update", () => {
+    const out = parseReactionOutput(
+      '{"reply":"ok","resolveComments":[{"path":"a.ts","line":1}],"updatedVerdict":"approve","updatedReviewComment":"done"}'
+    );
+    expect(out).toEqual({
+      reply: "ok",
+      resolveComments: [{ path: "a.ts", line: 1 }],
+      updatedVerdict: "approve",
+      updatedReviewComment: "done",
+    });
+  });
+});
+
+describe("extractValidLines", () => {
+  test("expands a multi-line hunk into each added line", () => {
+    const lines = extractValidLines([{ filename: "a.ts", patch: "@@ -1,2 +10,3 @@" }]);
+    expect(lines).toEqual([
+      { path: "a.ts", line: 10 },
+      { path: "a.ts", line: 11 },
+      { path: "a.ts", line: 12 },
+    ]);
+  });
+
+  test("treats a hunk with no explicit count as a single line", () => {
+    expect(extractValidLines([{ filename: "a.ts", patch: "@@ -5 +7 @@" }])).toEqual([
+      { path: "a.ts", line: 7 },
+    ]);
+  });
+
+  test("handles a zero-count (pure deletion) hunk as no commentable lines", () => {
+    expect(extractValidLines([{ filename: "a.ts", patch: "@@ -3,2 +4,0 @@" }])).toEqual([]);
+  });
+
+  test("collects across multiple files and hunks, skips patch-less files", () => {
+    const lines = extractValidLines([
+      { filename: "a.ts", patch: "@@ -1,1 +1,1 @@\n@@ -8,0 +9,2 @@" },
+      { filename: "b.ts" },
+    ]);
+    expect(lines).toEqual([
+      { path: "a.ts", line: 1 },
+      { path: "a.ts", line: 9 },
+      { path: "a.ts", line: 10 },
+    ]);
+  });
+});
+
+describe("isValidComment", () => {
+  const valid = [{ path: "a.ts", line: 10 }];
+  test("matches path and line", () => {
+    expect(isValidComment({ path: "a.ts", line: 10, body: "x" }, valid)).toBe(true);
+  });
+  test("rejects wrong line or path", () => {
+    expect(isValidComment({ path: "a.ts", line: 11, body: "x" }, valid)).toBe(false);
+    expect(isValidComment({ path: "b.ts", line: 10, body: "x" }, valid)).toBe(false);
+  });
+});
+
+describe("isAlreadyMentioned", () => {
+  test("detects the path:line token in the body", () => {
+    expect(isAlreadyMentioned({ path: "src/a.ts", line: 5, body: "x" }, "see src/a.ts:5 above")).toBe(
+      true
+    );
+    expect(isAlreadyMentioned({ path: "src/a.ts", line: 5, body: "x" }, "nothing here")).toBe(false);
+  });
+});
+
+describe("formatInvalidComments", () => {
+  test("returns empty string for no comments", () => {
+    expect(formatInvalidComments([])).toBe("");
+  });
+
+  test("downgrades blockers to suggestions and includes the location header", () => {
+    const out = formatInvalidComments([{ path: "a.ts", line: 9, body: "🚧 broken" }]);
+    expect(out).toContain("## Additional Comments (not in diff)");
+    expect(out).toContain("`a.ts:9`");
+    expect(out).toContain("🙋‍♂️ broken");
+    expect(out).not.toContain("🚧");
+  });
+});
+</file>
+
+<file path=".github/actions/code-review-action/src/reviewOutput.ts">
+/**
+ * Pure parsing and diff-hunk validation for the model's review/reaction output.
+ *
+ * Extracted from submitReview.ts / reactToComment.ts so this logic is unit-testable
+ * without importing those modules (which run their submission pipeline on import).
+ * No side effects, no Octokit, no env access.
+ */
+
+/** Inline comment on a specific file/line in the PR. */
+export interface InlineComment {
+  path: string;
+  line: number;
+  body: string;
+}
+
+/** Structured output from a Claude review. */
+export interface StructuredOutput {
+  verdict: "approve" | "requestChanges" | "comment";
+  reviewComment: string;
+  inlineComments?: InlineComment[];
+}
+
+/** A valid (commentable) line location in the PR diff. */
+export interface ValidLine {
+  path: string;
+  line: number;
+}
+
+/** Target for thread resolution by file location. */
+export interface ResolveTarget {
+  path: string;
+  line: number;
+}
+
+/** Structured output from a Claude comment reaction. */
+export interface ReactionOutput {
+  reply: string;
+  resolveComments?: ResolveTarget[];
+  updatedVerdict?: "approve" | "requestChanges" | "comment" | null;
+  updatedReviewComment?: string | null;
+}
+
+/**
+ * Parse and validate structured review output from Claude.
+ * Returns null if the output is empty, the literal "null", or not a JSON object.
+ */
+export function parseStructuredOutput(rawOutput: string): StructuredOutput | null {
+  const trimmed = rawOutput.trim();
+  if (!trimmed || trimmed === "null") {
+    return null;
+  }
+
+  const parsed: unknown = JSON.parse(trimmed);
+  if (typeof parsed !== "object" || parsed === null) {
+    return null;
+  }
+
+  const obj = parsed as Record<string, unknown>;
+  return {
+    verdict: (obj.verdict as StructuredOutput["verdict"]) ?? "comment",
+    reviewComment: (obj.reviewComment as string) ?? "Review completed.",
+    inlineComments: (obj.inlineComments as InlineComment[]) ?? [],
+  };
+}
+
+/**
+ * Parse and validate structured reaction output from Claude.
+ * Returns null if the output is empty, the literal "null", or not a JSON object.
+ */
+export function parseReactionOutput(rawOutput: string): ReactionOutput | null {
+  const trimmed = rawOutput.trim();
+  if (!trimmed || trimmed === "null") {
+    return null;
+  }
+
+  const parsed: unknown = JSON.parse(trimmed);
+  if (typeof parsed !== "object" || parsed === null) {
+    return null;
+  }
+
+  const obj = parsed as Record<string, unknown>;
+  return {
+    reply: (obj.reply as string) ?? "",
+    resolveComments: (obj.resolveComments as ResolveTarget[]) ?? [],
+    updatedVerdict: (obj.updatedVerdict as ReactionOutput["updatedVerdict"]) ?? null,
+    updatedReviewComment: (obj.updatedReviewComment as string | null) ?? null,
+  };
+}
+
+/** Expand a single unified-diff hunk header match into its added-line locations. */
+export function extractHunkLines(filename: string, match: RegExpMatchArray): ValidLine[] {
+  const start = Number(match[1]);
+  const count = match[2] ? Number(match[2]) : 1;
+
+  return Array.from({ length: count }, (_, i) => ({ path: filename, line: start + i }));
+}
+
+/**
+ * Extract the set of commentable line locations from PR diff hunks.
+ * Parses unified-diff hunk headers: `@@ -old,count +new,count @@`.
+ */
+export function extractValidLines(patches: Array<{ filename: string; patch?: string }>): ValidLine[] {
+  const hunkHeaderRegex = /@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/g;
+
+  return patches
+    .filter((file) => file.patch)
+    .flatMap((file) =>
+      [...file.patch!.matchAll(hunkHeaderRegex)].flatMap((m) => extractHunkLines(file.filename, m))
+    );
+}
+
+/** True when a comment targets a line that exists in the diff. */
+export function isValidComment(comment: InlineComment, validLines: ValidLine[]): boolean {
+  return validLines.some((vl) => vl.path === comment.path && vl.line === comment.line);
+}
+
+/**
+ * True when a comment's `path:line` is already referenced in the review body —
+ * used to avoid repeating an out-of-diff finding that the body already mentions.
+ */
+export function isAlreadyMentioned(comment: InlineComment, reviewBody: string): boolean {
+  const pattern = `${comment.path}:${comment.line}`;
+  return reviewBody.includes(pattern);
+}
+
+/**
+ * Format out-of-diff comments for inclusion in the review body.
+ * Downgrades blockers (🚧) to suggestions (🙋‍♂️) since they're supplementary.
+ */
+export function formatInvalidComments(comments: InlineComment[]): string {
+  if (comments.length === 0) {
+    return "";
+  }
+
+  const formatted = comments
+    .map((c) => {
+      const body = c.body.replaceAll("🚧", "🙋‍♂️");
+      return `**\`${c.path}:${c.line}\`**\n\n${body}`;
+    })
+    .join("\n\n");
+
+  return `\n\n---\n## Additional Comments (not in diff)\n\n${formatted}`;
 }
 </file>
 
@@ -5175,6 +5566,13 @@ import type { Octokit } from "@octokit/rest";
 import type { ReviewEvent, ReviewThread } from "./github/githubReview.ts";
 import { buildRuleUrlMap, linkRuleCodes } from "./ruleUrls.ts";
 import {
+  extractValidLines,
+  formatInvalidComments,
+  isAlreadyMentioned,
+  isValidComment,
+  parseStructuredOutput,
+} from "./reviewOutput.ts";
+import {
   deletePendingReviews,
   fetchReviewThreads,
   getLastBotReview,
@@ -5187,112 +5585,10 @@ import {
   verdictToEvent,
 } from "./github/githubReview.ts";
 
-/** Inline comment on a specific file/line in the PR */
-interface InlineComment {
-  path: string;
-  line: number;
-  body: string;
-}
-
-/** Structured output from Claude review */
-interface StructuredOutput {
-  verdict: "approve" | "requestChanges" | "comment";
-  reviewComment: string;
-  inlineComments?: InlineComment[];
-}
-
-/** Valid line location in the PR diff */
-interface ValidLine {
-  path: string;
-  line: number;
-}
-
 /** Location of a comment (path and line) */
 interface CommentLocation {
   path: string;
   line: number;
-}
-
-/**
- * Parse and validate structured output from Claude.
- * Returns null if output is empty, null string, or invalid JSON.
- */
-function parseStructuredOutput(rawOutput: string): StructuredOutput | null {
-  const trimmed = rawOutput.trim();
-  if (!trimmed || trimmed === "null") {
-    return null;
-  }
-
-  const parsed: unknown = JSON.parse(trimmed);
-  if (typeof parsed !== "object" || parsed === null) {
-    return null;
-  }
-
-  const obj = parsed as Record<string, unknown>;
-  return {
-    verdict: (obj.verdict as StructuredOutput["verdict"]) ?? "comment",
-    reviewComment: (obj.reviewComment as string) ?? "Review completed.",
-    inlineComments: (obj.inlineComments as InlineComment[]) ?? [],
-  };
-}
-
-/**
- * Extract line range from a single diff hunk match.
- */
-function extractHunkLines(filename: string, match: RegExpMatchArray): ValidLine[] {
-  const start = Number(match[1]);
-  const count = match[2] ? Number(match[2]) : 1;
-
-  return Array.from({ length: count }, (_, i) => ({ path: filename, line: start + i }));
-}
-
-/**
- * Extract valid line numbers from PR diff hunks.
- * Parses unified diff format: @@ -old,count +new,count @@
- */
-function extractValidLines(patches: Array<{ filename: string; patch?: string }>): ValidLine[] {
-  const hunkHeaderRegex = /@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/g;
-
-  return patches
-    .filter((file) => file.patch)
-    .flatMap((file) =>
-      [...file.patch!.matchAll(hunkHeaderRegex)].flatMap((m) => extractHunkLines(file.filename, m))
-    );
-}
-
-/**
- * Check if a comment is on a valid diff line.
- */
-function isValidComment(comment: InlineComment, validLines: ValidLine[]): boolean {
-  return validLines.some((vl) => vl.path === comment.path && vl.line === comment.line);
-}
-
-/**
- * Check if a comment's file:line is already mentioned in the review body.
- * Prevents duplicate content when invalid inline comments would repeat issues.
- */
-function isAlreadyMentioned(comment: InlineComment, reviewBody: string): boolean {
-  const pattern = `${comment.path}:${comment.line}`;
-  return reviewBody.includes(pattern);
-}
-
-/**
- * Format invalid comments for inclusion in review body.
- * Downgrades blockers (🚧) to suggestions (🙋‍♂️) since they're supplementary.
- */
-function formatInvalidComments(comments: InlineComment[]): string {
-  if (comments.length === 0) {
-    return "";
-  }
-
-  const formatted = comments
-    .map((c) => {
-      const body = c.body.replaceAll("🚧", "🙋‍♂️");
-      return `**\`${c.path}:${c.line}\`**\n\n${body}`;
-    })
-    .join("\n\n");
-
-  return `\n\n---\n## Additional Comments (not in diff)\n\n${formatted}`;
 }
 
 /**
