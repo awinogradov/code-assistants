@@ -9,6 +9,7 @@
 import type { Octokit } from "@octokit/rest";
 
 import { parseRepoEnv } from "./github/githubReview.ts";
+import { buildMarkedDetailsBlock } from "./markedDetailsBlock.ts";
 
 /** Configuration for the PR footer update, parsed from environment */
 interface FooterConfig {
@@ -70,18 +71,12 @@ function buildActionSection(helpId: string, helpText: string): string {
 
 /** Build the complete footer wrapper around all action sections. */
 function buildFullFooter(innerSections: string): string {
-  return [
-    outerOpenTag,
-    "---",
-    "<details>",
-    "<summary>Available commands 🤖</summary>",
-    "<br />",
-    "",
-    innerSections,
-    "",
-    "</details>",
-    outerCloseTag,
-  ].join("\n");
+  return buildMarkedDetailsBlock({
+    startMarker: outerOpenTag,
+    endMarker: outerCloseTag,
+    summary: "Available commands 🤖",
+    bodyLines: [innerSections],
+  });
 }
 
 /**
