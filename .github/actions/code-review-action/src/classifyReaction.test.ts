@@ -3,7 +3,26 @@
  */
 import { describe, expect, test } from "bun:test";
 
-import { isBareAcknowledgement, shouldSkipModelReply } from "./classifyReaction.ts";
+import { isBareAcknowledgement, requestsReReview, shouldSkipModelReply } from "./classifyReaction.ts";
+
+describe("requestsReReview", () => {
+  test("detects explicit re-review phrasings", () => {
+    expect(requestsReReview("pushed a fix, please re-review")).toBe(true);
+    expect(requestsReReview("can you take another look")).toBe(true);
+    expect(requestsReReview("updated. PTAL")).toBe(true);
+    expect(requestsReReview("review again please")).toBe(true);
+  });
+
+  test("is case-insensitive", () => {
+    expect(requestsReReview("Done — Please Re-Review")).toBe(true);
+  });
+
+  test("plain replies and acknowledgements do not request a re-review", () => {
+    expect(requestsReReview("Fixed — removed the unused import.")).toBe(false);
+    expect(requestsReReview("this is intentional, the pattern is required")).toBe(false);
+    expect(requestsReReview("")).toBe(false);
+  });
+});
 
 describe("isBareAcknowledgement", () => {
   test("plain 'Fixed' acknowledgement is bare", () => {
