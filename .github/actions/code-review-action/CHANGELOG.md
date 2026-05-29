@@ -2,6 +2,75 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [0.2.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v0.1.0...code-review-action@v0.2.0) (2026-05-29)
+
+## Release Notes
+
+The code review action now handles rapid-fire PR comments and stops replying unnecessarily to acknowledgements.
+
+## ✨ What's New
+
+### Automatic release PR merging
+Approved release PRs with passing CI checks now merge automatically, eliminating the manual merge step before publication. The release pipeline workflows (create, publish, and auto-merge) synchronize together to downstream repositories, streamlining your entire release process.
+
+<details><summary>Related issues</summary>
+
+- [#107: Add release-automerge composite action with downstream sync workflow](https://github.com/awinogradov/code-assistants/issues/107)
+</details>
+
+### Smarter acknowledgement handling
+The AI reviewer recognizes when you're just acknowledging its feedback (like "Fixed —") and reacts with a 👍 instead of generating a new reply. It still responds to questions and explicit re-review requests, reducing notification noise while keeping the conversation flow natural.
+
+<details><summary>Related issues</summary>
+
+- [#111: Code review react mode replies to every review-thread acknowledgement](https://github.com/awinogradov/code-assistants/issues/111)
+</details>
+
+## 🐛 Bug Fixes
+
+### Concurrent comment handling
+The code review bot no longer misses @-mentions when multiple PR comments arrive at the same time. Each comment now gets its own processing queue, ensuring every mention gets a response regardless of timing.
+
+<details><summary>Related issues</summary>
+
+- [#71: Code review action drops bot mentions when comments arrive in quick succession](https://github.com/awinogradov/code-assistants/issues/71)
+</details>
+
+### Release PR approval flow
+Release PRs now properly trigger auto-approval by using different identities for the PR author and reviewer. Previously, release PRs were stuck because GitHub prevents users from approving their own PRs — the bot was trying to approve PRs it created itself.
+
+## ⚙️ Configuration Required
+
+### Release PR author identity
+Your release workflow must use a different token for creating release PRs than the one used for code review. Update your `release-create.yml` workflow to use a personal access token (like `secrets.GH_TOKEN`) instead of `secrets.BOT_TOKEN` to ensure the reviewer bot can approve the PR.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #111 | [#113](https://github.com/awinogradov/code-assistants/pull/113) | @awinogradov |
+| #107 | [#110](https://github.com/awinogradov/code-assistants/pull/110) | @awinogradov |
+| #71 | [#105](https://github.com/awinogradov/code-assistants/pull/105) | @awinogradov |
+
+### Features
+
+* **release-automerge:** add release auto-merge action and workflow ([1863ee9](https://github.com/awinogradov/code-assistants/commit/1863ee92945dcbe381b4ccd12ce51d6b4748eceb))
+
+### Bug Fixes
+
+* **code-review-action:** require a positive token to skip ack replies ([930479a](https://github.com/awinogradov/code-assistants/commit/930479a15604294c9532285cb8123509d9528fa2))
+* **code-review-action:** skip react reply for author acknowledgements ([ea88093](https://github.com/awinogradov/code-assistants/commit/ea8809340f3273c43067074fed43ec2da2dc6b54))
+* **code-review:** scope concurrency group per comment id ([05ab7f8](https://github.com/awinogradov/code-assistants/commit/05ab7f83cc68a37f89492014e84f38fae79bd57b))
+* **release:** author release prs with a distinct identity ([fc6b266](https://github.com/awinogradov/code-assistants/commit/fc6b266a2d926a13876778be2ea848f9ec349382))
+
+### Documentation
+
+* **release:** document distinct release-pr author identity ([eb99546](https://github.com/awinogradov/code-assistants/commit/eb995467a7fad1f4408c6cbf8736e8a4e8d2097c))
+
+### Refactoring
+
+* **checks:** extract shared check-status poll loop ([8987c37](https://github.com/awinogradov/code-assistants/commit/8987c379894c8ddf5a77e1fae0d495fd17341b92))
 ## 0.1.0 (2026-05-28)
 
 ## Release Notes
