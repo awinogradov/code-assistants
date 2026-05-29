@@ -9,7 +9,8 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import {
-  countToolUses,
+  buildRunSummary,
+  countToolRoundTrips,
   deriveMode,
   detectLinuxLibc,
   extractUsage,
@@ -216,6 +217,11 @@ describe("deriveMode", () => {
   test("returns unknown for unrecognized prompts", () => {
     expect(deriveMode("do something else")).toBe("unknown");
   });
+
+  test("requires the trailing space — bare command returns unknown", () => {
+    expect(deriveMode("/autopilot:pr-review")).toBe("unknown");
+    expect(deriveMode("/autopilot:pr-answer")).toBe("unknown");
+  });
 });
 
 describe("findResultMessage", () => {
@@ -237,25 +243,26 @@ describe("findResultMessage", () => {
   });
 });
 
-describe("countToolUses", () => {
-  test("counts tool_use blocks across assistant messages", () => {
+describe("countToolRoundTrips", () => {
+  test("counts assistant turns with tool calls, not individual blocks", () => {
     const messages = [
       { type: "assistant", message: { content: [{ type: "text" }, { type: "tool_use" }] } },
       { type: "assistant", message: { content: [{ type: "tool_use" }, { type: "tool_use" }] } },
       { type: "user", message: { content: [{ type: "tool_result" }] } },
       { type: "result", subtype: "success" },
     ];
-    expect(countToolUses(messages)).toBe(3);
+    // Two assistant turns issued tool calls — the second's parallel blocks count once.
+    expect(countToolRoundTrips(messages)).toBe(2);
   });
 
   test("returns 0 for messages without tool_use blocks", () => {
-    expect(countToolUses([{ type: "assistant", message: { content: [{ type: "text" }] } }])).toBe(
-      0
-    );
+    expect(
+      countToolRoundTrips([{ type: "assistant", message: { content: [{ type: "text" }] } }])
+    ).toBe(0);
   });
 
   test("ignores malformed entries", () => {
-    expect(countToolUses([null, "noise", { type: "assistant" }, 42])).toBe(0);
+    expect(countToolRoundTrips([null, "noise", { type: "assistant" }, 42])).toBe(0);
   });
 });
 
@@ -295,7 +302,60 @@ describe("extractUsage", () => {
 
   test("coerces non-numeric fields to 0", () => {
     const result = { usage: { input_tokens: "lots" }, total_cost_usd: null };
-    expect(extractUsage(result)).toMatchObject({ tokensIn: 0, costUsd: 0 });
+    expect(extractUsage(result)).toEqual({
+      tokensIn: 0,
+      tokensOut: 0,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      costUsd: 0,
+      numTurns: 0,
+    });
+  });
+});
+
+describe("buildRunSummary", () => {
+  test("maps timings and usage onto the snake_case log fields", () => {
+    const messages = [
+      { type: "assistant", message: { content: [{ type: "tool_use" }] } },
+      {
+        type: "result",
+        total_cost_usd: 0.12,
+        num_turns: 3,
+        usage: {
+          input_tokens: 500,
+          output_tokens: 100,
+          cache_read_input_tokens: 400,
+          cache_creation_input_tokens: 20,
+        },
+      },
+    ];
+    expect(buildRunSummary("review", messages, { fanoutMs: 1200, modelMs: 34000 })).toEqual({
+      mode: "review",
+      fanout_ms: 1200,
+      model_ms: 34000,
+      tokens_in: 500,
+      tokens_out: 100,
+      cache_read_tokens: 400,
+      cache_creation_tokens: 20,
+      cost_usd: 0.12,
+      num_turns: 3,
+      tool_round_trips: 1,
+    });
+  });
+
+  test("defaults usage fields to 0 when no result message is present", () => {
+    expect(buildRunSummary("react", [], { fanoutMs: 0, modelMs: 5 })).toEqual({
+      mode: "react",
+      fanout_ms: 0,
+      model_ms: 5,
+      tokens_in: 0,
+      tokens_out: 0,
+      cache_read_tokens: 0,
+      cache_creation_tokens: 0,
+      cost_usd: 0,
+      num_turns: 0,
+      tool_round_trips: 0,
+    });
   });
 });
 
