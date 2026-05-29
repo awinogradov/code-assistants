@@ -36,6 +36,11 @@ async function setMemberVersion(repo: string, relPath: string, version: string):
   });
 }
 
+async function writePyproject(repo: string, relPath: string, body: string): Promise<void> {
+  await mkdir(join(repo, relPath), { recursive: true });
+  await Bun.write(join(repo, relPath, "pyproject.toml"), body);
+}
+
 async function commitInPath(
   repo: string,
   relPath: string,
@@ -226,6 +231,43 @@ describe("runCreate", () => {
       const libA = result.releases.find((r) => r.member.name === "lib-a");
       expect(libA?.previousVersion).toBeNull();
       expect(libA?.newVersion).toBe("0.4.0"); // minor from the 0.3.0 floor
+    }));
+
+  test("uses the pyproject [project] version as the floor when it exceeds the tag (#163)", () =>
+    withTempRepo(async (repo) => {
+      await setupFixture(repo);
+      await writePyproject(repo, "packages/lib-a", '[project]\nname = "lib-a"\nversion = "0.5.0"\n');
+      await $`git add .`.cwd(repo).quiet();
+      await $`git commit -m ${"chore(lib-a): add pyproject at 0.5.0"}`.cwd(repo).quiet();
+      await $`git tag lib-a@v0.1.0 HEAD`.cwd(repo).quiet();
+      await $`git tag lib-b@v0.1.0 HEAD`.cwd(repo).quiet();
+      await commitInPath(repo, "packages/lib-a", "f1.txt", "feat(lib-a): add foo");
+
+      const result = await runCreate({ cwd: repo });
+      const libA = result.releases.find((r) => r.member.name === "lib-a");
+      expect(libA?.newVersion).toBe("0.6.0"); // minor from the 0.5.0 pyproject floor
+    }));
+
+  test("ignores a version in a later table when [project] declares none (#163)", () =>
+    withTempRepo(async (repo) => {
+      await setupFixture(repo);
+      // [project] uses a dynamic version; the [tool.poetry] version must NOT leak.
+      await writePyproject(
+        repo,
+        "packages/lib-a",
+        '[project]\nname = "lib-a"\ndynamic = ["version"]\n\n[tool.poetry]\nversion = "9.9.9"\n',
+      );
+      await $`git add .`.cwd(repo).quiet();
+      await $`git commit -m ${"chore(lib-a): add dynamic pyproject"}`.cwd(repo).quiet();
+      await $`git tag lib-a@v0.1.0 HEAD`.cwd(repo).quiet();
+      await $`git tag lib-b@v0.1.0 HEAD`.cwd(repo).quiet();
+      await commitInPath(repo, "packages/lib-a", "f1.txt", "feat(lib-a): add foo");
+
+      const result = await runCreate({ cwd: repo });
+      const libA = result.releases.find((r) => r.member.name === "lib-a");
+      // package.json is 0.0.0 and [project] has no version, so the 0.1.0 tag
+      // floors the bump — the 9.9.9 in [tool.poetry] is ignored.
+      expect(libA?.newVersion).toBe("0.2.0");
     }));
 });
 
