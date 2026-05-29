@@ -44,12 +44,14 @@ $ARGUMENTS
 
 ### 1.1 PR Context
 
-Fetch PR metadata and diff (needed locally for Phase 2 review and Phase 4 submit):
+Fetch PR metadata (always) and the diff (only when you will review it in-model):
 
 ```bash
 gh pr view <PR_NUMBER> -R <REPO> --json title,body,files,commits,reviews,comments
 gh pr diff <PR_NUMBER> -R <REPO>
 ```
+
+**Single-source the diff.** If `PRECOMPUTED_REVIEWS_PATH` is set (orchestrator fan-out, Phase 2.4), the sub-agents already received the diff and the root model only aggregates their findings — **skip `gh pr diff` entirely** in that case. Fetch it only for in-model fan-out (Phase 2.3). Never embed the diff more than once.
 
 ### 1.2 Load Context via Sub-Agents
 
@@ -87,7 +89,9 @@ If no issue number found, output: "No linked issue — skipping issue comparison
 
 If the `gh` call fails (auth/network error) inside `resolve-issue-context`, skip issue context entirely.
 
-After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response for use with `grep_repomix_output` and `read_repomix_output`. Store issue context and review data from the agents.
+After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response. Store issue context and review data from the agents.
+
+**Read the pack, don't dump it.** The snapshot exists so you can pull _targeted_ context on demand — use `grep_repomix_output` (regex + `contextLines`) and `read_repomix_output` with a specific `startLine`/`endLine` slice. NEVER `read_repomix_output` over the whole range (that loads the entire codebase into context). When the diff is self-contained and needs no cross-file lookup (the common case), don't read the pack at all — the `outputId` stays available for sub-agents (e.g. architecture) that actually need to confirm a pattern elsewhere.
 
 ### 1.4 Review Round Handling
 
@@ -284,47 +288,21 @@ After all review results are available — whether produced in Phase 2.3 (in-mod
 
 1. Parse each review block's structured output (findings with severity emoji, file, line, **rule** code, detail). The rule code is the value of the `- **Rule:**` field (regex anchor: `^- \*\*Rule:\*\* ([A-Z0-9-]+)$`). If an agent omits the field, the finding has no rule code — do NOT substitute `UNSPECIFIED`; the suffix is simply omitted in step 5.
 2. If a review block indicates the agent failed or timed out (in-model) or had `error` set (pre-computed), skip that dimension — do not block the review.
-3. Deduplicate findings by `(path, line)` — if two agents flag the same location, keep the higher severity (🚧 > 🙋‍♂️ > 💡) and merge descriptions if complementary. Merge rule codes into the linked form inside one bracket pair, comma-separated, where each code keeps its own URL: `[[CHECK-BUG-002](url-a), [CHECK-AI-002](url-b)]`. URLs are resolved via §2.6 Rule-to-URL Mapping.
+3. Deduplicate findings by `(path, line)` — if two agents flag the same location, keep the higher severity (🚧 > 🙋‍♂️ > 💡) and merge descriptions if complementary. Merge rule codes as a bare comma-separated list inside one bracket pair: `[CHECK-BUG-002, CHECK-AI-002]`.
 4. Merge all findings into a single list ordered by severity: blockers first, then suggestions, then nitpicks.
-5. Propagate the rule code to the final review: append ` [<RULE>](<rule-url>)` to the end of each finding line in `reviewComment` and to the end of each `inlineComments.body`, with `<rule-url>` resolved per §2.6 Rule-to-URL Mapping. When the sub-agent emitted no rule code, append nothing (do not emit `[UNSPECIFIED]`). The emoji stays first so downstream severity filters keep working.
+5. Propagate the rule code to the final review: append a **bare** ` [<RULE>]` (or ` [<CODE1>, <CODE2>]` when several codes share a location) to the end of each finding line in `reviewComment` and each `inlineComments.body`. Do NOT build markdown links and do NOT read agent files to construct URLs — `code-review-action` resolves every code to its canonical GitHub link deterministically after the model finishes (see §2.6). When the sub-agent emitted no rule code, append nothing (do not emit `[UNSPECIFIED]`). The emoji stays first so downstream severity filters keep working.
 6. Proceed to Phase 3.
 
-### 2.6 Rule-to-URL Mapping
+### 2.6 Rule-to-URL Mapping (done by the action, not the model)
 
-Used in §2.5 steps 3 and 5 to turn a bare rule code into a markdown link to the rule's category in the producing sub-agent file on GitHub.
+Rule codes are emitted **bare** (`[CHECK-BUG-002]`, or `[CHECK-BUG-002, CHECK-AI-002]` for a shared location). `code-review-action` resolves each code to its canonical GitHub link **deterministically in code** (`src/ruleUrls.ts`) after the model returns its structured output — it scans the `pr:review:*.md` agent files once in Node and rewrites bare codes into markdown links. This replaced the former model-side resolution, which read all agent files and slugified headings every review (~11 tool round-trips per run).
 
-**Sub-agent → file lookup.** Every review block carries a `subagent_type` with the `autopilot:` prefix — in-model fan-out gets it from the Agent tool's `subagent_type` field; pre-computed fan-out gets it from `code-review-action`'s `reviewFanout.ts`. Strip the `autopilot:` prefix and append `.md` to get the bare agent filename:
+The model MUST therefore:
 
-| `subagent_type`                           | Agent filename                     |
-| ----------------------------------------- | ---------------------------------- |
-| `autopilot:pr:review:correctness`         | `pr:review:correctness.md`         |
-| `autopilot:pr:review:testing`             | `pr:review:testing.md`             |
-| `autopilot:pr:review:complexity`          | `pr:review:complexity.md`          |
-| `autopilot:pr:review:standards`           | `pr:review:standards.md`           |
-| `autopilot:pr:review:architecture`        | `pr:review:architecture.md`        |
-| `autopilot:pr:review:ai-smells`           | `pr:review:ai-smells.md`           |
-| `autopilot:pr:review:common-sense`        | `pr:review:common-sense.md`        |
-| `autopilot:pr:review:pr-hygiene`          | `pr:review:pr-hygiene.md`          |
-| `autopilot:pr:review:surface-correctness` | `pr:review:surface-correctness.md` |
-| `autopilot:pr:review:surface-testing`     | `pr:review:surface-testing.md`     |
-| `autopilot:pr:review:surface-naming`      | `pr:review:surface-naming.md`      |
+- Emit bare codes only — never construct `https://github.com/...` links and never read agent files to build them.
+- Append nothing when a finding has no rule code (do not emit `[UNSPECIFIED]`).
 
-**Local file path (for reading).** The skill must read the agent file from the installed plugin directory, not the caller's checkout — when `code-review-action` runs in a downstream repo, `claude-plugins/autopilot/agents/` does not exist in the workspace. Resolve the read path in this order:
-
-1. If the `CLAUDE_PLUGIN_DIR` env var is set (exposed by `code-review-action`), read from `${CLAUDE_PLUGIN_DIR}/agents/<filename>`.
-2. Otherwise (running inside the autopilot source repo), read from `claude-plugins/autopilot/agents/<filename>` relative to the repository root.
-
-If neither path is readable, fall back per the Edge cases below — never block the review.
-
-**Anchor derivation.** Read the producing agent file once via the `Read` tool (using the local path resolved above), find the line containing the rule code (matched as `**<CODE>:`), then walk upward to the nearest `### ` heading. Slugify that heading: lowercase, strip characters other than `[a-z0-9 -]`, replace spaces with `-`, collapse repeats. Example: `### B. Concurrency and Async Issues` → `b-concurrency-and-async-issues`. Cache the heading map per agent file for the run.
-
-**URL template.** Always emit links to the canonical GitHub source — the local read path is only used for anchor lookup, never as the link target. URL: `https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/<file-encoded>#<anchor>` — percent-encode `:` as `%3A` in the file segment so markdown parsers do not misinterpret it. Example: `pr:review:correctness.md` → `pr%3Areview%3Acorrectness.md`.
-
-**Edge cases.**
-
-- The sub-agent emitted no rule code: omit the bracket suffix entirely (see §2.5 step 1 and step 5). Do not emit `[UNSPECIFIED]`.
-- Rule code present but not found in the agent file (rename, typo, drift): fall back to bare `[<CODE>]` with no URL. Never block the review.
-- Local agent file not readable (neither `$CLAUDE_PLUGIN_DIR/agents/<filename>` nor `claude-plugins/autopilot/agents/<filename>` exists): fall back to bare `[<CODE>]` for every code from that sub-agent. Never block the review.
+Codes that don't resolve (rename, typo, drift) or an unreadable plugin directory degrade gracefully to the bare `[<CODE>]` text — the action never blocks the review over link resolution.
 
 ---
 
@@ -412,12 +390,12 @@ The `verdict` field drives the GitHub review event. An empty `reviewComment` mea
 ```json
 {
   "verdict": "requestChanges",
-  "reviewComment": "Adds retry logic to the payment webhook handler.\n\n### 🚧 Blockers\n\n1. **Missing idempotency check** - `src/webhooks/payment.ts:45` - Retries can cause duplicate charges [CHECK-BUG-002](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/pr%3Areview%3Acorrectness.md#b-concurrency-and-async-issues)\n\n### ⛔ Request Changes\n\nAdd idempotency key validation before processing payment.",
+  "reviewComment": "Adds retry logic to the payment webhook handler.\n\n### 🚧 Blockers\n\n1. **Missing idempotency check** - `src/webhooks/payment.ts:45` - Retries can cause duplicate charges [CHECK-BUG-002]\n\n### ⛔ Request Changes\n\nAdd idempotency key validation before processing payment.",
   "inlineComments": [
     {
       "path": "src/webhooks/payment.ts",
       "line": 45,
-      "body": "🚧 No idempotency check — retries will duplicate charges [CHECK-BUG-002](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/pr%3Areview%3Acorrectness.md#b-concurrency-and-async-issues)"
+      "body": "🚧 No idempotency check — retries will duplicate charges [CHECK-BUG-002]"
     }
   ]
 }
@@ -428,12 +406,12 @@ The `verdict` field drives the GitHub review event. An empty `reviewComment` mea
 ```json
 {
   "verdict": "approve",
-  "reviewComment": "Adds retry logic to the payment webhook handler.\n\n### 🙋‍♂️ Suggestions\n\n- `src/webhooks/payment.ts:62` - Consider exponential backoff for retries [CHECK-ARCH-002](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/pr%3Areview%3Aarchitecture.md#a-code-reuse-and-duplication)\n\n### 👍 Approve",
+  "reviewComment": "Adds retry logic to the payment webhook handler.\n\n### 🙋‍♂️ Suggestions\n\n- `src/webhooks/payment.ts:62` - Consider exponential backoff for retries [CHECK-ARCH-002]\n\n### 👍 Approve",
   "inlineComments": [
     {
       "path": "src/webhooks/payment.ts",
       "line": 62,
-      "body": "🙋‍♂️ Consider exponential backoff for retries [CHECK-ARCH-002](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/pr%3Areview%3Aarchitecture.md#a-code-reuse-and-duplication)"
+      "body": "🙋‍♂️ Consider exponential backoff for retries [CHECK-ARCH-002]"
     }
   ]
 }
@@ -441,22 +419,22 @@ The `verdict` field drives the GitHub review event. An empty `reviewComment` mea
 
 **reviewComment body template (ONLY when there are findings):**
 
-Every blocker, suggestion, and nitpick line ends with the rule code as a markdown link (e.g. `[CHECK-BUG-002](<rule-url>)`). `<rule-url>` is computed via §2.6 Rule-to-URL Mapping. If two agents flagged the same `(path, line)`, list all rule codes comma-separated inside a single bracket pair, each with its own URL (e.g. `[[CHECK-BUG-002](url-a), [CHECK-AI-002](url-b)]`). When the sub-agent emitted no `Rule:` field, omit the bracket suffix entirely.
+Every blocker, suggestion, and nitpick line ends with the **bare** rule code (e.g. `[CHECK-BUG-002]`). If two agents flagged the same `(path, line)`, list all codes comma-separated inside a single bracket pair (e.g. `[CHECK-BUG-002, CHECK-AI-002]`). Do NOT build markdown links — `code-review-action` resolves codes to links after submission (§2.6). When the sub-agent emitted no `Rule:` field, omit the bracket suffix entirely.
 
 ```markdown
 [1 factual sentence: what this PR changes — no quality judgment]
 
 ### 🚧 Blockers
 
-1. **[Title]** - `src/path/to/file.py:NN` - [Problem in 1 line] [CHECK-BUG-XXX](rule-url)
+1. **[Title]** - `src/path/to/file.py:NN` - [Problem in 1 line] [CHECK-BUG-XXX]
 
 ### 🙋‍♂️ Suggestions
 
-- `src/path/to/file.py:NN` - [Recommendation in 1 line] [CHECK-AI-XXX](rule-url)
+- `src/path/to/file.py:NN` - [Recommendation in 1 line] [CHECK-AI-XXX]
 
 ### 💡 Nitpicks
 
-- `src/path/to/file.py:NN` - [Optional fix in 1 line] [CHECK-CPLX-XXX](rule-url)
+- `src/path/to/file.py:NN` - [Optional fix in 1 line] [CHECK-CPLX-XXX]
 
 ### ⛔ Request Changes / ### 👍 Approve
 
@@ -471,7 +449,7 @@ Add inline comments for issues with specific code locations:
 - **🙋‍♂️ Suggestion** - Add if location is specific
 - **💡 Nitpicks** - Optional, can be in summary only
 
-Each inline comment: 1-2 sentences, start with severity emoji, end with the rule code as a markdown link resolved per §2.6 Rule-to-URL Mapping (e.g. `🚧 No idempotency check — retries will duplicate charges [CHECK-BUG-002](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/pr%3Areview%3Acorrectness.md#b-concurrency-and-async-issues)`).
+Each inline comment: 1-2 sentences, start with severity emoji, end with the **bare** rule code (e.g. `🚧 No idempotency check — retries will duplicate charges [CHECK-BUG-002]`). `code-review-action` resolves it to a link after submission (§2.6).
 
 ### Deduplication Rules
 
@@ -484,7 +462,7 @@ Each inline comment: 1-2 sentences, start with severity emoji, end with the rule
 - ALWAYS full paths for all file references (e.g., `src/history/kafka/consumer.py:66`, NOT `consumer.py:66`)
 - Direct, confident language
 - Clear verdict (rationale only when requesting changes)
-- Rule code as `[<CODE>](<rule-url>)` markdown-link suffix on every finding line (blocker, suggestion, nitpick) and every `inlineComments.body` — URL resolved per §2.6 Rule-to-URL Mapping; omit the suffix entirely when no rule code is available
+- Bare rule code `[<CODE>]` (or `[<CODE1>, <CODE2>]`) suffix on every finding line (blocker, suggestion, nitpick) and every `inlineComments.body` — `code-review-action` resolves codes to links (§2.6); omit the suffix entirely when no rule code is available
 
 ### Exclude
 
