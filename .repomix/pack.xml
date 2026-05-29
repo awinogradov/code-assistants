@@ -216,6 +216,7 @@ claude-plugins/
       plugin.json
     .release_notes/
       0.1.0.md
+      0.2.0.md
     agents/
       analyze-pr-commits.md
       analyze-staged-changes.md
@@ -20517,7 +20518,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -20619,6 +20620,37 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
 * bump version from 0.5.2 to 0.5.3 ([fbb517c](https://github.com/awinogradov/code-assistants/commit/fbb517caa44a906b30595437714396568f2124a8))
 * initial commit ([433c180](https://github.com/awinogradov/code-assistants/commit/433c180bd515189ebc447ec88ccea908e92ca3c9))
 * **plugin:** declare release.type claude-plugin ([3761e45](https://github.com/awinogradov/code-assistants/commit/3761e458df7c4adaadac3d46faa4cf7895ee993e))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/0.2.0.md">
+## [0.2.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v0.1.0...autopilot@v0.2.0) (2026-05-29)
+
+## Release Notes
+
+New Autopilot capabilities and repository visibility features that help with code reviews and development workflows.
+
+## ✨ What's New
+
+### Automatic codebase snapshots on merge
+Your repository now maintains an up-to-date snapshot of its entire codebase in `.repomix/pack.xml` that automatically refreshes with every merge to the main branch. This gives Claude instant access to your complete codebase structure without needing to scan files during conversations, making code reviews and architecture discussions significantly faster.
+
+The Autopilot plugin automatically uses these snapshots when available, falling back to live scanning only when needed. For repositories that want this capability, there's also a new `repomix-sync` action that helps propagate the snapshot workflow and configuration to other repos.
+
+<details><summary>Related issues</summary>
+
+- [#62: Run repomix pack on PR merge and commit snapshot to repo](https://github.com/awinogradov/code-assistants/issues/62)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #62 | [#106](https://github.com/awinogradov/code-assistants/pull/106) | @awinogradov |
+
+### Features
+
+* **repomix:** add pack-on-merge workflow and snapshot reader ([cfa4065](https://github.com/awinogradov/code-assistants/commit/cfa4065de142e776428ba65e9adaafa8c05e20f7))
 </file>
 
 <file path="claude-plugins/autopilot/agents/analyze-pr-commits.md">
@@ -28966,6 +28998,34 @@ Verification: Passed
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [0.2.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v0.1.0...autopilot@v0.2.0) (2026-05-29)
+
+## Release Notes
+
+New Autopilot capabilities and repository visibility features that help with code reviews and development workflows.
+
+## ✨ What's New
+
+### Automatic codebase snapshots on merge
+Your repository now maintains an up-to-date snapshot of its entire codebase in `.repomix/pack.xml` that automatically refreshes with every merge to the main branch. This gives Claude instant access to your complete codebase structure without needing to scan files during conversations, making code reviews and architecture discussions significantly faster.
+
+The Autopilot plugin automatically uses these snapshots when available, falling back to live scanning only when needed. For repositories that want this capability, there's also a new `repomix-sync` action that helps propagate the snapshot workflow and configuration to other repos.
+
+<details><summary>Related issues</summary>
+
+- [#62: Run repomix pack on PR merge and commit snapshot to repo](https://github.com/awinogradov/code-assistants/issues/62)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #62 | [#106](https://github.com/awinogradov/code-assistants/pull/106) | @awinogradov |
+
+### Features
+
+* **repomix:** add pack-on-merge workflow and snapshot reader ([cfa4065](https://github.com/awinogradov/code-assistants/commit/cfa4065de142e776428ba65e9adaafa8c05e20f7))
 ## 0.1.0 (2026-05-28)
 
 ## Release Notes
@@ -29088,14 +29148,14 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
   "release": {
     "type": "claude-plugin"
   },
-  "version": "0.1.0"
+  "version": "0.2.0"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v0.1.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v0.2.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -29462,7 +29522,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-0.1.0
+0.2.0
 </file>
 
 <file path="docs/agents-field.md">
