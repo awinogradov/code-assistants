@@ -10945,10 +10945,31 @@ import { describe, expect, test } from "bun:test";
 import { $ } from "bun";
 
 import { withTempRepo } from "../testHelpers.ts";
-import { emitMemberArtifacts, runCreate } from "./runCreate.ts";
+import { assertMonotonic, emitMemberArtifacts, runCreate } from "./runCreate.ts";
 
 async function writeJson(path: string, value: Record<string, unknown>): Promise<void> {
   await Bun.write(path, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+async function writePluginJson(repo: string, relPath: string, version: string): Promise<void> {
+  await mkdir(join(repo, relPath, ".claude-plugin"), { recursive: true });
+  await writeJson(join(repo, relPath, ".claude-plugin", "plugin.json"), {
+    name: "fixture-plugin",
+    version,
+  });
+}
+
+async function setMemberVersion(repo: string, relPath: string, version: string): Promise<void> {
+  await writeJson(join(repo, relPath, "package.json"), {
+    name: "@fixture/lib-a",
+    version,
+    release: { type: "lib-nodejs" },
+  });
+}
+
+async function writePyproject(repo: string, relPath: string, body: string): Promise<void> {
+  await mkdir(join(repo, relPath), { recursive: true });
+  await Bun.write(join(repo, relPath, "pyproject.toml"), body);
 }
 
 async function commitInPath(
@@ -11090,6 +11111,109 @@ describe("runCreate", () => {
       expect(changelog).toContain("# Changelog");
       expect(changelog).not.toContain("## GitHub Issues");
     }));
+
+  test("bases the next version on a manifest floor above the latest tag (#163)", () =>
+    withTempRepo(async (repo) => {
+      await setupFixture(repo);
+      // lib-a was manually bumped to 0.5.3 in plugin.json only — never tagged.
+      await writePluginJson(repo, "packages/lib-a", "0.5.3");
+      await $`git add .`.cwd(repo).quiet();
+      await $`git commit -m ${"chore(lib-a): add plugin manifest at 0.5.3"}`.cwd(repo).quiet();
+      await $`git tag lib-a@v0.1.0 HEAD`.cwd(repo).quiet();
+      await $`git tag lib-b@v0.1.0 HEAD`.cwd(repo).quiet();
+      await commitInPath(repo, "packages/lib-a", "f1.txt", "feat(lib-a): add foo");
+
+      const result = await runCreate({ cwd: repo });
+      const libA = result.releases.find((r) => r.member.name === "lib-a");
+      // minor bump from the 0.5.3 manifest floor, NOT from the 0.1.0 tag.
+      expect(libA?.newVersion).toBe("0.6.0");
+      expect(libA?.tag).toBe("lib-a@v0.6.0");
+      // previousVersion stays the raw tag so downstream git-range refs resolve.
+      expect(libA?.previousVersion).toBe("0.1.0");
+    }));
+
+  test("uses the package.json version as the floor when it exceeds the tag (#163)", () =>
+    withTempRepo(async (repo) => {
+      await setupFixture(repo);
+      await setMemberVersion(repo, "packages/lib-a", "0.5.0");
+      await $`git add .`.cwd(repo).quiet();
+      await $`git commit -m ${"chore(lib-a): bump to 0.5.0"}`.cwd(repo).quiet();
+      await $`git tag lib-a@v0.1.0 HEAD`.cwd(repo).quiet();
+      await $`git tag lib-b@v0.1.0 HEAD`.cwd(repo).quiet();
+      await commitInPath(repo, "packages/lib-a", "f1.txt", "fix(lib-a): bug");
+
+      const result = await runCreate({ cwd: repo });
+      const libA = result.releases.find((r) => r.member.name === "lib-a");
+      expect(libA?.newVersion).toBe("0.5.1"); // patch from 0.5.0 floor, not 0.1.1
+      expect(libA?.previousVersion).toBe("0.1.0");
+    }));
+
+  test("floors on the manifest version when the member has no tags (#163)", () =>
+    withTempRepo(async (repo) => {
+      await setupFixture(repo);
+      await setMemberVersion(repo, "packages/lib-a", "0.3.0");
+      await $`git add .`.cwd(repo).quiet();
+      await $`git commit -m ${"chore(lib-a): bump to 0.3.0"}`.cwd(repo).quiet();
+      // Tag only lib-b so lib-a has no tag of its own.
+      await $`git tag lib-b@v0.1.0 HEAD`.cwd(repo).quiet();
+      await commitInPath(repo, "packages/lib-a", "f1.txt", "feat(lib-a): add foo");
+
+      const result = await runCreate({ cwd: repo });
+      const libA = result.releases.find((r) => r.member.name === "lib-a");
+      expect(libA?.previousVersion).toBeNull();
+      expect(libA?.newVersion).toBe("0.4.0"); // minor from the 0.3.0 floor
+    }));
+
+  test("uses the pyproject [project] version as the floor when it exceeds the tag (#163)", () =>
+    withTempRepo(async (repo) => {
+      await setupFixture(repo);
+      await writePyproject(repo, "packages/lib-a", '[project]\nname = "lib-a"\nversion = "0.5.0"\n');
+      await $`git add .`.cwd(repo).quiet();
+      await $`git commit -m ${"chore(lib-a): add pyproject at 0.5.0"}`.cwd(repo).quiet();
+      await $`git tag lib-a@v0.1.0 HEAD`.cwd(repo).quiet();
+      await $`git tag lib-b@v0.1.0 HEAD`.cwd(repo).quiet();
+      await commitInPath(repo, "packages/lib-a", "f1.txt", "feat(lib-a): add foo");
+
+      const result = await runCreate({ cwd: repo });
+      const libA = result.releases.find((r) => r.member.name === "lib-a");
+      expect(libA?.newVersion).toBe("0.6.0"); // minor from the 0.5.0 pyproject floor
+    }));
+
+  test("ignores a version in a later table when [project] declares none (#163)", () =>
+    withTempRepo(async (repo) => {
+      await setupFixture(repo);
+      // [project] uses a dynamic version; the [tool.poetry] version must NOT leak.
+      await writePyproject(
+        repo,
+        "packages/lib-a",
+        '[project]\nname = "lib-a"\ndynamic = ["version"]\n\n[tool.poetry]\nversion = "9.9.9"\n',
+      );
+      await $`git add .`.cwd(repo).quiet();
+      await $`git commit -m ${"chore(lib-a): add dynamic pyproject"}`.cwd(repo).quiet();
+      await $`git tag lib-a@v0.1.0 HEAD`.cwd(repo).quiet();
+      await $`git tag lib-b@v0.1.0 HEAD`.cwd(repo).quiet();
+      await commitInPath(repo, "packages/lib-a", "f1.txt", "feat(lib-a): add foo");
+
+      const result = await runCreate({ cwd: repo });
+      const libA = result.releases.find((r) => r.member.name === "lib-a");
+      // package.json is 0.0.0 and [project] has no version, so the 0.1.0 tag
+      // floors the bump — the 9.9.9 in [tool.poetry] is ignored.
+      expect(libA?.newVersion).toBe("0.2.0");
+    }));
+});
+
+describe("assertMonotonic", () => {
+  test("throws when the computed version does not exceed the base", () => {
+    expect(() => assertMonotonic("0.5.3", "0.5.3")).toThrow("not greater than");
+  });
+
+  test("passes when the computed version exceeds the base", () => {
+    expect(() => assertMonotonic("0.5.3", "0.6.0")).not.toThrow();
+  });
+
+  test("is a no-op when there is no base (first release)", () => {
+    expect(() => assertMonotonic(null, "0.1.0")).not.toThrow();
+  });
 });
 </file>
 
@@ -11123,6 +11247,9 @@ import {
   generateChangelog,
   insertTicketsInRelease,
   processTickets,
+  readPackageJsonVersion,
+  readPluginVersions,
+  readPyprojectVersion,
 } from "../release.ts";
 import { updateVersionFiles } from "../prepareRelease.ts";
 import { refreshReleaseBadge } from "../updateReleaseBadge.ts";
@@ -11196,10 +11323,18 @@ export async function runCreate(options: RunCreateOptions = {}): Promise<RunCrea
   const manifests = await loadMemberManifests(discovery.members);
   const naturalBumps = new Map<string, BumpLevel>();
   const previousVersions = new Map<string, string | null>();
+  const versionBases = new Map<string, string | null>();
 
   for (const member of discovery.members) {
     const previous = await getLatestMemberVersion(member.name, cwd);
     previousVersions.set(member.name, previous);
+
+    // Base the next version on the highest version already declared anywhere
+    // for this member — the latest tag OR a manually-bumped manifest — so a
+    // manual bump is never silently regressed (issue #163). previousVersions
+    // keeps the raw tag because it is consumed downstream as a git ref.
+    const floor = await readMemberVersionFloor(member.path);
+    versionBases.set(member.name, maxVersion(previous, floor));
 
     const since = await getLatestMemberTagReachable(member.name, cwd);
     if (!(await memberHasChanges({ cwd, path: member.relPath, since }))) {
@@ -11224,7 +11359,10 @@ export async function runCreate(options: RunCreateOptions = {}): Promise<RunCrea
     if (!bump) continue;
 
     const previous = previousVersions.get(member.name) ?? null;
-    const newVersion = nextVersion(previous, bump);
+    // `base` (tag ⊔ manifest floor) drives the numeric bump; `previousVersion`
+    // stays the raw tag so downstream git-range refs remain valid (issue #163).
+    const base = versionBases.get(member.name) ?? previous;
+    const newVersion = nextVersion(base, bump);
     const branch = renderBranch(branchTemplate, member.name, newVersion);
     const tag = memberVersionTag(member.name, newVersion);
 
@@ -11274,12 +11412,62 @@ async function computeNaturalBump(
   return result.type;
 }
 
-function nextVersion(previous: string | null, bump: BumpLevel): string {
-  const base = previous ?? "0.0.0";
-  const next = semver.inc(base, bump);
-  if (!next) {
-    throw new Error(`Failed to compute next version from ${base} with bump ${bump}`);
+/**
+ * Pick the greater of two semver strings, tolerating nulls and invalid input.
+ * Invalid or `null` operands are treated as absent so a malformed version can
+ * never win the comparison.
+ */
+function maxVersion(a: string | null, b: string | null): string | null {
+  const left = a && semver.valid(a) ? a : null;
+  const right = b && semver.valid(b) ? b : null;
+  if (!left) return right;
+  if (!right) return left;
+  return semver.gte(left, right) ? left : right;
+}
+
+/**
+ * Compute a member's version floor: the highest valid semver declared across
+ * the same files {@link updateVersionFiles} writes — `package.json`,
+ * `pyproject.toml` `[project]`, and every `.claude-plugin/plugin.json`. This is
+ * the seam that closes issue #163: a manual bump in any of these files is
+ * respected instead of being overwritten by a tag-derived version. The per-file
+ * readers are shared with {@link getCurrentVersion} so the parsing stays in one
+ * place.
+ *
+ * `uv.lock` is omitted (it always mirrors `pyproject [project]`) and so is the
+ * plain `version` file (auto-written each release, not a manual source of
+ * truth). Returns `null` when no version-bearing file declares one.
+ */
+async function readMemberVersionFloor(memberPath: string): Promise<string | null> {
+  const candidates: (string | null)[] = [
+    await readPackageJsonVersion(memberPath),
+    await readPyprojectVersion(memberPath),
+    ...(await readPluginVersions(memberPath)),
+  ];
+
+  return candidates.reduce<string | null>(maxVersion, null);
+}
+
+/**
+ * Assert a freshly computed version strictly exceeds the base it was derived
+ * from. Defensive post-condition: with {@link semver.inc} this never trips for
+ * a real bump, but it is exported so the invariant is unit-testable and any
+ * future change to bump computation fails loudly instead of silently
+ * regressing a published version (issue #163).
+ */
+export function assertMonotonic(base: string | null, next: string): void {
+  if (base && !semver.gt(next, base)) {
+    throw new Error(`Computed version ${next} is not greater than previous ${base}`);
   }
+}
+
+function nextVersion(base: string | null, bump: BumpLevel): string {
+  const from = base ?? "0.0.0";
+  const next = semver.inc(from, bump);
+  if (!next) {
+    throw new Error(`Failed to compute next version from ${from} with bump ${bump}`);
+  }
+  assertMonotonic(base, next);
   return next;
 }
 
@@ -16641,6 +16829,9 @@ import {
   getCurrentVersion,
   insertTicketsInRelease,
   main,
+  readPackageJsonVersion,
+  readPluginVersions,
+  readPyprojectVersion,
   startOfLastReleasePattern,
 } from "./release.ts";
 import { createCommit, createInitialCommitAndTag, withTempRepo } from "./testHelpers.ts";
@@ -17066,6 +17257,71 @@ describe("release CLI", () => {
       }));
   });
 });
+
+describe("version-file readers", () => {
+  describe("readPackageJsonVersion()", () => {
+    test("returns the version field", () =>
+      withTempRepo(async (repo) => {
+        await createPackageJson(repo, "1.4.0");
+        expect(await readPackageJsonVersion(repo)).toBe("1.4.0");
+      }));
+
+    test("returns null when the file is absent", () =>
+      withTempRepo(async (repo) => {
+        expect(await readPackageJsonVersion(repo)).toBeNull();
+      }));
+
+    test("returns null when no version field is present", () =>
+      withTempRepo(async (repo) => {
+        await Bun.write(join(repo, "package.json"), JSON.stringify({ name: "x" }));
+        expect(await readPackageJsonVersion(repo)).toBeNull();
+      }));
+  });
+
+  describe("readPluginVersions()", () => {
+    test("collects versions from plugin manifests", () =>
+      withTempRepo(async (repo) => {
+        await createPluginJson(repo, "my-plugin", "3.1.0");
+        expect(await readPluginVersions(repo)).toEqual(["3.1.0"]);
+      }));
+
+    test("returns an empty array when none exist", () =>
+      withTempRepo(async (repo) => {
+        expect(await readPluginVersions(repo)).toEqual([]);
+      }));
+  });
+
+  describe("readPyprojectVersion()", () => {
+    test("reads the [project] version (double quotes)", () =>
+      withTempRepo(async (repo) => {
+        await createPyprojectToml(repo, "0.7.0");
+        expect(await readPyprojectVersion(repo)).toBe("0.7.0");
+      }));
+
+    test("reads a single-quoted [project] version", () =>
+      withTempRepo(async (repo) => {
+        await Bun.write(
+          join(repo, "pyproject.toml"),
+          "[project]\nname = 'x'\nversion = '0.8.0'\n",
+        );
+        expect(await readPyprojectVersion(repo)).toBe("0.8.0");
+      }));
+
+    test("does not read a version from a later table when [project] has none", () =>
+      withTempRepo(async (repo) => {
+        await Bun.write(
+          join(repo, "pyproject.toml"),
+          '[project]\nname = "x"\ndynamic = ["version"]\n\n[tool.poetry]\nversion = "9.9.9"\n',
+        );
+        expect(await readPyprojectVersion(repo)).toBeNull();
+      }));
+
+    test("returns null when the file is absent", () =>
+      withTempRepo(async (repo) => {
+        expect(await readPyprojectVersion(repo)).toBeNull();
+      }));
+  });
+});
 </file>
 
 <file path=".github/actions/release-action/src/release.ts">
@@ -17179,6 +17435,49 @@ export const changelogHeader =
   "# Changelog\n\nAll notable changes to this project will be documented in this file. " +
   "See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.\n\n";
 
+/** Read `.version` from a directory's `package.json`, or `null` when absent. */
+export async function readPackageJsonVersion(dir: string): Promise<string | null> {
+  const file = Bun.file(join(dir, "package.json"));
+  if (!(await file.exists())) return null;
+  const pkg = (await file.json()) as { version?: unknown };
+  return typeof pkg.version === "string" ? pkg.version : null;
+}
+
+/**
+ * Read the `version` from every `**\/.claude-plugin/plugin.json` under a
+ * directory (`.claude-plugin` is a dot dir, hence `dot: true`), skipping
+ * `node_modules` so a dependency's manifest is never picked up.
+ */
+export async function readPluginVersions(dir: string): Promise<string[]> {
+  const versions: string[] = [];
+  const glob = new Glob("**/.claude-plugin/plugin.json");
+  for await (const match of glob.scan({ cwd: dir, dot: true, absolute: true })) {
+    if (match.includes("node_modules")) continue;
+    const plugin = (await Bun.file(match).json()) as { version?: unknown };
+    if (typeof plugin.version === "string") versions.push(plugin.version);
+  }
+  return versions;
+}
+
+/**
+ * Read the `version` from a directory's `pyproject.toml` `[project]` table, or
+ * `null`. The lookup is bounded to the `[project]` section so a missing version
+ * there cannot borrow a `version` key from a later table (e.g. `[tool.poetry]`).
+ * Both quote styles are accepted.
+ */
+export async function readPyprojectVersion(dir: string): Promise<string | null> {
+  const file = Bun.file(join(dir, "pyproject.toml"));
+  if (!(await file.exists())) return null;
+  const content = await file.text();
+  const start = content.search(/^\[project\]/m);
+  if (start === -1) return null;
+  const rest = content.slice(start + "[project]".length);
+  const nextSection = rest.search(/^\[/m);
+  const section = nextSection === -1 ? rest : rest.slice(0, nextSection);
+  const match = section.match(/^[ \t]*version\s*=\s*["']([^"']+)["']/m);
+  return match ? match[1] : null;
+}
+
 /**
  * Get current version using a fallback chain
  *
@@ -17206,33 +17505,22 @@ export async function getCurrentVersion(cwd: string): Promise<VersionResult> {
   }
 
   // 2. package.json
-  const pkgFile = Bun.file(join(cwd, "package.json"));
-  if (await pkgFile.exists()) {
-    const pkg = (await pkgFile.json()) as { version?: string };
-    if (pkg.version) {
-      return { version: pkg.version, source: "package-json" };
-    }
+  const pkgVersion = await readPackageJsonVersion(cwd);
+  if (pkgVersion) {
+    return { version: pkgVersion, source: "package-json" };
   }
 
   // 3. First plugin.json found via glob (skip node_modules to avoid picking
   // a dependency's plugin.json instead of one belonging to this repo)
-  const glob = new Glob("**/.claude-plugin/plugin.json");
-  for await (const match of glob.scan({ cwd, dot: true, absolute: true })) {
-    if (match.includes("node_modules")) continue;
-    const plugin = (await Bun.file(match).json()) as { version?: string };
-    if (plugin.version) {
-      return { version: plugin.version, source: "plugin-json" };
-    }
+  const [pluginVersion] = await readPluginVersions(cwd);
+  if (pluginVersion) {
+    return { version: pluginVersion, source: "plugin-json" };
   }
 
   // 4. pyproject.toml
-  const pyFile = Bun.file(join(cwd, "pyproject.toml"));
-  if (await pyFile.exists()) {
-    const content = await pyFile.text();
-    const versionMatch = content.match(/^\[project\][\s\S]*?^version\s*=\s*["']([^"']+)["']/m);
-    if (versionMatch?.[1]) {
-      return { version: versionMatch[1], source: "pyproject-toml" };
-    }
+  const pyVersion = await readPyprojectVersion(cwd);
+  if (pyVersion) {
+    return { version: pyVersion, source: "pyproject-toml" };
   }
 
   // No manifest found — derive version from git tags, default to 0.0.0
