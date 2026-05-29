@@ -141,7 +141,7 @@ export function parseConfig(): RunClaudeConfig {
       process.env.EXECUTION_OUTPUT_FILE ??
       `${process.env.RUNNER_TEMP ?? "/tmp"}/claude-execution-output.json`,
     timeoutMs: timeoutMinutes * 60 * 1000,
-    modelOverrides: parseModelOverrides(process.env.REVIEW_MODEL_OVERRIDES),
+    modelOverrides: parseModelOverrides(process.env.REVIEW_MODEL_OVERRIDES, log),
   };
 }
 
@@ -286,20 +286,25 @@ const modelOverridesSchema = z.record(z.string(), z.string());
  * A malformed value yields an empty map (never blocks the review) but emits a
  * warning so an operator knows their overrides were ignored.
  */
-export function parseModelOverrides(raw: string | undefined): Record<string, string> {
+export function parseModelOverrides(
+  raw: string | undefined,
+  logger?: pino.Logger
+): Record<string, string> {
   if (!raw) return {};
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    log?.warn("Ignoring REVIEW_MODEL_OVERRIDES: not valid JSON.");
+    logger?.warn("Ignoring REVIEW_MODEL_OVERRIDES: not valid JSON.");
     return {};
   }
 
   const result = modelOverridesSchema.safeParse(parsed);
   if (!result.success) {
-    log?.warn("Ignoring REVIEW_MODEL_OVERRIDES: expected a JSON object of category→model strings.");
+    logger?.warn(
+      "Ignoring REVIEW_MODEL_OVERRIDES: expected a JSON object of category→model strings."
+    );
     return {};
   }
   return result.data;

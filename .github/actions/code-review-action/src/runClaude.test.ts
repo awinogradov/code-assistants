@@ -45,6 +45,16 @@ describe("parseModelOverrides", () => {
     expect(parseModelOverrides('"a string"')).toEqual({});
     expect(parseModelOverrides("42")).toEqual({});
   });
+
+  test("warns via the injected logger when the value is malformed", () => {
+    const warnings: string[] = [];
+    const logger = { warn: (msg: string) => warnings.push(msg) } as unknown as Parameters<
+      typeof parseModelOverrides
+    >[1];
+    parseModelOverrides("{bad", logger);
+    parseModelOverrides('{"x":3}', logger);
+    expect(warnings).toHaveLength(2);
+  });
 });
 
 describe("safeParseJson", () => {
