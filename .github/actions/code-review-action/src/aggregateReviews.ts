@@ -68,11 +68,8 @@ export function aggregateReviews(reviews: AgentReview[]): ReviewFinding[] {
     byLocation.set(key, existing ? mergeFindings(existing, finding) : finding);
   }
 
-  return [...byLocation.values(), ...standalone]
-    .map((finding, index) => ({ finding, index }))
-    .sort(
-      (a, b) =>
-        severityRank[a.finding.severity] - severityRank[b.finding.severity] || a.index - b.index,
-    )
-    .map(({ finding }) => finding);
+  // Array.sort is stable (ES2019+), so equal-severity findings keep insertion order.
+  return [...byLocation.values(), ...standalone].sort(
+    (a, b) => severityRank[a.severity] - severityRank[b.severity],
+  );
 }

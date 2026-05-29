@@ -1,21 +1,23 @@
 /**
  * Tests for reviewFanout.ts pure helpers.
  *
- * SDK-driven invocations (`runReviewFanout`, `runSubagent`) aren't covered here
- * because mocking the Agent SDK's streaming `query()` is brittle and the logic
- * inside those functions is a thin wrapper over the SDK. They're exercised by
- * the end-to-end review in CI.
+ * The SDK-driven `runReviewFanout` / `runSubagent` wrappers aren't covered here
+ * (mocking the streaming `query()` is brittle), but `collectStructuredFindings`
+ * takes a plain async iterable, so its parse/fail-open branches are tested below.
  */
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import type pino from "pino";
 
 import type { FanoutContext, SubagentResult } from "./reviewFanout.ts";
 import {
   buildFanoutStats,
   buildSubagentPrompt,
+  collectStructuredFindings,
   detectStack,
   loadReviewAgents,
   parseAgentFrontmatter,
@@ -24,6 +26,24 @@ import {
   toAgentReviews,
 } from "./reviewFanout.ts";
 import type { ReviewFinding } from "./reviewFindings.ts";
+
+/** No-op logger satisfying the pino surface `logMessage` touches. */
+const noopLog = {
+  info() {},
+  debug() {},
+  warn() {},
+  error() {},
+  trace() {},
+  fatal() {},
+  child() {
+    return noopLog;
+  },
+} as unknown as pino.Logger;
+
+/** Yield the given messages as the SDK stream `collectStructuredFindings` consumes. */
+async function* streamOf(...messages: unknown[]): AsyncGenerator<SDKMessage> {
+  for (const message of messages) yield message as SDKMessage;
+}
 
 describe("buildFanoutStats", () => {
   const result = (
@@ -133,6 +153,66 @@ describe("toAgentReviews", () => {
         },
       ]),
     ).toEqual([]);
+  });
+
+  test("leaves a subagent_type without the review prefix unchanged as the category", () => {
+    expect(toAgentReviews([{ subagent_type: "weird-name", findings: [], duration_ms: 1 }])).toEqual(
+      [{ category: "weird-name", findings: [] }],
+    );
+  });
+});
+
+describe("collectStructuredFindings", () => {
+  const validFinding: ReviewFinding = {
+    severity: "blocker",
+    file: "src/a.ts",
+    line: 1,
+    rule: "CHECK-BUG-001",
+    title: "t",
+    detail: "d",
+  };
+
+  // logResult (via logMessage) reads permission_denials.length, so the mock
+  // result messages carry an empty array alongside the fields under test.
+  const resultMessage = (fields: Record<string, unknown>): unknown => ({
+    type: "result",
+    permission_denials: [],
+    ...fields,
+  });
+
+  test("returns parsed findings from a successful result", async () => {
+    const result = await collectStructuredFindings(
+      noopLog,
+      streamOf(
+        resultMessage({ subtype: "success", structured_output: { findings: [validFinding] } }),
+      ),
+    );
+    expect(result).toEqual({ findings: [validFinding] });
+  });
+
+  test("skips the dimension when no result message arrives", async () => {
+    const result = await collectStructuredFindings(noopLog, streamOf());
+    expect(result.findings).toEqual([]);
+    expect(result.error).toContain("No result message");
+  });
+
+  test("skips the dimension on a non-success result subtype", async () => {
+    const result = await collectStructuredFindings(
+      noopLog,
+      streamOf(resultMessage({ subtype: "error_max_structured_output_retries" })),
+    );
+    expect(result.findings).toEqual([]);
+    expect(result.error).toContain("error_max_structured_output_retries");
+  });
+
+  test("records the zod issues and raw payload on a schema mismatch", async () => {
+    const result = await collectStructuredFindings(
+      noopLog,
+      streamOf(resultMessage({ subtype: "success", structured_output: { findings: "nope" } })),
+    );
+    expect(result.findings).toEqual([]);
+    expect(result.error).toContain("findings");
+    expect(result.raw).toBe(JSON.stringify({ findings: "nope" }));
   });
 });
 

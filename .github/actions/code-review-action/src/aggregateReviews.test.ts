@@ -83,4 +83,18 @@ describe("aggregateReviews", () => {
     ]);
     expect(merged.map((f) => f.title)).toEqual(["first", "second"]);
   });
+
+  test("orders across severity buckets while preserving order within each", () => {
+    const merged = aggregateReviews([
+      review("a", [
+        finding({ severity: "nitpick", line: 1, title: "n1" }),
+        finding({ severity: "blocker", line: 2, title: "b1" }),
+        finding({ severity: "suggestion", line: 3, title: "s1" }),
+        finding({ severity: "blocker", line: 4, title: "b2" }),
+        finding({ severity: "nitpick", line: 5, title: "n2" }),
+        finding({ severity: "suggestion", line: 6, title: "s2" }),
+      ]),
+    ]);
+    expect(merged.map((f) => f.title)).toEqual(["b1", "b2", "s1", "s2", "n1", "n2"]);
+  });
 });
