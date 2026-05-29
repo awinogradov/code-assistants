@@ -1,7 +1,7 @@
 /**
  * Tests for runSummaryFooter.ts.
- * Covers RUN_SUMMARY parsing (fail-open), footer rendering (core vs fan-out,
- * number formatting, markers), and footer stripping (round-trip, missing markers).
+ * Covers RUN_SUMMARY parsing (fail-open), footer rendering (number formatting,
+ * markers), and footer stripping (round-trip, missing markers).
  */
 import { describe, expect, test } from "bun:test";
 
@@ -14,7 +14,6 @@ import {
 
 const coreSummary: RunSummary = {
   mode: "review",
-  fanout_ms: 1200,
   model_ms: 34000,
   tokens_in: 500,
   tokens_out: 100,
@@ -23,17 +22,6 @@ const coreSummary: RunSummary = {
   cost_usd: 0.35,
   num_turns: 3,
   tool_round_trips: 10,
-};
-
-const fanoutSummary: RunSummary = {
-  ...coreSummary,
-  agent_count: 12,
-  failed_count: 1,
-  parallel_speedup: 8.5,
-  agent_durations: [
-    { category: "common-sense", duration_ms: 158000 },
-    { category: "surface-testing", duration_ms: 127000 },
-  ],
 };
 
 describe("parseRunSummary", () => {
@@ -59,12 +47,8 @@ describe("parseRunSummary", () => {
     expect(parseRunSummary(JSON.stringify({ ...coreSummary, cost_usd: "0.35" }))).toBeUndefined();
   });
 
-  test("parses a valid core summary", () => {
+  test("parses a valid summary", () => {
     expect(parseRunSummary(JSON.stringify(coreSummary))).toEqual(coreSummary);
-  });
-
-  test("preserves optional fan-out fields when present", () => {
-    expect(parseRunSummary(JSON.stringify(fanoutSummary))).toEqual(fanoutSummary);
   });
 });
 
@@ -84,36 +68,17 @@ describe("renderRunSummaryFooter", () => {
   test("formats durations as seconds and cost as USD", () => {
     const footer = renderRunSummaryFooter(coreSummary);
     expect(footer).toContain("| Model time | 34.0s |");
-    expect(footer).toContain("| Fan-out time | 1.2s |");
     expect(footer).toContain("| Cost (USD) | $0.35 |");
     expect(footer).toContain("| Tokens in / out | 500 / 100 |");
     expect(footer).toContain("| Cache read / write | 400 / 20 |");
   });
 
-  test("omits fan-out rows for a core-only summary", () => {
+  test("renders no fan-out rows (single-pass review)", () => {
     const footer = renderRunSummaryFooter(coreSummary);
+    expect(footer).not.toContain("Fan-out time");
     expect(footer).not.toContain("Agents");
     expect(footer).not.toContain("Parallel speedup");
-  });
-
-  test("renders fan-out rows with the multiplication sign when present", () => {
-    const footer = renderRunSummaryFooter(fanoutSummary);
-    expect(footer).toContain("| Agents | 12 |");
-    expect(footer).toContain("| Failed agents | 1 |");
-    expect(footer).toContain("| Parallel speedup | 8.5× |");
-  });
-
-  test("renders the slowest-agents row as a category/seconds list", () => {
-    expect(renderRunSummaryFooter(fanoutSummary)).toContain(
-      "| Slowest agents | common-sense 158.0s · surface-testing 127.0s |",
-    );
-  });
-
-  test("omits the slowest-agents row when durations are absent or empty", () => {
-    expect(renderRunSummaryFooter(coreSummary)).not.toContain("Slowest agents");
-    expect(renderRunSummaryFooter({ ...fanoutSummary, agent_durations: [] })).not.toContain(
-      "Slowest agents",
-    );
+    expect(footer).not.toContain("Slowest agents");
   });
 });
 
@@ -137,7 +102,8 @@ describe("stripRunSummaryFooter", () => {
   test("two bodies with different metrics strip to the same content", () => {
     const reviewComment = "### Review\n\nLGTM";
     const first = reviewComment + renderRunSummaryFooter(coreSummary);
-    const second = reviewComment + renderRunSummaryFooter(fanoutSummary);
+    const second =
+      reviewComment + renderRunSummaryFooter({ ...coreSummary, cost_usd: 0.99, model_ms: 1 });
     expect(stripRunSummaryFooter(first)).toBe(stripRunSummaryFooter(second));
   });
 });
