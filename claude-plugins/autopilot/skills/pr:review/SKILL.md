@@ -1,7 +1,7 @@
 ---
 name: pr:review
 description: Review a pull request and provide constructive feedback with structured verdict. Used by awinogradov/code-review-action
-argument-hint: "REPO: <owner/repo> PR_NUMBER: <number> REVIEWER: <bot-login> PR_AUTHOR: <author-login>"
+argument-hint: "REPO: <owner/repo> PR_NUMBER: <number> REVIEWER: <bot-login> PR_AUTHOR: <author-login> RULES_DOC_URL: <url>"
 allowed-tools:
   - Read
   - Glob
@@ -23,7 +23,7 @@ Arguments: `$ARGUMENTS`
 
 Expected form (typically supplied by `awinogradov/code-review-action`):
 
-- `REPO: <owner/repo> PR_NUMBER: <number> REVIEWER: <bot-login> PR_AUTHOR: <author-login>`
+- `REPO: <owner/repo> PR_NUMBER: <number> REVIEWER: <bot-login> PR_AUTHOR: <author-login> RULES_DOC_URL: <url>`
 
 ## Input resolution
 
@@ -31,6 +31,7 @@ Expected form (typically supplied by `awinogradov/code-review-action`):
 - **`PR_NUMBER`** — `$ARGUMENTS` → `gh pr view --json number --jq .number` for the current branch.
 - **`REVIEWER`** — `$ARGUMENTS` → `gh api user --jq .login` (authenticated user).
 - **`PR_AUTHOR`** — `$ARGUMENTS` → `gh pr view --json author --jq .author.login`.
+- **`RULES_DOC_URL`** — `$ARGUMENTS` → fall back to `https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/pr%3Areview/SKILL.md` when absent (e.g. a manual local run). This is the base URL for the `CHECK-` rule links in §2.5.
 
 Do NOT prompt the user. Return structured output with an explicit error if inputs cannot be resolved.
 
@@ -159,7 +160,7 @@ These rules are mandatory. Apply them exactly as written. Exceptions are only th
 
 ### 2.3 Review Checks
 
-Each check below carries an HTML anchor so `code-review-action` can link its `CHECK-` code back to this file. Keep each `<a id="...">` immediately above its rule.
+Each check below carries an HTML anchor so this skill can link its `CHECK-` code back to this file (see §2.5). Keep each `<a id="...">` immediately above its rule.
 
 #### Correctness & Bugs
 
@@ -639,12 +640,15 @@ Feature/fix PRs affecting users should include a `**Release notes:**` section in
 3. Order the merged list by severity: blockers first, then suggestions, then nitpicks.
 4. Proceed to Phase 3 with this list.
 
-### 2.5 Rule Codes (resolved to links by the action)
+### 2.5 Rule Codes
 
-Emit rule codes **bare** — `[CHECK-BUG-002]`, or `[CHECK-BUG-002, CHECK-AI-002]` for a shared location. `code-review-action` rewrites each bare code into a markdown link to this skill file's anchor (`src/ruleUrls.ts`) after the model returns its structured output. The model MUST therefore:
+Emit each rule code as a markdown link to its anchor in this file, using `RULES_DOC_URL` (from Input resolution) as the base:
 
-- Emit bare codes only — never construct `https://github.com/...` links.
+- Single code → `[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002)`.
+- Shared location (multiple codes) → `[[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002), [CHECK-AI-002](<RULES_DOC_URL>#CHECK-AI-002)]`.
 - Append nothing when a finding has no rule code (do not emit `[UNSPECIFIED]`).
+
+Substitute the resolved `RULES_DOC_URL` value verbatim — do not invent a different host or path. The `#CHECK-...` fragment must match the code exactly so it lands on the right anchor.
 
 Map `severity` to its emoji when rendering in Phase 3: `blocker` → 🚧, `suggestion` → 🙋‍♂️, `nitpick` → 💡. The emoji stays first so downstream severity filters keep working.
 
@@ -734,12 +738,12 @@ The `verdict` field drives the GitHub review event. An empty `reviewComment` mea
 ```json
 {
   "verdict": "requestChanges",
-  "reviewComment": "Adds retry logic to the payment webhook handler.\n\n### 🚧 Blockers\n\n1. **Missing idempotency check** - `src/webhooks/payment.ts:45` - Retries can cause duplicate charges [CHECK-BUG-002]\n\n### ⛔ Request Changes\n\nAdd idempotency key validation before processing payment.",
+  "reviewComment": "Adds retry logic to the payment webhook handler.\n\n### 🚧 Blockers\n\n1. **Missing idempotency check** - `src/webhooks/payment.ts:45` - Retries can cause duplicate charges [CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002)\n\n### ⛔ Request Changes\n\nAdd idempotency key validation before processing payment.",
   "inlineComments": [
     {
       "path": "src/webhooks/payment.ts",
       "line": 45,
-      "body": "🚧 No idempotency check — retries will duplicate charges [CHECK-BUG-002]"
+      "body": "🚧 No idempotency check — retries will duplicate charges [CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002)"
     }
   ]
 }
@@ -750,12 +754,12 @@ The `verdict` field drives the GitHub review event. An empty `reviewComment` mea
 ```json
 {
   "verdict": "approve",
-  "reviewComment": "Adds retry logic to the payment webhook handler.\n\n### 🙋‍♂️ Suggestions\n\n- `src/webhooks/payment.ts:62` - Consider exponential backoff for retries [CHECK-ARCH-002]\n\n### 👍 Approve",
+  "reviewComment": "Adds retry logic to the payment webhook handler.\n\n### 🙋‍♂️ Suggestions\n\n- `src/webhooks/payment.ts:62` - Consider exponential backoff for retries [CHECK-ARCH-002](<RULES_DOC_URL>#CHECK-ARCH-002)\n\n### 👍 Approve",
   "inlineComments": [
     {
       "path": "src/webhooks/payment.ts",
       "line": 62,
-      "body": "🙋‍♂️ Consider exponential backoff for retries [CHECK-ARCH-002]"
+      "body": "🙋‍♂️ Consider exponential backoff for retries [CHECK-ARCH-002](<RULES_DOC_URL>#CHECK-ARCH-002)"
     }
   ]
 }
@@ -763,22 +767,22 @@ The `verdict` field drives the GitHub review event. An empty `reviewComment` mea
 
 **reviewComment body template (ONLY when there are findings):**
 
-Every blocker, suggestion, and nitpick line ends with the **bare** rule code (e.g. `[CHECK-BUG-002]`). If two checks flagged the same `(path, line)`, list all codes comma-separated inside a single bracket pair (e.g. `[CHECK-BUG-002, CHECK-AI-002]`). Do NOT build markdown links — `code-review-action` resolves codes to links after submission (§2.5). When a finding has no rule code, omit the bracket suffix entirely.
+Every blocker, suggestion, and nitpick line ends with the rule code rendered as a markdown link per §2.5 (e.g. `[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002)`). If two checks flagged the same `(path, line)`, render the merged form `[[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002), [CHECK-AI-002](<RULES_DOC_URL>#CHECK-AI-002)]`. Build the links yourself from `RULES_DOC_URL`. When a finding has no rule code, omit the suffix entirely.
 
 ```markdown
 [1 factual sentence: what this PR changes — no quality judgment]
 
 ### 🚧 Blockers
 
-1. **[Title]** - `src/path/to/file.py:NN` - [Problem in 1 line] [CHECK-BUG-XXX]
+1. **[Title]** - `src/path/to/file.py:NN` - [Problem in 1 line] [CHECK-BUG-XXX](<RULES_DOC_URL>#CHECK-BUG-XXX)
 
 ### 🙋‍♂️ Suggestions
 
-- `src/path/to/file.py:NN` - [Recommendation in 1 line] [CHECK-AI-XXX]
+- `src/path/to/file.py:NN` - [Recommendation in 1 line] [CHECK-AI-XXX](<RULES_DOC_URL>#CHECK-AI-XXX)
 
 ### 💡 Nitpicks
 
-- `src/path/to/file.py:NN` - [Optional fix in 1 line] [CHECK-CPLX-XXX]
+- `src/path/to/file.py:NN` - [Optional fix in 1 line] [CHECK-CPLX-XXX](<RULES_DOC_URL>#CHECK-CPLX-XXX)
 
 ### ⛔ Request Changes / ### 👍 Approve
 
@@ -793,7 +797,7 @@ Add inline comments for issues with specific code locations:
 - **🙋‍♂️ Suggestion** - Add if location is specific
 - **💡 Nitpicks** - Optional, can be in summary only
 
-Each inline comment: 1-2 sentences, start with severity emoji, end with the **bare** rule code (e.g. `🚧 No idempotency check — retries will duplicate charges [CHECK-BUG-002]`). `code-review-action` resolves it to a link after submission (§2.5).
+Each inline comment: 1-2 sentences, start with severity emoji, end with the rule code rendered as a markdown link per §2.5 (e.g. `🚧 No idempotency check — retries will duplicate charges [CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002)`).
 
 ### Deduplication Rules
 
@@ -806,7 +810,7 @@ Each inline comment: 1-2 sentences, start with severity emoji, end with the **ba
 - ALWAYS full paths for all file references (e.g., `src/history/kafka/consumer.py:66`, NOT `consumer.py:66`)
 - Direct, confident language
 - Clear verdict (rationale only when requesting changes)
-- Bare rule code `[<CODE>]` (or `[<CODE1>, <CODE2>]`) suffix on every finding line (blocker, suggestion, nitpick) and every `inlineComments.body` — `code-review-action` resolves codes to links (§2.5); omit the suffix entirely when no rule code is available
+- Rule code rendered as a markdown link per §2.5 (`[<CODE>](<RULES_DOC_URL>#<CODE>)`, or merged `[[<CODE1>](<RULES_DOC_URL>#<CODE1>), [<CODE2>](<RULES_DOC_URL>#<CODE2>)]` for a shared location) on every finding line (blocker, suggestion, nitpick) and every `inlineComments.body`; omit the suffix entirely when no rule code is available
 
 ### Exclude
 

@@ -1,7 +1,7 @@
 ---
 name: pr:answer
 description: Answer a user comment on a PR review and update review state if needed
-argument-hint: "REPO: <owner/repo> PR_NUMBER: <number> REVIEWER: <bot-login> COMMENT_BODY: <text> COMMENT_PATH: <path> COMMENT_LINE: <line>"
+argument-hint: "REPO: <owner/repo> PR_NUMBER: <number> REVIEWER: <bot-login> COMMENT_BODY: <text> COMMENT_PATH: <path> COMMENT_LINE: <line> RULES_DOC_URL: <url>"
 allowed-tools:
   - Read
   - Glob
@@ -20,7 +20,7 @@ Arguments: `$ARGUMENTS`
 
 Expected form (typically supplied by `awinogradov/code-review-action`):
 
-- `REPO: <owner/repo> PR_NUMBER: <number> REVIEWER: <bot-login> COMMENT_BODY: <text> COMMENT_PATH: <path> COMMENT_LINE: <line>`
+- `REPO: <owner/repo> PR_NUMBER: <number> REVIEWER: <bot-login> COMMENT_BODY: <text> COMMENT_PATH: <path> COMMENT_LINE: <line> RULES_DOC_URL: <url>`
 
 ## Input resolution
 
@@ -29,6 +29,7 @@ Expected form (typically supplied by `awinogradov/code-review-action`):
 - **`REVIEWER`** — `$ARGUMENTS` → `gh api user --jq .login` (the authenticated user) as fallback.
 - **`COMMENT_BODY` / `COMMENT_PATH` / `COMMENT_LINE`** — `$ARGUMENTS` only. If missing when invoked interactively, abort with a clear error (these must come from the CI context).
 - **`NEEDS_REVERDICT`** — `$ARGUMENTS` only (`true`/`false`); the orchestrator pre-computes this from the comment text. Defaults to `false` when absent. Gates Phase 4's Verdict Update (see below).
+- **`RULES_DOC_URL`** — `$ARGUMENTS` → fall back to `https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/pr%3Areview/SKILL.md` when absent. Base URL for any `CHECK-` rule links in `updatedReviewComment`.
 
 Do NOT prompt the user. Return an error JSON structure if required inputs cannot be resolved.
 
@@ -148,7 +149,7 @@ When `NEEDS_REVERDICT` is `true`, check ALL remaining unresolved bot threads (no
 
 ### Review Body Update
 
-Only provide `updatedReviewComment` if `updatedVerdict` is non-null. Follow the same format as the original review body (see the pr:review skill for format rules) — including **bare** rule codes like `[CHECK-BUG-002]`; `code-review-action` resolves them to links after submission. Do not build markdown links or read agent files.
+Only provide `updatedReviewComment` if `updatedVerdict` is non-null. Follow the same format as the original review body (see the pr:review skill for format rules) — including `CHECK-` rule codes rendered as markdown links built from `RULES_DOC_URL`, exactly as in the pr:review skill's §2.5 (single: `[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002)`; shared: `[[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002), [CHECK-AI-002](<RULES_DOC_URL>#CHECK-AI-002)]`). Do not read agent files.
 
 ---
 
