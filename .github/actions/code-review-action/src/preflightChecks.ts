@@ -6,11 +6,10 @@
  * @example
  * GH_TOKEN=xxx REPO=owner/repo PR_NUMBER=123 PR_HEAD_SHA=abc JOB_NAME=review POLL_INTERVAL=10 CHECKS_TIMEOUT=600 PR_AUTHOR=user bun run scripts/preflightChecks.ts
  */
-import { appendFile } from "node:fs/promises";
-
 import { fetchCheckStatuses } from "@code-assistants/actions-core/checkStatus";
 import type { Octokit } from "@octokit/rest";
 
+import { setOutput } from "./actionsOutput.ts";
 import { parseRepoEnv } from "./github/githubReview.ts";
 
 /** Outcome of the preflight polling loop */
@@ -172,14 +171,6 @@ async function postSkipComment(
   console.log("✓ Posted skip comment to PR");
 }
 
-/** Write output to GITHUB_OUTPUT file. */
-async function writeOutput(key: string, value: string): Promise<void> {
-  const outputFile = process.env.GITHUB_OUTPUT;
-  if (outputFile) {
-    await appendFile(outputFile, `${key}=${value}\n`);
-  }
-}
-
 // Main execution
 try {
   const config = parsePreflightEnv();
@@ -191,7 +182,7 @@ try {
 
   if (outcome.status === "passed") {
     console.log("✓ All checks passed, proceeding with review");
-    await writeOutput("skip_review", "false");
+    await setOutput("skip_review", "false");
   } else if (outcome.status === "failed") {
     console.log(`✗ Failed checks: ${outcome.failedNames.join(", ")}`);
     const comment = buildFailureComment(config.prAuthor, outcome.failedNames);
@@ -203,7 +194,7 @@ try {
       config.reviewer,
       comment
     );
-    await writeOutput("skip_review", "true");
+    await setOutput("skip_review", "true");
   } else {
     const timeoutMin = Math.round(config.timeoutMs / 60_000);
     console.log(`✗ Timeout after ${timeoutMin}min, pending: ${outcome.pendingNames.join(", ")}`);
@@ -216,9 +207,9 @@ try {
       config.reviewer,
       comment
     );
-    await writeOutput("skip_review", "true");
+    await setOutput("skip_review", "true");
   }
 } catch (error) {
   console.error("Preflight check error (fail-open, proceeding with review):", error);
-  await writeOutput("skip_review", "false");
+  await setOutput("skip_review", "false");
 }

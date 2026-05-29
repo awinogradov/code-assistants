@@ -91,9 +91,8 @@ const commentId = process.env.COMMENT_ID;
 const commentPath = process.env.COMMENT_PATH;
 const ackOnly = process.env.ACK_ONLY === "true";
 
-// PR-author acknowledgement in a bot-authored thread (issue #111): the model
-// step was skipped upstream, so there is no reply to post — just react with 👍
-// so the thread shows the bot saw it. A failed reaction must not fail the run.
+// Bare acknowledgement (issue #111): react with 👍 instead of a prose reply.
+// A failed reaction must not fail the run.
 if (ackOnly) {
   if (commentId) {
     try {
