@@ -7,7 +7,24 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import { buildRuleUrlMap, linkRuleCodes, slugifyHeading } from "./ruleUrls.ts";
+import { agentsDirFromEnv, buildRuleUrlMap, linkRuleCodes, slugifyHeading } from "./ruleUrls.ts";
+
+describe("agentsDirFromEnv", () => {
+  const original = process.env.CLAUDE_PLUGIN_DIR;
+  afterEach(() => {
+    process.env.CLAUDE_PLUGIN_DIR = original;
+  });
+
+  test("appends /agents to the plugin dir from the env", () => {
+    process.env.CLAUDE_PLUGIN_DIR = "/plugins/autopilot";
+    expect(agentsDirFromEnv()).toBe("/plugins/autopilot/agents");
+  });
+
+  test("falls back to /agents when the env var is unset", () => {
+    delete process.env.CLAUDE_PLUGIN_DIR;
+    expect(agentsDirFromEnv()).toBe("/agents");
+  });
+});
 
 describe("slugifyHeading", () => {
   test("strips the marker, lowercases, drops punctuation, hyphenates", () => {
