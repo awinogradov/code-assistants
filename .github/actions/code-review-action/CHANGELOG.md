@@ -2,6 +2,95 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [0.3.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v0.2.0...code-review-action@v0.3.0) (2026-05-29)
+
+## Release Notes
+
+The code review action now runs faster and smarter, with specialized security reviews and detailed performance tracking.
+
+## ✨ What's New
+
+### Security and performance review agents
+Code reviews now include dedicated security checks that catch common vulnerabilities like hardcoded secrets, SQL injection risks, and insecure cryptography usage. Performance reviews also flag inefficient algorithms and resource leaks. You can customize which AI model handles each type of review through the new `review_model_overrides` configuration.
+
+<details><summary>Related issues</summary>
+
+- [#148: Right-size review model tiers and add security/performance review checks](https://github.com/awinogradov/code-assistants/issues/148)
+</details>
+
+### Performance instrumentation
+Each code review run now logs detailed metrics including execution time, token usage, API costs, and the number of AI interactions required. This data appears in your action logs as structured "Run summary" entries, making it easy to track performance and costs over time.
+
+<details><summary>Related issues</summary>
+
+- [#143: Add per-run instrumentation to code-review-action (timing, tokens, cost)](https://github.com/awinogradov/code-assistants/issues/143)
+</details>
+
+### Smarter follow-up responses
+When developers reply to review comments with questions or clarifications, the action now responds much faster by skipping the full re-review unless explicitly requested. This makes conversational back-and-forth during code review feel more natural and responsive.
+
+<details><summary>Related issues</summary>
+
+- [#144: Fix code-review follow-up reply flow and submission-logic correctness](https://github.com/awinogradov/code-assistants/issues/144)
+</details>
+
+## 🐛 Bug Fixes
+
+### Review submission reliability
+The action now correctly handles pull requests with more than 100 comment threads and prevents duplicate reviews when multiple instances run simultaneously. Review formatting is preserved exactly as the AI generates it, fixing cases where whitespace changes caused reviews to be incorrectly identified as duplicates.
+
+<details><summary>Related issues</summary>
+
+- [#144: Fix code-review follow-up reply flow and submission-logic correctness](https://github.com/awinogradov/code-assistants/issues/144)
+- [#149: Make the code-review submission pipeline testable and add tests](https://github.com/awinogradov/code-assistants/issues/149)
+</details>
+
+### Configuration validation
+Invalid model override configurations now generate clear warning messages instead of silently failing. The action also properly counts AI interactions for accurate cost tracking.
+
+<details><summary>Related issues</summary>
+
+- [#159: Address code review suggestions and nitpicks from the optimization epic](https://github.com/awinogradov/code-assistants/issues/159)
+- [#142: Optimize code-review-action: latency, tokens, follow-up flow, models, tests](https://github.com/awinogradov/code-assistants/issues/142)
+</details>
+
+## ⚙️ Configuration Required
+
+### Model overrides
+You can now customize which AI models handle different types of code review through the `review_model_overrides` input. This allows you to use faster, cheaper models for simple checks while reserving more powerful models for complex security analysis.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #142 | [#160](https://github.com/awinogradov/code-assistants/pull/160) | @awinogradov |
+| #159 | [#160](https://github.com/awinogradov/code-assistants/pull/160) | @awinogradov |
+| #144 | [#158](https://github.com/awinogradov/code-assistants/pull/158) | @awinogradov |
+| #149 | [#158](https://github.com/awinogradov/code-assistants/pull/158) | @awinogradov |
+| #148 | [#157](https://github.com/awinogradov/code-assistants/pull/157) | @awinogradov |
+| #147 | [#154](https://github.com/awinogradov/code-assistants/pull/154) | @awinogradov |
+| #143 | [#150](https://github.com/awinogradov/code-assistants/pull/150) | @awinogradov |
+
+### Features
+
+* **code-review:** add security agent and model overrides ([31282af](https://github.com/awinogradov/code-assistants/commit/31282af6f3f9a9b5d5dad3bffca00421617bffb8))
+* **code-review:** log per-run phase timings, tokens, and round-trips ([d28a2ce](https://github.com/awinogradov/code-assistants/commit/d28a2ce2f36f3d5e426489d27a124b3e9a32818f))
+
+### Bug Fixes
+
+* **code-review:** count tool round-trips by turn, not by block ([36a9cd0](https://github.com/awinogradov/code-assistants/commit/36a9cd0454de8257765d7da799d083d1971de43a))
+* **code-review:** gate verdict re-eval and harden review submission ([79cafc6](https://github.com/awinogradov/code-assistants/commit/79cafc62919ad63dfdd36aa58456eb7899866121))
+* **code-review:** inject logger so override warning fires ([c0150bc](https://github.com/awinogradov/code-assistants/commit/c0150bc8efbf35fee41053192222573e24f81d54))
+
+### Performance
+
+* **code-review:** resolve rule links in code, not in the model ([8adb856](https://github.com/awinogradov/code-assistants/commit/8adb8561b2675624b0c6c1641d37f85e38e38858))
+
+### Refactoring
+
+* **code-review:** extract review-output module for tests ([2987044](https://github.com/awinogradov/code-assistants/commit/2987044aac4b5bddd7acf0c3c9782699518fb665))
+* **code-review:** validate output with zod and reuse helpers ([a4f5f94](https://github.com/awinogradov/code-assistants/commit/a4f5f942442bb38e40f237861f24c64717c866ef))
 ## [0.2.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v0.1.0...code-review-action@v0.2.0) (2026-05-29)
 
 ## Release Notes
