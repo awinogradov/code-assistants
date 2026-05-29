@@ -8,18 +8,22 @@ A PR is merged only when **all** of the following hold:
 
 - the head ref matches `^release-`,
 - the PR is open,
-- the repo opted in via `release.automerge === true` in the root `package.json`
-  (read at the PR head SHA; default `false`),
+- the releasing member opted in: `release.automerge` resolves to `true`, taking
+  the member's own value and falling back to the root default — `member ?? root ??
+false`, read at the PR head SHA,
 - every sibling check is green (a failed check skips; a still-pending check skips),
   and
 - the PR's `reviewDecision` is `APPROVED`.
 
-> **Opt-in (default off).** Auto-merge is disabled unless the repo-root
-> `package.json` declares `release.automerge: true` (see the
-> [`release` field spec](../../../docs/release-field.md)). Because consumers
-> reference this action via `@main`, adopting the synced workflow alone does
-> **not** enable auto-merge — each repo must add the flag, or its release PRs
-> stay approved-but-unmerged for a human to merge.
+> **Opt-in (default off).** Auto-merge is disabled unless `release.automerge`
+> resolves to `true` (see the [`release` field spec](../../../docs/release-field.md)).
+> A monorepo opens one release PR per member (`release-<member>-<version>`), so the
+> gate resolves per member: it reads the member's own `release.automerge` and falls
+> back to the root default. Set it on the root to enable the whole repo, or on a
+> member to opt that package in or out. Because consumers reference this action via
+> `@main`, adopting the synced workflow alone does **not** enable auto-merge — each
+> repo must add the flag, or its release PRs stay approved-but-unmerged for a human
+> to merge.
 
 The merge is pinned to the triggering head commit, so a push that lands during
 evaluation is rejected rather than merged unreviewed. The check aggregation reuses
@@ -101,9 +105,12 @@ Store the token in a secret (e.g., `BOT_TOKEN`) and pass it via
 
 - Resolves the open release PR from the triggering commit via the
   commit-associated-PRs API, then bails unless its head ref matches `^release-`.
-- Reads the repo-root `package.json` at the head SHA and skips unless
-  `release.automerge === true`. A missing `package.json` is a clean skip; a
-  malformed one fails closed (no merge). A non-boolean `automerge` is rejected.
+- Identifies the releasing member from the PR's `<member>/.release_notes/<version>.md`
+  file, then reads `release.automerge` from that member's `package.json` (overriding)
+  and the root `package.json` (default) at the head SHA, skipping unless the resolved
+  value is `true`. A missing `package.json` is a clean skip; a malformed one fails
+  closed (no merge); a non-boolean `automerge` is rejected; an unresolvable member
+  is left unmerged.
 - Aggregates check runs and commit statuses in a single snapshot (no polling):
   any failed check or any still-pending check skips the merge until a later event.
 - Reads `reviewDecision` and merges only when it is `APPROVED`.
