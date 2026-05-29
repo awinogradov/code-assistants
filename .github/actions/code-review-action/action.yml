@@ -492,6 +492,7 @@ runs:
         EXECUTION_FILE: ${{ steps.review.outputs.execution_file }}
         PR_HEAD_SHA: ${{ steps.ctx.outputs.pr_head_sha }}
         RUNNER_TEMP: ${{ runner.temp }}
+        CLAUDE_PLUGIN_DIR: ${{ steps.plugin.outputs.dir }}
       run: bun run "${{ github.action_path }}/src/submitReview.ts"
 
     - name: Upload review execution artifact
@@ -556,6 +557,7 @@ runs:
         EXECUTION_FILE: ${{ steps.reaction.outputs.execution_file }}
         ACK_ONLY: ${{ steps.classify.outputs.ack_only }}
         RUNNER_TEMP: ${{ runner.temp }}
+        CLAUDE_PLUGIN_DIR: ${{ steps.plugin.outputs.dir }}
       run: bun run "${{ github.action_path }}/src/reactToComment.ts"
 
     - name: Upload reaction execution artifact

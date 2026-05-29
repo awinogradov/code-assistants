@@ -70,7 +70,9 @@ Agent 1 (fetch-pr-reviews):
   - `description`: "Fetch PR reviews"
 ```
 
-After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response for use with `grep_repomix_output` and `read_repomix_output`. Use the review data from `fetch-pr-reviews` to understand the full review history, including REVIEWER-specific reviews and comments.
+After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response. Use the review data from `fetch-pr-reviews` to understand the full review history, including REVIEWER-specific reviews and comments.
+
+**Read the pack, don't dump it.** Pull only targeted context via `grep_repomix_output` / sliced `read_repomix_output`; never read the whole pack. Most comment replies need no codebase lookup at all — skip the snapshot reads entirely unless the comment points you at specific other code to verify.
 
 ### 1.3 Extended Context
 
@@ -146,7 +148,7 @@ When `NEEDS_REVERDICT` is `true`, check ALL remaining unresolved bot threads (no
 
 ### Review Body Update
 
-Only provide `updatedReviewComment` if `updatedVerdict` is non-null. Follow the same format as the original review body (see the pr:review skill for format rules).
+Only provide `updatedReviewComment` if `updatedVerdict` is non-null. Follow the same format as the original review body (see the pr:review skill for format rules) — including **bare** rule codes like `[CHECK-BUG-002]`; `code-review-action` resolves them to links after submission. Do not build markdown links or read agent files.
 
 ---
 

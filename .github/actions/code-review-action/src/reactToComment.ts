@@ -6,6 +6,7 @@
  * GH_TOKEN=xxx REPO=owner/repo PR_NUMBER=123 COMMENT_ID=456 STRUCTURED_OUTPUT='{"reply":"..."}' bun run scripts/reactToComment.ts
  */
 import type { ReviewEvent } from "./github/githubReview.ts";
+import { buildRuleUrlMap, linkRuleCodes } from "./ruleUrls.ts";
 import {
   deletePendingReviews,
   fetchReviewThreads,
@@ -234,6 +235,9 @@ if (output.updatedVerdict && output.updatedReviewComment) {
     await resolveAllBotThreads(octokit, owner, repoName, pullNumber, reviewer);
   }
 
+  // Resolve bare rule codes to GitHub links in code (same as submitReview.ts).
+  const ruleUrlMap = await buildRuleUrlMap(`${process.env.CLAUDE_PLUGIN_DIR ?? ""}/agents`);
+
   await maybeSubmitVerdict(
     octokit,
     owner,
@@ -241,7 +245,7 @@ if (output.updatedVerdict && output.updatedReviewComment) {
     pullNumber,
     reviewer,
     event,
-    output.updatedReviewComment
+    linkRuleCodes(output.updatedReviewComment, ruleUrlMap)
   );
 }
 
