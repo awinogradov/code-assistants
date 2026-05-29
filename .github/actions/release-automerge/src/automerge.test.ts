@@ -89,6 +89,15 @@ describe("parseAutomerge", () => {
     expect(parseAutomerge(JSON.stringify({ release: { automerge: true } }), source)).toBe(true);
   });
 
+  test("true alongside a monorepo members root", () => {
+    expect(
+      parseAutomerge(
+        JSON.stringify({ release: { members: ["packages/*"], automerge: true } }),
+        source,
+      ),
+    ).toBe(true);
+  });
+
   test("false when release.automerge is false", () => {
     expect(parseAutomerge(JSON.stringify({ release: { automerge: false } }), source)).toBe(false);
   });
@@ -152,6 +161,10 @@ describe("releaseMemberDir", () => {
 
   test("null when no release-notes file is present", () => {
     expect(releaseMemberDir(["packages/actions-core/package.json"])).toBeNull();
+  });
+
+  test("null when the release-notes path is nested below the notes dir", () => {
+    expect(releaseMemberDir(["packages/foo/.release_notes/sub/1.0.0.md"])).toBeNull();
   });
 
   test("null when multiple distinct members are referenced", () => {
