@@ -2,6 +2,83 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [2.0.0](https://github.com/awinogradov/code-assistants/compare/agents-rules-sync-action@v1.0.0...agents-rules-sync-action@v2.0.0) (2026-05-29)
+
+## Release Notes
+
+Agent rules are now synchronized with consistent bot authentication and easier configuration.
+
+## ⚠️ Breaking Changes
+
+### Action authentication inputs renamed
+The `token` and `github_token` inputs have been renamed to `bot_token` for consistency across all actions. You'll need to update your workflow files to use the new input name.
+
+**Before:**
+```yaml
+- uses: awinogradov/code-assistants/.github/actions/agents-rules-sync@v1
+  with:
+    token: ${{ secrets.GH_TOKEN }}
+```
+
+**After:**
+```yaml
+- uses: awinogradov/code-assistants/.github/actions/agents-rules-sync@v2
+  with:
+    bot_token: ${{ secrets.BOT_TOKEN }}
+```
+
+<details><summary>Related issues</summary>
+
+- [#96: Standardize actions on bot_token and bot_username](https://github.com/awinogradov/code-assistants/issues/96)
+</details>
+
+## ✨ What's New
+
+### Customizable sync commit author
+You can now configure which bot account creates the sync commits by setting the `bot_username` input. This helps teams identify automated changes and maintain consistent commit attribution across their repositories.
+
+```yaml
+- uses: awinogradov/code-assistants/.github/actions/agents-rules-sync@v2
+  with:
+    bot_token: ${{ secrets.BOT_TOKEN }}
+    bot_username: ${{ vars.BOT_USERNAME }}  # Optional, defaults to github-actions[bot]
+```
+
+<details><summary>Related issues</summary>
+
+- [#96: Standardize actions on bot_token and bot_username](https://github.com/awinogradov/code-assistants/issues/96)
+</details>
+
+## 🐛 Bug Fixes
+
+### Action loading errors resolved
+The sync action would fail to load when called from external repositories due to an invalid variable expression in the action's metadata. This has been fixed, ensuring the action loads reliably regardless of where it's called from.
+
+## ⚙️ Configuration Required
+
+### Update workflow secrets
+Replace any references to `secrets.GH_TOKEN` with `secrets.BOT_TOKEN` in your workflows. If you want to customize the commit author, also add `vars.BOT_USERNAME` to your repository variables.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #96 | [#103](https://github.com/awinogradov/code-assistants/pull/103) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **actions:** inputs token and github_token are renamed to bot_token; consumers must
+update with: blocks to pass bot_token (and optional bot_username), and workflows now read
+secrets.BOT_TOKEN and vars.BOT_USERNAME instead of secrets.GH_TOKEN.
+
+### Features
+
+* **actions:** rename token inputs to bot_token, add bot_username ([160049b](https://github.com/awinogradov/code-assistants/commit/160049b998131e2e5c503559bf5d8e70e7ea8d5a))
+
+### Bug Fixes
+
+* **actions:** remove vars expr from descriptions ([f5b2c74](https://github.com/awinogradov/code-assistants/commit/f5b2c74aef1561ca8366ed31da938ef6e7bfb514))
 ## 1.0.0 (2026-05-28)
 
 ## Release Notes
