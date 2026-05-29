@@ -145,7 +145,12 @@ export function releaseMemberDir(filenames: string[]): string | null {
     }
   }
 
-  return dirs.size === 1 ? [...dirs][0]! : null;
+  if (dirs.size !== 1) {
+    return null;
+  }
+
+  const [dir] = dirs;
+  return dir ?? null;
 }
 
 /**
@@ -178,14 +183,16 @@ async function fetchAutomergeOptIn(config: AutomergeConfig, pullNumber: number):
       sourceAt(path),
     );
 
-  const root = await readAutomergeAt(rootPackageJsonPath);
-
-  // Standalone repo: the member IS the root, so there is nothing to override.
+  // Standalone repo: the member IS the root, so only the root needs reading.
   if (memberDir === "") {
-    return root === true;
+    return (await readAutomergeAt(rootPackageJsonPath)) === true;
   }
 
-  const member = await readAutomergeAt(`${memberDir}${rootPackageJsonPath}`);
+  // Member and root reads are independent — fetch them in one roundtrip.
+  const [member, root] = await Promise.all([
+    readAutomergeAt(`${memberDir}${rootPackageJsonPath}`),
+    readAutomergeAt(rootPackageJsonPath),
+  ]);
   return resolveAutomergeOptIn(member, root);
 }
 
