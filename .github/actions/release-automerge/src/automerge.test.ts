@@ -9,7 +9,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   isApprovedDecision,
-  isAutomergeEnabled,
+  parseAutomergeOptIn,
   pickReleasePr,
   selectMergeMethod,
 } from "./automerge.ts";
@@ -40,26 +40,26 @@ describe("pickReleasePr", () => {
 
 describe("selectMergeMethod", () => {
   test("prefers rebase when allowed", () => {
-    expect(
-      selectMergeMethod({ allowRebase: true, allowSquash: true, allowMerge: true })
-    ).toBe("rebase");
+    expect(selectMergeMethod({ allowRebase: true, allowSquash: true, allowMerge: true })).toBe(
+      "rebase",
+    );
   });
 
   test("falls back to squash when rebase disabled", () => {
-    expect(
-      selectMergeMethod({ allowRebase: false, allowSquash: true, allowMerge: true })
-    ).toBe("squash");
+    expect(selectMergeMethod({ allowRebase: false, allowSquash: true, allowMerge: true })).toBe(
+      "squash",
+    );
   });
 
   test("falls back to merge when only merge allowed", () => {
-    expect(
-      selectMergeMethod({ allowRebase: false, allowSquash: false, allowMerge: true })
-    ).toBe("merge");
+    expect(selectMergeMethod({ allowRebase: false, allowSquash: false, allowMerge: true })).toBe(
+      "merge",
+    );
   });
 
   test("returns null when no method allowed", () => {
     expect(
-      selectMergeMethod({ allowRebase: false, allowSquash: false, allowMerge: false })
+      selectMergeMethod({ allowRebase: false, allowSquash: false, allowMerge: false }),
     ).toBeNull();
   });
 });
@@ -76,26 +76,53 @@ describe("isApprovedDecision", () => {
   });
 });
 
-describe("isAutomergeEnabled", () => {
-  test("true when release.automerge is true", () => {
-    expect(isAutomergeEnabled({ release: { automerge: true } })).toBe(true);
+describe("parseAutomergeOptIn", () => {
+  const source = "owner/repo:package.json@abc1234";
+
+  test("false when raw content is null (missing file)", () => {
+    expect(parseAutomergeOptIn(null, source)).toBe(false);
   });
 
-  test("true alongside a monorepo members root", () => {
-    expect(isAutomergeEnabled({ release: { members: ["packages/*"], automerge: true } })).toBe(
-      true
+  test("true when release.automerge is true", () => {
+    expect(parseAutomergeOptIn(JSON.stringify({ release: { automerge: true } }), source)).toBe(
+      true,
     );
   });
 
+  test("true alongside a monorepo members root", () => {
+    expect(
+      parseAutomergeOptIn(
+        JSON.stringify({ release: { members: ["packages/*"], automerge: true } }),
+        source,
+      ),
+    ).toBe(true);
+  });
+
   test("false when release.automerge is false", () => {
-    expect(isAutomergeEnabled({ release: { automerge: false } })).toBe(false);
+    expect(parseAutomergeOptIn(JSON.stringify({ release: { automerge: false } }), source)).toBe(
+      false,
+    );
   });
 
   test("false when release.automerge is absent", () => {
-    expect(isAutomergeEnabled({ release: { type: "github-action" } })).toBe(false);
+    expect(
+      parseAutomergeOptIn(JSON.stringify({ release: { type: "github-action" } }), source),
+    ).toBe(false);
   });
 
   test("false when there is no release field", () => {
-    expect(isAutomergeEnabled({ name: "x" })).toBe(false);
+    expect(parseAutomergeOptIn(JSON.stringify({ name: "x" }), source)).toBe(false);
+  });
+
+  test("throws naming the source when JSON is malformed", () => {
+    expect(() => parseAutomergeOptIn("{ not json", source)).toThrow(
+      /Failed to read auto-merge opt-in from owner\/repo:package\.json@abc1234/,
+    );
+  });
+
+  test("throws when release.automerge is not a boolean", () => {
+    expect(() =>
+      parseAutomergeOptIn(JSON.stringify({ release: { automerge: "yes" } }), source),
+    ).toThrow(/'release\.automerge'.*must be a boolean/);
   });
 });

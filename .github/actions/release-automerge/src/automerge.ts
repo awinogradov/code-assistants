@@ -94,19 +94,27 @@ export function isApprovedDecision(decision: string | null): boolean {
 }
 
 /**
- * Repo-wide auto-merge opt-in: true only when the root `package.json` declares
- * `release.automerge === true`. Any other value — including an absent field —
- * leaves auto-merge disabled, so the action no-ops and a human merges instead.
+ * Decide auto-merge opt-in from the raw root `package.json` content.
+ *
+ * Repo-wide opt-in holds only when `release.automerge === true`; any other value
+ * — including an absent field — disables it. A `null` `raw` (missing file) is a
+ * clean "disabled". Malformed JSON or an invalid `release` object throws, naming
+ * `source`, so the fail-closed caller never merges on doubt.
  */
-export function isAutomergeEnabled(rootPackageJson: unknown): boolean {
-  return readRootRelease(rootPackageJson).automerge === true;
+export function parseAutomergeOptIn(raw: string | null, source: string): boolean {
+  if (raw === null) {
+    return false;
+  }
+
+  try {
+    return readRootRelease(JSON.parse(raw)).automerge === true;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to read auto-merge opt-in from ${source}: ${detail}`);
+  }
 }
 
-/**
- * Read the root `package.json` at the triggering head SHA and decide whether
- * the repo opted into auto-merge. A missing file is a clean "disabled" (no-op);
- * a malformed file throws so the fail-closed wrapper never merges on doubt.
- */
+/** Fetch the root `package.json` at the triggering head SHA and decide opt-in. */
 async function fetchAutomergeOptIn(config: AutomergeConfig): Promise<boolean> {
   const { octokit, owner, repo, headSha } = config;
   const raw = await fetchRawContent({
@@ -117,18 +125,7 @@ async function fetchAutomergeOptIn(config: AutomergeConfig): Promise<boolean> {
     ref: headSha,
   });
 
-  if (raw === null) {
-    return false;
-  }
-
-  try {
-    return isAutomergeEnabled(JSON.parse(raw));
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `Failed to read auto-merge opt-in from ${owner}/${repo}:${rootPackageJsonPath}@${headSha.slice(0, 7)}: ${detail}`
-    );
-  }
+  return parseAutomergeOptIn(raw, `${owner}/${repo}:${rootPackageJsonPath}@${headSha.slice(0, 7)}`);
 }
 
 /** Fetch the PR's aggregate review decision via GraphQL. */
@@ -136,7 +133,7 @@ async function fetchReviewDecision(
   octokit: Octokit,
   owner: string,
   repo: string,
-  pullNumber: number
+  pullNumber: number,
 ): Promise<string | null> {
   const result = await octokit.graphql<{
     repository: { pullRequest: { reviewDecision: string | null } };
@@ -146,7 +143,7 @@ async function fetchReviewDecision(
         pullRequest(number: $number) { reviewDecision }
       }
     }`,
-    { owner, repo, number: pullNumber }
+    { owner, repo, number: pullNumber },
   );
 
   return result.repository.pullRequest.reviewDecision;
@@ -156,7 +153,7 @@ async function fetchReviewDecision(
 async function fetchMergeMethodFlags(
   octokit: Octokit,
   owner: string,
-  repo: string
+  repo: string,
 ): Promise<MergeMethodFlags> {
   const { data } = await octokit.rest.repos.get({ owner, repo });
   return {
@@ -191,7 +188,9 @@ async function mergeRelease(config: AutomergeConfig, pullNumber: number): Promis
   } catch (error) {
     const status = (error as { status?: number }).status;
     if (status && idempotentMergeStatuses.has(status)) {
-      console.log(`Skip: PR #${pullNumber} not mergeable now (HTTP ${status}) — head moved or already merged`);
+      console.log(
+        `Skip: PR #${pullNumber} not mergeable now (HTTP ${status}) — head moved or already merged`,
+      );
       return;
     }
     throw error;
@@ -216,7 +215,7 @@ async function run(config: AutomergeConfig): Promise<void> {
 
   if (!(await fetchAutomergeOptIn(config))) {
     console.log(
-      "Skip: auto-merge disabled — set release.automerge:true in the root package.json (see docs/release-automerge.md)"
+      "Skip: auto-merge disabled — set release.automerge:true in the root package.json (see docs/release-automerge.md)",
     );
     return;
   }
