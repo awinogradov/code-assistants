@@ -36,10 +36,8 @@ describe("parseModelOverrides", () => {
     });
   });
 
-  test("drops non-string values and keeps string ones", () => {
-    expect(parseModelOverrides('{"security":"sonnet","bogus":3,"x":null}')).toEqual({
-      security: "sonnet",
-    });
+  test("rejects the whole map when any value is not a string (strict Zod)", () => {
+    expect(parseModelOverrides('{"security":"sonnet","bogus":3}')).toEqual({});
   });
 
   test("returns empty map for malformed JSON or non-objects", () => {
@@ -337,6 +335,14 @@ describe("extractUsage", () => {
       costUsd: 0,
       numTurns: 0,
     });
+  });
+
+  test("coerces non-finite numbers (Infinity / NaN) to 0", () => {
+    const result = {
+      usage: { input_tokens: Number.POSITIVE_INFINITY, output_tokens: Number.NaN },
+      total_cost_usd: Number.POSITIVE_INFINITY,
+    };
+    expect(extractUsage(result)).toMatchObject({ tokensIn: 0, tokensOut: 0, costUsd: 0 });
   });
 });
 

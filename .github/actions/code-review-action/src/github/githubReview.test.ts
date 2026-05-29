@@ -60,7 +60,7 @@ describe("fetchReviewThreads", () => {
     const cursors: Array<string | null> = [];
     let call = 0;
     const octokit = {
-      graphql: async (_q: string, vars: { cursor: string | null }) => {
+      graphql: (_q: string, vars: { cursor: string | null }) => {
         cursors.push(vars.cursor);
         return { repository: { pullRequest: { reviewThreads: pages[call++] } } };
       },
@@ -79,7 +79,7 @@ describe("getLastBotReview", () => {
     const octokit = {
       rest: {
         pulls: {
-          listReviews: async () => ({
+          listReviews: () => ({
             data: [
               { user: { login: "alice" }, state: "COMMENTED", body: "x" },
               { user: { login: "bot" }, state: "APPROVED", body: "first" },
@@ -96,7 +96,7 @@ describe("getLastBotReview", () => {
 
   test("returns undefined when the bot has no review", async () => {
     const octokit = {
-      rest: { pulls: { listReviews: async () => ({ data: [{ user: { login: "alice" }, state: "APPROVED" }] }) } },
+      rest: { pulls: { listReviews: () => ({ data: [{ user: { login: "alice" }, state: "APPROVED" }] }) } },
     } as unknown as Octokit;
     expect(await getLastBotReview(octokit, "o", "r", 1, "bot")).toBeUndefined();
   });
@@ -108,14 +108,14 @@ describe("deletePendingReviews", () => {
     const octokit = {
       rest: {
         pulls: {
-          listReviews: async () => ({
+          listReviews: () => ({
             data: [
               { id: 1, state: "PENDING" },
               { id: 2, state: "APPROVED" },
               { id: 3, state: "PENDING" },
             ],
           }),
-          deletePendingReview: async ({ review_id }: { review_id: number }) => {
+          deletePendingReview: ({ review_id }: { review_id: number }) => {
             deleted.push(review_id);
             return {};
           },
@@ -130,7 +130,7 @@ describe("deletePendingReviews", () => {
 
 describe("hasRecentBotReview", () => {
   const reviews = (data: unknown[]) =>
-    ({ rest: { pulls: { listReviews: async () => ({ data }) } } }) as unknown as Octokit;
+    ({ rest: { pulls: { listReviews: () => ({ data }) } } }) as unknown as Octokit;
 
   test("matches the bot's review on the given head SHA", async () => {
     const o = reviews([{ user: { login: "bot" }, state: "APPROVED", commit_id: "sha1" }]);
@@ -148,8 +148,8 @@ describe("hasRecentBotReply", () => {
   test("detects an inline reply by the bot to the given comment", async () => {
     const octokit = {
       rest: {
-        pulls: { listReviewComments: async () => ({ data: [{ in_reply_to_id: 42, user: { login: "bot" } }] }) },
-        issues: { listComments: async () => ({ data: [] }) },
+        pulls: { listReviewComments: () => ({ data: [{ in_reply_to_id: 42, user: { login: "bot" } }] }) },
+        issues: { listComments: () => ({ data: [] }) },
       },
     } as unknown as Octokit;
 
@@ -160,8 +160,8 @@ describe("hasRecentBotReply", () => {
   test("detects a bot issue comment when no path is given", async () => {
     const octokit = {
       rest: {
-        issues: { listComments: async () => ({ data: [{ user: { login: "bot" } }] }) },
-        pulls: { listReviewComments: async () => ({ data: [] }) },
+        issues: { listComments: () => ({ data: [{ user: { login: "bot" } }] }) },
+        pulls: { listReviewComments: () => ({ data: [] }) },
       },
     } as unknown as Octokit;
 

@@ -142,7 +142,7 @@ export async function loadReviewAgents(pluginDir: string): Promise<AgentDefiniti
 }
 
 /** Resolve a sub-agent's model: per-category override > frontmatter > fallback. */
-function resolveModel(ctx: FanoutContext, agent: AgentDefinition): string {
+export function resolveModel(ctx: FanoutContext, agent: AgentDefinition): string {
   const category = agent.subagent_type.replace("autopilot:pr:review:", "");
   return ctx.modelOverrides[category] ?? agent.model ?? ctx.fallbackModel;
 }

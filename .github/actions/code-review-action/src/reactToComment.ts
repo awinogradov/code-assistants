@@ -6,8 +6,8 @@
  * GH_TOKEN=xxx REPO=owner/repo PR_NUMBER=123 COMMENT_ID=456 STRUCTURED_OUTPUT='{"reply":"..."}' bun run scripts/reactToComment.ts
  */
 import type { ReviewEvent } from "./github/githubReview.ts";
-import { buildRuleUrlMap, linkRuleCodes } from "./ruleUrls.ts";
-import { parseReactionOutput } from "./reviewOutput.ts";
+import { agentsDirFromEnv, buildRuleUrlMap, linkRuleCodes } from "./ruleUrls.ts";
+import { parseReactionOutput } from "./reviewOutput/reviewOutput.ts";
 import {
   deletePendingReviews,
   fetchReviewThreads,
@@ -65,8 +65,8 @@ async function maybeSubmitVerdict(
 
   await deletePendingReviews(octokit, owner, repo, pullNumber);
 
-  const guard = await getLastBotReview(octokit, owner, repo, pullNumber, reviewer);
-  if (guard && normalizeBody(guard.body ?? "") === normalizeBody(body)) {
+  const guardReview = await getLastBotReview(octokit, owner, repo, pullNumber, reviewer);
+  if (guardReview && normalizeBody(guardReview.body ?? "") === normalizeBody(body)) {
     console.log("✓ Identical verdict appeared concurrently, skipping duplicate");
     return;
   }
@@ -199,7 +199,7 @@ if (output.updatedVerdict && output.updatedReviewComment) {
   }
 
   // Resolve bare rule codes to GitHub links in code (same as submitReview.ts).
-  const ruleUrlMap = await buildRuleUrlMap(`${process.env.CLAUDE_PLUGIN_DIR ?? ""}/agents`);
+  const ruleUrlMap = await buildRuleUrlMap(agentsDirFromEnv());
 
   await maybeSubmitVerdict(
     octokit,

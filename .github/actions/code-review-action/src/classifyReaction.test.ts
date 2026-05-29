@@ -6,11 +6,18 @@ import { describe, expect, test } from "bun:test";
 import { isBareAcknowledgement, requestsReReview, shouldSkipModelReply } from "./classifyReaction.ts";
 
 describe("requestsReReview", () => {
-  test("detects explicit re-review phrasings", () => {
-    expect(requestsReReview("pushed a fix, please re-review")).toBe(true);
-    expect(requestsReReview("can you take another look")).toBe(true);
-    expect(requestsReReview("updated. PTAL")).toBe(true);
-    expect(requestsReReview("review again please")).toBe(true);
+  test("detects every re-review keyword variant", () => {
+    for (const phrase of [
+      "please re-review",
+      "re review this",
+      "rereview when you can",
+      "review again please",
+      "take another look",
+      "have a look again",
+      "updated, PTAL",
+    ]) {
+      expect(requestsReReview(phrase)).toBe(true);
+    }
   });
 
   test("is case-insensitive", () => {
