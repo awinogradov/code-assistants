@@ -6,7 +6,7 @@
  * @example
  * GH_TOKEN=xxx REPO=owner/repo PR_NUMBER=123 PR_HEAD_SHA=abc JOB_NAME=review POLL_INTERVAL=10 CHECKS_TIMEOUT=600 PR_AUTHOR=user bun run scripts/preflightChecks.ts
  */
-import { fetchCheckStatuses } from "@code-assistants/actions-core/checkStatus";
+import { fetchCheckStatuses, pollCheckStatuses } from "@code-assistants/actions-core/checkStatus";
 import type { Octokit } from "@octokit/rest";
 
 import { setOutput } from "./actionsOutput.ts";
@@ -69,38 +69,28 @@ function parsePreflightEnv(): PreflightConfig {
  */
 async function pollUntilComplete(config: PreflightConfig): Promise<PreflightOutcome> {
   const { octokit, owner, repoName, headSha, jobName, pollIntervalMs, timeoutMs } = config;
-  let elapsed = 0;
+  const timeoutSec = Math.round(timeoutMs / 1000);
 
-  while (elapsed < timeoutMs) {
-    const result = await fetchCheckStatuses(octokit, owner, repoName, headSha, jobName);
+  const result = await pollCheckStatuses(
+    () => fetchCheckStatuses(octokit, owner, repoName, headSha, jobName),
+    {
+      pollIntervalMs,
+      timeoutMs,
+      onPending: (pendingNames, elapsedMs) =>
+        console.log(
+          `Waiting for checks: ${pendingNames.join(", ")}... (${Math.round(elapsedMs / 1000)}s / ${timeoutSec}s)`,
+        ),
+    },
+  );
 
-    if (result.hasFailed) {
-      return { status: "failed", failedNames: result.failedNames };
-    }
-    if (result.allCompleted) {
-      return { status: "passed" };
-    }
-
-    const elapsedSec = Math.round(elapsed / 1000);
-    const timeoutSec = Math.round(timeoutMs / 1000);
-    console.log(
-      `Waiting for checks: ${result.pendingNames.join(", ")}... (${elapsedSec}s / ${timeoutSec}s)`
-    );
-
-    await Bun.sleep(pollIntervalMs);
-    elapsed += pollIntervalMs;
+  if (result.hasFailed) {
+    return { status: "failed", failedNames: result.failedNames };
   }
-
-  const finalResult = await fetchCheckStatuses(octokit, owner, repoName, headSha, jobName);
-
-  if (finalResult.hasFailed) {
-    return { status: "failed", failedNames: finalResult.failedNames };
-  }
-  if (finalResult.allCompleted) {
+  if (result.allCompleted) {
     return { status: "passed" };
   }
 
-  return { status: "timeout", pendingNames: finalResult.pendingNames };
+  return { status: "timeout", pendingNames: result.pendingNames };
 }
 
 /** Build sarcastic comment for failed checks. */
@@ -146,7 +136,7 @@ async function postSkipComment(
   repo: string,
   prNumber: number,
   reviewer: string,
-  body: string
+  body: string,
 ): Promise<void> {
   const { data: comments } = await octokit.rest.issues.listComments({
     owner,
@@ -175,7 +165,7 @@ async function postSkipComment(
 try {
   const config = parsePreflightEnv();
   console.log(
-    `Preflight: polling checks for ${config.headSha.slice(0, 7)} every ${config.pollIntervalMs / 1000}s (timeout: ${config.timeoutMs / 1000}s)`
+    `Preflight: polling checks for ${config.headSha.slice(0, 7)} every ${config.pollIntervalMs / 1000}s (timeout: ${config.timeoutMs / 1000}s)`,
   );
 
   const outcome = await pollUntilComplete(config);
@@ -192,7 +182,7 @@ try {
       config.repoName,
       config.pullNumber,
       config.reviewer,
-      comment
+      comment,
     );
     await setOutput("skip_review", "true");
   } else {
@@ -205,7 +195,7 @@ try {
       config.repoName,
       config.pullNumber,
       config.reviewer,
-      comment
+      comment,
     );
     await setOutput("skip_review", "true");
   }
