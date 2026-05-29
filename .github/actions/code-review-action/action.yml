@@ -73,6 +73,10 @@ inputs:
     description: "Maximum seconds to wait for checks to complete (used with preflight_checks)"
     required: false
     default: "600"
+  rules_doc_url:
+    description: "Canonical GitHub blob URL of the pr:review SKILL.md. The review/answer skills use it to build CHECK-* rule links. Override only when the skill lives in a fork."
+    required: false
+    default: "https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/pr%3Areview/SKILL.md"
 
 runs:
   using: composite
@@ -462,7 +466,7 @@ runs:
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude_oauth_token }}
         GH_TOKEN: ${{ inputs.bot_token }}
         CLAUDE_PROMPT: |
-          /autopilot:pr-review REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} PR_AUTHOR: ${{ steps.pr.outputs.author }}
+          /autopilot:pr-review REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} PR_AUTHOR: ${{ steps.pr.outputs.author }} RULES_DOC_URL: ${{ inputs.rules_doc_url }}
         CLAUDE_MODEL: ${{ inputs.model }}
         CLAUDE_ALLOWED_TOOLS: "Bash(gh:*),mcp__repomix__*,mcp__context7__*,mcp__Ref__*,mcp__exa__*,mcp__perplexity__*,Read,Glob,Grep"
         CLAUDE_DISALLOWED_TOOLS: "Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh issue comment:*),Bash(gh api:*)"
@@ -526,7 +530,7 @@ runs:
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude_oauth_token }}
         GH_TOKEN: ${{ inputs.bot_token }}
         CLAUDE_PROMPT: |
-          /autopilot:pr-answer REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} COMMENT_BODY: ${{ steps.ctx.outputs.comment_body }} COMMENT_PATH: ${{ steps.ctx.outputs.comment_path }} COMMENT_LINE: ${{ steps.ctx.outputs.comment_line }} NEEDS_REVERDICT: ${{ steps.classify.outputs.needs_reverdict }}
+          /autopilot:pr-answer REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} COMMENT_BODY: ${{ steps.ctx.outputs.comment_body }} COMMENT_PATH: ${{ steps.ctx.outputs.comment_path }} COMMENT_LINE: ${{ steps.ctx.outputs.comment_line }} NEEDS_REVERDICT: ${{ steps.classify.outputs.needs_reverdict }} RULES_DOC_URL: ${{ inputs.rules_doc_url }}
         CLAUDE_MODEL: ${{ inputs.model }}
         CLAUDE_ALLOWED_TOOLS: "Bash(gh:*),mcp__repomix__*,mcp__context7__*,mcp__Ref__*,mcp__exa__*,mcp__perplexity__*,Read,Glob,Grep"
         CLAUDE_DISALLOWED_TOOLS: "Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh issue comment:*),Bash(gh api:*)"
