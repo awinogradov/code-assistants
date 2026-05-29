@@ -69,6 +69,7 @@ The content is organized as follows:
         0.2.0.md
       src/
         github/
+          githubReview.test.ts
           githubReview.ts
         actionsOutput.test.ts
         actionsOutput.ts
@@ -1647,6 +1648,42 @@ Your release workflow must use a different token for creating release PRs than t
 * **checks:** extract shared check-status poll loop ([8987c37](https://github.com/awinogradov/code-assistants/commit/8987c379894c8ddf5a77e1fae0d495fd17341b92))
 </file>
 
+<file path=".github/actions/code-review-action/src/github/githubReview.test.ts">
+/**
+ * Tests for githubReview.ts pure helpers.
+ * Octokit-backed functions (fetch/resolve threads, getLastBotReview) are exercised
+ * by the end-to-end review in CI and by the Phase 5 fake-Octokit suite (#149).
+ */
+import { describe, expect, test } from "bun:test";
+
+import { normalizeBody } from "./githubReview.ts";
+
+describe("normalizeBody", () => {
+  test("strips per-line trailing whitespace", () => {
+    expect(normalizeBody("line one   \nline two\t\n")).toBe("line one\nline two");
+  });
+
+  test("collapses 3+ blank lines to a single blank line", () => {
+    expect(normalizeBody("a\n\n\n\nb")).toBe("a\n\nb");
+  });
+
+  test("treats bodies differing only in trailing space / extra blanks as equal", () => {
+    expect(normalizeBody("### Blockers\n\n- one")).toBe(
+      normalizeBody("### Blockers   \n\n\n- one  ")
+    );
+  });
+
+  test("preserves line breaks — structurally different bodies stay different", () => {
+    // The old collapse-all-whitespace approach wrongly made these identical.
+    expect(normalizeBody("a\nb")).not.toBe(normalizeBody("a b"));
+  });
+
+  test("trims leading and trailing newlines", () => {
+    expect(normalizeBody("\n\nbody\n\n")).toBe("body");
+  });
+});
+</file>
+
 <file path=".github/actions/code-review-action/src/github/githubReview.ts">
 /**
  * Shared GitHub review operations for PR review submission and comment reaction scripts.
@@ -1681,25 +1718,29 @@ export interface RepoEnv {
   reviewer: string;
 }
 
+/** Single review-thread node as returned by the GraphQL query */
+interface ReviewThreadNode {
+  id: string;
+  path: string;
+  line: number | null;
+  isOutdated: boolean;
+  isResolved: boolean;
+  comments: {
+    nodes: Array<{
+      author: { login: string } | null;
+      body: string;
+      pullRequestReview: { id: string } | null;
+    }>;
+  };
+}
+
 /** GraphQL response shape for review threads query */
 interface ReviewThreadsResponse {
   repository: {
     pullRequest: {
       reviewThreads: {
-        nodes: Array<{
-          id: string;
-          path: string;
-          line: number | null;
-          isOutdated: boolean;
-          isResolved: boolean;
-          comments: {
-            nodes: Array<{
-              author: { login: string } | null;
-              body: string;
-              pullRequestReview: { id: string } | null;
-            }>;
-          };
-        }>;
+        nodes: ReviewThreadNode[];
+        pageInfo: { hasNextPage: boolean; endCursor: string | null };
       };
     };
   };
@@ -1711,6 +1752,45 @@ export const verdictToEvent: Record<string, ReviewEvent> = {
   requestChanges: "REQUEST_CHANGES",
   comment: "COMMENT",
 };
+
+/**
+ * Normalize a review/comment body for dedup comparison. Strips per-line trailing
+ * whitespace and collapses 3+ consecutive newlines to two, but preserves line
+ * breaks — so bodies that differ structurally are NOT treated as identical (the
+ * old collapse-all-whitespace approach silently dropped genuinely different reviews).
+ */
+export function normalizeBody(body: string): string {
+  return body
+    .replaceAll(/[ \t]+$/gm, "")
+    .replaceAll(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/** Minimal shape of a submitted review needed for dedup comparison. */
+export interface BotReviewSummary {
+  body: string | null;
+  state?: string;
+}
+
+/**
+ * Return the most recent non-pending review authored by the bot, or undefined.
+ * Used both for the initial dedup check and the last-write guard re-read
+ * immediately before submitting, which narrows the concurrent-duplicate window.
+ */
+export async function getLastBotReview(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  pullNumber: number,
+  reviewer: string
+): Promise<BotReviewSummary | undefined> {
+  const { data: reviews } = await octokit.rest.pulls.listReviews({
+    owner,
+    repo,
+    pull_number: pullNumber,
+  });
+  return reviews.filter((r) => r.user?.login === reviewer && r.state !== "PENDING").at(-1);
+}
 
 /**
  * Parse and validate required environment variables, initialize Octokit.
@@ -1740,21 +1820,33 @@ export function parseRepoEnv(): RepoEnv {
   };
 }
 
-/**
- * Fetch all review threads for a PR via GraphQL.
- * Returns flattened thread objects with first comment metadata.
- */
-export async function fetchReviewThreads(
+/** Flatten a GraphQL review-thread node into a {@link ReviewThread}. */
+function mapThreadNode(node: ReviewThreadNode): ReviewThread {
+  return {
+    id: node.id,
+    path: node.path,
+    line: node.line,
+    isOutdated: node.isOutdated,
+    isResolved: node.isResolved,
+    firstCommentAuthor: node.comments.nodes[0]?.author?.login ?? null,
+    firstCommentBody: node.comments.nodes[0]?.body ?? "",
+    firstCommentReviewId: node.comments.nodes[0]?.pullRequestReview?.id ?? null,
+  };
+}
+
+/** Fetch a single page of review threads. Explicit return type pins inference. */
+async function fetchReviewThreadPage(
   octokit: Octokit,
   owner: string,
   repo: string,
-  pullNumber: number
-): Promise<ReviewThread[]> {
+  pullNumber: number,
+  cursor: string | null
+): Promise<ReviewThreadsResponse> {
   const query = `
-    query($owner: String!, $repo: String!, $number: Int!) {
+    query($owner: String!, $repo: String!, $number: Int!, $cursor: String) {
       repository(owner: $owner, name: $repo) {
         pullRequest(number: $number) {
-          reviewThreads(first: 100) {
+          reviewThreads(first: 100, after: $cursor) {
             nodes {
               id
               path
@@ -1769,28 +1861,44 @@ export async function fetchReviewThreads(
                 }
               }
             }
+            pageInfo { hasNextPage endCursor }
           }
         }
       }
     }
   `;
 
-  const result = await octokit.graphql<ReviewThreadsResponse>(query, {
-    owner,
-    repo,
-    number: pullNumber,
-  });
+  return octokit.graphql<ReviewThreadsResponse>(query, { owner, repo, number: pullNumber, cursor });
+}
 
-  return result.repository.pullRequest.reviewThreads.nodes.map((node) => ({
-    id: node.id,
-    path: node.path,
-    line: node.line,
-    isOutdated: node.isOutdated,
-    isResolved: node.isResolved,
-    firstCommentAuthor: node.comments.nodes[0]?.author?.login ?? null,
-    firstCommentBody: node.comments.nodes[0]?.body ?? "",
-    firstCommentReviewId: node.comments.nodes[0]?.pullRequestReview?.id ?? null,
-  }));
+/**
+ * Fetch all review threads for a PR via GraphQL, paginating past the 100-node
+ * page so long-lived PRs don't silently drop threads from resolution logic.
+ */
+export async function fetchReviewThreads(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  pullNumber: number
+): Promise<ReviewThread[]> {
+  const threads: ReviewThread[] = [];
+  let cursor: string | null = null;
+
+  for (;;) {
+    const page: ReviewThreadsResponse = await fetchReviewThreadPage(
+      octokit,
+      owner,
+      repo,
+      pullNumber,
+      cursor
+    );
+    const { reviewThreads } = page.repository.pullRequest;
+    threads.push(...reviewThreads.nodes.map(mapThreadNode));
+    if (!reviewThreads.pageInfo.hasNextPage) break;
+    cursor = reviewThreads.pageInfo.endCursor;
+  }
+
+  return threads;
 }
 
 /**
@@ -2048,7 +2156,26 @@ export async function setOutput(key: string, value: string): Promise<void> {
  */
 import { describe, expect, test } from "bun:test";
 
-import { isBareAcknowledgement, shouldSkipModelReply } from "./classifyReaction.ts";
+import { isBareAcknowledgement, requestsReReview, shouldSkipModelReply } from "./classifyReaction.ts";
+
+describe("requestsReReview", () => {
+  test("detects explicit re-review phrasings", () => {
+    expect(requestsReReview("pushed a fix, please re-review")).toBe(true);
+    expect(requestsReReview("can you take another look")).toBe(true);
+    expect(requestsReReview("updated. PTAL")).toBe(true);
+    expect(requestsReReview("review again please")).toBe(true);
+  });
+
+  test("is case-insensitive", () => {
+    expect(requestsReReview("Done — Please Re-Review")).toBe(true);
+  });
+
+  test("plain replies and acknowledgements do not request a re-review", () => {
+    expect(requestsReReview("Fixed — removed the unused import.")).toBe(false);
+    expect(requestsReReview("this is intentional, the pattern is required")).toBe(false);
+    expect(requestsReReview("")).toBe(false);
+  });
+});
 
 describe("isBareAcknowledgement", () => {
   test("plain 'Fixed' acknowledgement is bare", () => {
@@ -2187,6 +2314,16 @@ const acknowledgementPatterns = [
 ];
 
 /**
+ * True when the comment explicitly asks the bot to look at the PR again — used
+ * to gate the expensive verdict re-evaluation in `pr:answer` so plain replies
+ * skip it. Shares {@link reReviewKeywords} with the acknowledgement check.
+ */
+export function requestsReReview(body: string): boolean {
+  const lower = body.toLowerCase();
+  return reReviewKeywords.some((keyword) => lower.includes(keyword));
+}
+
+/**
  * True when a comment body is a bare acknowledgement: it carries a positive
  * acknowledgement signal and neither asks a question nor requests a re-review.
  * Requiring a positive signal — rather than only the absence of one — keeps
@@ -2197,12 +2334,11 @@ export function isBareAcknowledgement(body: string): boolean {
     return false;
   }
 
-  const lower = body.toLowerCase();
-  if (reReviewKeywords.some((keyword) => lower.includes(keyword))) {
+  if (requestsReReview(body)) {
     return false;
   }
 
-  return acknowledgementPatterns.some((pattern) => pattern.test(lower));
+  return acknowledgementPatterns.some((pattern) => pattern.test(body.toLowerCase()));
 }
 
 /** Inputs needed to decide whether a react-mode reply can skip the model. */
@@ -2243,6 +2379,11 @@ if (import.meta.main) {
   });
 
   await setOutput("ack_only", String(ackOnly));
+
+  // Gate pr:answer's verdict re-evaluation: only re-review when the comment
+  // explicitly asks for it, so plain replies skip the expensive pass.
+  const needsReverdict = requestsReReview(process.env.COMMENT_BODY ?? "");
+  await setOutput("needs_reverdict", String(needsReverdict));
 
   if (ackOnly) {
     console.log("PR-author acknowledgement in bot thread — skipping model reply (issue #111)");
@@ -2819,7 +2960,7 @@ import { fetchCheckStatuses, pollCheckStatuses } from "@code-assistants/actions-
 import type { Octokit } from "@octokit/rest";
 
 import { setOutput } from "./actionsOutput.ts";
-import { parseRepoEnv } from "./github/githubReview.ts";
+import { normalizeBody, parseRepoEnv } from "./github/githubReview.ts";
 
 /** Outcome of the preflight polling loop */
 type PreflightOutcome =
@@ -2930,11 +3071,6 @@ I have better things to do than wait around. Fix your CI and re-request review w
 _Code Review skipped 😢_`;
 }
 
-/** Normalize comment body for dedup comparison. */
-function normalizeBody(body: string): string {
-  return body.trim().replaceAll(/\s+/g, " ");
-}
-
 /**
  * Post a skip comment to the PR with dedup check.
  * Fetches recent bot comments and skips if the same comment already exists.
@@ -3009,6 +3145,10 @@ try {
     await setOutput("skip_review", "true");
   }
 } catch (error) {
+  // Fail open so a preflight glitch never blocks review — but surface it as a
+  // GitHub Actions warning annotation so the silent proceed is visible in the run.
+  const message = error instanceof Error ? error.message : String(error);
+  console.log(`::warning title=Preflight failed open::${message}`);
   console.error("Preflight check error (fail-open, proceeding with review):", error);
   await setOutput("skip_review", "false");
 }
@@ -3022,10 +3162,13 @@ try {
  * @example
  * GH_TOKEN=xxx REPO=owner/repo PR_NUMBER=123 COMMENT_ID=456 STRUCTURED_OUTPUT='{"reply":"..."}' bun run scripts/reactToComment.ts
  */
+import type { ReviewEvent } from "./github/githubReview.ts";
 import {
   deletePendingReviews,
   fetchReviewThreads,
+  getLastBotReview,
   hasRecentBotReply,
+  normalizeBody,
   parseRepoEnv,
   readExecutionResult,
   resolveThread,
@@ -3071,14 +3214,6 @@ function parseReactionOutput(rawOutput: string): ReactionOutput | null {
 }
 
 /**
- * Normalize body for dedup comparison.
- * Trims whitespace and collapses internal whitespace runs.
- */
-function normalizeBody(body: string): string {
-  return body.trim().replaceAll(/\s+/g, " ");
-}
-
-/**
  * Resolve all unresolved bot review threads on a PR.
  * Used when verdict changes to APPROVE — all prior bot comments are considered addressed.
  */
@@ -3099,6 +3234,38 @@ async function resolveAllBotThreads(
   if (toResolve.length > 0) {
     console.log(`✓ Resolved ${toResolve.length} review thread(s)`);
   }
+}
+
+/**
+ * Submit a verdict-update review, skipping if an identical bot review already
+ * exists — both at entry and again immediately before writing (last-write guard
+ * against concurrent same-PR runs). Early returns keep nesting flat.
+ */
+async function maybeSubmitVerdict(
+  octokit: Parameters<typeof fetchReviewThreads>[0],
+  owner: string,
+  repo: string,
+  pullNumber: number,
+  reviewer: string,
+  event: ReviewEvent,
+  body: string
+): Promise<void> {
+  const lastReview = await getLastBotReview(octokit, owner, repo, pullNumber, reviewer);
+  if (lastReview && normalizeBody(lastReview.body ?? "") === normalizeBody(body)) {
+    console.log("✓ Review already posted, skipping duplicate verdict update");
+    return;
+  }
+
+  await deletePendingReviews(octokit, owner, repo, pullNumber);
+
+  const guard = await getLastBotReview(octokit, owner, repo, pullNumber, reviewer);
+  if (guard && normalizeBody(guard.body ?? "") === normalizeBody(body)) {
+    console.log("✓ Identical verdict appeared concurrently, skipping duplicate");
+    return;
+  }
+
+  await octokit.rest.pulls.createReview({ owner, repo, pull_number: pullNumber, event, body });
+  console.log(`✓ Updated review verdict to ${event}`);
 }
 
 // Main execution
@@ -3215,7 +3382,7 @@ if (resolveTargets.length > 0) {
   }
 }
 
-// Step 3: Update verdict if changed (with dedup check)
+// Step 3: Update verdict if changed (with dedup + last-write guard)
 if (output.updatedVerdict && output.updatedReviewComment) {
   const event = verdictToEvent[output.updatedVerdict] ?? "COMMENT";
 
@@ -3224,33 +3391,15 @@ if (output.updatedVerdict && output.updatedReviewComment) {
     await resolveAllBotThreads(octokit, owner, repoName, pullNumber, reviewer);
   }
 
-  const { data: reviews } = await octokit.rest.pulls.listReviews({
+  await maybeSubmitVerdict(
+    octokit,
     owner,
-    repo: repoName,
-    pull_number: pullNumber,
-  });
-  const lastBotReview = reviews
-    .filter((r) => r.user?.login === reviewer && r.state !== "PENDING")
-    .at(-1);
-
-  if (
-    lastBotReview &&
-    normalizeBody(lastBotReview.body ?? "") === normalizeBody(output.updatedReviewComment)
-  ) {
-    console.log("✓ Review already posted, skipping duplicate verdict update");
-  } else {
-    await deletePendingReviews(octokit, owner, repoName, pullNumber);
-
-    await octokit.rest.pulls.createReview({
-      owner,
-      repo: repoName,
-      pull_number: pullNumber,
-      event,
-      body: output.updatedReviewComment,
-    });
-
-    console.log(`✓ Updated review verdict to ${event}`);
-  }
+    repoName,
+    pullNumber,
+    reviewer,
+    event,
+    output.updatedReviewComment
+  );
 }
 
 console.log("✓ Reaction processed successfully");
@@ -4768,7 +4917,9 @@ import type { ReviewEvent, ReviewThread } from "./github/githubReview.ts";
 import {
   deletePendingReviews,
   fetchReviewThreads,
+  getLastBotReview,
   hasRecentBotReview,
+  normalizeBody,
   parseRepoEnv,
   readExecutionResult,
   resolveThread,
@@ -4882,14 +5033,6 @@ function formatInvalidComments(comments: InlineComment[]): string {
     .join("\n\n");
 
   return `\n\n---\n## Additional Comments (not in diff)\n\n${formatted}`;
-}
-
-/**
- * Normalize review body for dedup comparison.
- * Trims whitespace and collapses internal whitespace runs.
- */
-function normalizeBody(body: string): string {
-  return body.trim().replaceAll(/\s+/g, " ");
 }
 
 /**
@@ -5040,6 +5183,15 @@ if (
 
 // Delete pending reviews before submitting
 await deletePendingReviews(octokit, owner, repoName, pullNumber);
+
+// Last-write guard: re-read the latest bot review immediately before submitting.
+// A concurrent run (the per-comment concurrency group does not serialize same-PR
+// runs) may have posted an identical body since the check above — skip if so.
+const guardReview = await getLastBotReview(octokit, owner, repoName, pullNumber, reviewer);
+if (guardReview && normalizeBody(guardReview.body ?? "") === normalizeBody(finalBody)) {
+  console.log("✓ Identical review appeared concurrently, skipping duplicate");
+  process.exit(0);
+}
 
 // Submit the review
 const { data: submittedReview } = await octokit.rest.pulls.createReview({
@@ -5779,7 +5931,7 @@ runs:
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude_oauth_token }}
         GH_TOKEN: ${{ inputs.bot_token }}
         CLAUDE_PROMPT: |
-          /autopilot:pr-answer REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} COMMENT_BODY: ${{ steps.ctx.outputs.comment_body }} COMMENT_PATH: ${{ steps.ctx.outputs.comment_path }} COMMENT_LINE: ${{ steps.ctx.outputs.comment_line }}
+          /autopilot:pr-answer REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} COMMENT_BODY: ${{ steps.ctx.outputs.comment_body }} COMMENT_PATH: ${{ steps.ctx.outputs.comment_path }} COMMENT_LINE: ${{ steps.ctx.outputs.comment_line }} NEEDS_REVERDICT: ${{ steps.classify.outputs.needs_reverdict }}
         CLAUDE_MODEL: ${{ inputs.model }}
         CLAUDE_ALLOWED_TOOLS: "Bash(gh:*),mcp__repomix__*,mcp__context7__*,mcp__Ref__*,mcp__exa__*,mcp__perplexity__*,Read,Glob,Grep"
         CLAUDE_DISALLOWED_TOOLS: "Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh issue comment:*),Bash(gh api:*)"
@@ -25744,7 +25896,6 @@ allowed-tools:
   - Glob
   - Grep
   - Bash(gh *)
-  - MCP(github:*)
   - MCP(repomix:*)
   - MCP(context7:*)
   - MCP(Ref:*)
@@ -25766,6 +25917,7 @@ Expected form (typically supplied by `awinogradov/code-review-action`):
 - **`PR_NUMBER`** — `$ARGUMENTS` → `gh pr view --json number --jq .number` for the current branch.
 - **`REVIEWER`** — `$ARGUMENTS` → `gh api user --jq .login` (the authenticated user) as fallback.
 - **`COMMENT_BODY` / `COMMENT_PATH` / `COMMENT_LINE`** — `$ARGUMENTS` only. If missing when invoked interactively, abort with a clear error (these must come from the CI context).
+- **`NEEDS_REVERDICT`** — `$ARGUMENTS` only (`true`/`false`); the orchestrator pre-computes this from the comment text. Defaults to `false` when absent. Gates Phase 4's Verdict Update (see below).
 
 Do NOT prompt the user. Return an error JSON structure if required inputs cannot be resolved.
 
@@ -25873,7 +26025,9 @@ Do NOT resolve when:
 
 ### Verdict Update
 
-Check ALL remaining unresolved bot threads (not just the one being discussed) to determine:
+**Gate:** Only perform this pass when `NEEDS_REVERDICT` is `true` (the comment asked for a re-review). When it is `false`, set `updatedVerdict: null` and `updatedReviewComment: null` and skip straight to producing the reply — do NOT scan threads or re-review. This keeps a plain reply from triggering a full re-evaluation; a genuine verdict change still lands on the next review run (a push) or when the author explicitly asks for a re-review.
+
+When `NEEDS_REVERDICT` is `true`, check ALL remaining unresolved bot threads (not just the one being discussed) to determine:
 
 - If ALL 🚧 blockers are now resolved/retracted → `updatedVerdict: "approve"`
 - If this creates a NEW blocker → `updatedVerdict: "requestChanges"`
