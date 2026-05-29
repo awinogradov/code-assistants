@@ -16,6 +16,7 @@
  */
 import { join } from "node:path";
 
+import { Glob } from "bun";
 import semver from "semver";
 
 import { assemblePrBody } from "../assemble-pr-body.ts";
@@ -100,10 +101,18 @@ export async function runCreate(options: RunCreateOptions = {}): Promise<RunCrea
   const manifests = await loadMemberManifests(discovery.members);
   const naturalBumps = new Map<string, BumpLevel>();
   const previousVersions = new Map<string, string | null>();
+  const versionBases = new Map<string, string | null>();
 
   for (const member of discovery.members) {
     const previous = await getLatestMemberVersion(member.name, cwd);
     previousVersions.set(member.name, previous);
+
+    // Base the next version on the highest version already declared anywhere
+    // for this member — the latest tag OR a manually-bumped manifest — so a
+    // manual bump is never silently regressed (issue #163). previousVersions
+    // keeps the raw tag because it is consumed downstream as a git ref.
+    const floor = await readMemberVersionFloor(member.path);
+    versionBases.set(member.name, maxVersion(previous, floor));
 
     const since = await getLatestMemberTagReachable(member.name, cwd);
     if (!(await memberHasChanges({ cwd, path: member.relPath, since }))) {
@@ -128,7 +137,10 @@ export async function runCreate(options: RunCreateOptions = {}): Promise<RunCrea
     if (!bump) continue;
 
     const previous = previousVersions.get(member.name) ?? null;
-    const newVersion = nextVersion(previous, bump);
+    // `base` (tag ⊔ manifest floor) drives the numeric bump; `previousVersion`
+    // stays the raw tag so downstream git-range refs remain valid (issue #163).
+    const base = versionBases.get(member.name) ?? previous;
+    const newVersion = nextVersion(base, bump);
     const branch = renderBranch(branchTemplate, member.name, newVersion);
     const tag = memberVersionTag(member.name, newVersion);
 
@@ -178,12 +190,87 @@ async function computeNaturalBump(
   return result.type;
 }
 
-function nextVersion(previous: string | null, bump: BumpLevel): string {
-  const base = previous ?? "0.0.0";
-  const next = semver.inc(base, bump);
-  if (!next) {
-    throw new Error(`Failed to compute next version from ${base} with bump ${bump}`);
+/**
+ * Pick the greater of two semver strings, tolerating nulls and invalid input.
+ * Invalid or `null` operands are treated as absent so a malformed version can
+ * never win the comparison.
+ */
+function maxVersion(a: string | null, b: string | null): string | null {
+  const left = a && semver.valid(a) ? a : null;
+  const right = b && semver.valid(b) ? b : null;
+  if (!left) return right;
+  if (!right) return left;
+  return semver.gte(left, right) ? left : right;
+}
+
+/**
+ * Read the `version` declared in every `**\/.claude-plugin/plugin.json` under a
+ * member directory (`.claude-plugin` is a dot dir, hence `dot: true`).
+ */
+async function readPluginVersions(memberPath: string): Promise<(string | null)[]> {
+  const versions: (string | null)[] = [];
+  const glob = new Glob("**/.claude-plugin/plugin.json");
+  for await (const match of glob.scan({ cwd: memberPath, dot: true, absolute: false })) {
+    if (match.includes("node_modules")) continue;
+    const plugin = (await Bun.file(join(memberPath, match)).json()) as Record<string, unknown>;
+    versions.push(typeof plugin.version === "string" ? plugin.version : null);
   }
+  return versions;
+}
+
+/**
+ * Compute a member's version floor: the highest valid semver declared across
+ * the same files {@link updateVersionFiles} writes — `package.json`,
+ * `pyproject.toml` `[project]`, and every `.claude-plugin/plugin.json`. This is
+ * the seam that closes issue #163: a manual bump in any of these files is
+ * respected instead of being overwritten by a tag-derived version.
+ *
+ * `uv.lock` is omitted (it always mirrors `pyproject [project]`) and so is the
+ * plain `version` file (auto-written each release, not a manual source of
+ * truth). Returns `null` when no version-bearing file declares one.
+ */
+async function readMemberVersionFloor(memberPath: string): Promise<string | null> {
+  const candidates: (string | null)[] = [];
+
+  const pkgFile = Bun.file(join(memberPath, "package.json"));
+  if (await pkgFile.exists()) {
+    const pkg = (await pkgFile.json()) as Record<string, unknown>;
+    candidates.push(typeof pkg.version === "string" ? pkg.version : null);
+  }
+
+  const pyFile = Bun.file(join(memberPath, "pyproject.toml"));
+  if (await pyFile.exists()) {
+    const match = (await pyFile.text()).match(
+      /^\[project\][\s\S]*?^version\s*=\s*"([^"]*)"/m,
+    );
+    candidates.push(match ? match[1] : null);
+  }
+
+  candidates.push(...(await readPluginVersions(memberPath)));
+
+  return candidates.reduce<string | null>(maxVersion, null);
+}
+
+/**
+ * Assert a freshly computed version strictly exceeds the base it was derived
+ * from. Defensive post-condition: with {@link semver.inc} this never trips for
+ * a real bump, but it is exported so the invariant is unit-testable and any
+ * future change to bump computation fails loudly instead of silently
+ * regressing a published version (issue #163).
+ */
+export function assertMonotonic(base: string | null, next: string): void {
+  if (base && !semver.gt(next, base)) {
+    throw new Error(`Computed version ${next} is not greater than previous ${base}`);
+  }
+}
+
+function nextVersion(base: string | null, bump: BumpLevel): string {
+  const from = base ?? "0.0.0";
+  const next = semver.inc(from, bump);
+  if (!next) {
+    throw new Error(`Failed to compute next version from ${from} with bump ${bump}`);
+  }
+  assertMonotonic(base, next);
   return next;
 }
 
