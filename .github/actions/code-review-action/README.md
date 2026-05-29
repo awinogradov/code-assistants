@@ -83,6 +83,12 @@ The action invokes Claude Code with the local `claude-plugins/autopilot` plugin 
 
 When `parallel_fanout: true`, the action's orchestrator fans out the `pr:review:*` sub-agents in parallel via the Agent SDK instead of letting the root model do it in-model.
 
+## Review run-summary footer
+
+Every review comment carries a collapsed **"Review run summary 🤖"** footer ("under the cut") with the run's latency, token usage, cache hits, cost, tool round-trips, and — when `parallel_fanout` is on — agent counts and parallel speedup. The metrics are computed in `runClaude.ts`, passed to `submitReview.ts` via the `run_summary` step output, and appended to the **main review comment only** (never inline, never on `react`-mode replies). The footer is wrapped in HTML-comment markers so it is stripped before duplicate-review detection, keeping run-varying numbers from defeating dedup.
+
+See [Review run-summary footer](../../../docs/code-review-run-summary.md) for the full data flow and diagram.
+
 ## Labels
 
 PRs authored by the configured `bot_username` (or `reviewer` if `bot_username` is unset) and carrying the `ci-skip-review` label are skipped — useful for automated CI updates that don't need review.
