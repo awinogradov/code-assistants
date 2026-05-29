@@ -47,6 +47,7 @@ The content is organized as follows:
     agents-rules-sync/
       .release_notes/
         1.0.0.md
+        2.0.0.md
       docs/
         sync-flow.md
       src/
@@ -100,6 +101,7 @@ The content is organized as follows:
     files-sync/
       .release_notes/
         1.0.0.md
+        2.0.0.md
       src/
         botIdentity.test.ts
         botIdentity.ts
@@ -419,6 +421,86 @@ If you're currently using a pinned version tag, you can continue using it withou
 ### CI
 
 * pin actions with floating semver tags ([d1e0af8](https://github.com/awinogradov/code-assistants/commit/d1e0af8ce106b938140a5d6f42d31a8055909c73))
+</file>
+
+<file path=".github/actions/agents-rules-sync/.release_notes/2.0.0.md">
+## [2.0.0](https://github.com/awinogradov/code-assistants/compare/agents-rules-sync-action@v1.0.0...agents-rules-sync-action@v2.0.0) (2026-05-29)
+
+## Release Notes
+
+Agent rules are now synchronized with consistent bot authentication and easier configuration.
+
+## ⚠️ Breaking Changes
+
+### Action authentication inputs renamed
+The `token` and `github_token` inputs have been renamed to `bot_token` for consistency across all actions. You'll need to update your workflow files to use the new input name.
+
+**Before:**
+```yaml
+- uses: awinogradov/code-assistants/.github/actions/agents-rules-sync@v1
+  with:
+    token: ${{ secrets.GH_TOKEN }}
+```
+
+**After:**
+```yaml
+- uses: awinogradov/code-assistants/.github/actions/agents-rules-sync@v2
+  with:
+    bot_token: ${{ secrets.BOT_TOKEN }}
+```
+
+<details><summary>Related issues</summary>
+
+- [#96: Standardize actions on bot_token and bot_username](https://github.com/awinogradov/code-assistants/issues/96)
+</details>
+
+## ✨ What's New
+
+### Customizable sync commit author
+You can now configure which bot account creates the sync commits by setting the `bot_username` input. This helps teams identify automated changes and maintain consistent commit attribution across their repositories.
+
+```yaml
+- uses: awinogradov/code-assistants/.github/actions/agents-rules-sync@v2
+  with:
+    bot_token: ${{ secrets.BOT_TOKEN }}
+    bot_username: ${{ vars.BOT_USERNAME }}  # Optional, defaults to github-actions[bot]
+```
+
+<details><summary>Related issues</summary>
+
+- [#96: Standardize actions on bot_token and bot_username](https://github.com/awinogradov/code-assistants/issues/96)
+</details>
+
+## 🐛 Bug Fixes
+
+### Action loading errors resolved
+The sync action would fail to load when called from external repositories due to an invalid variable expression in the action's metadata. This has been fixed, ensuring the action loads reliably regardless of where it's called from.
+
+## ⚙️ Configuration Required
+
+### Update workflow secrets
+Replace any references to `secrets.GH_TOKEN` with `secrets.BOT_TOKEN` in your workflows. If you want to customize the commit author, also add `vars.BOT_USERNAME` to your repository variables.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #96 | [#103](https://github.com/awinogradov/code-assistants/pull/103) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **actions:** inputs token and github_token are renamed to bot_token; consumers must
+update with: blocks to pass bot_token (and optional bot_username), and workflows now read
+secrets.BOT_TOKEN and vars.BOT_USERNAME instead of secrets.GH_TOKEN.
+
+### Features
+
+* **actions:** rename token inputs to bot_token, add bot_username ([160049b](https://github.com/awinogradov/code-assistants/commit/160049b998131e2e5c503559bf5d8e70e7ea8d5a))
+
+### Bug Fixes
+
+* **actions:** remove vars expr from descriptions ([f5b2c74](https://github.com/awinogradov/code-assistants/commit/f5b2c74aef1561ca8366ed31da938ef6e7bfb514))
 </file>
 
 <file path=".github/actions/agents-rules-sync/docs/sync-flow.md">
@@ -1060,6 +1142,83 @@ await main().catch((error: unknown) => {
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [2.0.0](https://github.com/awinogradov/code-assistants/compare/agents-rules-sync-action@v1.0.0...agents-rules-sync-action@v2.0.0) (2026-05-29)
+
+## Release Notes
+
+Agent rules are now synchronized with consistent bot authentication and easier configuration.
+
+## ⚠️ Breaking Changes
+
+### Action authentication inputs renamed
+The `token` and `github_token` inputs have been renamed to `bot_token` for consistency across all actions. You'll need to update your workflow files to use the new input name.
+
+**Before:**
+```yaml
+- uses: awinogradov/code-assistants/.github/actions/agents-rules-sync@v1
+  with:
+    token: ${{ secrets.GH_TOKEN }}
+```
+
+**After:**
+```yaml
+- uses: awinogradov/code-assistants/.github/actions/agents-rules-sync@v2
+  with:
+    bot_token: ${{ secrets.BOT_TOKEN }}
+```
+
+<details><summary>Related issues</summary>
+
+- [#96: Standardize actions on bot_token and bot_username](https://github.com/awinogradov/code-assistants/issues/96)
+</details>
+
+## ✨ What's New
+
+### Customizable sync commit author
+You can now configure which bot account creates the sync commits by setting the `bot_username` input. This helps teams identify automated changes and maintain consistent commit attribution across their repositories.
+
+```yaml
+- uses: awinogradov/code-assistants/.github/actions/agents-rules-sync@v2
+  with:
+    bot_token: ${{ secrets.BOT_TOKEN }}
+    bot_username: ${{ vars.BOT_USERNAME }}  # Optional, defaults to github-actions[bot]
+```
+
+<details><summary>Related issues</summary>
+
+- [#96: Standardize actions on bot_token and bot_username](https://github.com/awinogradov/code-assistants/issues/96)
+</details>
+
+## 🐛 Bug Fixes
+
+### Action loading errors resolved
+The sync action would fail to load when called from external repositories due to an invalid variable expression in the action's metadata. This has been fixed, ensuring the action loads reliably regardless of where it's called from.
+
+## ⚙️ Configuration Required
+
+### Update workflow secrets
+Replace any references to `secrets.GH_TOKEN` with `secrets.BOT_TOKEN` in your workflows. If you want to customize the commit author, also add `vars.BOT_USERNAME` to your repository variables.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #96 | [#103](https://github.com/awinogradov/code-assistants/pull/103) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **actions:** inputs token and github_token are renamed to bot_token; consumers must
+update with: blocks to pass bot_token (and optional bot_username), and workflows now read
+secrets.BOT_TOKEN and vars.BOT_USERNAME instead of secrets.GH_TOKEN.
+
+### Features
+
+* **actions:** rename token inputs to bot_token, add bot_username ([160049b](https://github.com/awinogradov/code-assistants/commit/160049b998131e2e5c503559bf5d8e70e7ea8d5a))
+
+### Bug Fixes
+
+* **actions:** remove vars expr from descriptions ([f5b2c74](https://github.com/awinogradov/code-assistants/commit/f5b2c74aef1561ca8366ed31da938ef6e7bfb514))
 ## 1.0.0 (2026-05-28)
 
 ## Release Notes
@@ -1156,12 +1315,18 @@ If you're currently using a pinned version tag, you can continue using it withou
 ### Breaking changes
 
 - Consumers must now pass an explicit `token` input (PAT or GitHub App installation token) to both files-sync and agents-rules-sync. Pinning to an existing tag retains the old default behavior until upgrade.
+
+## From 1.0.0 to 2.0.0
+
+### Breaking changes
+
+- inputs token and github_token are renamed to bot_token; consumers must
 </file>
 
 <file path=".github/actions/agents-rules-sync/package.json">
 {
   "name": "@code-assistants/agents-rules-sync-action",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Composite GitHub Action that syncs the stack-appropriate agent rules file into CLAUDE.md.",
   "private": true,
   "type": "module",
@@ -1196,7 +1361,7 @@ If you're currently using a pinned version tag, you can continue using it withou
 <file path=".github/actions/agents-rules-sync/README.md">
 # Agents rules sync
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v2.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that syncs the stack-appropriate agent rules file from an upstream
@@ -1334,7 +1499,7 @@ uses: awinogradov/code-assistants/.github/actions/agents-rules-sync@v1
 </file>
 
 <file path=".github/actions/agents-rules-sync/version">
-1.0.0
+2.0.0
 </file>
 
 <file path=".github/actions/code-review-action/.release_notes/0.1.0.md">
@@ -6136,6 +6301,74 @@ A token with elevated permissions is now mandatory for the sync actions to work 
 * pin actions with floating semver tags ([d1e0af8](https://github.com/awinogradov/code-assistants/commit/d1e0af8ce106b938140a5d6f42d31a8055909c73))
 </file>
 
+<file path=".github/actions/files-sync/.release_notes/2.0.0.md">
+## [2.0.0](https://github.com/awinogradov/code-assistants/compare/files-sync-action@v1.0.0...files-sync-action@v2.0.0) (2026-05-29)
+
+## Release Notes
+
+The authentication system for the files-sync action now uses standardized naming, making it clearer which tokens and usernames to configure.
+
+## ✨ What's New
+
+### Standardized authentication inputs
+The action now uses `bot_token` instead of the previous `token` or `github_token` inputs, bringing consistency across all authentication methods. You can also specify a custom bot username for commits through the new `bot_username` input, which defaults to `github-actions[bot]` if not provided.
+
+<details><summary>Related issues</summary>
+
+- [#96: Standardize actions on bot_token and bot_username](https://github.com/awinogradov/code-assistants/issues/96)
+</details>
+
+## 🐛 Bug Fixes
+
+### Automatic bot email generation
+The action now correctly generates GitHub's noreply email addresses by looking up the bot's user ID through the API, ensuring commits always have valid author information even when using GitHub Apps or service accounts.
+
+### Action loading errors resolved
+Composite actions no longer fail to load due to invalid variable expressions in their input descriptions, fixing a critical issue that prevented the action from running at all in some environments.
+
+## ⚠️ Breaking Changes
+
+### Authentication input renamed
+The `token` and `github_token` inputs have been renamed to `bot_token`. Update your workflow files to use the new input name:
+
+**Before:**
+```yaml
+- uses: awinogradov/code-assistants/.github/actions/files-sync@v1
+  with:
+    token: ${{ secrets.GH_TOKEN }}
+```
+
+**After:**
+```yaml
+- uses: awinogradov/code-assistants/.github/actions/files-sync@v2
+  with:
+    bot_token: ${{ secrets.BOT_TOKEN }}
+    bot_username: ${{ vars.BOT_USERNAME }}  # optional
+```
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #96 | [#103](https://github.com/awinogradov/code-assistants/pull/103) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **actions:** inputs token and github_token are renamed to bot_token; consumers must
+update with: blocks to pass bot_token (and optional bot_username), and workflows now read
+secrets.BOT_TOKEN and vars.BOT_USERNAME instead of secrets.GH_TOKEN.
+
+### Features
+
+* **actions:** rename token inputs to bot_token, add bot_username ([160049b](https://github.com/awinogradov/code-assistants/commit/160049b998131e2e5c503559bf5d8e70e7ea8d5a))
+
+### Bug Fixes
+
+* **actions:** derive bot uid from github api for noreply email ([cd9b047](https://github.com/awinogradov/code-assistants/commit/cd9b0475830816e1be8f5e5d62362acf289d166e))
+* **actions:** remove vars expr from descriptions ([f5b2c74](https://github.com/awinogradov/code-assistants/commit/f5b2c74aef1561ca8366ed31da938ef6e7bfb514))
+</file>
+
 <file path=".github/actions/files-sync/src/botIdentity.test.ts">
 import { describe, expect, mock, test } from 'bun:test';
 
@@ -7414,6 +7647,71 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [2.0.0](https://github.com/awinogradov/code-assistants/compare/files-sync-action@v1.0.0...files-sync-action@v2.0.0) (2026-05-29)
+
+## Release Notes
+
+The authentication system for the files-sync action now uses standardized naming, making it clearer which tokens and usernames to configure.
+
+## ✨ What's New
+
+### Standardized authentication inputs
+The action now uses `bot_token` instead of the previous `token` or `github_token` inputs, bringing consistency across all authentication methods. You can also specify a custom bot username for commits through the new `bot_username` input, which defaults to `github-actions[bot]` if not provided.
+
+<details><summary>Related issues</summary>
+
+- [#96: Standardize actions on bot_token and bot_username](https://github.com/awinogradov/code-assistants/issues/96)
+</details>
+
+## 🐛 Bug Fixes
+
+### Automatic bot email generation
+The action now correctly generates GitHub's noreply email addresses by looking up the bot's user ID through the API, ensuring commits always have valid author information even when using GitHub Apps or service accounts.
+
+### Action loading errors resolved
+Composite actions no longer fail to load due to invalid variable expressions in their input descriptions, fixing a critical issue that prevented the action from running at all in some environments.
+
+## ⚠️ Breaking Changes
+
+### Authentication input renamed
+The `token` and `github_token` inputs have been renamed to `bot_token`. Update your workflow files to use the new input name:
+
+**Before:**
+```yaml
+- uses: awinogradov/code-assistants/.github/actions/files-sync@v1
+  with:
+    token: ${{ secrets.GH_TOKEN }}
+```
+
+**After:**
+```yaml
+- uses: awinogradov/code-assistants/.github/actions/files-sync@v2
+  with:
+    bot_token: ${{ secrets.BOT_TOKEN }}
+    bot_username: ${{ vars.BOT_USERNAME }}  # optional
+```
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #96 | [#103](https://github.com/awinogradov/code-assistants/pull/103) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **actions:** inputs token and github_token are renamed to bot_token; consumers must
+update with: blocks to pass bot_token (and optional bot_username), and workflows now read
+secrets.BOT_TOKEN and vars.BOT_USERNAME instead of secrets.GH_TOKEN.
+
+### Features
+
+* **actions:** rename token inputs to bot_token, add bot_username ([160049b](https://github.com/awinogradov/code-assistants/commit/160049b998131e2e5c503559bf5d8e70e7ea8d5a))
+
+### Bug Fixes
+
+* **actions:** derive bot uid from github api for noreply email ([cd9b047](https://github.com/awinogradov/code-assistants/commit/cd9b0475830816e1be8f5e5d62362acf289d166e))
+* **actions:** remove vars expr from descriptions ([f5b2c74](https://github.com/awinogradov/code-assistants/commit/f5b2c74aef1561ca8366ed31da938ef6e7bfb514))
 ## 1.0.0 (2026-05-28)
 
 ## Release Notes
@@ -7733,12 +8031,18 @@ await main().catch((error: unknown) => {
 ### Breaking changes
 
 - Consumers must now pass an explicit `token` input (PAT or GitHub App installation token) to both files-sync and agents-rules-sync. Pinning to an existing tag retains the old default behavior until upgrade.
+
+## From 1.0.0 to 2.0.0
+
+### Breaking changes
+
+- inputs token and github_token are renamed to bot_token; consumers must
 </file>
 
 <file path=".github/actions/files-sync/package.json">
 {
   "name": "@code-assistants/files-sync-action",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Composite GitHub Action that syncs declared files from upstream repositories.",
   "private": true,
   "type": "module",
@@ -7773,7 +8077,7 @@ await main().catch((error: unknown) => {
 <file path=".github/actions/files-sync/README.md">
 # Files sync
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v2.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that syncs declared files from one or more source repositories into
@@ -7909,7 +8213,7 @@ uses: awinogradov/code-assistants/.github/actions/files-sync@v1
 </file>
 
 <file path=".github/actions/files-sync/version">
-1.0.0
+2.0.0
 </file>
 
 <file path=".github/actions/release-action/.release_notes/0.1.0.md">
