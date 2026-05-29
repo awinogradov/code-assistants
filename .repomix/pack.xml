@@ -20558,7 +20558,13 @@ concurrency:
 
 jobs:
   ai-review:
-    if: (github.event_name != 'issue_comment' || github.event.issue.pull_request) && vars.BOT_USERNAME != ''
+    # Skip events sent by the bot itself — its own review/inline comments would
+    # otherwise spawn a no-op react-mode run each (the in-action guard skips them
+    # only after the runner spins up). Filtering here keeps the run from starting.
+    if: >-
+      (github.event_name != 'issue_comment' || github.event.issue.pull_request)
+      && vars.BOT_USERNAME != ''
+      && github.event.sender.login != vars.BOT_USERNAME
     runs-on: ubuntu-latest
     permissions:
       contents: read
