@@ -324,12 +324,14 @@ async function run(): Promise<void> {
     "Starting Claude execution."
   );
 
+  const fanoutStart = performance.now();
   const precomputedReviewsPath = await runFanoutIfEnabled(
     config,
     settingSources as ("user" | "project")[],
     mcpServers,
     pathToClaudeCodeExecutable
   );
+  const fanoutMs = Math.round(performance.now() - fanoutStart);
 
   const messages: unknown[] = [];
 
@@ -362,14 +364,17 @@ async function run(): Promise<void> {
     },
   });
 
+  const queryStart = performance.now();
   for await (const message of q) {
     logMessage(log, message);
     messages.push(message);
   }
+  const modelMs = Math.round(performance.now() - queryStart);
 
   // Prevent the 30min timer from keeping the event loop alive after completion
   clearTimeout(timeout);
 
+  logRunSummary(log, deriveMode(config.prompt), messages, { fanoutMs, modelMs });
   await writeExecutionFile(log, config.outputFilePath, messages);
   await emitOutputs(log, config.outputFilePath, messages);
 }
@@ -387,6 +392,105 @@ async function writeExecutionFile(
   );
 }
 
+/** Derive the run mode from the prompt, for the instrumentation summary. */
+export function deriveMode(prompt: string): "review" | "react" | "unknown" {
+  if (prompt.includes("/autopilot:pr-review ")) return "review";
+  if (prompt.includes("/autopilot:pr-answer ")) return "react";
+  return "unknown";
+}
+
+/** Find the final SDK `result` message in the collected stream. */
+export function findResultMessage(messages: unknown[]): Record<string, unknown> | undefined {
+  return messages.findLast(
+    (m): m is Record<string, unknown> =>
+      typeof m === "object" && m !== null && (m as Record<string, unknown>).type === "result"
+  );
+}
+
+/** Count `tool_use` blocks across assistant messages — one per tool round-trip. */
+export function countToolUses(messages: unknown[]): number {
+  let count = 0;
+  for (const message of messages) {
+    if (typeof message !== "object" || message === null) continue;
+    const record = message as Record<string, unknown>;
+    if (record.type !== "assistant") continue;
+    const content = (record.message as { content?: unknown } | undefined)?.content;
+    if (!Array.isArray(content)) continue;
+    for (const block of content) {
+      if (
+        typeof block === "object" &&
+        block !== null &&
+        (block as Record<string, unknown>).type === "tool_use"
+      ) {
+        count += 1;
+      }
+    }
+  }
+  return count;
+}
+
+/** Token and cost usage extracted from the SDK `result` message. */
+export interface UsageSummary {
+  tokensIn: number;
+  tokensOut: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  costUsd: number;
+  numTurns: number;
+}
+
+/** Extract usage/cost fields from the SDK `result` message, defaulting absent values to 0. */
+export function extractUsage(resultMessage: Record<string, unknown> | undefined): UsageSummary {
+  const usage = (resultMessage?.usage ?? {}) as Record<string, unknown>;
+  const toNumber = (value: unknown): number =>
+    typeof value === "number" && Number.isFinite(value) ? value : 0;
+
+  return {
+    tokensIn: toNumber(usage.input_tokens),
+    tokensOut: toNumber(usage.output_tokens),
+    cacheReadTokens: toNumber(usage.cache_read_input_tokens),
+    cacheCreationTokens: toNumber(usage.cache_creation_input_tokens),
+    costUsd: toNumber(resultMessage?.total_cost_usd),
+    numTurns: toNumber(resultMessage?.num_turns),
+  };
+}
+
+/** Wall-clock timings (ms) for the instrumented phases of a run. */
+export interface PhaseTimings {
+  fanoutMs: number;
+  modelMs: number;
+}
+
+/**
+ * Emit a single structured per-run summary line: mode, phase timings, token
+ * usage, cost, and tool round-trips. Logged before {@link emitOutputs} so the
+ * summary survives even when the run concludes with a non-success exit.
+ */
+function logRunSummary(
+  log: pino.Logger,
+  mode: string,
+  messages: unknown[],
+  timings: PhaseTimings
+): void {
+  const usage = extractUsage(findResultMessage(messages));
+
+  log.info(
+    {
+      mode,
+      fanout_ms: timings.fanoutMs,
+      model_ms: timings.modelMs,
+      tokens_in: usage.tokensIn,
+      tokens_out: usage.tokensOut,
+      cache_read_tokens: usage.cacheReadTokens,
+      cache_creation_tokens: usage.cacheCreationTokens,
+      cost_usd: usage.costUsd,
+      num_turns: usage.numTurns,
+      tool_round_trips: countToolUses(messages),
+    },
+    "Run summary."
+  );
+}
+
 /**
  * Emit GitHub Actions outputs from the collected messages, flag long-running
  * sessions, and exit non-zero when the final result subtype isn't "success".
@@ -396,10 +500,7 @@ async function emitOutputs(
   outputFilePath: string,
   messages: unknown[]
 ): Promise<void> {
-  const resultMessage = messages.findLast(
-    (m): m is Record<string, unknown> =>
-      typeof m === "object" && m !== null && (m as Record<string, unknown>).type === "result"
-  );
+  const resultMessage = findResultMessage(messages);
 
   const structuredOutput = resultMessage?.structured_output;
   const conclusion = (resultMessage?.subtype as string) ?? "error";
