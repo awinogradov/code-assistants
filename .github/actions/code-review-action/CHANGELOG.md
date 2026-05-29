@@ -2,6 +2,58 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [0.2.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v0.1.0...code-review-action@v0.2.0) (2026-05-29)
+
+## Release Notes
+
+The AI code reviewer now handles simultaneous PR comments and review acknowledgements more intelligently, while a new auto-merge capability streamlines the release process.
+
+## ✨ What's New
+
+### Automatic release PR merging
+Release pull requests that pass all checks and have been approved now merge automatically, eliminating the manual merge step between creating a release PR and publishing. The new release auto-merge action coordinates with existing release and publish workflows to ensure smooth end-to-end automation.
+
+<details><summary>Related issues</summary>
+
+- [#107: Add release-automerge composite action with downstream sync workflow](https://github.com/awinogradov/code-assistants/issues/107)
+</details>
+
+## 🐛 Bug Fixes
+
+### Better handling of simultaneous PR comments
+The AI code reviewer no longer misses @-mentions when multiple comments arrive at the same time. Previously, the concurrency settings would cancel pending reviews when new comments arrived quickly, causing the bot to ignore mentions. Now each comment gets its own processing queue, ensuring all mentions receive a response.
+
+<details><summary>Related issues</summary>
+
+- [#71: Code review action drops bot mentions when comments arrive in quick succession](https://github.com/awinogradov/code-assistants/issues/71)
+</details>
+
+### Smarter responses to review acknowledgements
+When PR authors respond with simple acknowledgements like "Fixed" or "Done" to review feedback, the AI reviewer now reacts with a 👍 emoji instead of generating a full reply. The bot still provides detailed responses to questions and explicit requests for re-review, reducing notification noise while maintaining helpfulness.
+
+<details><summary>Related issues</summary>
+
+- [#111: Code review react mode replies to every review-thread acknowledgement](https://github.com/awinogradov/code-assistants/issues/111)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #111 | [#113](https://github.com/awinogradov/code-assistants/pull/113) | @awinogradov |
+| #107 | [#110](https://github.com/awinogradov/code-assistants/pull/110) | @awinogradov |
+| #71 | [#105](https://github.com/awinogradov/code-assistants/pull/105) | @awinogradov |
+
+### Features
+
+* **release-automerge:** add release auto-merge action and workflow ([1863ee9](https://github.com/awinogradov/code-assistants/commit/1863ee92945dcbe381b4ccd12ce51d6b4748eceb))
+
+### Bug Fixes
+
+* **code-review-action:** require a positive token to skip ack replies ([930479a](https://github.com/awinogradov/code-assistants/commit/930479a15604294c9532285cb8123509d9528fa2))
+* **code-review-action:** skip react reply for author acknowledgements ([ea88093](https://github.com/awinogradov/code-assistants/commit/ea8809340f3273c43067074fed43ec2da2dc6b54))
+* **code-review:** scope concurrency group per comment id ([05ab7f8](https://github.com/awinogradov/code-assistants/commit/05ab7f83cc68a37f89492014e84f38fae79bd57b))
 ## 0.1.0 (2026-05-28)
 
 ## Release Notes
