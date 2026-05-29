@@ -23,6 +23,11 @@ describe("parseStructuredOutput", () => {
     expect(parseStructuredOutput("42")).toBeNull();
   });
 
+  test("returns null (never throws) on truncated / malformed JSON", () => {
+    expect(parseStructuredOutput('{"verdict":"approve","reviewComment":"trunc')).toBeNull();
+    expect(parseReactionOutput('{"reply":"oop')).toBeNull();
+  });
+
   test("parses a full review object", () => {
     const out = parseStructuredOutput(
       '{"verdict":"requestChanges","reviewComment":"x","inlineComments":[{"path":"a.ts","line":3,"body":"b"}]}'

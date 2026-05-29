@@ -3,22 +3,42 @@
  *
  * Extracted from submitReview.ts / reactToComment.ts so this logic is unit-testable
  * without importing those modules (which run their submission pipeline on import).
- * No side effects, no Octokit, no env access.
+ * No side effects, no Octokit, no env access. Model output is validated with Zod at
+ * the parse boundary — malformed/truncated JSON yields null, never a thrown error.
  */
+import { z } from "zod";
 
 /** Inline comment on a specific file/line in the PR. */
-export interface InlineComment {
-  path: string;
-  line: number;
-  body: string;
-}
+export const inlineCommentSchema = z.object({
+  path: z.string(),
+  line: z.number(),
+  body: z.string(),
+});
+export type InlineComment = z.infer<typeof inlineCommentSchema>;
 
-/** Structured output from a Claude review. */
-export interface StructuredOutput {
-  verdict: "approve" | "requestChanges" | "comment";
-  reviewComment: string;
-  inlineComments?: InlineComment[];
-}
+/** Structured output from a Claude review (lenient: missing fields get defaults). */
+export const structuredOutputSchema = z.object({
+  verdict: z.enum(["approve", "requestChanges", "comment"]).catch("comment"),
+  reviewComment: z.string().catch("Review completed."),
+  inlineComments: z.array(inlineCommentSchema).catch([]),
+});
+export type StructuredOutput = z.infer<typeof structuredOutputSchema>;
+
+/** Target for thread resolution by file location. */
+export const resolveTargetSchema = z.object({
+  path: z.string(),
+  line: z.number(),
+});
+export type ResolveTarget = z.infer<typeof resolveTargetSchema>;
+
+/** Structured output from a Claude comment reaction. */
+export const reactionOutputSchema = z.object({
+  reply: z.string().catch(""),
+  resolveComments: z.array(resolveTargetSchema).catch([]),
+  updatedVerdict: z.enum(["approve", "requestChanges", "comment"]).nullable().catch(null),
+  updatedReviewComment: z.string().nullable().catch(null),
+});
+export type ReactionOutput = z.infer<typeof reactionOutputSchema>;
 
 /** A valid (commentable) line location in the PR diff. */
 export interface ValidLine {
@@ -26,65 +46,35 @@ export interface ValidLine {
   line: number;
 }
 
-/** Target for thread resolution by file location. */
-export interface ResolveTarget {
-  path: string;
-  line: number;
-}
-
-/** Structured output from a Claude comment reaction. */
-export interface ReactionOutput {
-  reply: string;
-  resolveComments?: ResolveTarget[];
-  updatedVerdict?: "approve" | "requestChanges" | "comment" | null;
-  updatedReviewComment?: string | null;
-}
-
 /**
- * Parse and validate structured review output from Claude.
- * Returns null if the output is empty, the literal "null", or not a JSON object.
+ * Trim, JSON-parse (never throwing), and validate against a Zod schema.
+ * Returns null for empty/"null" input, malformed JSON, or a schema mismatch.
  */
+function parseJsonWithSchema<T>(rawOutput: string, schema: z.ZodType<T>): T | null {
+  const trimmed = rawOutput.trim();
+  if (!trimmed || trimmed === "null") {
+    return null;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+
+  const result = schema.safeParse(parsed);
+  return result.success ? result.data : null;
+}
+
+/** Parse and validate structured review output from Claude (null on any failure). */
 export function parseStructuredOutput(rawOutput: string): StructuredOutput | null {
-  const trimmed = rawOutput.trim();
-  if (!trimmed || trimmed === "null") {
-    return null;
-  }
-
-  const parsed: unknown = JSON.parse(trimmed);
-  if (typeof parsed !== "object" || parsed === null) {
-    return null;
-  }
-
-  const obj = parsed as Record<string, unknown>;
-  return {
-    verdict: (obj.verdict as StructuredOutput["verdict"]) ?? "comment",
-    reviewComment: (obj.reviewComment as string) ?? "Review completed.",
-    inlineComments: (obj.inlineComments as InlineComment[]) ?? [],
-  };
+  return parseJsonWithSchema(rawOutput, structuredOutputSchema);
 }
 
-/**
- * Parse and validate structured reaction output from Claude.
- * Returns null if the output is empty, the literal "null", or not a JSON object.
- */
+/** Parse and validate structured reaction output from Claude (null on any failure). */
 export function parseReactionOutput(rawOutput: string): ReactionOutput | null {
-  const trimmed = rawOutput.trim();
-  if (!trimmed || trimmed === "null") {
-    return null;
-  }
-
-  const parsed: unknown = JSON.parse(trimmed);
-  if (typeof parsed !== "object" || parsed === null) {
-    return null;
-  }
-
-  const obj = parsed as Record<string, unknown>;
-  return {
-    reply: (obj.reply as string) ?? "",
-    resolveComments: (obj.resolveComments as ResolveTarget[]) ?? [],
-    updatedVerdict: (obj.updatedVerdict as ReactionOutput["updatedVerdict"]) ?? null,
-    updatedReviewComment: (obj.updatedReviewComment as string | null) ?? null,
-  };
+  return parseJsonWithSchema(rawOutput, reactionOutputSchema);
 }
 
 /** Expand a single unified-diff hunk header match into its added-line locations. */

@@ -8,14 +8,15 @@
 import type { Octokit } from "@octokit/rest";
 
 import type { ReviewEvent, ReviewThread } from "./github/githubReview.ts";
-import { buildRuleUrlMap, linkRuleCodes } from "./ruleUrls.ts";
+import { agentsDirFromEnv, buildRuleUrlMap, linkRuleCodes } from "./ruleUrls.ts";
 import {
   extractValidLines,
   formatInvalidComments,
   isAlreadyMentioned,
   isValidComment,
   parseStructuredOutput,
-} from "./reviewOutput.ts";
+  type ValidLine,
+} from "./reviewOutput/reviewOutput.ts";
 import {
   deletePendingReviews,
   fetchReviewThreads,
@@ -28,12 +29,6 @@ import {
   unresolveThread,
   verdictToEvent,
 } from "./github/githubReview.ts";
-
-/** Location of a comment (path and line) */
-interface CommentLocation {
-  path: string;
-  line: number;
-}
 
 /**
  * Cleanup bot review threads by resolving outdated ones, duplicates, and fixed blockers.
@@ -48,7 +43,7 @@ async function cleanupBotThreads(
   repo: string,
   pullNumber: number,
   botLogin: string,
-  newCommentLocations: CommentLocation[],
+  newCommentLocations: ValidLine[],
   event: ReviewEvent
 ): Promise<number> {
   const threads = await fetchReviewThreads(octokit, owner, repo, pullNumber);
@@ -119,7 +114,7 @@ if (!output) {
 // Resolve bare rule codes (e.g. [CHECK-BUG-002]) to GitHub links in code, so the
 // review model no longer reads agent files per run to build them. Missing codes
 // stay bare; an unreadable plugin dir yields an empty map (links simply omitted).
-const ruleUrlMap = await buildRuleUrlMap(`${process.env.CLAUDE_PLUGIN_DIR ?? ""}/agents`);
+const ruleUrlMap = await buildRuleUrlMap(agentsDirFromEnv());
 output.reviewComment = linkRuleCodes(output.reviewComment, ruleUrlMap);
 output.inlineComments = (output.inlineComments ?? []).map((c) => ({
   ...c,
@@ -165,14 +160,7 @@ if (resolvedCount > 0) {
 }
 
 // Skip if consecutive approval with no new findings (avoid duplicate reviews)
-const { data: reviews } = await octokit.rest.pulls.listReviews({
-  owner,
-  repo: repoName,
-  pull_number: pullNumber,
-});
-
-const botReviews = reviews.filter((r) => r.user?.login === reviewer && r.state !== "PENDING");
-const lastBotReview = botReviews.at(-1);
+const lastBotReview = await getLastBotReview(octokit, owner, repoName, pullNumber, reviewer);
 
 // Skip if last bot review has identical body (prevents duplicate from concurrent posting)
 if (lastBotReview && normalizeBody(lastBotReview.body ?? "") === normalizeBody(finalBody)) {

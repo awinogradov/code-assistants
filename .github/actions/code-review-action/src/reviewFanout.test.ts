@@ -12,13 +12,44 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
+import type { FanoutContext } from "./reviewFanout.ts";
 import {
   buildSubagentPrompt,
   detectStack,
   loadReviewAgents,
   parseAgentFrontmatter,
+  resolveModel,
   splitFrontmatter,
 } from "./reviewFanout.ts";
+
+describe("resolveModel", () => {
+  const ctx = (overrides: Record<string, string>) =>
+    ({ modelOverrides: overrides, fallbackModel: "fallback-model" }) as unknown as FanoutContext;
+  const agent = (subagent_type: string, model?: string) =>
+    ({ subagent_type, model }) as Parameters<typeof resolveModel>[1];
+
+  test("prefers a per-category override over the frontmatter model", () => {
+    expect(resolveModel(ctx({ correctness: "opus" }), agent("autopilot:pr:review:correctness", "sonnet"))).toBe(
+      "opus"
+    );
+  });
+
+  test("falls back to the frontmatter model when no override matches", () => {
+    expect(resolveModel(ctx({ testing: "opus" }), agent("autopilot:pr:review:correctness", "sonnet"))).toBe(
+      "sonnet"
+    );
+  });
+
+  test("falls back to the context model when neither override nor frontmatter is set", () => {
+    expect(resolveModel(ctx({}), agent("autopilot:pr:review:correctness"))).toBe("fallback-model");
+  });
+
+  test("keys overrides by the bare category (autopilot:pr:review: stripped)", () => {
+    expect(resolveModel(ctx({ "surface-naming": "haiku" }), agent("autopilot:pr:review:surface-naming", "sonnet"))).toBe(
+      "haiku"
+    );
+  });
+});
 
 describe("splitFrontmatter", () => {
   test("extracts frontmatter and body", () => {

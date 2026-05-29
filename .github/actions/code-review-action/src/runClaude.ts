@@ -26,6 +26,10 @@ import { runReviewFanout, type FanoutContext } from "./reviewFanout.ts";
 /** Duration above which a Claude session is considered long-running (triggers artifact upload). */
 const longRunMs = 5 * 60 * 1000;
 
+/** Slash-command prefixes that select the run mode. The trailing space is load-bearing. */
+const reviewCommand = "/autopilot:pr-review ";
+const reactCommand = "/autopilot:pr-answer ";
+
 /** Create pino logger configured per platform logging standard. */
 async function createLogger(): Promise<pino.Logger> {
   const { version } = (await Bun.file(`${import.meta.dirname}/../package.json`).json()) as {
@@ -84,6 +88,7 @@ export interface RunClaudeConfig {
   settingsJson: string | undefined;
   outputFilePath: string;
   timeoutMs: number;
+  modelOverrides: Record<string, string>;
 }
 
 /**
@@ -136,6 +141,7 @@ export function parseConfig(): RunClaudeConfig {
       process.env.EXECUTION_OUTPUT_FILE ??
       `${process.env.RUNNER_TEMP ?? "/tmp"}/claude-execution-output.json`,
     timeoutMs: timeoutMinutes * 60 * 1000,
+    modelOverrides: parseModelOverrides(process.env.REVIEW_MODEL_OVERRIDES),
   };
 }
 
@@ -266,27 +272,37 @@ let log: pino.Logger | undefined;
  */
 function shouldRunFanout(config: RunClaudeConfig): boolean {
   if (process.env.PARALLEL_FANOUT !== "true") return false;
-  if (!config.prompt.includes("/autopilot:pr-review ")) return false;
+  if (!config.prompt.includes(reviewCommand)) return false;
   if (!config.pluginDir) return false;
   if (!process.env.GITHUB_REPOSITORY || !process.env.PR_NUMBER) return false;
   return true;
 }
 
+/** Zod schema for the optional per-category model-override map (category → model). */
+const modelOverridesSchema = z.record(z.string(), z.string());
+
 /**
- * Parse the optional per-category model-override map from env. String values only;
- * a malformed value yields an empty map so it never blocks the review.
+ * Parse the optional per-category model-override map from env, validated with Zod.
+ * A malformed value yields an empty map (never blocks the review) but emits a
+ * warning so an operator knows their overrides were ignored.
  */
 export function parseModelOverrides(raw: string | undefined): Record<string, string> {
   if (!raw) return {};
+
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (typeof parsed !== "object" || parsed === null) return {};
-    return Object.fromEntries(
-      Object.entries(parsed).filter(([, v]) => typeof v === "string")
-    ) as Record<string, string>;
+    parsed = JSON.parse(raw);
   } catch {
+    log?.warn("Ignoring REVIEW_MODEL_OVERRIDES: not valid JSON.");
     return {};
   }
+
+  const result = modelOverridesSchema.safeParse(parsed);
+  if (!result.success) {
+    log?.warn("Ignoring REVIEW_MODEL_OVERRIDES: expected a JSON object of category→model strings.");
+    return {};
+  }
+  return result.data;
 }
 
 /** Spawn the 12 review sub-agents in parallel and persist their results. */
@@ -307,7 +323,7 @@ async function runFanoutIfEnabled(
     settingSources,
     pathToClaudeCodeExecutable,
     fallbackModel: config.model,
-    modelOverrides: parseModelOverrides(process.env.REVIEW_MODEL_OVERRIDES),
+    modelOverrides: config.modelOverrides,
     inheritedAllowedTools: config.allowedTools,
     inheritedDisallowedTools: config.disallowedTools,
     // Give each sub-agent 10 min — rfc-compliance historically hits ~77s.
@@ -412,8 +428,8 @@ async function writeExecutionFile(
 
 /** Derive the run mode from the prompt, for the instrumentation summary. */
 export function deriveMode(prompt: string): "review" | "react" | "unknown" {
-  if (prompt.includes("/autopilot:pr-review ")) return "review";
-  if (prompt.includes("/autopilot:pr-answer ")) return "react";
+  if (prompt.includes(reviewCommand)) return "review";
+  if (prompt.includes(reactCommand)) return "react";
   return "unknown";
 }
 
