@@ -58,6 +58,18 @@ Adding a new package dependency for something that could be done in <20 lines wi
 
 - Example violation: Adding `dotenv` to read 2 environment variables when `process.env` or `os.getenv()` suffices.
 
+**CHECK-DEP-001: Deprecated or unmaintained dependency added** — Severity: suggestion
+
+A newly added dependency is deprecated, archived, or visibly unmaintained (no releases in years, known successor), or pulls a heavy/duplicate transitive tree for a small need.
+
+- Example violation: adding `request` (deprecated) instead of the built-in `fetch`.
+
+**CHECK-DEP-002: Dependency with incompatible or missing license** — Severity: suggestion
+
+A new dependency carries a license incompatible with the project (e.g. GPL into a permissively-licensed project) or has no discernible license.
+
+- Example violation: adding a GPL-3.0 package to an MIT-licensed library distributed to downstream consumers.
+
 ### C. Pattern Consistency
 
 **CHECK-ARCH-007: Inconsistent error handling pattern** — Severity: suggestion

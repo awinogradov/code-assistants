@@ -18,9 +18,36 @@ import {
   loadMcpServers,
   mcpConfigFileSchema,
   parseConfig,
+  parseModelOverrides,
   resolveClaudeBinary,
   safeParseJson,
 } from "./runClaude.ts";
+
+describe("parseModelOverrides", () => {
+  test("returns empty map for undefined or empty input", () => {
+    expect(parseModelOverrides(undefined)).toEqual({});
+    expect(parseModelOverrides("")).toEqual({});
+  });
+
+  test("parses a category-to-model map", () => {
+    expect(parseModelOverrides('{"correctness":"claude-opus-4-8","complexity":"claude-sonnet-4-6"}')).toEqual({
+      correctness: "claude-opus-4-8",
+      complexity: "claude-sonnet-4-6",
+    });
+  });
+
+  test("drops non-string values and keeps string ones", () => {
+    expect(parseModelOverrides('{"security":"sonnet","bogus":3,"x":null}')).toEqual({
+      security: "sonnet",
+    });
+  });
+
+  test("returns empty map for malformed JSON or non-objects", () => {
+    expect(parseModelOverrides("{bad")).toEqual({});
+    expect(parseModelOverrides('"a string"')).toEqual({});
+    expect(parseModelOverrides("42")).toEqual({});
+  });
+});
 
 describe("safeParseJson", () => {
   test("returns undefined for empty string", () => {

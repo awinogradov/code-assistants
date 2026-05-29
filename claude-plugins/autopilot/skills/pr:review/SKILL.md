@@ -159,7 +159,7 @@ Store the echoed value as `<path>` — it is the concrete reference Phase 2.4 us
 
 Used only when `PRECOMPUTED_REVIEWS_PATH` is empty or unset (see 2.2).
 
-Launch ALL 11 review agents **in parallel** (single message, multiple Agent tool calls). Each agent receives the stack and diff in its prompt. Some agents receive additional context.
+Launch ALL 12 review agents **in parallel** (single message, multiple Agent tool calls). Each agent receives the stack and diff in its prompt. Some agents receive additional context.
 
 **Prompt template for most agents:**
 
@@ -235,9 +235,13 @@ Agent 10 — Surface Testing & Quality (haiku):
 Agent 11 — Surface Naming & Structure (haiku):
   subagent_type: "autopilot:pr:review:surface-naming"
   description: "Review: surface-naming"
+
+Agent 12 — Security (sonnet):
+  subagent_type: "autopilot:pr:review:security"
+  description: "Review: security"
 ```
 
-After all 11 agents complete, proceed to Phase 2.5 with the list of structured review blocks.
+After all 12 agents complete, proceed to Phase 2.5 with the list of structured review blocks.
 
 ### 2.4 Pre-Computed Fan-Out Results
 

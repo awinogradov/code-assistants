@@ -272,6 +272,23 @@ function shouldRunFanout(config: RunClaudeConfig): boolean {
   return true;
 }
 
+/**
+ * Parse the optional per-category model-override map from env. String values only;
+ * a malformed value yields an empty map so it never blocks the review.
+ */
+export function parseModelOverrides(raw: string | undefined): Record<string, string> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (typeof parsed !== "object" || parsed === null) return {};
+    return Object.fromEntries(
+      Object.entries(parsed).filter(([, v]) => typeof v === "string")
+    ) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
 /** Spawn the 12 review sub-agents in parallel and persist their results. */
 async function runFanoutIfEnabled(
   config: RunClaudeConfig,
@@ -290,6 +307,7 @@ async function runFanoutIfEnabled(
     settingSources,
     pathToClaudeCodeExecutable,
     fallbackModel: config.model,
+    modelOverrides: parseModelOverrides(process.env.REVIEW_MODEL_OVERRIDES),
     inheritedAllowedTools: config.allowedTools,
     inheritedDisallowedTools: config.disallowedTools,
     // Give each sub-agent 10 min — rfc-compliance historically hits ~77s.

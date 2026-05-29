@@ -49,6 +49,7 @@ File named generically (e.g., `utils.ts`, `helpers.ts`, `common.ts`, `maintenanc
 Related files follow different naming patterns — some use `_client` suffix, others use `_service`, mixing conventions.
 
 - Example violation: `audioClient.ts`, `speechService.ts`, `ttsHandler.ts` — inconsistent suffixes within a single domain.
+- Scope: **file and path** naming conventions. Inconsistent **identifier** naming inside code is CHECK-CPLX-006 (complexity) — do not double-report.
 
 **CHECK-CS-009: New file in wrong directory** — Severity: suggestion
 

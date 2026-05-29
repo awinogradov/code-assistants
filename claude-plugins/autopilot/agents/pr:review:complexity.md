@@ -62,6 +62,7 @@ Name implies different behavior than what the code does. `get_*`/`get*` that mut
 Same concept named differently in the same file or closely related files — `user_id` in one function, `uid` in another, `userId` in a third.
 
 - Example violation: `getSessionConfig()` and `fetchSessionSettings()` in the same module doing similar things.
+- Scope: identifier (variable/function) naming **inside code**. Inconsistent **file/path** naming is CHECK-CS-008 (surface-naming) — do not double-report.
 
 ### C. Code Structure
 
