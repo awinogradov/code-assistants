@@ -81,6 +81,8 @@ The content is organized as follows:
         classifyReaction.ts
         logClaudeMessage.test.ts
         logClaudeMessage.ts
+        markedDetailsBlock.test.ts
+        markedDetailsBlock.ts
         preflightChecks.ts
         reactToComment.ts
         reviewFanout.test.ts
@@ -89,6 +91,8 @@ The content is organized as follows:
         ruleUrls.ts
         runClaude.test.ts
         runClaude.ts
+        runSummaryFooter.test.ts
+        runSummaryFooter.ts
         submitReview.ts
         updatePrFooter.ts
       action.yml
@@ -293,6 +297,7 @@ claude-plugins/
     version
 docs/
   agents-field.md
+  code-review-run-summary.md
   release-automerge.md
   release-field.md
   repomix-pack.md
@@ -3476,6 +3481,103 @@ export function logMessage(log: pino.Logger, message: SDKMessage): void {
 }
 </file>
 
+<file path=".github/actions/code-review-action/src/markedDetailsBlock.test.ts">
+/**
+ * Tests for markedDetailsBlock.ts.
+ * Covers marker placement, the blank line after `<br />` that lets markdown
+ * render inside `<details>`, and body-line ordering.
+ */
+import { describe, expect, test } from "bun:test";
+
+import { buildMarkedDetailsBlock } from "./markedDetailsBlock.ts";
+
+describe("buildMarkedDetailsBlock", () => {
+  test("bounds the block with the markers and a horizontal rule", () => {
+    const block = buildMarkedDetailsBlock({
+      startMarker: "<!-- start -->",
+      endMarker: "<!-- end -->",
+      summary: "Title 🤖",
+      bodyLines: ["body"],
+    });
+
+    expect(block.startsWith("<!-- start -->\n---\n")).toBe(true);
+    expect(block.endsWith("</details>\n<!-- end -->")).toBe(true);
+    expect(block).toContain("<summary>Title 🤖</summary>");
+  });
+
+  test("keeps a blank line after <br /> so markdown renders inside <details>", () => {
+    const block = buildMarkedDetailsBlock({
+      startMarker: "<!-- start -->",
+      endMarker: "<!-- end -->",
+      summary: "Title",
+      bodyLines: ["| Metric | Value |"],
+    });
+
+    expect(block).toContain("<br />\n\n| Metric | Value |\n\n</details>");
+  });
+
+  test("renders body lines in order", () => {
+    const block = buildMarkedDetailsBlock({
+      startMarker: "<!-- start -->",
+      endMarker: "<!-- end -->",
+      summary: "Title",
+      bodyLines: ["one", "two", "three"],
+    });
+
+    expect(block).toContain("one\ntwo\nthree");
+  });
+});
+</file>
+
+<file path=".github/actions/code-review-action/src/markedDetailsBlock.ts">
+/**
+ * Build the marker-bounded, collapsible `<details>` block shared by the PR
+ * help footer (`updatePrFooter.ts`) and the review run-summary footer
+ * (`runSummaryFooter.ts`). The HTML-comment markers bound the block so callers
+ * can locate it to rebuild or strip it, and the blank line after `<br />` lets
+ * a GitHub-flavored markdown table or list render inside the `<details>`.
+ *
+ * @example
+ * buildMarkedDetailsBlock({
+ *   startMarker: "<!-- run-summary-start -->",
+ *   endMarker: "<!-- run-summary-end -->",
+ *   summary: "Review run summary 🤖",
+ *   bodyLines: ["| Metric | Value |", "| --- | --- |", "| Cost | $0.10 |"],
+ * });
+ */
+export interface MarkedDetailsBlock {
+  /** Opening HTML-comment marker placed directly above the `---` rule. */
+  startMarker: string;
+  /** Closing HTML-comment marker placed directly below `</details>`. */
+  endMarker: string;
+  /** Text rendered inside `<summary>`, e.g. `"Available commands 🤖"`. */
+  summary: string;
+  /** Markdown lines rendered inside the open `<details>`, after the blank line. */
+  bodyLines: string[];
+}
+
+/** Assemble the marker-wrapped `<details>` block from its parts. */
+export function buildMarkedDetailsBlock({
+  startMarker,
+  endMarker,
+  summary,
+  bodyLines,
+}: MarkedDetailsBlock): string {
+  return [
+    startMarker,
+    "---",
+    "<details>",
+    `<summary>${summary}</summary>`,
+    "<br />",
+    "",
+    ...bodyLines,
+    "",
+    "</details>",
+    endMarker,
+  ].join("\n");
+}
+</file>
+
 <file path=".github/actions/code-review-action/src/preflightChecks.ts">
 /**
  * Preflight PR check status polling before AI code review.
@@ -3916,8 +4018,9 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import type { FanoutContext } from "./reviewFanout.ts";
+import type { FanoutContext, SubagentResult } from "./reviewFanout.ts";
 import {
+  buildFanoutStats,
   buildSubagentPrompt,
   detectStack,
   loadReviewAgents,
@@ -3925,6 +4028,37 @@ import {
   resolveModel,
   splitFrontmatter,
 } from "./reviewFanout.ts";
+
+describe("buildFanoutStats", () => {
+  const result = (duration_ms: number, error?: string): SubagentResult => ({
+    subagent_type: "autopilot:pr:review:correctness",
+    markdown: "",
+    duration_ms,
+    error,
+  });
+
+  test("counts agents and failures", () => {
+    const stats = buildFanoutStats([result(100), result(200, "boom"), result(150)], 250);
+    expect(stats.agentCount).toBe(3);
+    expect(stats.failedCount).toBe(1);
+  });
+
+  test("computes parallel speedup as sum(agent time) / wall time", () => {
+    expect(buildFanoutStats([result(100), result(300)], 200).parallelSpeedup).toBe(2);
+  });
+
+  test("returns 0 speedup when no wall time elapsed", () => {
+    expect(buildFanoutStats([result(100)], 0).parallelSpeedup).toBe(0);
+  });
+
+  test("handles an empty result set", () => {
+    expect(buildFanoutStats([], 100)).toEqual({
+      agentCount: 0,
+      failedCount: 0,
+      parallelSpeedup: 0,
+    });
+  });
+});
 
 describe("resolveModel", () => {
   const ctx = (overrides: Record<string, string>) =>
@@ -4163,6 +4297,13 @@ export interface SubagentResult {
   markdown: string;
   duration_ms: number;
   error?: string;
+}
+
+/** Aggregate fan-out counters surfaced in the per-run summary footer. */
+export interface FanoutStats {
+  agentCount: number;
+  failedCount: number;
+  parallelSpeedup: number;
 }
 
 /** In-memory representation of one loaded agent definition file. */
@@ -4417,12 +4558,29 @@ function buildSubagentOptions(
 }
 
 /**
- * Run all 12 `pr:review:*` sub-agents in parallel and return their markdown
- * review blocks. Individual failures are captured in the `error` field of the
- * corresponding result but do not abort the whole fan-out — this mirrors the
- * current root-model behavior where a failing sub-agent is skipped.
+ * Derive the fan-out summary counters from the per-agent results and the
+ * wall-clock duration. `parallelSpeedup` is sum(agent time) / wall time — the
+ * gain versus a hypothetical serial run — and is 0 when no wall time elapsed.
  */
-export async function runReviewFanout(ctx: FanoutContext): Promise<SubagentResult[]> {
+export function buildFanoutStats(results: SubagentResult[], totalMs: number): FanoutStats {
+  const totalAgentMs = results.reduce((sum, r) => sum + r.duration_ms, 0);
+  return {
+    agentCount: results.length,
+    failedCount: results.filter((r) => r.error).length,
+    parallelSpeedup: totalMs > 0 ? +(totalAgentMs / totalMs).toFixed(2) : 0,
+  };
+}
+
+/**
+ * Run all 12 `pr:review:*` sub-agents in parallel and return their markdown
+ * review blocks alongside the aggregate fan-out stats. Individual failures are
+ * captured in the `error` field of the corresponding result but do not abort the
+ * whole fan-out — this mirrors the current root-model behavior where a failing
+ * sub-agent is skipped.
+ */
+export async function runReviewFanout(
+  ctx: FanoutContext,
+): Promise<{ results: SubagentResult[]; stats: FanoutStats }> {
   ctx.log.info(
     { repo: ctx.repo, pr_number: ctx.prNumber, plugin_dir: ctx.pluginDir },
     "Parallel review fan-out starting.",
@@ -4446,22 +4604,21 @@ export async function runReviewFanout(ctx: FanoutContext): Promise<SubagentResul
 
   const totalMs = Math.round(performance.now() - start);
   const maxAgentMs = results.reduce((max, r) => Math.max(max, r.duration_ms), 0);
-  const totalAgentMs = results.reduce((sum, r) => sum + r.duration_ms, 0);
-  const failed = results.filter((r) => r.error).length;
+  const stats = buildFanoutStats(results, totalMs);
 
   ctx.log.info(
     {
       total_ms: totalMs,
       max_agent_ms: maxAgentMs,
       // Gain vs. a hypothetical serial run: sum(agent time) / wall time.
-      parallel_speedup: totalMs > 0 ? +(totalAgentMs / totalMs).toFixed(2) : 0,
-      agent_count: results.length,
-      failed_count: failed,
+      parallel_speedup: stats.parallelSpeedup,
+      agent_count: stats.agentCount,
+      failed_count: stats.failedCount,
     },
     "Parallel review fan-out complete.",
   );
 
-  return results;
+  return { results, stats };
 }
 </file>
 
@@ -4737,6 +4894,7 @@ import {
   parseModelOverrides,
   resolveClaudeBinary,
   safeParseJson,
+  withFanoutStats,
 } from "./runClaude.ts";
 
 describe("parseModelOverrides", () => {
@@ -5118,6 +5276,26 @@ describe("buildRunSummary", () => {
   });
 });
 
+describe("withFanoutStats", () => {
+  const summary = { mode: "review", cost_usd: 0.1 };
+
+  test("returns the summary unchanged when no fan-out stats are present", () => {
+    expect(withFanoutStats(summary, undefined)).toEqual(summary);
+  });
+
+  test("merges fan-out counters under snake_case keys", () => {
+    expect(
+      withFanoutStats(summary, { agentCount: 12, failedCount: 1, parallelSpeedup: 8.5 })
+    ).toEqual({
+      mode: "review",
+      cost_usd: 0.1,
+      agent_count: 12,
+      failed_count: 1,
+      parallel_speedup: 8.5,
+    });
+  });
+});
+
 describe("detectLinuxLibc", () => {
   test("returns 'glibc' or 'musl' (string literal)", async () => {
     const libc = await detectLinuxLibc();
@@ -5178,7 +5356,7 @@ import { z } from "zod";
 
 import { setOutput } from "./actionsOutput.ts";
 import { logMessage } from "./logClaudeMessage.ts";
-import { runReviewFanout, type FanoutContext } from "./reviewFanout.ts";
+import { runReviewFanout, type FanoutContext, type FanoutStats } from "./reviewFanout.ts";
 
 /** Duration above which a Claude session is considered long-running (triggers artifact upload). */
 const longRunMs = 5 * 60 * 1000;
@@ -5473,7 +5651,7 @@ async function runFanoutIfEnabled(
   settingSources: ("user" | "project")[],
   mcpServers: Record<string, McpServerConfig>,
   pathToClaudeCodeExecutable: string | undefined
-): Promise<string | undefined> {
+): Promise<{ outputPath: string; stats: FanoutStats } | undefined> {
   if (!log || !shouldRunFanout(config)) return undefined;
 
   const fanoutCtx: FanoutContext = {
@@ -5492,11 +5670,11 @@ async function runFanoutIfEnabled(
     subagentTimeoutMs: 10 * 60 * 1000,
   };
 
-  const results = await runReviewFanout(fanoutCtx);
+  const { results, stats } = await runReviewFanout(fanoutCtx);
   const outputPath = `${process.env.RUNNER_TEMP ?? "/tmp"}/precomputed-reviews.json`;
   await Bun.write(outputPath, JSON.stringify(results, null, 2));
   log.info({ output_path: outputPath, count: results.length }, "Fan-out results written.");
-  return outputPath;
+  return { outputPath, stats };
 }
 
 /** Run Claude Code and write outputs. Exported for visibility, called from main guard. */
@@ -5521,7 +5699,7 @@ async function run(): Promise<void> {
   );
 
   const fanoutStart = performance.now();
-  const precomputedReviewsPath = await runFanoutIfEnabled(
+  const fanout = await runFanoutIfEnabled(
     config,
     settingSources as ("user" | "project")[],
     mcpServers,
@@ -5555,7 +5733,7 @@ async function run(): Promise<void> {
         ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? "",
         CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN ?? "",
         GH_TOKEN: process.env.GH_TOKEN ?? "",
-        PRECOMPUTED_REVIEWS_PATH: precomputedReviewsPath ?? "",
+        PRECOMPUTED_REVIEWS_PATH: fanout?.outputPath ?? "",
       },
     },
   });
@@ -5570,7 +5748,13 @@ async function run(): Promise<void> {
   // Prevent the 30min timer from keeping the event loop alive after completion
   clearTimeout(timeout);
 
-  logRunSummary(log, deriveMode(config.prompt), messages, { fanoutMs, modelMs });
+  // Emit the run summary (log + step output) BEFORE emitOutputs, which may
+  // process.exit(1) on a non-success result — keeping the footer data available
+  // to the separate submitReview step even on a failed run.
+  const summary = buildRunSummary(deriveMode(config.prompt), messages, { fanoutMs, modelMs });
+  log.info(summary, "Run summary.");
+  await setOutput("run_summary", JSON.stringify(withFanoutStats(summary, fanout?.stats)));
+
   await writeExecutionFile(log, config.outputFilePath, messages);
   await emitOutputs(log, config.outputFilePath, messages);
 }
@@ -5688,17 +5872,21 @@ export function buildRunSummary(
 }
 
 /**
- * Emit the per-run summary as one structured log line. Logged before
- * {@link emitOutputs} so it survives even when the run concludes with a
- * non-success exit.
+ * Merge the optional fan-out counters (snake_case) into the run summary so the
+ * review footer can render them. Returns the summary unchanged when fan-out did
+ * not run (react mode or a non-fan-out review).
  */
-function logRunSummary(
-  log: pino.Logger,
-  mode: string,
-  messages: unknown[],
-  timings: PhaseTimings
-): void {
-  log.info(buildRunSummary(mode, messages, timings), "Run summary.");
+export function withFanoutStats(
+  summary: Record<string, number | string>,
+  stats: FanoutStats | undefined
+): Record<string, number | string> {
+  if (!stats) return summary;
+  return {
+    ...summary,
+    agent_count: stats.agentCount,
+    failed_count: stats.failedCount,
+    parallel_speedup: stats.parallelSpeedup,
+  };
 }
 
 /**
@@ -5769,6 +5957,271 @@ if (import.meta.main) {
 }
 </file>
 
+<file path=".github/actions/code-review-action/src/runSummaryFooter.test.ts">
+/**
+ * Tests for runSummaryFooter.ts.
+ * Covers RUN_SUMMARY parsing (fail-open), footer rendering (core vs fan-out,
+ * number formatting, markers), and footer stripping (round-trip, missing markers).
+ */
+import { describe, expect, test } from "bun:test";
+
+import {
+  parseRunSummary,
+  renderRunSummaryFooter,
+  stripRunSummaryFooter,
+  type RunSummary,
+} from "./runSummaryFooter.ts";
+
+const coreSummary: RunSummary = {
+  mode: "review",
+  fanout_ms: 1200,
+  model_ms: 34000,
+  tokens_in: 500,
+  tokens_out: 100,
+  cache_read_tokens: 400,
+  cache_creation_tokens: 20,
+  cost_usd: 0.35,
+  num_turns: 3,
+  tool_round_trips: 10,
+};
+
+const fanoutSummary: RunSummary = {
+  ...coreSummary,
+  agent_count: 12,
+  failed_count: 1,
+  parallel_speedup: 8.5,
+};
+
+describe("parseRunSummary", () => {
+  test("returns undefined for empty or undefined input", () => {
+    expect(parseRunSummary(undefined)).toBeUndefined();
+    expect(parseRunSummary("")).toBeUndefined();
+  });
+
+  test("returns undefined for malformed JSON", () => {
+    expect(parseRunSummary("{not json")).toBeUndefined();
+  });
+
+  test("returns undefined when a required field is missing", () => {
+    const { cost_usd: _omitted, ...partial } = coreSummary;
+    expect(parseRunSummary(JSON.stringify(partial))).toBeUndefined();
+  });
+
+  test("returns undefined for an unknown mode", () => {
+    expect(parseRunSummary(JSON.stringify({ ...coreSummary, mode: "bogus" }))).toBeUndefined();
+  });
+
+  test("returns undefined when a numeric field is a string (no coercion)", () => {
+    expect(parseRunSummary(JSON.stringify({ ...coreSummary, cost_usd: "0.35" }))).toBeUndefined();
+  });
+
+  test("parses a valid core summary", () => {
+    expect(parseRunSummary(JSON.stringify(coreSummary))).toEqual(coreSummary);
+  });
+
+  test("preserves optional fan-out fields when present", () => {
+    expect(parseRunSummary(JSON.stringify(fanoutSummary))).toEqual(fanoutSummary);
+  });
+});
+
+describe("renderRunSummaryFooter", () => {
+  test("wraps the block in the strip markers and a horizontal rule", () => {
+    const footer = renderRunSummaryFooter(coreSummary);
+    expect(footer).toContain("<!-- run-summary-start -->");
+    expect(footer).toContain("<!-- run-summary-end -->");
+    expect(footer).toContain("\n---\n");
+    expect(footer).toContain("<summary>Review run summary 🤖</summary>");
+  });
+
+  test("keeps the blank line after <br /> so the table renders inside <details>", () => {
+    expect(renderRunSummaryFooter(coreSummary)).toContain("<br />\n\n| Metric | Value |");
+  });
+
+  test("formats durations as seconds and cost as USD", () => {
+    const footer = renderRunSummaryFooter(coreSummary);
+    expect(footer).toContain("| Model time | 34.0s |");
+    expect(footer).toContain("| Fan-out time | 1.2s |");
+    expect(footer).toContain("| Cost (USD) | $0.35 |");
+    expect(footer).toContain("| Tokens in / out | 500 / 100 |");
+    expect(footer).toContain("| Cache read / write | 400 / 20 |");
+  });
+
+  test("omits fan-out rows for a core-only summary", () => {
+    const footer = renderRunSummaryFooter(coreSummary);
+    expect(footer).not.toContain("Agents");
+    expect(footer).not.toContain("Parallel speedup");
+  });
+
+  test("renders fan-out rows with the multiplication sign when present", () => {
+    const footer = renderRunSummaryFooter(fanoutSummary);
+    expect(footer).toContain("| Agents | 12 |");
+    expect(footer).toContain("| Failed agents | 1 |");
+    expect(footer).toContain("| Parallel speedup | 8.5× |");
+  });
+});
+
+describe("stripRunSummaryFooter", () => {
+  test("returns the body unchanged when no marker is present", () => {
+    expect(stripRunSummaryFooter("plain review body")).toBe("plain review body");
+  });
+
+  test("returns the body unchanged when the end marker is missing", () => {
+    const body = "review\n\n<!-- run-summary-start -->\n---\nstuff";
+    expect(stripRunSummaryFooter(body)).toBe(body);
+  });
+
+  test("round-trips: stripping an appended footer yields the original content", () => {
+    const reviewComment = "### Review\n\nLGTM";
+    expect(stripRunSummaryFooter(reviewComment + renderRunSummaryFooter(coreSummary))).toBe(
+      reviewComment
+    );
+  });
+
+  test("two bodies with different metrics strip to the same content", () => {
+    const reviewComment = "### Review\n\nLGTM";
+    const first = reviewComment + renderRunSummaryFooter(coreSummary);
+    const second = reviewComment + renderRunSummaryFooter(fanoutSummary);
+    expect(stripRunSummaryFooter(first)).toBe(stripRunSummaryFooter(second));
+  });
+});
+</file>
+
+<file path=".github/actions/code-review-action/src/runSummaryFooter.ts">
+/**
+ * Render and strip the per-run summary footer appended to a PR review comment.
+ *
+ * The review-run metrics (cost, latency, tokens, tool round-trips, optional
+ * fan-out stats) are computed in `runClaude.ts` and serialized into the
+ * `run_summary` step output. `submitReview.ts` parses that JSON and appends a
+ * collapsible `<details>` footer to the main review comment. The footer is
+ * wrapped in HTML-comment markers so the duplicate-suppression guard can strip
+ * the run-varying numbers before comparing review bodies.
+ *
+ * @example
+ * const summary = parseRunSummary(process.env.RUN_SUMMARY);
+ * const body = reviewComment + (summary ? renderRunSummaryFooter(summary) : "");
+ * // dedup: normalizeBody(stripRunSummaryFooter(body))
+ */
+import { z } from "zod";
+
+import { buildMarkedDetailsBlock } from "./markedDetailsBlock.ts";
+
+/** Opening marker bounding the run-summary footer, used for dedup stripping. */
+const footerStartMarker = "<!-- run-summary-start -->";
+
+/** Closing marker bounding the run-summary footer, used for dedup stripping. */
+const footerEndMarker = "<!-- run-summary-end -->";
+
+/**
+ * Schema for the serialized per-run summary passed via the `RUN_SUMMARY` env.
+ * Strict (no coercion): every metric must already be a number and `mode` a
+ * known literal, so a malformed value can never reach the rendered markdown.
+ * Fan-out fields are present only when the parallel fan-out ran.
+ */
+export const runSummarySchema = z.object({
+  mode: z.enum(["review", "react", "unknown"]),
+  fanout_ms: z.number(),
+  model_ms: z.number(),
+  tokens_in: z.number(),
+  tokens_out: z.number(),
+  cache_read_tokens: z.number(),
+  cache_creation_tokens: z.number(),
+  cost_usd: z.number(),
+  num_turns: z.number(),
+  tool_round_trips: z.number(),
+  agent_count: z.number().optional(),
+  failed_count: z.number().optional(),
+  parallel_speedup: z.number().optional(),
+});
+
+/** Validated per-run summary rendered into the review footer. */
+export type RunSummary = z.infer<typeof runSummarySchema>;
+
+/**
+ * Parse the untrusted `RUN_SUMMARY` env value into a {@link RunSummary}.
+ * Fails open: returns `undefined` for an empty, non-JSON, or schema-invalid
+ * value so the review is posted without a footer rather than blocked.
+ */
+export function parseRunSummary(raw: string | undefined): RunSummary | undefined {
+  if (!raw) return undefined;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+
+  const result = runSummarySchema.safeParse(parsed);
+  return result.success ? result.data : undefined;
+}
+
+/** Format a millisecond duration as seconds with one decimal (e.g. `34.0s`). */
+function formatSeconds(ms: number): string {
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+/** Build the markdown metric rows, adding fan-out rows only when present. */
+function buildRows(summary: RunSummary): string[] {
+  const rows = [
+    ["Mode", summary.mode],
+    ["Model time", formatSeconds(summary.model_ms)],
+    ["Fan-out time", formatSeconds(summary.fanout_ms)],
+    ["Tool round-trips", String(summary.tool_round_trips)],
+    ["Assistant turns", String(summary.num_turns)],
+    ["Tokens in / out", `${summary.tokens_in} / ${summary.tokens_out}`],
+    ["Cache read / write", `${summary.cache_read_tokens} / ${summary.cache_creation_tokens}`],
+    ["Cost (USD)", `$${summary.cost_usd.toFixed(2)}`],
+  ];
+
+  if (summary.agent_count !== undefined) {
+    rows.push(["Agents", String(summary.agent_count)]);
+    rows.push(["Failed agents", String(summary.failed_count ?? 0)]);
+    if (summary.parallel_speedup !== undefined) {
+      rows.push(["Parallel speedup", `${summary.parallel_speedup}×`]);
+    }
+  }
+
+  return rows.map(([label, value]) => `| ${label} | ${value} |`);
+}
+
+/**
+ * Render the marker-wrapped, collapsible run-summary footer.
+ *
+ * Built from the shared {@link buildMarkedDetailsBlock} helper (also used by
+ * `updatePrFooter.ts`); the two leading blank lines separate the footer from the
+ * preceding review body. Fan-out rows (Agents / Failed agents / Parallel
+ * speedup) appear only when the parallel fan-out ran.
+ */
+export function renderRunSummaryFooter(summary: RunSummary): string {
+  return [
+    "",
+    "",
+    buildMarkedDetailsBlock({
+      startMarker: footerStartMarker,
+      endMarker: footerEndMarker,
+      summary: "Review run summary 🤖",
+      bodyLines: ["| Metric | Value |", "| --- | --- |", ...buildRows(summary)],
+    }),
+  ].join("\n");
+}
+
+/**
+ * Remove the marker-bounded run-summary footer (inclusive of the `---` rule)
+ * from a review body so duplicate detection compares the stable content only.
+ * Returns the body unchanged when either marker is absent.
+ */
+export function stripRunSummaryFooter(body: string): string {
+  const start = body.indexOf(footerStartMarker);
+  if (start === -1) return body;
+
+  const end = body.indexOf(footerEndMarker, start);
+  if (end === -1) return body;
+
+  return (body.slice(0, start) + body.slice(end + footerEndMarker.length)).trimEnd();
+}
+</file>
+
 <file path=".github/actions/code-review-action/src/submitReview.ts">
 /**
  * Submit PR review to GitHub with inline comments validation.
@@ -5801,6 +6254,11 @@ import {
   unresolveThread,
   verdictToEvent,
 } from "./github/githubReview.ts";
+import {
+  parseRunSummary,
+  renderRunSummaryFooter,
+  stripRunSummaryFooter,
+} from "./runSummaryFooter.ts";
 
 /**
  * Cleanup bot review threads by resolving outdated ones, duplicates, and fixed blockers.
@@ -5910,7 +6368,16 @@ const invalidComments = allComments
   .filter((c) => !isValidComment(c, validLines))
   .filter((c) => !isAlreadyMentioned(c, output.reviewComment));
 
-const finalBody = output.reviewComment + formatInvalidComments(invalidComments);
+// Append the per-run metrics as a collapsible footer on the main review comment
+// only (never inline, never react replies). Fail-open: no footer when RUN_SUMMARY
+// is absent or invalid.
+const runSummary = parseRunSummary(process.env.RUN_SUMMARY);
+const runSummaryFooter = runSummary ? renderRunSummaryFooter(runSummary) : "";
+const finalBody = output.reviewComment + formatInvalidComments(invalidComments) + runSummaryFooter;
+
+// The footer carries run-varying numbers (cost, latency); strip it from both
+// bodies so the duplicate-suppression guard compares the stable content only.
+const dedupKey = (body: string): string => normalizeBody(stripRunSummaryFooter(body));
 
 console.log(
   `Submitting ${event} review: ${validComments.length} inline comments, ${invalidComments.length} moved to body...`
@@ -5935,7 +6402,7 @@ if (resolvedCount > 0) {
 const lastBotReview = await getLastBotReview(octokit, owner, repoName, pullNumber, reviewer);
 
 // Skip if last bot review has identical body (prevents duplicate from concurrent posting)
-if (lastBotReview && normalizeBody(lastBotReview.body ?? "") === normalizeBody(finalBody)) {
+if (lastBotReview && dedupKey(lastBotReview.body ?? "") === dedupKey(finalBody)) {
   console.log("✓ Review already posted, skipping duplicate");
   process.exit(0);
 }
@@ -5958,7 +6425,7 @@ await deletePendingReviews(octokit, owner, repoName, pullNumber);
 // A concurrent run (the per-comment concurrency group does not serialize same-PR
 // runs) may have posted an identical body since the check above — skip if so.
 const guardReview = await getLastBotReview(octokit, owner, repoName, pullNumber, reviewer);
-if (guardReview && normalizeBody(guardReview.body ?? "") === normalizeBody(finalBody)) {
+if (guardReview && dedupKey(guardReview.body ?? "") === dedupKey(finalBody)) {
   console.log("✓ Identical review appeared concurrently, skipping duplicate");
   process.exit(0);
 }
@@ -6007,6 +6474,7 @@ if (event === "APPROVE" && validComments.length > 0) {
 import type { Octokit } from "@octokit/rest";
 
 import { parseRepoEnv } from "./github/githubReview.ts";
+import { buildMarkedDetailsBlock } from "./markedDetailsBlock.ts";
 
 /** Configuration for the PR footer update, parsed from environment */
 interface FooterConfig {
@@ -6068,18 +6536,12 @@ function buildActionSection(helpId: string, helpText: string): string {
 
 /** Build the complete footer wrapper around all action sections. */
 function buildFullFooter(innerSections: string): string {
-  return [
-    outerOpenTag,
-    "---",
-    "<details>",
-    "<summary>Available commands 🤖</summary>",
-    "<br />",
-    "",
-    innerSections,
-    "",
-    "</details>",
-    outerCloseTag,
-  ].join("\n");
+  return buildMarkedDetailsBlock({
+    startMarker: outerOpenTag,
+    endMarker: outerCloseTag,
+    summary: "Available commands 🤖",
+    bodyLines: [innerSections],
+  });
 }
 
 /**
@@ -6666,6 +7128,7 @@ runs:
         REVIEWER: ${{ inputs.reviewer }}
         STRUCTURED_OUTPUT: ${{ steps.review.outputs.structured_output }}
         EXECUTION_FILE: ${{ steps.review.outputs.execution_file }}
+        RUN_SUMMARY: ${{ steps.review.outputs.run_summary }}
         PR_HEAD_SHA: ${{ steps.ctx.outputs.pr_head_sha }}
         RUNNER_TEMP: ${{ runner.temp }}
         CLAUDE_PLUGIN_DIR: ${{ steps.plugin.outputs.dir }}
@@ -7096,6 +7559,12 @@ The action invokes Claude Code with the local `claude-plugins/autopilot` plugin 
 - `/autopilot:pr-answer` — reply to a PR comment thread and optionally resolve / update the existing review
 
 When `parallel_fanout: true`, the action's orchestrator fans out the `pr:review:*` sub-agents in parallel via the Agent SDK instead of letting the root model do it in-model.
+
+## Review run-summary footer
+
+Every review comment carries a collapsed **"Review run summary 🤖"** footer ("under the cut") with the run's latency, token usage, cache hits, cost, tool round-trips, and — when `parallel_fanout` is on — agent counts and parallel speedup. The metrics are computed in `runClaude.ts`, passed to `submitReview.ts` via the `run_summary` step output, and appended to the **main review comment only** (never inline, never on `react`-mode replies). The footer is wrapped in HTML-comment markers so it is stripped before duplicate-review detection, keeping run-varying numbers from defeating dedup.
+
+See [Review run-summary footer](../../../docs/code-review-run-summary.md) for the full data flow and diagram.
 
 ## Labels
 
@@ -31668,6 +32137,112 @@ To add a new stack:
 To add a new language: extend the language-to-pattern table in `claude-plugins/autopilot/skills/todo-cleanup/SKILL.md` and mirror the change here.
 </file>
 
+<file path="docs/code-review-run-summary.md">
+# Review run-summary footer
+
+`code-review-action` instruments every review run with per-run metrics — model/fan-out latency, token usage, cache hits, cost, tool round-trips, and (when the parallel fan-out runs) agent counts and speedup. These numbers were invaluable while optimizing the action, but they used to live only in the Actions run logs.
+
+The run-summary footer surfaces them directly under each review: a collapsed `<details>` block appended to the **main review comment only** — never on inline comments, never on `react`-mode replies — so reviewers can spot a slow or expensive run at a glance without digging through workflow logs.
+
+## Data flow
+
+The metrics are computed in one process (`runClaude.ts`) and rendered in another (`submitReview.ts`). They cross the boundary as a GitHub Action **step output** — the same mechanism `structured_output` and `execution_file` already use.
+
+```
+  PROCESS 1: runClaude.ts (action.yml step id: review)
+┌──────────────────────────────────────────────────────────────────┐
+│  runReviewFanout() ──①──▶ buildFanoutStats()                       │
+│        │                  {agentCount, failedCount,               │
+│        │                   parallelSpeedup}                       │
+│        ▼                          │                               │
+│  buildRunSummary() ──────────┐    │  (core metrics, unchanged)    │
+│        │  {model_ms,         │    │                               │
+│        │   fanout_ms,        ▼    ▼                               │
+│        │   tokens, cost,  ┌──────────────┐    ┌────────────────┐  │
+│        │   round_trips}   │ withFanout-  │─②▶│ setOutput(      │  │
+│        └─────────────────▶│ Stats(merge) │   │  "run_summary") │  │
+│         log.info("Run     └──────┬───────┘    └────────────────┘  │
+│         summary.") ◀─────────────┘  (kept — Actions-log signal)   │
+└──────────────────────────────────────────────────────────────────┘
+                                         │ ③ $GITHUB_OUTPUT (heredoc)
+                                         ▼
+                          ┌──────────────────────────────┐
+                          │  action.yml: Submit Review    │
+                          │  env RUN_SUMMARY:             │
+                          │  ${{steps.review.outputs      │
+                          │       .run_summary}}          │
+                          └──────────────┬───────────────┘
+                                         │ ④
+                                         ▼
+  PROCESS 2: submitReview.ts
+┌──────────────────────────────────────────────────────────────────┐
+│  parseRunSummary(RUN_SUMMARY)  ──⑤──▶ safeParse fail-open (skip)   │
+│        │ ok                                                        │
+│        ▼                                                           │
+│  renderRunSummaryFooter(summary)                                  │
+│        │  "---" + <details> table, wrapped in                     │
+│        │  <!-- run-summary-start … end --> markers                │
+│        ▼                                                           │
+│  finalBody = reviewComment + invalidComments + footer            │
+│        │                                                          │
+│        ├──⑥──▶ dedupKey = normalizeBody(stripRunSummaryFooter(·)) │
+│        │        applied to BOTH bodies before comparison          │
+│        ▼                                                          │
+│  octokit.createReview({ body: finalBody })  ──⑦──▶ MAIN comment   │
+│                                  (never inline, never react)      │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Flow legend:**
+
+- ① `buildFanoutStats` derives the fan-out counters that `runReviewFanout` returns alongside its results (`max_agent_ms` stays in the completion log).
+- ② `withFanoutStats` merges the optional fan-out counters (mapped to snake_case keys) into the core summary. `buildRunSummary` itself is unchanged.
+- ③ `setOutput` writes `run_summary` to `$GITHUB_OUTPUT` using a per-call heredoc delimiter, so the JSON value is safe. It is emitted **before** `emitOutputs`, which may `process.exit(1)` on a non-success result.
+- ④ `action.yml` bridges the step output into the submit process as the `RUN_SUMMARY` env var. The `react`-mode reaction step is intentionally **not** wired — the footer is review-only.
+- ⑤ `parseRunSummary` validates the untrusted env with a strict Zod schema (no coercion); an empty or invalid value yields no footer and the review posts unchanged.
+- ⑥ The footer carries run-varying numbers, so it is stripped from both the new body and the previously-posted body before the duplicate-suppression guard compares them — otherwise the cost/latency deltas would defeat dedup. `normalizeBody` stays generic.
+- ⑦ The footer lands only on the main review comment via `createReview`; inline comments and `reactToComment.ts` replies are untouched.
+
+## Rendered footer
+
+`renderRunSummaryFooter` mirrors the "under the cut" pattern from `updatePrFooter.ts` — the start marker sits directly above the `---` rule, and a blank line after `<br />` lets the GitHub-flavored markdown table render inside `<details>`. Fan-out rows (Agents / Failed agents / Parallel speedup) appear only when the parallel fan-out ran.
+
+```text
+<!-- run-summary-start -->
+---
+<details>
+<summary>Review run summary 🤖</summary>
+<br />
+
+| Metric | Value |
+| --- | --- |
+| Mode | review |
+| Model time | 34.0s |
+| Fan-out time | 1.2s |
+| Tool round-trips | 10 |
+| Assistant turns | 3 |
+| Tokens in / out | 500 / 100 |
+| Cache read / write | 400 / 20 |
+| Cost (USD) | $0.35 |
+| Agents | 12 |
+| Failed agents | 1 |
+| Parallel speedup | 8.5× |
+
+</details>
+<!-- run-summary-end -->
+```
+
+## Source map
+
+| File                      | Responsibility                                                                           |
+| ------------------------- | ---------------------------------------------------------------------------------------- |
+| `src/runClaude.ts`        | Computes the summary, merges fan-out stats, emits the `run_summary` output               |
+| `src/reviewFanout.ts`     | `buildFanoutStats` + returns stats from `runReviewFanout`                                |
+| `src/runSummaryFooter.ts` | `runSummarySchema`, `parseRunSummary`, `renderRunSummaryFooter`, `stripRunSummaryFooter` |
+| `src/submitReview.ts`     | Appends the footer to the main review body; strips it for dedup                          |
+| `action.yml`              | Bridges `run_summary` into the Submit Review step as `RUN_SUMMARY`                       |
+</file>
+
 <file path="docs/release-automerge.md">
 # Release auto-merge
 
@@ -35906,6 +36481,7 @@ See the [plugin README](./claude-plugins/autopilot/README.md#installation) for s
 - [`release` field spec](./docs/release-field.md) — how `release-action` picks the right artifacts for npm packages, GitHub Actions, and Claude plugins
 - [Release auto-merge flow](./docs/release-automerge.md) — the event-driven action that merges approved, all-green release PRs, and how its workflow is propagated downstream
 - [Committed Repomix pack](./docs/repomix-pack.md) — the `.repomix/pack.xml` snapshot, the merge-triggered workflow that refreshes it, and the snapshot-first contract skills follow
+- [Review run-summary footer](./docs/code-review-run-summary.md) — how `code-review-action` surfaces per-run cost/latency/token metrics in a collapsible footer on the main review comment
 - [Stack rule sets](./rules/) — `Bun`, `Bun+React+Tailwind`, `NodeJS+React`, `NodeJS+React+Tailwind`
 
 ## GitHub Actions
