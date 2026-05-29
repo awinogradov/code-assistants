@@ -68,6 +68,17 @@ describe("buildFanoutStats", () => {
     ]);
   });
 
+  test("includes errored agents in the slowest list (a failing agent can be the long pole)", () => {
+    const stats = buildFanoutStats(
+      [
+        result(400, "timed out", "autopilot:pr:review:common-sense"),
+        result(100, undefined, "autopilot:pr:review:standards"),
+      ],
+      400,
+    );
+    expect(stats.agentDurations[0]).toEqual({ category: "common-sense", durationMs: 400 });
+  });
+
   test("handles an empty result set", () => {
     expect(buildFanoutStats([], 100)).toEqual({
       agentCount: 0,
@@ -99,6 +110,29 @@ describe("toAgentReviews", () => {
       },
     ]);
     expect(reviews).toEqual([{ category: "correctness", findings: [finding] }]);
+  });
+
+  test("returns an empty list for no results", () => {
+    expect(toAgentReviews([])).toEqual([]);
+  });
+
+  test("returns an empty list when every agent errored", () => {
+    expect(
+      toAgentReviews([
+        {
+          subagent_type: "autopilot:pr:review:correctness",
+          findings: [],
+          duration_ms: 5,
+          error: "boom",
+        },
+        {
+          subagent_type: "autopilot:pr:review:security",
+          findings: [],
+          duration_ms: 5,
+          error: "boom",
+        },
+      ]),
+    ).toEqual([]);
   });
 });
 
