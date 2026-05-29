@@ -7,7 +7,6 @@ allowed-tools:
   - Glob
   - Grep
   - Bash(gh *)
-  - MCP(github:*)
   - MCP(repomix:*)
   - MCP(context7:*)
   - MCP(Ref:*)
@@ -29,6 +28,7 @@ Expected form (typically supplied by `awinogradov/code-review-action`):
 - **`PR_NUMBER`** — `$ARGUMENTS` → `gh pr view --json number --jq .number` for the current branch.
 - **`REVIEWER`** — `$ARGUMENTS` → `gh api user --jq .login` (the authenticated user) as fallback.
 - **`COMMENT_BODY` / `COMMENT_PATH` / `COMMENT_LINE`** — `$ARGUMENTS` only. If missing when invoked interactively, abort with a clear error (these must come from the CI context).
+- **`NEEDS_REVERDICT`** — `$ARGUMENTS` only (`true`/`false`); the orchestrator pre-computes this from the comment text. Defaults to `false` when absent. Gates Phase 4's Verdict Update (see below).
 
 Do NOT prompt the user. Return an error JSON structure if required inputs cannot be resolved.
 
@@ -136,7 +136,9 @@ Do NOT resolve when:
 
 ### Verdict Update
 
-Check ALL remaining unresolved bot threads (not just the one being discussed) to determine:
+**Gate:** Only perform this pass when `NEEDS_REVERDICT` is `true` (the comment asked for a re-review). When it is `false`, set `updatedVerdict: null` and `updatedReviewComment: null` and skip straight to producing the reply — do NOT scan threads or re-review. This keeps a plain reply from triggering a full re-evaluation; a genuine verdict change still lands on the next review run (a push) or when the author explicitly asks for a re-review.
+
+When `NEEDS_REVERDICT` is `true`, check ALL remaining unresolved bot threads (not just the one being discussed) to determine:
 
 - If ALL 🚧 blockers are now resolved/retracted → `updatedVerdict: "approve"`
 - If this creates a NEW blocker → `updatedVerdict: "requestChanges"`

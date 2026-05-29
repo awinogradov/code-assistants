@@ -5,10 +5,13 @@
  * @example
  * GH_TOKEN=xxx REPO=owner/repo PR_NUMBER=123 COMMENT_ID=456 STRUCTURED_OUTPUT='{"reply":"..."}' bun run scripts/reactToComment.ts
  */
+import type { ReviewEvent } from "./github/githubReview.ts";
 import {
   deletePendingReviews,
   fetchReviewThreads,
+  getLastBotReview,
   hasRecentBotReply,
+  normalizeBody,
   parseRepoEnv,
   readExecutionResult,
   resolveThread,
@@ -54,14 +57,6 @@ function parseReactionOutput(rawOutput: string): ReactionOutput | null {
 }
 
 /**
- * Normalize body for dedup comparison.
- * Trims whitespace and collapses internal whitespace runs.
- */
-function normalizeBody(body: string): string {
-  return body.trim().replaceAll(/\s+/g, " ");
-}
-
-/**
  * Resolve all unresolved bot review threads on a PR.
  * Used when verdict changes to APPROVE — all prior bot comments are considered addressed.
  */
@@ -82,6 +77,38 @@ async function resolveAllBotThreads(
   if (toResolve.length > 0) {
     console.log(`✓ Resolved ${toResolve.length} review thread(s)`);
   }
+}
+
+/**
+ * Submit a verdict-update review, skipping if an identical bot review already
+ * exists — both at entry and again immediately before writing (last-write guard
+ * against concurrent same-PR runs). Early returns keep nesting flat.
+ */
+async function maybeSubmitVerdict(
+  octokit: Parameters<typeof fetchReviewThreads>[0],
+  owner: string,
+  repo: string,
+  pullNumber: number,
+  reviewer: string,
+  event: ReviewEvent,
+  body: string
+): Promise<void> {
+  const lastReview = await getLastBotReview(octokit, owner, repo, pullNumber, reviewer);
+  if (lastReview && normalizeBody(lastReview.body ?? "") === normalizeBody(body)) {
+    console.log("✓ Review already posted, skipping duplicate verdict update");
+    return;
+  }
+
+  await deletePendingReviews(octokit, owner, repo, pullNumber);
+
+  const guard = await getLastBotReview(octokit, owner, repo, pullNumber, reviewer);
+  if (guard && normalizeBody(guard.body ?? "") === normalizeBody(body)) {
+    console.log("✓ Identical verdict appeared concurrently, skipping duplicate");
+    return;
+  }
+
+  await octokit.rest.pulls.createReview({ owner, repo, pull_number: pullNumber, event, body });
+  console.log(`✓ Updated review verdict to ${event}`);
 }
 
 // Main execution
@@ -198,7 +225,7 @@ if (resolveTargets.length > 0) {
   }
 }
 
-// Step 3: Update verdict if changed (with dedup check)
+// Step 3: Update verdict if changed (with dedup + last-write guard)
 if (output.updatedVerdict && output.updatedReviewComment) {
   const event = verdictToEvent[output.updatedVerdict] ?? "COMMENT";
 
@@ -207,33 +234,15 @@ if (output.updatedVerdict && output.updatedReviewComment) {
     await resolveAllBotThreads(octokit, owner, repoName, pullNumber, reviewer);
   }
 
-  const { data: reviews } = await octokit.rest.pulls.listReviews({
+  await maybeSubmitVerdict(
+    octokit,
     owner,
-    repo: repoName,
-    pull_number: pullNumber,
-  });
-  const lastBotReview = reviews
-    .filter((r) => r.user?.login === reviewer && r.state !== "PENDING")
-    .at(-1);
-
-  if (
-    lastBotReview &&
-    normalizeBody(lastBotReview.body ?? "") === normalizeBody(output.updatedReviewComment)
-  ) {
-    console.log("✓ Review already posted, skipping duplicate verdict update");
-  } else {
-    await deletePendingReviews(octokit, owner, repoName, pullNumber);
-
-    await octokit.rest.pulls.createReview({
-      owner,
-      repo: repoName,
-      pull_number: pullNumber,
-      event,
-      body: output.updatedReviewComment,
-    });
-
-    console.log(`✓ Updated review verdict to ${event}`);
-  }
+    repoName,
+    pullNumber,
+    reviewer,
+    event,
+    output.updatedReviewComment
+  );
 }
 
 console.log("✓ Reaction processed successfully");

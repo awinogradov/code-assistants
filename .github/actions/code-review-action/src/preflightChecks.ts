@@ -10,7 +10,7 @@ import { fetchCheckStatuses, pollCheckStatuses } from "@code-assistants/actions-
 import type { Octokit } from "@octokit/rest";
 
 import { setOutput } from "./actionsOutput.ts";
-import { parseRepoEnv } from "./github/githubReview.ts";
+import { normalizeBody, parseRepoEnv } from "./github/githubReview.ts";
 
 /** Outcome of the preflight polling loop */
 type PreflightOutcome =
@@ -121,11 +121,6 @@ I have better things to do than wait around. Fix your CI and re-request review w
 _Code Review skipped 😢_`;
 }
 
-/** Normalize comment body for dedup comparison. */
-function normalizeBody(body: string): string {
-  return body.trim().replaceAll(/\s+/g, " ");
-}
-
 /**
  * Post a skip comment to the PR with dedup check.
  * Fetches recent bot comments and skips if the same comment already exists.
@@ -200,6 +195,10 @@ try {
     await setOutput("skip_review", "true");
   }
 } catch (error) {
+  // Fail open so a preflight glitch never blocks review — but surface it as a
+  // GitHub Actions warning annotation so the silent proceed is visible in the run.
+  const message = error instanceof Error ? error.message : String(error);
+  console.log(`::warning title=Preflight failed open::${message}`);
   console.error("Preflight check error (fail-open, proceeding with review):", error);
   await setOutput("skip_review", "false");
 }

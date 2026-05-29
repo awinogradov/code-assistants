@@ -31,25 +31,29 @@ export interface RepoEnv {
   reviewer: string;
 }
 
+/** Single review-thread node as returned by the GraphQL query */
+interface ReviewThreadNode {
+  id: string;
+  path: string;
+  line: number | null;
+  isOutdated: boolean;
+  isResolved: boolean;
+  comments: {
+    nodes: Array<{
+      author: { login: string } | null;
+      body: string;
+      pullRequestReview: { id: string } | null;
+    }>;
+  };
+}
+
 /** GraphQL response shape for review threads query */
 interface ReviewThreadsResponse {
   repository: {
     pullRequest: {
       reviewThreads: {
-        nodes: Array<{
-          id: string;
-          path: string;
-          line: number | null;
-          isOutdated: boolean;
-          isResolved: boolean;
-          comments: {
-            nodes: Array<{
-              author: { login: string } | null;
-              body: string;
-              pullRequestReview: { id: string } | null;
-            }>;
-          };
-        }>;
+        nodes: ReviewThreadNode[];
+        pageInfo: { hasNextPage: boolean; endCursor: string | null };
       };
     };
   };
@@ -61,6 +65,45 @@ export const verdictToEvent: Record<string, ReviewEvent> = {
   requestChanges: "REQUEST_CHANGES",
   comment: "COMMENT",
 };
+
+/**
+ * Normalize a review/comment body for dedup comparison. Strips per-line trailing
+ * whitespace and collapses 3+ consecutive newlines to two, but preserves line
+ * breaks — so bodies that differ structurally are NOT treated as identical (the
+ * old collapse-all-whitespace approach silently dropped genuinely different reviews).
+ */
+export function normalizeBody(body: string): string {
+  return body
+    .replaceAll(/[ \t]+$/gm, "")
+    .replaceAll(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/** Minimal shape of a submitted review needed for dedup comparison. */
+export interface BotReviewSummary {
+  body: string | null;
+  state?: string;
+}
+
+/**
+ * Return the most recent non-pending review authored by the bot, or undefined.
+ * Used both for the initial dedup check and the last-write guard re-read
+ * immediately before submitting, which narrows the concurrent-duplicate window.
+ */
+export async function getLastBotReview(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  pullNumber: number,
+  reviewer: string
+): Promise<BotReviewSummary | undefined> {
+  const { data: reviews } = await octokit.rest.pulls.listReviews({
+    owner,
+    repo,
+    pull_number: pullNumber,
+  });
+  return reviews.filter((r) => r.user?.login === reviewer && r.state !== "PENDING").at(-1);
+}
 
 /**
  * Parse and validate required environment variables, initialize Octokit.
@@ -90,21 +133,33 @@ export function parseRepoEnv(): RepoEnv {
   };
 }
 
-/**
- * Fetch all review threads for a PR via GraphQL.
- * Returns flattened thread objects with first comment metadata.
- */
-export async function fetchReviewThreads(
+/** Flatten a GraphQL review-thread node into a {@link ReviewThread}. */
+function mapThreadNode(node: ReviewThreadNode): ReviewThread {
+  return {
+    id: node.id,
+    path: node.path,
+    line: node.line,
+    isOutdated: node.isOutdated,
+    isResolved: node.isResolved,
+    firstCommentAuthor: node.comments.nodes[0]?.author?.login ?? null,
+    firstCommentBody: node.comments.nodes[0]?.body ?? "",
+    firstCommentReviewId: node.comments.nodes[0]?.pullRequestReview?.id ?? null,
+  };
+}
+
+/** Fetch a single page of review threads. Explicit return type pins inference. */
+async function fetchReviewThreadPage(
   octokit: Octokit,
   owner: string,
   repo: string,
-  pullNumber: number
-): Promise<ReviewThread[]> {
+  pullNumber: number,
+  cursor: string | null
+): Promise<ReviewThreadsResponse> {
   const query = `
-    query($owner: String!, $repo: String!, $number: Int!) {
+    query($owner: String!, $repo: String!, $number: Int!, $cursor: String) {
       repository(owner: $owner, name: $repo) {
         pullRequest(number: $number) {
-          reviewThreads(first: 100) {
+          reviewThreads(first: 100, after: $cursor) {
             nodes {
               id
               path
@@ -119,28 +174,44 @@ export async function fetchReviewThreads(
                 }
               }
             }
+            pageInfo { hasNextPage endCursor }
           }
         }
       }
     }
   `;
 
-  const result = await octokit.graphql<ReviewThreadsResponse>(query, {
-    owner,
-    repo,
-    number: pullNumber,
-  });
+  return octokit.graphql<ReviewThreadsResponse>(query, { owner, repo, number: pullNumber, cursor });
+}
 
-  return result.repository.pullRequest.reviewThreads.nodes.map((node) => ({
-    id: node.id,
-    path: node.path,
-    line: node.line,
-    isOutdated: node.isOutdated,
-    isResolved: node.isResolved,
-    firstCommentAuthor: node.comments.nodes[0]?.author?.login ?? null,
-    firstCommentBody: node.comments.nodes[0]?.body ?? "",
-    firstCommentReviewId: node.comments.nodes[0]?.pullRequestReview?.id ?? null,
-  }));
+/**
+ * Fetch all review threads for a PR via GraphQL, paginating past the 100-node
+ * page so long-lived PRs don't silently drop threads from resolution logic.
+ */
+export async function fetchReviewThreads(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  pullNumber: number
+): Promise<ReviewThread[]> {
+  const threads: ReviewThread[] = [];
+  let cursor: string | null = null;
+
+  for (;;) {
+    const page: ReviewThreadsResponse = await fetchReviewThreadPage(
+      octokit,
+      owner,
+      repo,
+      pullNumber,
+      cursor
+    );
+    const { reviewThreads } = page.repository.pullRequest;
+    threads.push(...reviewThreads.nodes.map(mapThreadNode));
+    if (!reviewThreads.pageInfo.hasNextPage) break;
+    cursor = reviewThreads.pageInfo.endCursor;
+  }
+
+  return threads;
 }
 
 /**

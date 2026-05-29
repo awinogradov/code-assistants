@@ -11,7 +11,9 @@ import type { ReviewEvent, ReviewThread } from "./github/githubReview.ts";
 import {
   deletePendingReviews,
   fetchReviewThreads,
+  getLastBotReview,
   hasRecentBotReview,
+  normalizeBody,
   parseRepoEnv,
   readExecutionResult,
   resolveThread,
@@ -125,14 +127,6 @@ function formatInvalidComments(comments: InlineComment[]): string {
     .join("\n\n");
 
   return `\n\n---\n## Additional Comments (not in diff)\n\n${formatted}`;
-}
-
-/**
- * Normalize review body for dedup comparison.
- * Trims whitespace and collapses internal whitespace runs.
- */
-function normalizeBody(body: string): string {
-  return body.trim().replaceAll(/\s+/g, " ");
 }
 
 /**
@@ -283,6 +277,15 @@ if (
 
 // Delete pending reviews before submitting
 await deletePendingReviews(octokit, owner, repoName, pullNumber);
+
+// Last-write guard: re-read the latest bot review immediately before submitting.
+// A concurrent run (the per-comment concurrency group does not serialize same-PR
+// runs) may have posted an identical body since the check above — skip if so.
+const guardReview = await getLastBotReview(octokit, owner, repoName, pullNumber, reviewer);
+if (guardReview && normalizeBody(guardReview.body ?? "") === normalizeBody(finalBody)) {
+  console.log("✓ Identical review appeared concurrently, skipping duplicate");
+  process.exit(0);
+}
 
 // Submit the review
 const { data: submittedReview } = await octokit.rest.pulls.createReview({
