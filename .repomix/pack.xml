@@ -71,6 +71,9 @@ The content is organized as follows:
         github/
           githubReview.test.ts
           githubReview.ts
+        reviewOutput/
+          reviewOutput.test.ts
+          reviewOutput.ts
         actionsOutput.test.ts
         actionsOutput.ts
         classifyReaction.test.ts
@@ -81,8 +84,6 @@ The content is organized as follows:
         reactToComment.ts
         reviewFanout.test.ts
         reviewFanout.ts
-        reviewOutput.test.ts
-        reviewOutput.ts
         ruleUrls.test.ts
         ruleUrls.ts
         runClaude.test.ts
@@ -1716,7 +1717,7 @@ describe("fetchReviewThreads", () => {
     const cursors: Array<string | null> = [];
     let call = 0;
     const octokit = {
-      graphql: async (_q: string, vars: { cursor: string | null }) => {
+      graphql: (_q: string, vars: { cursor: string | null }) => {
         cursors.push(vars.cursor);
         return { repository: { pullRequest: { reviewThreads: pages[call++] } } };
       },
@@ -1735,7 +1736,7 @@ describe("getLastBotReview", () => {
     const octokit = {
       rest: {
         pulls: {
-          listReviews: async () => ({
+          listReviews: () => ({
             data: [
               { user: { login: "alice" }, state: "COMMENTED", body: "x" },
               { user: { login: "bot" }, state: "APPROVED", body: "first" },
@@ -1752,7 +1753,7 @@ describe("getLastBotReview", () => {
 
   test("returns undefined when the bot has no review", async () => {
     const octokit = {
-      rest: { pulls: { listReviews: async () => ({ data: [{ user: { login: "alice" }, state: "APPROVED" }] }) } },
+      rest: { pulls: { listReviews: () => ({ data: [{ user: { login: "alice" }, state: "APPROVED" }] }) } },
     } as unknown as Octokit;
     expect(await getLastBotReview(octokit, "o", "r", 1, "bot")).toBeUndefined();
   });
@@ -1764,14 +1765,14 @@ describe("deletePendingReviews", () => {
     const octokit = {
       rest: {
         pulls: {
-          listReviews: async () => ({
+          listReviews: () => ({
             data: [
               { id: 1, state: "PENDING" },
               { id: 2, state: "APPROVED" },
               { id: 3, state: "PENDING" },
             ],
           }),
-          deletePendingReview: async ({ review_id }: { review_id: number }) => {
+          deletePendingReview: ({ review_id }: { review_id: number }) => {
             deleted.push(review_id);
             return {};
           },
@@ -1786,7 +1787,7 @@ describe("deletePendingReviews", () => {
 
 describe("hasRecentBotReview", () => {
   const reviews = (data: unknown[]) =>
-    ({ rest: { pulls: { listReviews: async () => ({ data }) } } }) as unknown as Octokit;
+    ({ rest: { pulls: { listReviews: () => ({ data }) } } }) as unknown as Octokit;
 
   test("matches the bot's review on the given head SHA", async () => {
     const o = reviews([{ user: { login: "bot" }, state: "APPROVED", commit_id: "sha1" }]);
@@ -1804,8 +1805,8 @@ describe("hasRecentBotReply", () => {
   test("detects an inline reply by the bot to the given comment", async () => {
     const octokit = {
       rest: {
-        pulls: { listReviewComments: async () => ({ data: [{ in_reply_to_id: 42, user: { login: "bot" } }] }) },
-        issues: { listComments: async () => ({ data: [] }) },
+        pulls: { listReviewComments: () => ({ data: [{ in_reply_to_id: 42, user: { login: "bot" } }] }) },
+        issues: { listComments: () => ({ data: [] }) },
       },
     } as unknown as Octokit;
 
@@ -1816,8 +1817,8 @@ describe("hasRecentBotReply", () => {
   test("detects a bot issue comment when no path is given", async () => {
     const octokit = {
       rest: {
-        issues: { listComments: async () => ({ data: [{ user: { login: "bot" } }] }) },
-        pulls: { listReviewComments: async () => ({ data: [] }) },
+        issues: { listComments: () => ({ data: [{ user: { login: "bot" } }] }) },
+        pulls: { listReviewComments: () => ({ data: [] }) },
       },
     } as unknown as Octokit;
 
@@ -2201,6 +2202,290 @@ export async function hasRecentBotReply(
 }
 </file>
 
+<file path=".github/actions/code-review-action/src/reviewOutput/reviewOutput.test.ts">
+/**
+ * Tests for reviewOutput.ts — pure parsing and diff-hunk validation.
+ */
+import { describe, expect, test } from "bun:test";
+
+import {
+  extractValidLines,
+  formatInvalidComments,
+  isAlreadyMentioned,
+  isValidComment,
+  parseReactionOutput,
+  parseStructuredOutput,
+} from "./reviewOutput.ts";
+
+describe("parseStructuredOutput", () => {
+  test("returns null for empty or literal-null input", () => {
+    expect(parseStructuredOutput("")).toBeNull();
+    expect(parseStructuredOutput("  null  ")).toBeNull();
+  });
+
+  test("returns null for non-object JSON", () => {
+    expect(parseStructuredOutput('"a string"')).toBeNull();
+    expect(parseStructuredOutput("42")).toBeNull();
+  });
+
+  test("returns null (never throws) on truncated / malformed JSON", () => {
+    expect(parseStructuredOutput('{"verdict":"approve","reviewComment":"trunc')).toBeNull();
+    expect(parseReactionOutput('{"reply":"oop')).toBeNull();
+  });
+
+  test("parses a full review object", () => {
+    const out = parseStructuredOutput(
+      '{"verdict":"requestChanges","reviewComment":"x","inlineComments":[{"path":"a.ts","line":3,"body":"b"}]}'
+    );
+    expect(out).toEqual({
+      verdict: "requestChanges",
+      reviewComment: "x",
+      inlineComments: [{ path: "a.ts", line: 3, body: "b" }],
+    });
+  });
+
+  test("defaults missing fields", () => {
+    expect(parseStructuredOutput("{}")).toEqual({
+      verdict: "comment",
+      reviewComment: "Review completed.",
+      inlineComments: [],
+    });
+  });
+});
+
+describe("parseReactionOutput", () => {
+  test("returns null for empty / literal-null / non-object", () => {
+    expect(parseReactionOutput("")).toBeNull();
+    expect(parseReactionOutput("null")).toBeNull();
+    expect(parseReactionOutput("3")).toBeNull();
+  });
+
+  test("parses a reply with defaults", () => {
+    expect(parseReactionOutput('{"reply":"thanks"}')).toEqual({
+      reply: "thanks",
+      resolveComments: [],
+      updatedVerdict: null,
+      updatedReviewComment: null,
+    });
+  });
+
+  test("parses a verdict update", () => {
+    const out = parseReactionOutput(
+      '{"reply":"ok","resolveComments":[{"path":"a.ts","line":1}],"updatedVerdict":"approve","updatedReviewComment":"done"}'
+    );
+    expect(out).toEqual({
+      reply: "ok",
+      resolveComments: [{ path: "a.ts", line: 1 }],
+      updatedVerdict: "approve",
+      updatedReviewComment: "done",
+    });
+  });
+});
+
+describe("extractValidLines", () => {
+  test("expands a multi-line hunk into each added line", () => {
+    const lines = extractValidLines([{ filename: "a.ts", patch: "@@ -1,2 +10,3 @@" }]);
+    expect(lines).toEqual([
+      { path: "a.ts", line: 10 },
+      { path: "a.ts", line: 11 },
+      { path: "a.ts", line: 12 },
+    ]);
+  });
+
+  test("treats a hunk with no explicit count as a single line", () => {
+    expect(extractValidLines([{ filename: "a.ts", patch: "@@ -5 +7 @@" }])).toEqual([
+      { path: "a.ts", line: 7 },
+    ]);
+  });
+
+  test("handles a zero-count (pure deletion) hunk as no commentable lines", () => {
+    expect(extractValidLines([{ filename: "a.ts", patch: "@@ -3,2 +4,0 @@" }])).toEqual([]);
+  });
+
+  test("collects across multiple files and hunks, skips patch-less files", () => {
+    const lines = extractValidLines([
+      { filename: "a.ts", patch: "@@ -1,1 +1,1 @@\n@@ -8,0 +9,2 @@" },
+      { filename: "b.ts" },
+    ]);
+    expect(lines).toEqual([
+      { path: "a.ts", line: 1 },
+      { path: "a.ts", line: 9 },
+      { path: "a.ts", line: 10 },
+    ]);
+  });
+});
+
+describe("isValidComment", () => {
+  const valid = [{ path: "a.ts", line: 10 }];
+  test("matches path and line", () => {
+    expect(isValidComment({ path: "a.ts", line: 10, body: "x" }, valid)).toBe(true);
+  });
+  test("rejects wrong line or path", () => {
+    expect(isValidComment({ path: "a.ts", line: 11, body: "x" }, valid)).toBe(false);
+    expect(isValidComment({ path: "b.ts", line: 10, body: "x" }, valid)).toBe(false);
+  });
+});
+
+describe("isAlreadyMentioned", () => {
+  test("detects the path:line token in the body", () => {
+    expect(isAlreadyMentioned({ path: "src/a.ts", line: 5, body: "x" }, "see src/a.ts:5 above")).toBe(
+      true
+    );
+    expect(isAlreadyMentioned({ path: "src/a.ts", line: 5, body: "x" }, "nothing here")).toBe(false);
+  });
+});
+
+describe("formatInvalidComments", () => {
+  test("returns empty string for no comments", () => {
+    expect(formatInvalidComments([])).toBe("");
+  });
+
+  test("downgrades blockers to suggestions and includes the location header", () => {
+    const out = formatInvalidComments([{ path: "a.ts", line: 9, body: "🚧 broken" }]);
+    expect(out).toContain("## Additional Comments (not in diff)");
+    expect(out).toContain("`a.ts:9`");
+    expect(out).toContain("🙋‍♂️ broken");
+    expect(out).not.toContain("🚧");
+  });
+});
+</file>
+
+<file path=".github/actions/code-review-action/src/reviewOutput/reviewOutput.ts">
+/**
+ * Pure parsing and diff-hunk validation for the model's review/reaction output.
+ *
+ * Extracted from submitReview.ts / reactToComment.ts so this logic is unit-testable
+ * without importing those modules (which run their submission pipeline on import).
+ * No side effects, no Octokit, no env access. Model output is validated with Zod at
+ * the parse boundary — malformed/truncated JSON yields null, never a thrown error.
+ */
+import { z } from "zod";
+
+/** Inline comment on a specific file/line in the PR. */
+export const inlineCommentSchema = z.object({
+  path: z.string(),
+  line: z.number(),
+  body: z.string(),
+});
+export type InlineComment = z.infer<typeof inlineCommentSchema>;
+
+/** Structured output from a Claude review (lenient: missing fields get defaults). */
+export const structuredOutputSchema = z.object({
+  verdict: z.enum(["approve", "requestChanges", "comment"]).catch("comment"),
+  reviewComment: z.string().catch("Review completed."),
+  inlineComments: z.array(inlineCommentSchema).catch([]),
+});
+export type StructuredOutput = z.infer<typeof structuredOutputSchema>;
+
+/** Target for thread resolution by file location. */
+export const resolveTargetSchema = z.object({
+  path: z.string(),
+  line: z.number(),
+});
+export type ResolveTarget = z.infer<typeof resolveTargetSchema>;
+
+/** Structured output from a Claude comment reaction. */
+export const reactionOutputSchema = z.object({
+  reply: z.string().catch(""),
+  resolveComments: z.array(resolveTargetSchema).catch([]),
+  updatedVerdict: z.enum(["approve", "requestChanges", "comment"]).nullable().catch(null),
+  updatedReviewComment: z.string().nullable().catch(null),
+});
+export type ReactionOutput = z.infer<typeof reactionOutputSchema>;
+
+/** A valid (commentable) line location in the PR diff. */
+export interface ValidLine {
+  path: string;
+  line: number;
+}
+
+/**
+ * Trim, JSON-parse (never throwing), and validate against a Zod schema.
+ * Returns null for empty/"null" input, malformed JSON, or a schema mismatch.
+ */
+function parseJsonWithSchema<T>(rawOutput: string, schema: z.ZodType<T>): T | null {
+  const trimmed = rawOutput.trim();
+  if (!trimmed || trimmed === "null") {
+    return null;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+
+  const result = schema.safeParse(parsed);
+  return result.success ? result.data : null;
+}
+
+/** Parse and validate structured review output from Claude (null on any failure). */
+export function parseStructuredOutput(rawOutput: string): StructuredOutput | null {
+  return parseJsonWithSchema(rawOutput, structuredOutputSchema);
+}
+
+/** Parse and validate structured reaction output from Claude (null on any failure). */
+export function parseReactionOutput(rawOutput: string): ReactionOutput | null {
+  return parseJsonWithSchema(rawOutput, reactionOutputSchema);
+}
+
+/** Expand a single unified-diff hunk header match into its added-line locations. */
+export function extractHunkLines(filename: string, match: RegExpMatchArray): ValidLine[] {
+  const start = Number(match[1]);
+  const count = match[2] ? Number(match[2]) : 1;
+
+  return Array.from({ length: count }, (_, i) => ({ path: filename, line: start + i }));
+}
+
+/**
+ * Extract the set of commentable line locations from PR diff hunks.
+ * Parses unified-diff hunk headers: `@@ -old,count +new,count @@`.
+ */
+export function extractValidLines(patches: Array<{ filename: string; patch?: string }>): ValidLine[] {
+  const hunkHeaderRegex = /@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/g;
+
+  return patches
+    .filter((file) => file.patch)
+    .flatMap((file) =>
+      [...file.patch!.matchAll(hunkHeaderRegex)].flatMap((m) => extractHunkLines(file.filename, m))
+    );
+}
+
+/** True when a comment targets a line that exists in the diff. */
+export function isValidComment(comment: InlineComment, validLines: ValidLine[]): boolean {
+  return validLines.some((vl) => vl.path === comment.path && vl.line === comment.line);
+}
+
+/**
+ * True when a comment's `path:line` is already referenced in the review body —
+ * used to avoid repeating an out-of-diff finding that the body already mentions.
+ */
+export function isAlreadyMentioned(comment: InlineComment, reviewBody: string): boolean {
+  const pattern = `${comment.path}:${comment.line}`;
+  return reviewBody.includes(pattern);
+}
+
+/**
+ * Format out-of-diff comments for inclusion in the review body.
+ * Downgrades blockers (🚧) to suggestions (🙋‍♂️) since they're supplementary.
+ */
+export function formatInvalidComments(comments: InlineComment[]): string {
+  if (comments.length === 0) {
+    return "";
+  }
+
+  const formatted = comments
+    .map((c) => {
+      const body = c.body.replaceAll("🚧", "🙋‍♂️");
+      return `**\`${c.path}:${c.line}\`**\n\n${body}`;
+    })
+    .join("\n\n");
+
+  return `\n\n---\n## Additional Comments (not in diff)\n\n${formatted}`;
+}
+</file>
+
 <file path=".github/actions/code-review-action/src/actionsOutput.test.ts">
 /**
  * Tests for the shared GitHub Actions output helper.
@@ -2301,11 +2586,18 @@ import { describe, expect, test } from "bun:test";
 import { isBareAcknowledgement, requestsReReview, shouldSkipModelReply } from "./classifyReaction.ts";
 
 describe("requestsReReview", () => {
-  test("detects explicit re-review phrasings", () => {
-    expect(requestsReReview("pushed a fix, please re-review")).toBe(true);
-    expect(requestsReReview("can you take another look")).toBe(true);
-    expect(requestsReReview("updated. PTAL")).toBe(true);
-    expect(requestsReReview("review again please")).toBe(true);
+  test("detects every re-review keyword variant", () => {
+    for (const phrase of [
+      "please re-review",
+      "re review this",
+      "rereview when you can",
+      "review again please",
+      "take another look",
+      "have a look again",
+      "updated, PTAL",
+    ]) {
+      expect(requestsReReview(phrase)).toBe(true);
+    }
   });
 
   test("is case-insensitive", () => {
@@ -3305,8 +3597,8 @@ try {
  * GH_TOKEN=xxx REPO=owner/repo PR_NUMBER=123 COMMENT_ID=456 STRUCTURED_OUTPUT='{"reply":"..."}' bun run scripts/reactToComment.ts
  */
 import type { ReviewEvent } from "./github/githubReview.ts";
-import { buildRuleUrlMap, linkRuleCodes } from "./ruleUrls.ts";
-import { parseReactionOutput } from "./reviewOutput.ts";
+import { agentsDirFromEnv, buildRuleUrlMap, linkRuleCodes } from "./ruleUrls.ts";
+import { parseReactionOutput } from "./reviewOutput/reviewOutput.ts";
 import {
   deletePendingReviews,
   fetchReviewThreads,
@@ -3364,8 +3656,8 @@ async function maybeSubmitVerdict(
 
   await deletePendingReviews(octokit, owner, repo, pullNumber);
 
-  const guard = await getLastBotReview(octokit, owner, repo, pullNumber, reviewer);
-  if (guard && normalizeBody(guard.body ?? "") === normalizeBody(body)) {
+  const guardReview = await getLastBotReview(octokit, owner, repo, pullNumber, reviewer);
+  if (guardReview && normalizeBody(guardReview.body ?? "") === normalizeBody(body)) {
     console.log("✓ Identical verdict appeared concurrently, skipping duplicate");
     return;
   }
@@ -3498,7 +3790,7 @@ if (output.updatedVerdict && output.updatedReviewComment) {
   }
 
   // Resolve bare rule codes to GitHub links in code (same as submitReview.ts).
-  const ruleUrlMap = await buildRuleUrlMap(`${process.env.CLAUDE_PLUGIN_DIR ?? ""}/agents`);
+  const ruleUrlMap = await buildRuleUrlMap(agentsDirFromEnv());
 
   await maybeSubmitVerdict(
     octokit,
@@ -3529,13 +3821,44 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
+import type { FanoutContext } from "./reviewFanout.ts";
 import {
   buildSubagentPrompt,
   detectStack,
   loadReviewAgents,
   parseAgentFrontmatter,
+  resolveModel,
   splitFrontmatter,
 } from "./reviewFanout.ts";
+
+describe("resolveModel", () => {
+  const ctx = (overrides: Record<string, string>) =>
+    ({ modelOverrides: overrides, fallbackModel: "fallback-model" }) as unknown as FanoutContext;
+  const agent = (subagent_type: string, model?: string) =>
+    ({ subagent_type, model }) as Parameters<typeof resolveModel>[1];
+
+  test("prefers a per-category override over the frontmatter model", () => {
+    expect(resolveModel(ctx({ correctness: "opus" }), agent("autopilot:pr:review:correctness", "sonnet"))).toBe(
+      "opus"
+    );
+  });
+
+  test("falls back to the frontmatter model when no override matches", () => {
+    expect(resolveModel(ctx({ testing: "opus" }), agent("autopilot:pr:review:correctness", "sonnet"))).toBe(
+      "sonnet"
+    );
+  });
+
+  test("falls back to the context model when neither override nor frontmatter is set", () => {
+    expect(resolveModel(ctx({}), agent("autopilot:pr:review:correctness"))).toBe("fallback-model");
+  });
+
+  test("keys overrides by the bare category (autopilot:pr:review: stripped)", () => {
+    expect(resolveModel(ctx({ "surface-naming": "haiku" }), agent("autopilot:pr:review:surface-naming", "sonnet"))).toBe(
+      "haiku"
+    );
+  });
+});
 
 describe("splitFrontmatter", () => {
   test("extracts frontmatter and body", () => {
@@ -3840,7 +4163,7 @@ export async function loadReviewAgents(pluginDir: string): Promise<AgentDefiniti
 }
 
 /** Resolve a sub-agent's model: per-category override > frontmatter > fallback. */
-function resolveModel(ctx: FanoutContext, agent: AgentDefinition): string {
+export function resolveModel(ctx: FanoutContext, agent: AgentDefinition): string {
   const category = agent.subagent_type.replace("autopilot:pr:review:", "");
   return ctx.modelOverrides[category] ?? agent.model ?? ctx.fallbackModel;
 }
@@ -4047,295 +4370,6 @@ export async function runReviewFanout(ctx: FanoutContext): Promise<SubagentResul
 }
 </file>
 
-<file path=".github/actions/code-review-action/src/reviewOutput.test.ts">
-/**
- * Tests for reviewOutput.ts — pure parsing and diff-hunk validation.
- */
-import { describe, expect, test } from "bun:test";
-
-import {
-  extractValidLines,
-  formatInvalidComments,
-  isAlreadyMentioned,
-  isValidComment,
-  parseReactionOutput,
-  parseStructuredOutput,
-} from "./reviewOutput.ts";
-
-describe("parseStructuredOutput", () => {
-  test("returns null for empty or literal-null input", () => {
-    expect(parseStructuredOutput("")).toBeNull();
-    expect(parseStructuredOutput("  null  ")).toBeNull();
-  });
-
-  test("returns null for non-object JSON", () => {
-    expect(parseStructuredOutput('"a string"')).toBeNull();
-    expect(parseStructuredOutput("42")).toBeNull();
-  });
-
-  test("parses a full review object", () => {
-    const out = parseStructuredOutput(
-      '{"verdict":"requestChanges","reviewComment":"x","inlineComments":[{"path":"a.ts","line":3,"body":"b"}]}'
-    );
-    expect(out).toEqual({
-      verdict: "requestChanges",
-      reviewComment: "x",
-      inlineComments: [{ path: "a.ts", line: 3, body: "b" }],
-    });
-  });
-
-  test("defaults missing fields", () => {
-    expect(parseStructuredOutput("{}")).toEqual({
-      verdict: "comment",
-      reviewComment: "Review completed.",
-      inlineComments: [],
-    });
-  });
-});
-
-describe("parseReactionOutput", () => {
-  test("returns null for empty / literal-null / non-object", () => {
-    expect(parseReactionOutput("")).toBeNull();
-    expect(parseReactionOutput("null")).toBeNull();
-    expect(parseReactionOutput("3")).toBeNull();
-  });
-
-  test("parses a reply with defaults", () => {
-    expect(parseReactionOutput('{"reply":"thanks"}')).toEqual({
-      reply: "thanks",
-      resolveComments: [],
-      updatedVerdict: null,
-      updatedReviewComment: null,
-    });
-  });
-
-  test("parses a verdict update", () => {
-    const out = parseReactionOutput(
-      '{"reply":"ok","resolveComments":[{"path":"a.ts","line":1}],"updatedVerdict":"approve","updatedReviewComment":"done"}'
-    );
-    expect(out).toEqual({
-      reply: "ok",
-      resolveComments: [{ path: "a.ts", line: 1 }],
-      updatedVerdict: "approve",
-      updatedReviewComment: "done",
-    });
-  });
-});
-
-describe("extractValidLines", () => {
-  test("expands a multi-line hunk into each added line", () => {
-    const lines = extractValidLines([{ filename: "a.ts", patch: "@@ -1,2 +10,3 @@" }]);
-    expect(lines).toEqual([
-      { path: "a.ts", line: 10 },
-      { path: "a.ts", line: 11 },
-      { path: "a.ts", line: 12 },
-    ]);
-  });
-
-  test("treats a hunk with no explicit count as a single line", () => {
-    expect(extractValidLines([{ filename: "a.ts", patch: "@@ -5 +7 @@" }])).toEqual([
-      { path: "a.ts", line: 7 },
-    ]);
-  });
-
-  test("handles a zero-count (pure deletion) hunk as no commentable lines", () => {
-    expect(extractValidLines([{ filename: "a.ts", patch: "@@ -3,2 +4,0 @@" }])).toEqual([]);
-  });
-
-  test("collects across multiple files and hunks, skips patch-less files", () => {
-    const lines = extractValidLines([
-      { filename: "a.ts", patch: "@@ -1,1 +1,1 @@\n@@ -8,0 +9,2 @@" },
-      { filename: "b.ts" },
-    ]);
-    expect(lines).toEqual([
-      { path: "a.ts", line: 1 },
-      { path: "a.ts", line: 9 },
-      { path: "a.ts", line: 10 },
-    ]);
-  });
-});
-
-describe("isValidComment", () => {
-  const valid = [{ path: "a.ts", line: 10 }];
-  test("matches path and line", () => {
-    expect(isValidComment({ path: "a.ts", line: 10, body: "x" }, valid)).toBe(true);
-  });
-  test("rejects wrong line or path", () => {
-    expect(isValidComment({ path: "a.ts", line: 11, body: "x" }, valid)).toBe(false);
-    expect(isValidComment({ path: "b.ts", line: 10, body: "x" }, valid)).toBe(false);
-  });
-});
-
-describe("isAlreadyMentioned", () => {
-  test("detects the path:line token in the body", () => {
-    expect(isAlreadyMentioned({ path: "src/a.ts", line: 5, body: "x" }, "see src/a.ts:5 above")).toBe(
-      true
-    );
-    expect(isAlreadyMentioned({ path: "src/a.ts", line: 5, body: "x" }, "nothing here")).toBe(false);
-  });
-});
-
-describe("formatInvalidComments", () => {
-  test("returns empty string for no comments", () => {
-    expect(formatInvalidComments([])).toBe("");
-  });
-
-  test("downgrades blockers to suggestions and includes the location header", () => {
-    const out = formatInvalidComments([{ path: "a.ts", line: 9, body: "🚧 broken" }]);
-    expect(out).toContain("## Additional Comments (not in diff)");
-    expect(out).toContain("`a.ts:9`");
-    expect(out).toContain("🙋‍♂️ broken");
-    expect(out).not.toContain("🚧");
-  });
-});
-</file>
-
-<file path=".github/actions/code-review-action/src/reviewOutput.ts">
-/**
- * Pure parsing and diff-hunk validation for the model's review/reaction output.
- *
- * Extracted from submitReview.ts / reactToComment.ts so this logic is unit-testable
- * without importing those modules (which run their submission pipeline on import).
- * No side effects, no Octokit, no env access.
- */
-
-/** Inline comment on a specific file/line in the PR. */
-export interface InlineComment {
-  path: string;
-  line: number;
-  body: string;
-}
-
-/** Structured output from a Claude review. */
-export interface StructuredOutput {
-  verdict: "approve" | "requestChanges" | "comment";
-  reviewComment: string;
-  inlineComments?: InlineComment[];
-}
-
-/** A valid (commentable) line location in the PR diff. */
-export interface ValidLine {
-  path: string;
-  line: number;
-}
-
-/** Target for thread resolution by file location. */
-export interface ResolveTarget {
-  path: string;
-  line: number;
-}
-
-/** Structured output from a Claude comment reaction. */
-export interface ReactionOutput {
-  reply: string;
-  resolveComments?: ResolveTarget[];
-  updatedVerdict?: "approve" | "requestChanges" | "comment" | null;
-  updatedReviewComment?: string | null;
-}
-
-/**
- * Parse and validate structured review output from Claude.
- * Returns null if the output is empty, the literal "null", or not a JSON object.
- */
-export function parseStructuredOutput(rawOutput: string): StructuredOutput | null {
-  const trimmed = rawOutput.trim();
-  if (!trimmed || trimmed === "null") {
-    return null;
-  }
-
-  const parsed: unknown = JSON.parse(trimmed);
-  if (typeof parsed !== "object" || parsed === null) {
-    return null;
-  }
-
-  const obj = parsed as Record<string, unknown>;
-  return {
-    verdict: (obj.verdict as StructuredOutput["verdict"]) ?? "comment",
-    reviewComment: (obj.reviewComment as string) ?? "Review completed.",
-    inlineComments: (obj.inlineComments as InlineComment[]) ?? [],
-  };
-}
-
-/**
- * Parse and validate structured reaction output from Claude.
- * Returns null if the output is empty, the literal "null", or not a JSON object.
- */
-export function parseReactionOutput(rawOutput: string): ReactionOutput | null {
-  const trimmed = rawOutput.trim();
-  if (!trimmed || trimmed === "null") {
-    return null;
-  }
-
-  const parsed: unknown = JSON.parse(trimmed);
-  if (typeof parsed !== "object" || parsed === null) {
-    return null;
-  }
-
-  const obj = parsed as Record<string, unknown>;
-  return {
-    reply: (obj.reply as string) ?? "",
-    resolveComments: (obj.resolveComments as ResolveTarget[]) ?? [],
-    updatedVerdict: (obj.updatedVerdict as ReactionOutput["updatedVerdict"]) ?? null,
-    updatedReviewComment: (obj.updatedReviewComment as string | null) ?? null,
-  };
-}
-
-/** Expand a single unified-diff hunk header match into its added-line locations. */
-export function extractHunkLines(filename: string, match: RegExpMatchArray): ValidLine[] {
-  const start = Number(match[1]);
-  const count = match[2] ? Number(match[2]) : 1;
-
-  return Array.from({ length: count }, (_, i) => ({ path: filename, line: start + i }));
-}
-
-/**
- * Extract the set of commentable line locations from PR diff hunks.
- * Parses unified-diff hunk headers: `@@ -old,count +new,count @@`.
- */
-export function extractValidLines(patches: Array<{ filename: string; patch?: string }>): ValidLine[] {
-  const hunkHeaderRegex = /@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/g;
-
-  return patches
-    .filter((file) => file.patch)
-    .flatMap((file) =>
-      [...file.patch!.matchAll(hunkHeaderRegex)].flatMap((m) => extractHunkLines(file.filename, m))
-    );
-}
-
-/** True when a comment targets a line that exists in the diff. */
-export function isValidComment(comment: InlineComment, validLines: ValidLine[]): boolean {
-  return validLines.some((vl) => vl.path === comment.path && vl.line === comment.line);
-}
-
-/**
- * True when a comment's `path:line` is already referenced in the review body —
- * used to avoid repeating an out-of-diff finding that the body already mentions.
- */
-export function isAlreadyMentioned(comment: InlineComment, reviewBody: string): boolean {
-  const pattern = `${comment.path}:${comment.line}`;
-  return reviewBody.includes(pattern);
-}
-
-/**
- * Format out-of-diff comments for inclusion in the review body.
- * Downgrades blockers (🚧) to suggestions (🙋‍♂️) since they're supplementary.
- */
-export function formatInvalidComments(comments: InlineComment[]): string {
-  if (comments.length === 0) {
-    return "";
-  }
-
-  const formatted = comments
-    .map((c) => {
-      const body = c.body.replaceAll("🚧", "🙋‍♂️");
-      return `**\`${c.path}:${c.line}\`**\n\n${body}`;
-    })
-    .join("\n\n");
-
-  return `\n\n---\n## Additional Comments (not in diff)\n\n${formatted}`;
-}
-</file>
-
 <file path=".github/actions/code-review-action/src/ruleUrls.test.ts">
 /**
  * Tests for ruleUrls.ts — deterministic rule-code → GitHub-link resolution.
@@ -4346,7 +4380,24 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import { buildRuleUrlMap, linkRuleCodes, slugifyHeading } from "./ruleUrls.ts";
+import { agentsDirFromEnv, buildRuleUrlMap, linkRuleCodes, slugifyHeading } from "./ruleUrls.ts";
+
+describe("agentsDirFromEnv", () => {
+  const original = process.env.CLAUDE_PLUGIN_DIR;
+  afterEach(() => {
+    process.env.CLAUDE_PLUGIN_DIR = original;
+  });
+
+  test("appends /agents to the plugin dir from the env", () => {
+    process.env.CLAUDE_PLUGIN_DIR = "/plugins/autopilot";
+    expect(agentsDirFromEnv()).toBe("/plugins/autopilot/agents");
+  });
+
+  test("falls back to /agents when the env var is unset", () => {
+    delete process.env.CLAUDE_PLUGIN_DIR;
+    expect(agentsDirFromEnv()).toBe("/agents");
+  });
+});
 
 describe("slugifyHeading", () => {
   test("strips the marker, lowercases, drops punctuation, hyphenates", () => {
@@ -4392,6 +4443,12 @@ describe("linkRuleCodes", () => {
       "see [the docs](https://x) and [a note]"
     );
   });
+
+  test("links known codes and leaves unknown ones bare within a merged group", () => {
+    expect(linkRuleCodes("mix [CHECK-BUG-002, CHECK-XYZ-999]", map)).toBe(
+      "mix [[CHECK-BUG-002](https://example.com/bug#b), [CHECK-XYZ-999]]"
+    );
+  });
 });
 
 describe("buildRuleUrlMap", () => {
@@ -4402,6 +4459,11 @@ describe("buildRuleUrlMap", () => {
     await Bun.write(
       join(dir, "pr:review:correctness.md"),
       "### A. Logic Errors\n**CHECK-BUG-001: Wrong variable** — Severity: blocker\n\n### B. Concurrency and Async Issues\n**CHECK-BUG-002: Shared mutable state** — Severity: blocker\n"
+    );
+    // A second pr:review agent file — codes from all files should be collected.
+    await Bun.write(
+      join(dir, "pr:review:security.md"),
+      "### A. Secrets and Credentials\n**CHECK-SEC-001: Hardcoded secret** — Severity: blocker\n"
     );
     // A non-matching file should be ignored.
     await Bun.write(join(dir, "other.md"), "**CHECK-ZZZ-001: nope**\n");
@@ -4419,6 +4481,14 @@ describe("buildRuleUrlMap", () => {
     expect(map.get("CHECK-BUG-002")).toBe(
       "https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/pr%3Areview%3Acorrectness.md#b-concurrency-and-async-issues"
     );
+  });
+
+  test("collects codes across multiple pr:review files", async () => {
+    const map = await buildRuleUrlMap(dir);
+    expect(map.get("CHECK-SEC-001")).toBe(
+      "https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/pr%3Areview%3Asecurity.md#a-secrets-and-credentials"
+    );
+    expect(map.has("CHECK-BUG-001")).toBe(true);
   });
 
   test("ignores files that are not pr:review agents", async () => {
@@ -4449,9 +4519,19 @@ describe("buildRuleUrlMap", () => {
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 
-/** Canonical source location of the autopilot agent files (links always target this). */
+/**
+ * Canonical source location of the autopilot agent files. Intentionally hardcoded
+ * to the source repo (not derived from GITHUB_REPOSITORY): the agent files live
+ * here regardless of which downstream repo the action runs in, so links must
+ * always target this repo.
+ */
 const agentsSourceUrl =
   "https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents";
+
+/** The installed plugin's agents directory, from the env the action exposes. */
+export function agentsDirFromEnv(): string {
+  return `${process.env.CLAUDE_PLUGIN_DIR ?? ""}/agents`;
+}
 
 /** Slugify a `### ` heading to a GitHub anchor (lowercase, alnum + hyphens). */
 export function slugifyHeading(heading: string): string {
@@ -4469,8 +4549,9 @@ function encodeAgentFile(filename: string): string {
   return filename.replaceAll(":", "%3A");
 }
 
-/** Index one agent file's rule codes into the map, keyed to their section anchor. */
-function indexAgentFile(text: string, filename: string, map: Map<string, string>): void {
+/** Extract one agent file's `[ruleCode, url]` pairs, each keyed to its section anchor. */
+function indexAgentFile(text: string, filename: string): Array<[string, string]> {
+  const entries: Array<[string, string]> = [];
   let anchor = "";
   for (const line of text.split("\n")) {
     const heading = line.match(/^###\s+(.+)$/);
@@ -4480,9 +4561,10 @@ function indexAgentFile(text: string, filename: string, map: Map<string, string>
     }
     const code = line.match(/\*\*(CHECK-[A-Z]+-\d+):/);
     if (code && anchor) {
-      map.set(code[1], `${agentsSourceUrl}/${encodeAgentFile(filename)}#${anchor}`);
+      entries.push([code[1], `${agentsSourceUrl}/${encodeAgentFile(filename)}#${anchor}`]);
     }
   }
+  return entries;
 }
 
 /**
@@ -4491,22 +4573,22 @@ function indexAgentFile(text: string, filename: string, map: Map<string, string>
  * callers then emit bare codes, never blocking the review.
  */
 export async function buildRuleUrlMap(agentsDir: string): Promise<Map<string, string>> {
-  const map = new Map<string, string>();
-
   let files: string[];
   try {
     files = (await readdir(agentsDir)).filter(
       (f) => f.startsWith("pr:review:") && f.endsWith(".md")
     );
   } catch {
-    return map;
+    return new Map();
   }
 
+  const map = new Map<string, string>();
   for (const file of files) {
     const text = await Bun.file(join(agentsDir, file)).text();
-    indexAgentFile(text, file, map);
+    for (const [code, url] of indexAgentFile(text, file)) {
+      map.set(code, url);
+    }
   }
-
   return map;
 }
 
@@ -4517,6 +4599,8 @@ export async function buildRuleUrlMap(agentsDir: string): Promise<Map<string, st
  * Codes absent from the map stay bare; already-linked codes (`](…)`) are left alone.
  */
 export function linkRuleCodes(body: string, map: Map<string, string>): string {
+  // The `(?!\()` negative lookahead skips brackets already followed by `(…)` —
+  // i.e. an already-linked `[CODE](url)` — so re-runs don't double-wrap.
   return body.replace(/\[([^\]]*CHECK-[A-Z]+-\d+[^\]]*)\](?!\()/g, (full, inner: string) => {
     const codes = inner
       .split(",")
@@ -4573,16 +4657,24 @@ describe("parseModelOverrides", () => {
     });
   });
 
-  test("drops non-string values and keeps string ones", () => {
-    expect(parseModelOverrides('{"security":"sonnet","bogus":3,"x":null}')).toEqual({
-      security: "sonnet",
-    });
+  test("rejects the whole map when any value is not a string (strict Zod)", () => {
+    expect(parseModelOverrides('{"security":"sonnet","bogus":3}')).toEqual({});
   });
 
   test("returns empty map for malformed JSON or non-objects", () => {
     expect(parseModelOverrides("{bad")).toEqual({});
     expect(parseModelOverrides('"a string"')).toEqual({});
     expect(parseModelOverrides("42")).toEqual({});
+  });
+
+  test("warns via the injected logger when the value is malformed", () => {
+    const warnings: string[] = [];
+    const logger = { warn: (msg: string) => warnings.push(msg) } as unknown as Parameters<
+      typeof parseModelOverrides
+    >[1];
+    parseModelOverrides("{bad", logger);
+    parseModelOverrides('{"x":3}', logger);
+    expect(warnings).toHaveLength(2);
   });
 });
 
@@ -4875,6 +4967,14 @@ describe("extractUsage", () => {
       numTurns: 0,
     });
   });
+
+  test("coerces non-finite numbers (Infinity / NaN) to 0", () => {
+    const result = {
+      usage: { input_tokens: Number.POSITIVE_INFINITY, output_tokens: Number.NaN },
+      total_cost_usd: Number.POSITIVE_INFINITY,
+    };
+    expect(extractUsage(result)).toMatchObject({ tokensIn: 0, tokensOut: 0, costUsd: 0 });
+  });
 });
 
 describe("buildRunSummary", () => {
@@ -4988,6 +5088,10 @@ import { runReviewFanout, type FanoutContext } from "./reviewFanout.ts";
 /** Duration above which a Claude session is considered long-running (triggers artifact upload). */
 const longRunMs = 5 * 60 * 1000;
 
+/** Slash-command prefixes that select the run mode. The trailing space is load-bearing. */
+const reviewCommand = "/autopilot:pr-review ";
+const reactCommand = "/autopilot:pr-answer ";
+
 /** Create pino logger configured per platform logging standard. */
 async function createLogger(): Promise<pino.Logger> {
   const { version } = (await Bun.file(`${import.meta.dirname}/../package.json`).json()) as {
@@ -5046,6 +5150,7 @@ export interface RunClaudeConfig {
   settingsJson: string | undefined;
   outputFilePath: string;
   timeoutMs: number;
+  modelOverrides: Record<string, string>;
 }
 
 /**
@@ -5098,6 +5203,7 @@ export function parseConfig(): RunClaudeConfig {
       process.env.EXECUTION_OUTPUT_FILE ??
       `${process.env.RUNNER_TEMP ?? "/tmp"}/claude-execution-output.json`,
     timeoutMs: timeoutMinutes * 60 * 1000,
+    modelOverrides: parseModelOverrides(process.env.REVIEW_MODEL_OVERRIDES, log),
   };
 }
 
@@ -5228,27 +5334,42 @@ let log: pino.Logger | undefined;
  */
 function shouldRunFanout(config: RunClaudeConfig): boolean {
   if (process.env.PARALLEL_FANOUT !== "true") return false;
-  if (!config.prompt.includes("/autopilot:pr-review ")) return false;
+  if (!config.prompt.includes(reviewCommand)) return false;
   if (!config.pluginDir) return false;
   if (!process.env.GITHUB_REPOSITORY || !process.env.PR_NUMBER) return false;
   return true;
 }
 
+/** Zod schema for the optional per-category model-override map (category → model). */
+const modelOverridesSchema = z.record(z.string(), z.string());
+
 /**
- * Parse the optional per-category model-override map from env. String values only;
- * a malformed value yields an empty map so it never blocks the review.
+ * Parse the optional per-category model-override map from env, validated with Zod.
+ * A malformed value yields an empty map (never blocks the review) but emits a
+ * warning so an operator knows their overrides were ignored.
  */
-export function parseModelOverrides(raw: string | undefined): Record<string, string> {
+export function parseModelOverrides(
+  raw: string | undefined,
+  logger?: pino.Logger
+): Record<string, string> {
   if (!raw) return {};
+
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (typeof parsed !== "object" || parsed === null) return {};
-    return Object.fromEntries(
-      Object.entries(parsed).filter(([, v]) => typeof v === "string")
-    ) as Record<string, string>;
+    parsed = JSON.parse(raw);
   } catch {
+    logger?.warn("Ignoring REVIEW_MODEL_OVERRIDES: not valid JSON.");
     return {};
   }
+
+  const result = modelOverridesSchema.safeParse(parsed);
+  if (!result.success) {
+    logger?.warn(
+      "Ignoring REVIEW_MODEL_OVERRIDES: expected a JSON object of category→model strings."
+    );
+    return {};
+  }
+  return result.data;
 }
 
 /** Spawn the 12 review sub-agents in parallel and persist their results. */
@@ -5269,7 +5390,7 @@ async function runFanoutIfEnabled(
     settingSources,
     pathToClaudeCodeExecutable,
     fallbackModel: config.model,
-    modelOverrides: parseModelOverrides(process.env.REVIEW_MODEL_OVERRIDES),
+    modelOverrides: config.modelOverrides,
     inheritedAllowedTools: config.allowedTools,
     inheritedDisallowedTools: config.disallowedTools,
     // Give each sub-agent 10 min — rfc-compliance historically hits ~77s.
@@ -5374,8 +5495,8 @@ async function writeExecutionFile(
 
 /** Derive the run mode from the prompt, for the instrumentation summary. */
 export function deriveMode(prompt: string): "review" | "react" | "unknown" {
-  if (prompt.includes("/autopilot:pr-review ")) return "review";
-  if (prompt.includes("/autopilot:pr-answer ")) return "react";
+  if (prompt.includes(reviewCommand)) return "review";
+  if (prompt.includes(reactCommand)) return "react";
   return "unknown";
 }
 
@@ -5564,14 +5685,15 @@ if (import.meta.main) {
 import type { Octokit } from "@octokit/rest";
 
 import type { ReviewEvent, ReviewThread } from "./github/githubReview.ts";
-import { buildRuleUrlMap, linkRuleCodes } from "./ruleUrls.ts";
+import { agentsDirFromEnv, buildRuleUrlMap, linkRuleCodes } from "./ruleUrls.ts";
 import {
   extractValidLines,
   formatInvalidComments,
   isAlreadyMentioned,
   isValidComment,
   parseStructuredOutput,
-} from "./reviewOutput.ts";
+  type ValidLine,
+} from "./reviewOutput/reviewOutput.ts";
 import {
   deletePendingReviews,
   fetchReviewThreads,
@@ -5584,12 +5706,6 @@ import {
   unresolveThread,
   verdictToEvent,
 } from "./github/githubReview.ts";
-
-/** Location of a comment (path and line) */
-interface CommentLocation {
-  path: string;
-  line: number;
-}
 
 /**
  * Cleanup bot review threads by resolving outdated ones, duplicates, and fixed blockers.
@@ -5604,7 +5720,7 @@ async function cleanupBotThreads(
   repo: string,
   pullNumber: number,
   botLogin: string,
-  newCommentLocations: CommentLocation[],
+  newCommentLocations: ValidLine[],
   event: ReviewEvent
 ): Promise<number> {
   const threads = await fetchReviewThreads(octokit, owner, repo, pullNumber);
@@ -5675,7 +5791,7 @@ if (!output) {
 // Resolve bare rule codes (e.g. [CHECK-BUG-002]) to GitHub links in code, so the
 // review model no longer reads agent files per run to build them. Missing codes
 // stay bare; an unreadable plugin dir yields an empty map (links simply omitted).
-const ruleUrlMap = await buildRuleUrlMap(`${process.env.CLAUDE_PLUGIN_DIR ?? ""}/agents`);
+const ruleUrlMap = await buildRuleUrlMap(agentsDirFromEnv());
 output.reviewComment = linkRuleCodes(output.reviewComment, ruleUrlMap);
 output.inlineComments = (output.inlineComments ?? []).map((c) => ({
   ...c,
@@ -5721,14 +5837,7 @@ if (resolvedCount > 0) {
 }
 
 // Skip if consecutive approval with no new findings (avoid duplicate reviews)
-const { data: reviews } = await octokit.rest.pulls.listReviews({
-  owner,
-  repo: repoName,
-  pull_number: pullNumber,
-});
-
-const botReviews = reviews.filter((r) => r.user?.login === reviewer && r.state !== "PENDING");
-const lastBotReview = botReviews.at(-1);
+const lastBotReview = await getLastBotReview(octokit, owner, repoName, pullNumber, reviewer);
 
 // Skip if last bot review has identical body (prevents duplicate from concurrent posting)
 if (lastBotReview && normalizeBody(lastBotReview.body ?? "") === normalizeBody(finalBody)) {
