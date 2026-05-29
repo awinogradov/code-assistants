@@ -76,6 +76,15 @@ async function cleanupBotThreads(
 }
 
 // Main execution
+
+// A wholly-failed review fan-out has no usable signal. Fail the check loudly
+// instead of posting a review — guarded before any parse/dedup so a prior
+// same-SHA review cannot flip this green.
+if (process.env.FANOUT_WHOLLY_FAILED === "true") {
+  console.error("Review fan-out wholly failed: all sub-agents errored. Failing the review check.");
+  process.exit(1);
+}
+
 const { octokit, owner, repoName, pullNumber, reviewer } = parseRepoEnv();
 const structuredOutput = process.env.STRUCTURED_OUTPUT ?? "";
 

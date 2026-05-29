@@ -494,6 +494,7 @@ runs:
         PR_NUMBER: ${{ steps.ctx.outputs.pr_number }}
         REVIEWER: ${{ inputs.reviewer }}
         STRUCTURED_OUTPUT: ${{ steps.review.outputs.structured_output }}
+        FANOUT_WHOLLY_FAILED: ${{ steps.review.outputs.fanout_wholly_failed }}
         EXECUTION_FILE: ${{ steps.review.outputs.execution_file }}
         RUN_SUMMARY: ${{ steps.review.outputs.run_summary }}
         PR_HEAD_SHA: ${{ steps.ctx.outputs.pr_head_sha }}

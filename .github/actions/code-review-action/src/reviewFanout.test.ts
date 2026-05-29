@@ -13,12 +13,13 @@ import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type pino from "pino";
 
-import type { FanoutContext, SubagentResult } from "./reviewFanout.ts";
+import type { FanoutContext, FanoutStats, SubagentResult } from "./reviewFanout.ts";
 import {
   buildFanoutStats,
   buildSubagentPrompt,
   collectStructuredFindings,
   detectStack,
+  isFanoutWhollyFailed,
   loadReviewAgents,
   parseAgentFrontmatter,
   resolveModel,
@@ -213,6 +214,91 @@ describe("collectStructuredFindings", () => {
     expect(result.findings).toEqual([]);
     expect(result.error).toContain("findings");
     expect(result.raw).toBe(JSON.stringify({ findings: "nope" }));
+  });
+
+  test("recovers findings from the result text when structured_output is absent", async () => {
+    const result = await collectStructuredFindings(
+      noopLog,
+      streamOf(
+        resultMessage({ subtype: "success", result: JSON.stringify({ findings: [validFinding] }) }),
+      ),
+    );
+    expect(result).toEqual({ findings: [validFinding] });
+  });
+
+  test("recovers a valid empty findings object from the result text", async () => {
+    const result = await collectStructuredFindings(
+      noopLog,
+      streamOf(resultMessage({ subtype: "success", result: '{ "findings": [] }' })),
+    );
+    expect(result).toEqual({ findings: [] });
+    expect(result.error).toBeUndefined();
+  });
+
+  test("strips a fenced code block around the result text", async () => {
+    const fenced = ["```json", JSON.stringify({ findings: [validFinding] }), "```"].join("\n");
+    const result = await collectStructuredFindings(
+      noopLog,
+      streamOf(resultMessage({ subtype: "success", result: fenced })),
+    );
+    expect(result).toEqual({ findings: [validFinding] });
+  });
+
+  test("prefers structured_output over the result text when both are present", async () => {
+    const result = await collectStructuredFindings(
+      noopLog,
+      streamOf(
+        resultMessage({
+          subtype: "success",
+          structured_output: { findings: [validFinding] },
+          result: "not json",
+        }),
+      ),
+    );
+    expect(result).toEqual({ findings: [validFinding] });
+  });
+
+  test("skips the dimension when neither structured_output nor result text is valid JSON", async () => {
+    const result = await collectStructuredFindings(
+      noopLog,
+      streamOf(resultMessage({ subtype: "success", result: "I could not complete the review." })),
+    );
+    expect(result.findings).toEqual([]);
+    expect(result.error).toContain("did not match the findings schema");
+    expect(result.raw).toBe("I could not complete the review.");
+  });
+});
+
+describe("isFanoutWhollyFailed", () => {
+  const stats = (agentCount: number, failedCount: number): FanoutStats => ({
+    agentCount,
+    failedCount,
+    parallelSpeedup: 0,
+    agentDurations: [],
+  });
+
+  test("true when every agent errored", () => {
+    expect(isFanoutWhollyFailed(stats(12, 12))).toBe(true);
+  });
+
+  test("true for a single failed agent", () => {
+    expect(isFanoutWhollyFailed(stats(1, 1))).toBe(true);
+  });
+
+  test("false when at least one agent succeeded", () => {
+    expect(isFanoutWhollyFailed(stats(3, 1))).toBe(false);
+  });
+
+  test("false when no agents failed", () => {
+    expect(isFanoutWhollyFailed(stats(3, 0))).toBe(false);
+  });
+
+  test("false for a single successful agent", () => {
+    expect(isFanoutWhollyFailed(stats(1, 0))).toBe(false);
+  });
+
+  test("false when no agents ran", () => {
+    expect(isFanoutWhollyFailed(stats(0, 0))).toBe(false);
   });
 });
 

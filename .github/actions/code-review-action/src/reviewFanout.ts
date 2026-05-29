@@ -276,12 +276,37 @@ async function runSubagent(
 }
 
 /**
- * Drain the SDK stream and parse the terminal result's structured output.
+ * Recover the findings object an agent emits as its final text when the SDK
+ * `structured_output` channel is empty. Tries the raw text, then a fenced code
+ * block, then the first-brace-to-last-brace slice; returns `undefined` when none
+ * parse (truncated or prose-wrapped output degrades to a skipped dimension).
+ */
+function parseResultJson(result: string | undefined): unknown {
+  if (!result) return undefined;
+  const trimmed = result.trim();
+  const unfenced = trimmed.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```$/i, "").trim();
+  const sliced = trimmed.slice(trimmed.indexOf("{"), trimmed.lastIndexOf("}") + 1);
+  for (const candidate of [trimmed, unfenced, sliced]) {
+    if (!candidate) continue;
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      // Fall through to the next recovery strategy.
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Drain the SDK stream and parse the terminal result's findings.
  *
- * `structured_output` exists only on a `subtype: "success"` result; any error
- * subtype (including `error_max_structured_output_retries`), a missing result,
- * or a schema-invalid payload degrades to a skipped dimension — same policy as a
- * failed in-model sub-agent — with the raw payload kept for diagnostics.
+ * Findings come from the `subtype: "success"` result: preferentially via the SDK
+ * `structured_output` channel, otherwise recovered from the result text with
+ * {@link parseResultJson} (the agents emit the findings object as their final
+ * message). A missing result, any error subtype (including
+ * `error_max_structured_output_retries`), or a payload matching neither degrades
+ * to a skipped dimension — same policy as a failed in-model sub-agent — with the
+ * attempted payload kept in `raw` for diagnostics.
  */
 export async function collectStructuredFindings(
   log: pino.Logger,
@@ -298,7 +323,10 @@ export async function collectStructuredFindings(
     return { findings: [], error: `Sub-agent ended with ${resultMessage.subtype}.` };
   }
 
-  const parsed = agentOutputSchema.safeParse(resultMessage.structured_output);
+  const structured = resultMessage.structured_output;
+  const usedResultText = structured === undefined || structured === null;
+  const candidate = usedResultText ? parseResultJson(resultMessage.result) : structured;
+  const parsed = agentOutputSchema.safeParse(candidate);
   if (!parsed.success) {
     const issues = parsed.error.issues
       .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
@@ -306,9 +334,10 @@ export async function collectStructuredFindings(
     return {
       findings: [],
       error: `Sub-agent structured output did not match the findings schema: ${issues}`,
-      raw: JSON.stringify(resultMessage.structured_output),
+      raw: usedResultText ? resultMessage.result : JSON.stringify(structured),
     };
   }
+  if (usedResultText) log.debug("Recovered findings from result text (no structured_output).");
   return { findings: parsed.data.findings };
 }
 
@@ -363,6 +392,16 @@ export function buildFanoutStats(results: SubagentResult[], totalMs: number): Fa
     parallelSpeedup: totalMs > 0 ? +(totalAgentMs / totalMs).toFixed(2) : 0,
     agentDurations,
   };
+}
+
+/**
+ * True when every spawned sub-agent errored — the fan-out yielded zero usable
+ * review signal. The caller fails the run loudly instead of writing an empty
+ * findings file the root model would read as "no findings → approve". A partial
+ * failure (at least one agent succeeded) is NOT wholly failed.
+ */
+export function isFanoutWhollyFailed(stats: FanoutStats): boolean {
+  return stats.agentCount > 0 && stats.failedCount === stats.agentCount;
 }
 
 /**

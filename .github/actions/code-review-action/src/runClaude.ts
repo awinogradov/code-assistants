@@ -23,6 +23,7 @@ import { setOutput } from "./actionsOutput.ts";
 import { aggregateReviews } from "./aggregateReviews.ts";
 import { logMessage } from "./logClaudeMessage.ts";
 import {
+  isFanoutWhollyFailed,
   runReviewFanout,
   toAgentReviews,
   type FanoutContext,
@@ -343,6 +344,17 @@ async function runFanoutIfEnabled(
   };
 
   const { results, stats } = await runReviewFanout(fanoutCtx);
+  // A 100%-failed fan-out has zero review signal. Writing the usual empty
+  // findings file would let the root model post a clean approval, so fail the
+  // run loudly instead — Submit Review keys off this output to fail the check.
+  if (isFanoutWhollyFailed(stats)) {
+    log.error(
+      { agent_count: stats.agentCount, failed_count: stats.failedCount },
+      "Review fan-out wholly failed; all sub-agents errored."
+    );
+    await setOutput("fanout_wholly_failed", "true");
+    throw new Error(`Review fan-out wholly failed: all ${stats.agentCount} sub-agents errored.`);
+  }
   // Merge the per-agent findings deterministically in code so the root model
   // receives a single ready-to-format list instead of re-deduping 12 blocks.
   const findings = aggregateReviews(toAgentReviews(results));
