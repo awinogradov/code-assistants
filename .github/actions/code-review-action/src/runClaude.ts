@@ -407,24 +407,28 @@ export function findResultMessage(messages: unknown[]): Record<string, unknown> 
   );
 }
 
-/** Count `tool_use` blocks across assistant messages — one per tool round-trip. */
-export function countToolUses(messages: unknown[]): number {
+/** True when an assistant message content array holds at least one `tool_use` block. */
+function hasToolUseBlock(content: unknown): boolean {
+  if (!Array.isArray(content)) return false;
+  return content.some(
+    (block) =>
+      typeof block === "object" &&
+      block !== null &&
+      (block as Record<string, unknown>).type === "tool_use"
+  );
+}
+
+/**
+ * Count assistant turns that issued at least one tool call — i.e. model→tool
+ * round-trips. A single turn with several parallel `tool_use` blocks counts once.
+ */
+export function countToolRoundTrips(messages: unknown[]): number {
   let count = 0;
   for (const message of messages) {
     if (typeof message !== "object" || message === null) continue;
     const record = message as Record<string, unknown>;
     if (record.type !== "assistant") continue;
-    const content = (record.message as { content?: unknown } | undefined)?.content;
-    if (!Array.isArray(content)) continue;
-    for (const block of content) {
-      if (
-        typeof block === "object" &&
-        block !== null &&
-        (block as Record<string, unknown>).type === "tool_use"
-      ) {
-        count += 1;
-      }
-    }
+    if (hasToolUseBlock((record.message as { content?: unknown } | undefined)?.content)) count += 1;
   }
   return count;
 }
@@ -462,9 +466,35 @@ export interface PhaseTimings {
 }
 
 /**
- * Emit a single structured per-run summary line: mode, phase timings, token
- * usage, cost, and tool round-trips. Logged before {@link emitOutputs} so the
- * summary survives even when the run concludes with a non-success exit.
+ * Build the structured per-run summary: mode, phase timings, token usage, cost,
+ * and tool round-trips. Returns the snake_case-keyed object that is logged as a
+ * single line — separated from logging so the field mapping is unit-testable.
+ */
+export function buildRunSummary(
+  mode: string,
+  messages: unknown[],
+  timings: PhaseTimings
+): Record<string, number | string> {
+  const usage = extractUsage(findResultMessage(messages));
+
+  return {
+    mode,
+    fanout_ms: timings.fanoutMs,
+    model_ms: timings.modelMs,
+    tokens_in: usage.tokensIn,
+    tokens_out: usage.tokensOut,
+    cache_read_tokens: usage.cacheReadTokens,
+    cache_creation_tokens: usage.cacheCreationTokens,
+    cost_usd: usage.costUsd,
+    num_turns: usage.numTurns,
+    tool_round_trips: countToolRoundTrips(messages),
+  };
+}
+
+/**
+ * Emit the per-run summary as one structured log line. Logged before
+ * {@link emitOutputs} so it survives even when the run concludes with a
+ * non-success exit.
  */
 function logRunSummary(
   log: pino.Logger,
@@ -472,23 +502,7 @@ function logRunSummary(
   messages: unknown[],
   timings: PhaseTimings
 ): void {
-  const usage = extractUsage(findResultMessage(messages));
-
-  log.info(
-    {
-      mode,
-      fanout_ms: timings.fanoutMs,
-      model_ms: timings.modelMs,
-      tokens_in: usage.tokensIn,
-      tokens_out: usage.tokensOut,
-      cache_read_tokens: usage.cacheReadTokens,
-      cache_creation_tokens: usage.cacheCreationTokens,
-      cost_usd: usage.costUsd,
-      num_turns: usage.numTurns,
-      tool_round_trips: countToolUses(messages),
-    },
-    "Run summary."
-  );
+  log.info(buildRunSummary(mode, messages, timings), "Run summary.");
 }
 
 /**
