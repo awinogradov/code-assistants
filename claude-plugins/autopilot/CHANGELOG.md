@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [0.2.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v0.1.0...autopilot@v0.2.0) (2026-05-29)
+
+## Release Notes
+
+New Autopilot capabilities and repository visibility features that help with code reviews and development workflows.
+
+## ✨ What's New
+
+### Automatic codebase snapshots on merge
+Your repository now maintains an up-to-date snapshot of its entire codebase in `.repomix/pack.xml` that automatically refreshes with every merge to the main branch. This gives Claude instant access to your complete codebase structure without needing to scan files during conversations, making code reviews and architecture discussions significantly faster.
+
+The Autopilot plugin automatically uses these snapshots when available, falling back to live scanning only when needed. For repositories that want this capability, there's also a new `repomix-sync` action that helps propagate the snapshot workflow and configuration to other repos.
+
+<details><summary>Related issues</summary>
+
+- [#62: Run repomix pack on PR merge and commit snapshot to repo](https://github.com/awinogradov/code-assistants/issues/62)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #62 | [#106](https://github.com/awinogradov/code-assistants/pull/106) | @awinogradov |
+
+### Features
+
+* **repomix:** add pack-on-merge workflow and snapshot reader ([cfa4065](https://github.com/awinogradov/code-assistants/commit/cfa4065de142e776428ba65e9adaafa8c05e20f7))
 ## 0.1.0 (2026-05-28)
 
 ## Release Notes
