@@ -162,8 +162,6 @@ The content is organized as follows:
         prepareRelease.ts
         release.test.ts
         release.ts
-        releaseField.test.ts
-        releaseField.ts
         releaseNotesPrompt.ts
         run.ts
         slackNotify.test.ts
@@ -287,6 +285,8 @@ packages/
       fetchRawContent.ts
       parseRepo.test.ts
       parseRepo.ts
+      releaseField.test.ts
+      releaseField.ts
     package.json
     tsconfig.json
 rules/
@@ -8748,9 +8748,8 @@ describe("discoverMembers", () => {
  */
 import { join, relative } from "node:path";
 
+import { readReleaseField, readRootRelease, type ReleaseType } from "@code-assistants/actions-core/releaseField";
 import { Glob } from "bun";
-
-import { readReleaseField, readRootRelease, type ReleaseType } from "../releaseField.ts";
 
 /** Workspace member eligible for an independent release. */
 export interface Member {
@@ -13388,8 +13387,9 @@ if (import.meta.main) {
  */
 import { appendFile } from "node:fs/promises";
 
+import { readReleaseField } from "@code-assistants/actions-core/releaseField";
+
 import { discoverMembers } from "./monorepo/discoverMembers.ts";
-import { readReleaseField } from "./releaseField.ts";
 
 const DOCS_LINK = "docs/release-field.md";
 const PACKAGE_JSON = "package.json";
@@ -15943,431 +15943,6 @@ if (import.meta.main) {
 }
 </file>
 
-<file path=".github/actions/release-action/src/releaseField.test.ts">
-/**
- * Tests for the `package.json` `release` field reader.
- */
-import { describe, expect, test } from "bun:test";
-
-import { readReleaseField, readRootRelease, releaseTypes } from "./releaseField.ts";
-
-describe("readReleaseField — type", () => {
-  test.each(releaseTypes.map((value) => [value]))("accepts recognized type %s", (value) => {
-    expect(readReleaseField({ name: "x", release: { type: value } })).toEqual({
-      type: value,
-    });
-  });
-
-  test("throws when the release field is missing", () => {
-    expect(() => readReleaseField({ name: "x" })).toThrow(
-      /Missing 'release' field in package\.json/,
-    );
-  });
-
-  test("missing-field error references the docs", () => {
-    expect(() => readReleaseField({ name: "x" })).toThrow(/docs\/release-field\.md/);
-  });
-
-  test("throws when release is a bare string (old shape)", () => {
-    expect(() => readReleaseField({ release: "lib-nodejs" })).toThrow(
-      /'release' in package\.json must be an object/,
-    );
-  });
-
-  test("throws when release is an array", () => {
-    expect(() => readReleaseField({ release: [] })).toThrow(/must be an object.*Got array/);
-  });
-
-  test("throws when release.type is missing", () => {
-    expect(() => readReleaseField({ release: {} })).toThrow(
-      /'release\.type'.*must be a string; got undefined/,
-    );
-  });
-
-  test("throws when release.type is unrecognized", () => {
-    expect(() => readReleaseField({ release: { type: "not-a-real-type" } })).toThrow(
-      /Unrecognized 'release\.type' value "not-a-real-type"/,
-    );
-  });
-
-  test("unrecognized-type error lists allowed values", () => {
-    expect(() => readReleaseField({ release: { type: "not-a-real-type" } })).toThrow(
-      /lib-nodejs.*github-action.*claude-plugin/,
-    );
-  });
-
-  test("throws when release.type is not a string", () => {
-    expect(() => readReleaseField({ release: { type: 42 } })).toThrow(
-      /must be a string; got number/,
-    );
-  });
-
-  test("throws when packageJson is null", () => {
-    expect(() => readReleaseField(null)).toThrow(/expected an object/);
-  });
-
-  test("throws when packageJson is not an object", () => {
-    expect(() => readReleaseField("not-an-object")).toThrow(/expected an object/);
-  });
-});
-
-describe("readReleaseField — slack", () => {
-  test("returns slack channel when present", () => {
-    expect(
-      readReleaseField({
-        release: { type: "lib-nodejs", slack: "#releases" },
-      }),
-    ).toEqual({ type: "lib-nodejs", slack: "#releases" });
-  });
-
-  test("omits slack key when not present", () => {
-    const result = readReleaseField({ release: { type: "lib-nodejs" } });
-    expect(result).toEqual({ type: "lib-nodejs" });
-    expect("slack" in result).toBe(false);
-  });
-
-  test("throws when slack is an empty string", () => {
-    expect(() => readReleaseField({ release: { type: "lib-nodejs", slack: "" } })).toThrow(
-      /'release\.slack'.*must be a non-empty string/,
-    );
-  });
-
-  test("throws when slack is not a string", () => {
-    expect(() => readReleaseField({ release: { type: "lib-nodejs", slack: 42 } })).toThrow(
-      /'release\.slack'.*must be a non-empty string/,
-    );
-  });
-});
-
-describe("readRootRelease", () => {
-  test("returns empty object when no release field is present", () => {
-    expect(readRootRelease({ name: "monorepo" })).toEqual({});
-  });
-
-  test("returns members array for monorepo root", () => {
-    expect(
-      readRootRelease({
-        release: { members: [".github/actions/release-action", "packages/foo"] },
-      }),
-    ).toEqual({ members: [".github/actions/release-action", "packages/foo"] });
-  });
-
-  test("returns type for standalone root", () => {
-    expect(readRootRelease({ release: { type: "lib-nodejs" } })).toEqual({
-      type: "lib-nodejs",
-    });
-  });
-
-  test("returns slack alongside members", () => {
-    expect(
-      readRootRelease({
-        release: { members: ["packages/*"], slack: "#releases" },
-      }),
-    ).toEqual({ members: ["packages/*"], slack: "#releases" });
-  });
-
-  test("throws when both members and type are declared", () => {
-    expect(() =>
-      readRootRelease({
-        release: { members: ["packages/*"], type: "lib-nodejs" },
-      }),
-    ).toThrow(/mutually exclusive/);
-  });
-
-  test("throws when members is not an array", () => {
-    expect(() => readRootRelease({ release: { members: "packages/*" } })).toThrow(
-      /must be an array of workspace paths/,
-    );
-  });
-
-  test("throws when members is empty", () => {
-    expect(() => readRootRelease({ release: { members: [] } })).toThrow(
-      /must contain at least one workspace path/,
-    );
-  });
-
-  test("throws when a members entry is not a non-empty string", () => {
-    expect(() => readRootRelease({ release: { members: ["packages/*", ""] } })).toThrow(
-      /entries must be non-empty strings/,
-    );
-  });
-
-  test("throws when release is not an object", () => {
-    expect(() => readRootRelease({ release: "lib-nodejs" })).toThrow(/must be an object/);
-  });
-
-  test("throws when packageJson is null", () => {
-    expect(() => readRootRelease(null)).toThrow(/expected an object/);
-  });
-});
-</file>
-
-<file path=".github/actions/release-action/src/releaseField.ts">
-/**
- * Read the `release` config object from a parsed `package.json`.
- *
- * `release` is the single source of truth for `release-action` per-repo config:
- *
- * - `type` — picks publish targets, version source, and the major-version tag.
- * - `slack` — optional Slack channel for the post-publish notification.
- *
- * Detection is fail-closed for `type`: a missing field or an unrecognized
- * value throws an `Error` referencing the spec doc.
- *
- * @see ../../../../docs/release-field.md
- *
- * @example
- * ```typescript
- * import { readReleaseField } from "./releaseField.ts";
- *
- * const pkg = await Bun.file("package.json").json();
- * const { type, slack } = readReleaseField(pkg);
- * // type:  "github-action"
- * // slack: "#releases" | undefined
- * ```
- */
-
-const DOCS_LINK = "docs/release-field.md";
-
-/**
- * Recognized release types. Order mirrors the table in the release-action
- * README so the two stay in sync.
- */
-export const releaseTypes = [
-  "lib-nodejs",
-  "lib-bun",
-  "lib-python",
-  "service-nodejs",
-  "service-python",
-  "github-action",
-  "claude-plugin",
-] as const;
-
-/** A release type recognised by release-action. */
-export type ReleaseType = (typeof releaseTypes)[number];
-
-/** Parsed `release` config from `package.json`. */
-export interface ReleaseConfig {
-  type: ReleaseType;
-  slack?: string;
-}
-
-/**
- * Root-level `release` config from the repository-root `package.json`.
- *
- * A monorepo root declares `members` to enumerate workspace paths to release;
- * a standalone repo declares `type` and behaves like a member. Both forms may
- * carry `slack`. `members` and `type` are mutually exclusive at the root —
- * mixing them is a configuration error.
- */
-export interface RootReleaseConfig {
-  members?: readonly string[];
-  type?: ReleaseType;
-  slack?: string;
-}
-
-function fail(message: string): never {
-  throw new Error(`${message} See ${DOCS_LINK}.`);
-}
-
-function readReleaseObject(packageJson: unknown): Record<string, unknown> {
-  if (typeof packageJson !== "object" || packageJson === null) {
-    fail("Invalid package.json — expected an object.");
-  }
-
-  if (!("release" in packageJson)) {
-    fail(
-      `Missing 'release' field in package.json. Set a top-level "release" object with a "type" — allowed: ${releaseTypes.join(
-        ", ",
-      )}.`,
-    );
-  }
-
-  const raw: unknown = (packageJson as Record<string, unknown>).release;
-
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-    fail(
-      `'release' in package.json must be an object with a "type" string. Got ${
-        Array.isArray(raw) ? "array" : typeof raw
-      }.`,
-    );
-  }
-
-  return raw as Record<string, unknown>;
-}
-
-function readType(release: Record<string, unknown>): ReleaseType {
-  const value: unknown = release.type;
-
-  if (typeof value !== "string") {
-    fail(
-      `'release.type' in package.json must be a string; got ${typeof value}. Allowed: ${releaseTypes.join(
-        ", ",
-      )}.`,
-    );
-  }
-
-  if (!(releaseTypes as readonly string[]).includes(value)) {
-    fail(
-      `Unrecognized 'release.type' value "${value}" in package.json. Allowed: ${releaseTypes.join(
-        ", ",
-      )}.`,
-    );
-  }
-
-  return value as ReleaseType;
-}
-
-function readSlack(release: Record<string, unknown>): string | undefined {
-  if (!("slack" in release)) {
-    return undefined;
-  }
-
-  const value: unknown = release.slack;
-
-  if (typeof value !== "string" || value.length === 0) {
-    fail(
-      "'release.slack' in package.json must be a non-empty string (e.g. \"#releases\") when present.",
-    );
-  }
-
-  return value;
-}
-
-/**
- * Read and validate the top-level `release` object on a parsed `package.json`.
- *
- * Throws if the field is missing, not an object, or `release.type` is missing
- * or unrecognized. `release.slack` is optional but must be a non-empty
- * string when present.
- *
- * @param packageJson - Parsed `package.json` (treat the type as `unknown` —
- *   this function performs the runtime validation).
- * @returns The validated {@link ReleaseConfig}.
- * @throws {Error} when the field is missing or invalid. The message names the
- *   field, lists allowed values, and points to `docs/release-field.md`.
- *
- * @example
- * ```typescript
- * // Success
- * readReleaseField({
- *   name: "ingest",
- *   release: { type: "lib-nodejs", slack: "#releases" },
- * });
- * // → { type: "lib-nodejs", slack: "#releases" }
- *
- * // Failure — missing field
- * readReleaseField({ name: "ingest" });
- * // → throws: Missing 'release' field in package.json. …
- * ```
- */
-export function readReleaseField(packageJson: unknown): ReleaseConfig {
-  const release = readReleaseObject(packageJson);
-  const type = readType(release);
-  const slack = readSlack(release);
-
-  return slack === undefined ? { type } : { type, slack };
-}
-
-function readMembers(release: Record<string, unknown>): readonly string[] | undefined {
-  if (!("members" in release)) {
-    return undefined;
-  }
-
-  const value: unknown = release.members;
-
-  if (!Array.isArray(value)) {
-    fail(
-      `'release.members' in package.json must be an array of workspace paths; got ${typeof value}.`,
-    );
-  }
-
-  if (value.length === 0) {
-    fail(
-      "'release.members' in package.json must contain at least one workspace path when present.",
-    );
-  }
-
-  for (const entry of value) {
-    if (typeof entry !== "string" || entry.length === 0) {
-      fail("'release.members' entries must be non-empty strings (workspace paths).");
-    }
-  }
-
-  return value as readonly string[];
-}
-
-/**
- * Read and validate the top-level `release` object on a parsed repository-root
- * `package.json`.
- *
- * Unlike {@link readReleaseField}, root config may declare `members` instead of
- * `type` to opt into monorepo mode. Returns an empty object shape when the
- * root has no `release` field — callers handle that case (e.g., fall back to
- * `workspaces` discovery).
- *
- * @throws when both `members` and `type` are declared (ambiguous root mode),
- *   when `members` is not a non-empty `string[]`, or when `type`/`slack` are
- *   present but invalid (same rules as {@link readReleaseField}).
- *
- * @example
- * ```typescript
- * readRootRelease({ release: { members: ["packages/*"] } });
- * // → { members: ["packages/*"] }
- *
- * readRootRelease({ release: { type: "lib-nodejs", slack: "#releases" } });
- * // → { type: "lib-nodejs", slack: "#releases" }
- *
- * readRootRelease({ name: "monorepo" });
- * // → {}
- * ```
- */
-export function readRootRelease(packageJson: unknown): RootReleaseConfig {
-  if (typeof packageJson !== "object" || packageJson === null) {
-    fail("Invalid package.json — expected an object.");
-  }
-
-  if (!("release" in packageJson)) {
-    return {};
-  }
-
-  const raw: unknown = (packageJson as Record<string, unknown>).release;
-
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-    fail(
-      `'release' in package.json must be an object. Got ${
-        Array.isArray(raw) ? "array" : typeof raw
-      }.`,
-    );
-  }
-
-  const release = raw as Record<string, unknown>;
-  const members = readMembers(release);
-  const hasType = "type" in release;
-
-  if (members && hasType) {
-    fail(
-      "'release.members' and 'release.type' are mutually exclusive at the root — pick monorepo mode (members) or standalone mode (type).",
-    );
-  }
-
-  const slack = readSlack(release);
-  const config: RootReleaseConfig = {};
-
-  if (members) {
-    config.members = members;
-  } else if (hasType) {
-    config.type = readType(release);
-  }
-
-  if (slack !== undefined) {
-    config.slack = slack;
-  }
-
-  return config;
-}
-</file>
-
 <file path=".github/actions/release-action/src/releaseNotesPrompt.ts">
 /**
  * Release notes prompt configuration and content filtering
@@ -17330,9 +16905,9 @@ Updated workflows.
  * SLACK_TOKEN=xoxb-... bun src/slackNotify.ts
  * ```
  */
+import { readReleaseField } from "@code-assistants/actions-core/releaseField";
 import { WebClient } from "@slack/web-api";
 
-import { readReleaseField } from "./releaseField.ts";
 import { changelogSectionNames } from "./release.ts";
 
 /** Heading prefix used by conventional changelog sections in release notes files */
@@ -18216,6 +17791,7 @@ Add a `release` field to your package.json to configure release behavior. See th
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.92.0",
+    "@code-assistants/actions-core": "workspace:*",
     "@slack/web-api": "7.15.1",
     "conventional-changelog": "7.2.0",
     "conventional-changelog-conventionalcommits": "9.3.1",
@@ -18518,7 +18094,12 @@ uses: awinogradov/code-assistants/.github/actions/release-action@v1
  */
 import { describe, expect, test } from "bun:test";
 
-import { isApprovedDecision, pickReleasePr, selectMergeMethod } from "./automerge.ts";
+import {
+  isApprovedDecision,
+  parseAutomergeOptIn,
+  pickReleasePr,
+  selectMergeMethod,
+} from "./automerge.ts";
 
 describe("pickReleasePr", () => {
   test("picks the open release PR", () => {
@@ -18546,26 +18127,26 @@ describe("pickReleasePr", () => {
 
 describe("selectMergeMethod", () => {
   test("prefers rebase when allowed", () => {
-    expect(
-      selectMergeMethod({ allowRebase: true, allowSquash: true, allowMerge: true })
-    ).toBe("rebase");
+    expect(selectMergeMethod({ allowRebase: true, allowSquash: true, allowMerge: true })).toBe(
+      "rebase",
+    );
   });
 
   test("falls back to squash when rebase disabled", () => {
-    expect(
-      selectMergeMethod({ allowRebase: false, allowSquash: true, allowMerge: true })
-    ).toBe("squash");
+    expect(selectMergeMethod({ allowRebase: false, allowSquash: true, allowMerge: true })).toBe(
+      "squash",
+    );
   });
 
   test("falls back to merge when only merge allowed", () => {
-    expect(
-      selectMergeMethod({ allowRebase: false, allowSquash: false, allowMerge: true })
-    ).toBe("merge");
+    expect(selectMergeMethod({ allowRebase: false, allowSquash: false, allowMerge: true })).toBe(
+      "merge",
+    );
   });
 
   test("returns null when no method allowed", () => {
     expect(
-      selectMergeMethod({ allowRebase: false, allowSquash: false, allowMerge: false })
+      selectMergeMethod({ allowRebase: false, allowSquash: false, allowMerge: false }),
     ).toBeNull();
   });
 });
@@ -18581,6 +18162,57 @@ describe("isApprovedDecision", () => {
     expect(isApprovedDecision(null)).toBe(false);
   });
 });
+
+describe("parseAutomergeOptIn", () => {
+  const source = "owner/repo:package.json@abc1234";
+
+  test("false when raw content is null (missing file)", () => {
+    expect(parseAutomergeOptIn(null, source)).toBe(false);
+  });
+
+  test("true when release.automerge is true", () => {
+    expect(parseAutomergeOptIn(JSON.stringify({ release: { automerge: true } }), source)).toBe(
+      true,
+    );
+  });
+
+  test("true alongside a monorepo members root", () => {
+    expect(
+      parseAutomergeOptIn(
+        JSON.stringify({ release: { members: ["packages/*"], automerge: true } }),
+        source,
+      ),
+    ).toBe(true);
+  });
+
+  test("false when release.automerge is false", () => {
+    expect(parseAutomergeOptIn(JSON.stringify({ release: { automerge: false } }), source)).toBe(
+      false,
+    );
+  });
+
+  test("false when release.automerge is absent", () => {
+    expect(
+      parseAutomergeOptIn(JSON.stringify({ release: { type: "github-action" } }), source),
+    ).toBe(false);
+  });
+
+  test("false when there is no release field", () => {
+    expect(parseAutomergeOptIn(JSON.stringify({ name: "x" }), source)).toBe(false);
+  });
+
+  test("throws naming the source when JSON is malformed", () => {
+    expect(() => parseAutomergeOptIn("{ not json", source)).toThrow(
+      /Failed to read auto-merge opt-in from owner\/repo:package\.json@abc1234/,
+    );
+  });
+
+  test("throws when release.automerge is not a boolean", () => {
+    expect(() =>
+      parseAutomergeOptIn(JSON.stringify({ release: { automerge: "yes" } }), source),
+    ).toThrow(/'release\.automerge'.*must be a boolean/);
+  });
+});
 </file>
 
 <file path=".github/actions/release-automerge/src/automerge.ts">
@@ -18589,16 +18221,21 @@ describe("isApprovedDecision", () => {
  *
  * Re-evaluated on every relevant event (check_suite, status, review), the action
  * merges a PR only when ALL of these hold: the head ref matches `^release-`, the
- * PR is open, every sibling check is green, and the review decision is APPROVED.
- * Any unmet condition or unexpected error is fail-closed — the action never
- * merges on doubt. The merge is pinned to the triggering head SHA so a push that
- * lands mid-evaluation cannot be merged unreviewed.
+ * PR is open, the repo-root `package.json` opts in via `release.automerge === true`,
+ * every sibling check is green, and the review decision is APPROVED. The opt-in is
+ * read from the root `package.json` at the triggering head SHA, so the policy
+ * travels with the release branch. Any unmet condition or unexpected error is
+ * fail-closed — the action never merges on doubt. The merge is pinned to the
+ * triggering head SHA so a push that lands mid-evaluation cannot be merged
+ * unreviewed.
  *
  * @example
  * GH_TOKEN=xxx REPO=owner/repo HEAD_SHA=abc JOB_NAME=automerge bun run src/automerge.ts
  */
 import { fetchCheckStatuses } from "@code-assistants/actions-core/checkStatus";
+import { fetchRawContent } from "@code-assistants/actions-core/fetchRawContent";
 import { parseRepo } from "@code-assistants/actions-core/parseRepo";
+import { readRootRelease } from "@code-assistants/actions-core/releaseField";
 import { Octokit } from "@octokit/rest";
 
 /** Minimal PR shape needed to pick the release PR for a commit. */
@@ -18619,6 +18256,8 @@ export interface MergeMethodFlags {
 export type MergeMethod = "rebase" | "squash" | "merge";
 
 const releaseBranch = /^release-/;
+// Repo-wide auto-merge opt-in lives in the root package.json's `release` object.
+const rootPackageJsonPath = "package.json";
 // GitHub merge-API responses that mean "nothing to do" rather than a real error:
 // 405 not mergeable / already merged, 409 head SHA moved (sha mismatch), 422 unprocessable.
 const idempotentMergeStatuses = new Set([405, 409, 422]);
@@ -18672,12 +18311,47 @@ export function isApprovedDecision(decision: string | null): boolean {
   return decision === "APPROVED";
 }
 
+/**
+ * Decide auto-merge opt-in from the raw root `package.json` content.
+ *
+ * Repo-wide opt-in holds only when `release.automerge === true`; any other value
+ * — including an absent field — disables it. A `null` `raw` (missing file) is a
+ * clean "disabled". Malformed JSON or an invalid `release` object throws, naming
+ * `source`, so the fail-closed caller never merges on doubt.
+ */
+export function parseAutomergeOptIn(raw: string | null, source: string): boolean {
+  if (raw === null) {
+    return false;
+  }
+
+  try {
+    return readRootRelease(JSON.parse(raw)).automerge === true;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to read auto-merge opt-in from ${source}: ${detail}`);
+  }
+}
+
+/** Fetch the root `package.json` at the triggering head SHA and decide opt-in. */
+async function fetchAutomergeOptIn(config: AutomergeConfig): Promise<boolean> {
+  const { octokit, owner, repo, headSha } = config;
+  const raw = await fetchRawContent({
+    octokit,
+    owner,
+    repo,
+    path: rootPackageJsonPath,
+    ref: headSha,
+  });
+
+  return parseAutomergeOptIn(raw, `${owner}/${repo}:${rootPackageJsonPath}@${headSha.slice(0, 7)}`);
+}
+
 /** Fetch the PR's aggregate review decision via GraphQL. */
 async function fetchReviewDecision(
   octokit: Octokit,
   owner: string,
   repo: string,
-  pullNumber: number
+  pullNumber: number,
 ): Promise<string | null> {
   const result = await octokit.graphql<{
     repository: { pullRequest: { reviewDecision: string | null } };
@@ -18687,7 +18361,7 @@ async function fetchReviewDecision(
         pullRequest(number: $number) { reviewDecision }
       }
     }`,
-    { owner, repo, number: pullNumber }
+    { owner, repo, number: pullNumber },
   );
 
   return result.repository.pullRequest.reviewDecision;
@@ -18697,7 +18371,7 @@ async function fetchReviewDecision(
 async function fetchMergeMethodFlags(
   octokit: Octokit,
   owner: string,
-  repo: string
+  repo: string,
 ): Promise<MergeMethodFlags> {
   const { data } = await octokit.rest.repos.get({ owner, repo });
   return {
@@ -18732,7 +18406,9 @@ async function mergeRelease(config: AutomergeConfig, pullNumber: number): Promis
   } catch (error) {
     const status = (error as { status?: number }).status;
     if (status && idempotentMergeStatuses.has(status)) {
-      console.log(`Skip: PR #${pullNumber} not mergeable now (HTTP ${status}) — head moved or already merged`);
+      console.log(
+        `Skip: PR #${pullNumber} not mergeable now (HTTP ${status}) — head moved or already merged`,
+      );
       return;
     }
     throw error;
@@ -18752,6 +18428,13 @@ async function run(config: AutomergeConfig): Promise<void> {
 
   if (!pr) {
     console.log(`Skip: no open release PR for ${headSha.slice(0, 7)}`);
+    return;
+  }
+
+  if (!(await fetchAutomergeOptIn(config))) {
+    console.log(
+      "Skip: auto-merge disabled — set release.automerge:true in the root package.json (see docs/release-automerge.md)",
+    );
     return;
   }
 
@@ -18881,9 +18564,18 @@ A PR is merged only when **all** of the following hold:
 
 - the head ref matches `^release-`,
 - the PR is open,
+- the repo opted in via `release.automerge === true` in the root `package.json`
+  (read at the PR head SHA; default `false`),
 - every sibling check is green (a failed check skips; a still-pending check skips),
   and
 - the PR's `reviewDecision` is `APPROVED`.
+
+> **Opt-in (default off).** Auto-merge is disabled unless the repo-root
+> `package.json` declares `release.automerge: true` (see the
+> [`release` field spec](../../../docs/release-field.md)). Because consumers
+> reference this action via `@main`, adopting the synced workflow alone does
+> **not** enable auto-merge — each repo must add the flag, or its release PRs
+> stay approved-but-unmerged for a human to merge.
 
 The merge is pinned to the triggering head commit, so a push that lands during
 evaluation is rejected rather than merged unreviewed. The check aggregation reuses
@@ -18965,6 +18657,9 @@ Store the token in a secret (e.g., `BOT_TOKEN`) and pass it via
 
 - Resolves the open release PR from the triggering commit via the
   commit-associated-PRs API, then bails unless its head ref matches `^release-`.
+- Reads the repo-root `package.json` at the head SHA and skips unless
+  `release.automerge === true`. A missing `package.json` is a clean skip; a
+  malformed one fails closed (no merge). A non-boolean `automerge` is rejected.
 - Aggregates check runs and commit statuses in a single snapshot (no polling):
   any failed check or any still-pending check skips the merge until a later event.
 - Reads `reviewDecision` and merges only when it is `APPROVED`.
@@ -28939,14 +28634,15 @@ the merge with no manual step.
  │ on: check_suite[completed] · pull_request_review[submitted]│
  └───────────────────────────┬───────────────────────────────┘
                              ▼
-   ┌─────────────────────────────────────────────────┐
-   │ release-automerge action                         │
-   │ 1. resolve open PR for the head SHA              │
-   │ 2. head ref ~ ^release-  AND  state == open ?    │
-   │ 3. all checks green? (shared aggregation)        │
-   │ 4. reviewDecision == APPROVED ?                  │
-   │ 5. merge (sha-pinned) with an allowed method     │
-   └───────────────────────────┬─────────────────────┘
+   ┌───────────────────────────────────────────────────┐
+   │ release-automerge action                          │
+   │ 1. resolve open PR for the head SHA               │
+   │ 2. head ref ~ ^release-  AND  state == open ?     │
+   │ 3. root package.json release.automerge === true ? │
+   │ 4. all checks green? (shared aggregation)         │
+   │ 5. reviewDecision == APPROVED ?                   │
+   │ 6. merge (sha-pinned) with an allowed method      │
+   └───────────────────────────┬───────────────────────┘
                   ▼ all true                ▼ any false / any error
             merge PR                   no-op (never merge)
                   │
@@ -28965,10 +28661,21 @@ the merge with no manual step.
   approval already re-evaluates commit statuses, so dropping it avoids running on
   non-release PRs without losing meaningful coverage.)
 - **Merge conditions (all must hold):** the head ref matches `^release-`, the PR
-  is open, every sibling check is green (failed → skip; still pending → skip), and
-  `reviewDecision == APPROVED`. The check aggregation reuses the same logic as the
-  AI-review preflight (see [the shared `checkStatus` helper][checkstatus]),
-  deduplicated by name and excluding the action's own job.
+  is open, the repo opted in via `release.automerge === true`, every sibling check
+  is green (failed → skip; still pending → skip), and `reviewDecision == APPROVED`.
+  The check aggregation reuses the same logic as the AI-review preflight (see
+  [the shared `checkStatus` helper][checkstatus]), deduplicated by name and
+  excluding the action's own job.
+- **Opt-in gate (default off):** the action reads the repo-root `package.json` at
+  the triggering head SHA and merges only when `release.automerge === true` (see
+  the [`release` field spec](./release-field.md)). The flag travels with the
+  release branch — a PR that toggles it changes its own merge eligibility. A
+  missing `package.json` is a clean skip; a malformed one fails closed (no merge);
+  a non-boolean `automerge` is rejected. **Migration:** because downstream repos
+  reference the action via `@main`, this gate ships as a behavior change — every
+  repo that relied on auto-merge must add `release.automerge: true` to its root
+  `package.json`, or its release PRs will stay approved-but-unmerged until a human
+  merges them.
 - **Merge method:** the action reads the repository's allowed merge methods
   (`allow_rebase_merge` / `allow_squash_merge` / `allow_merge_commit`) and prefers
   `rebase`, falling back to `squash` then `merge`. The merge is pinned to the
@@ -29076,12 +28783,15 @@ interface RootReleaseConfig {
   members?: string[]; // monorepo: explicit member paths (mutually exclusive with `type`)
   type?: ReleaseType; // standalone: same shape as ReleaseConfig
   slack?: string;
+  automerge?: boolean; // root-only opt-in for release-automerge (default false)
 }
 ```
 
 `type` is required on **member** manifests. `slack` is optional — when omitted, `release-action` skips the Slack notification step. When present, it must be a non-empty string.
 
 At the **root** of a monorepo, `release.members` declares the workspace paths to release; `type` is omitted on the root in that case. When neither `members` nor `type` is present, `release-action` falls back to expanding the root's `workspaces` globs and using only members that declare their own `release.type`.
+
+`automerge` is a **root-only**, repo-wide boolean consumed only by [`release-automerge`](../.github/actions/release-automerge/README.md) (default `false`). It opts the repository into auto-merging approved, all-green release PRs; it is independent of `members`/`type` and is never read per member. It is **not** a `release.type` value, so it does not appear in the recognized-`type` table below and does not follow the type-extension workflow.
 
 ### Recognized `type` values
 
@@ -29099,10 +28809,11 @@ Any other value is treated as unrecognized and fails the action.
 
 ## Consumers
 
-| Tool                                                            | Reads           | Behavior                                                                                                             | Source                                                    |
-| --------------------------------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| [`release-action`](../.github/actions/release-action/README.md) | `release.type`  | Selects version source, npm-publish step, GitHub Release step, and major-version tag based on the value's table row. | `.github/actions/release-action/src/detectReleaseType.ts` |
-| [`release-action`](../.github/actions/release-action/README.md) | `release.slack` | When present, posts a Slack notification to this channel after publish. When absent, the Slack step is skipped.      | `.github/actions/release-action/src/slackNotify.ts`       |
+| Tool                                                                  | Reads               | Behavior                                                                                                                                                                  | Source                                                    |
+| --------------------------------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| [`release-action`](../.github/actions/release-action/README.md)       | `release.type`      | Selects version source, npm-publish step, GitHub Release step, and major-version tag based on the value's table row.                                                      | `.github/actions/release-action/src/detectReleaseType.ts` |
+| [`release-action`](../.github/actions/release-action/README.md)       | `release.slack`     | When present, posts a Slack notification to this channel after publish. When absent, the Slack step is skipped.                                                           | `.github/actions/release-action/src/slackNotify.ts`       |
+| [`release-automerge`](../.github/actions/release-automerge/README.md) | `release.automerge` | Merges an approved, all-green release PR only when `true` (read from the repo-root `package.json` at the PR head SHA). When `false` or absent, leaves the PR for a human. | `packages/actions-core/src/releaseField.ts`               |
 
 ## Detection algorithm
 
@@ -29113,7 +28824,7 @@ Any other value is treated as unrecognized and fails the action.
 5. Validate `release.slack` is a non-empty string if present.
 6. **No fallback** — missing `release`, missing `release.type`, or an unrecognized value fails the action with a message pointing back to this document.
 
-The reference implementation is `.github/actions/release-action/src/releaseField.ts` (`readReleaseField`). The entry script `detectReleaseType.ts` wires the `type` to the action; `slackNotify.ts` reads `slack` from the same parsed config.
+The reference implementation is `packages/actions-core/src/releaseField.ts` (`readReleaseField` / `readRootRelease`), shared by `release-action` and `release-automerge`. The entry script `detectReleaseType.ts` wires the `type` to the action; `slackNotify.ts` reads `slack` from the same parsed config; `release-automerge` reads `release.automerge` via `readRootRelease`.
 
 ## Examples
 
@@ -29178,11 +28889,25 @@ Version source switches to `plugin.json`; npm publish is skipped; GitHub Release
 
 `release-action` runs once per member with the per-member `release.type` driving artifacts. Per-member tags use the form `<name>@v<version>` (e.g. `release-action@v1.2.0`) and the floating major tag becomes `<name>@v1`. When `release.members` is omitted, the action falls back to the root `workspaces` array and skips any member that does not declare its own `release` field.
 
+### Repo opting into auto-merge
+
+```json
+{
+  "name": "monorepo",
+  "workspaces": [".github/actions/*", "packages/*"],
+  "release": {
+    "automerge": true
+  }
+}
+```
+
+`release-automerge` merges approved, all-green `release-*` PRs without a manual click. Because `members`/`type` are omitted, `release-action` still discovers members via the `workspaces` fallback — `automerge` only governs the merge step and is read at the PR head SHA. Omitting `automerge` (or setting it `false`) leaves release PRs for a human to merge.
+
 ## Extending
 
 To add a new release type:
 
-1. Add the value to `releaseTypes` in `.github/actions/release-action/src/releaseField.ts`.
+1. Add the value to `releaseTypes` in `packages/actions-core/src/releaseField.ts`.
 2. Extend the release-action publish logic to handle the new value.
 3. Add a row to the table above and mirror it in `.github/actions/release-action/README.md` (keep both tables in the same row order).
 </file>
@@ -29888,6 +29613,496 @@ export function parseRepo(repository: string): Repo {
 }
 </file>
 
+<file path="packages/actions-core/src/releaseField.test.ts">
+/**
+ * Tests for the `package.json` `release` field reader.
+ */
+import { describe, expect, test } from "bun:test";
+
+import { readReleaseField, readRootRelease, releaseTypes } from "./releaseField.ts";
+
+describe("readReleaseField — type", () => {
+  test.each(releaseTypes.map((value) => [value]))("accepts recognized type %s", (value) => {
+    expect(readReleaseField({ name: "x", release: { type: value } })).toEqual({
+      type: value,
+    });
+  });
+
+  test("throws when the release field is missing", () => {
+    expect(() => readReleaseField({ name: "x" })).toThrow(
+      /Missing 'release' field in package\.json/,
+    );
+  });
+
+  test("missing-field error references the docs", () => {
+    expect(() => readReleaseField({ name: "x" })).toThrow(/docs\/release-field\.md/);
+  });
+
+  test("throws when release is a bare string (old shape)", () => {
+    expect(() => readReleaseField({ release: "lib-nodejs" })).toThrow(
+      /'release' in package\.json must be an object/,
+    );
+  });
+
+  test("throws when release is an array", () => {
+    expect(() => readReleaseField({ release: [] })).toThrow(/must be an object.*Got array/);
+  });
+
+  test("throws when release.type is missing", () => {
+    expect(() => readReleaseField({ release: {} })).toThrow(
+      /'release\.type'.*must be a string; got undefined/,
+    );
+  });
+
+  test("throws when release.type is unrecognized", () => {
+    expect(() => readReleaseField({ release: { type: "not-a-real-type" } })).toThrow(
+      /Unrecognized 'release\.type' value "not-a-real-type"/,
+    );
+  });
+
+  test("unrecognized-type error lists allowed values", () => {
+    expect(() => readReleaseField({ release: { type: "not-a-real-type" } })).toThrow(
+      /lib-nodejs.*github-action.*claude-plugin/,
+    );
+  });
+
+  test("throws when release.type is not a string", () => {
+    expect(() => readReleaseField({ release: { type: 42 } })).toThrow(
+      /must be a string; got number/,
+    );
+  });
+
+  test("throws when packageJson is null", () => {
+    expect(() => readReleaseField(null)).toThrow(/expected an object/);
+  });
+
+  test("throws when packageJson is not an object", () => {
+    expect(() => readReleaseField("not-an-object")).toThrow(/expected an object/);
+  });
+});
+
+describe("readReleaseField — slack", () => {
+  test("returns slack channel when present", () => {
+    expect(
+      readReleaseField({
+        release: { type: "lib-nodejs", slack: "#releases" },
+      }),
+    ).toEqual({ type: "lib-nodejs", slack: "#releases" });
+  });
+
+  test("omits slack key when not present", () => {
+    const result = readReleaseField({ release: { type: "lib-nodejs" } });
+    expect(result).toEqual({ type: "lib-nodejs" });
+    expect("slack" in result).toBe(false);
+  });
+
+  test("throws when slack is an empty string", () => {
+    expect(() => readReleaseField({ release: { type: "lib-nodejs", slack: "" } })).toThrow(
+      /'release\.slack'.*must be a non-empty string/,
+    );
+  });
+
+  test("throws when slack is not a string", () => {
+    expect(() => readReleaseField({ release: { type: "lib-nodejs", slack: 42 } })).toThrow(
+      /'release\.slack'.*must be a non-empty string/,
+    );
+  });
+});
+
+describe("readRootRelease", () => {
+  test("returns empty object when no release field is present", () => {
+    expect(readRootRelease({ name: "monorepo" })).toEqual({});
+  });
+
+  test("returns members array for monorepo root", () => {
+    expect(
+      readRootRelease({
+        release: { members: [".github/actions/release-action", "packages/foo"] },
+      }),
+    ).toEqual({ members: [".github/actions/release-action", "packages/foo"] });
+  });
+
+  test("returns type for standalone root", () => {
+    expect(readRootRelease({ release: { type: "lib-nodejs" } })).toEqual({
+      type: "lib-nodejs",
+    });
+  });
+
+  test("returns slack alongside members", () => {
+    expect(
+      readRootRelease({
+        release: { members: ["packages/*"], slack: "#releases" },
+      }),
+    ).toEqual({ members: ["packages/*"], slack: "#releases" });
+  });
+
+  test("throws when both members and type are declared", () => {
+    expect(() =>
+      readRootRelease({
+        release: { members: ["packages/*"], type: "lib-nodejs" },
+      }),
+    ).toThrow(/mutually exclusive/);
+  });
+
+  test("throws when members is not an array", () => {
+    expect(() => readRootRelease({ release: { members: "packages/*" } })).toThrow(
+      /must be an array of workspace paths/,
+    );
+  });
+
+  test("throws when members is empty", () => {
+    expect(() => readRootRelease({ release: { members: [] } })).toThrow(
+      /must contain at least one workspace path/,
+    );
+  });
+
+  test("throws when a members entry is not a non-empty string", () => {
+    expect(() => readRootRelease({ release: { members: ["packages/*", ""] } })).toThrow(
+      /entries must be non-empty strings/,
+    );
+  });
+
+  test("throws when release is not an object", () => {
+    expect(() => readRootRelease({ release: "lib-nodejs" })).toThrow(/must be an object/);
+  });
+
+  test("throws when packageJson is null", () => {
+    expect(() => readRootRelease(null)).toThrow(/expected an object/);
+  });
+});
+
+describe("readRootRelease — automerge", () => {
+  test("returns automerge alongside members", () => {
+    expect(readRootRelease({ release: { members: ["packages/*"], automerge: true } })).toEqual({
+      members: ["packages/*"],
+      automerge: true,
+    });
+  });
+
+  test("returns automerge alongside type", () => {
+    expect(readRootRelease({ release: { type: "lib-nodejs", automerge: false } })).toEqual({
+      type: "lib-nodejs",
+      automerge: false,
+    });
+  });
+
+  test("returns automerge-only root with no members or type", () => {
+    const result = readRootRelease({ release: { automerge: true } });
+    expect(result).toEqual({ automerge: true });
+    expect("members" in result).toBe(false);
+    expect("type" in result).toBe(false);
+  });
+
+  test("omits automerge key when not present", () => {
+    const result = readRootRelease({ release: { type: "lib-nodejs" } });
+    expect("automerge" in result).toBe(false);
+  });
+
+  test("throws when automerge is not a boolean", () => {
+    expect(() => readRootRelease({ release: { automerge: "yes" } })).toThrow(
+      /'release\.automerge'.*must be a boolean/,
+    );
+  });
+});
+</file>
+
+<file path="packages/actions-core/src/releaseField.ts">
+/**
+ * Read the `release` config object from a parsed `package.json`.
+ *
+ * `release` is the single source of truth for `release-action` per-repo config:
+ *
+ * - `type` — picks publish targets, version source, and the major-version tag.
+ * - `slack` — optional Slack channel for the post-publish notification.
+ * - `automerge` — root-only opt-in for `release-automerge` (default `false`).
+ *
+ * Detection is fail-closed for `type`: a missing field or an unrecognized
+ * value throws an `Error` referencing the spec doc.
+ *
+ * @see ../../../docs/release-field.md
+ *
+ * @example
+ * ```typescript
+ * import { readReleaseField } from "./releaseField.ts";
+ *
+ * const pkg = await Bun.file("package.json").json();
+ * const { type, slack } = readReleaseField(pkg);
+ * // type:  "github-action"
+ * // slack: "#releases" | undefined
+ * ```
+ */
+
+const DOCS_LINK = "docs/release-field.md";
+
+/**
+ * Recognized release types. Order mirrors the table in the release-action
+ * README so the two stay in sync.
+ */
+export const releaseTypes = [
+  "lib-nodejs",
+  "lib-bun",
+  "lib-python",
+  "service-nodejs",
+  "service-python",
+  "github-action",
+  "claude-plugin",
+] as const;
+
+/** A release type recognised by release-action. */
+export type ReleaseType = (typeof releaseTypes)[number];
+
+/** Parsed `release` config from `package.json`. */
+export interface ReleaseConfig {
+  type: ReleaseType;
+  slack?: string;
+}
+
+/**
+ * Root-level `release` config from the repository-root `package.json`.
+ *
+ * A monorepo root declares `members` to enumerate workspace paths to release;
+ * a standalone repo declares `type` and behaves like a member. Both forms may
+ * carry `slack`. `members` and `type` are mutually exclusive at the root —
+ * mixing them is a configuration error.
+ *
+ * `automerge` is a repo-wide opt-in consumed only by `release-automerge`
+ * (default `false`); it is independent of `members`/`type` and is never read
+ * per member.
+ */
+export interface RootReleaseConfig {
+  members?: readonly string[];
+  type?: ReleaseType;
+  slack?: string;
+  automerge?: boolean;
+}
+
+function fail(message: string): never {
+  throw new Error(`${message} See ${DOCS_LINK}.`);
+}
+
+function readReleaseObject(packageJson: unknown): Record<string, unknown> {
+  if (typeof packageJson !== "object" || packageJson === null) {
+    fail("Invalid package.json — expected an object.");
+  }
+
+  if (!("release" in packageJson)) {
+    fail(
+      `Missing 'release' field in package.json. Set a top-level "release" object with a "type" — allowed: ${releaseTypes.join(
+        ", ",
+      )}.`,
+    );
+  }
+
+  const raw: unknown = (packageJson as Record<string, unknown>).release;
+
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    fail(
+      `'release' in package.json must be an object with a "type" string. Got ${
+        Array.isArray(raw) ? "array" : typeof raw
+      }.`,
+    );
+  }
+
+  return raw as Record<string, unknown>;
+}
+
+function readType(release: Record<string, unknown>): ReleaseType {
+  const value: unknown = release.type;
+
+  if (typeof value !== "string") {
+    fail(
+      `'release.type' in package.json must be a string; got ${typeof value}. Allowed: ${releaseTypes.join(
+        ", ",
+      )}.`,
+    );
+  }
+
+  if (!(releaseTypes as readonly string[]).includes(value)) {
+    fail(
+      `Unrecognized 'release.type' value "${value}" in package.json. Allowed: ${releaseTypes.join(
+        ", ",
+      )}.`,
+    );
+  }
+
+  return value as ReleaseType;
+}
+
+function readSlack(release: Record<string, unknown>): string | undefined {
+  if (!("slack" in release)) {
+    return undefined;
+  }
+
+  const value: unknown = release.slack;
+
+  if (typeof value !== "string" || value.length === 0) {
+    fail(
+      "'release.slack' in package.json must be a non-empty string (e.g. \"#releases\") when present.",
+    );
+  }
+
+  return value;
+}
+
+/**
+ * Read and validate the top-level `release` object on a parsed `package.json`.
+ *
+ * Throws if the field is missing, not an object, or `release.type` is missing
+ * or unrecognized. `release.slack` is optional but must be a non-empty
+ * string when present.
+ *
+ * @param packageJson - Parsed `package.json` (treat the type as `unknown` —
+ *   this function performs the runtime validation).
+ * @returns The validated {@link ReleaseConfig}.
+ * @throws {Error} when the field is missing or invalid. The message names the
+ *   field, lists allowed values, and points to `docs/release-field.md`.
+ *
+ * @example
+ * ```typescript
+ * // Success
+ * readReleaseField({
+ *   name: "ingest",
+ *   release: { type: "lib-nodejs", slack: "#releases" },
+ * });
+ * // → { type: "lib-nodejs", slack: "#releases" }
+ *
+ * // Failure — missing field
+ * readReleaseField({ name: "ingest" });
+ * // → throws: Missing 'release' field in package.json. …
+ * ```
+ */
+export function readReleaseField(packageJson: unknown): ReleaseConfig {
+  const release = readReleaseObject(packageJson);
+  const type = readType(release);
+  const slack = readSlack(release);
+
+  return slack === undefined ? { type } : { type, slack };
+}
+
+function readMembers(release: Record<string, unknown>): readonly string[] | undefined {
+  if (!("members" in release)) {
+    return undefined;
+  }
+
+  const value: unknown = release.members;
+
+  if (!Array.isArray(value)) {
+    fail(
+      `'release.members' in package.json must be an array of workspace paths; got ${typeof value}.`,
+    );
+  }
+
+  if (value.length === 0) {
+    fail(
+      "'release.members' in package.json must contain at least one workspace path when present.",
+    );
+  }
+
+  for (const entry of value) {
+    if (typeof entry !== "string" || entry.length === 0) {
+      fail("'release.members' entries must be non-empty strings (workspace paths).");
+    }
+  }
+
+  return value as readonly string[];
+}
+
+function readAutomerge(release: Record<string, unknown>): boolean | undefined {
+  if (!("automerge" in release)) {
+    return undefined;
+  }
+
+  const value: unknown = release.automerge;
+
+  if (typeof value !== "boolean") {
+    fail(
+      `'release.automerge' in package.json must be a boolean (true to opt into release auto-merge); got ${typeof value}.`,
+    );
+  }
+
+  return value;
+}
+
+/**
+ * Read and validate the top-level `release` object on a parsed repository-root
+ * `package.json`.
+ *
+ * Unlike {@link readReleaseField}, root config may declare `members` instead of
+ * `type` to opt into monorepo mode. Returns an empty object shape when the
+ * root has no `release` field — callers handle that case (e.g., fall back to
+ * `workspaces` discovery).
+ *
+ * @throws when both `members` and `type` are declared (ambiguous root mode),
+ *   when `members` is not a non-empty `string[]`, when `automerge` is present
+ *   but not a boolean, or when `type`/`slack` are present but invalid (same
+ *   rules as {@link readReleaseField}).
+ *
+ * @example
+ * ```typescript
+ * readRootRelease({ release: { members: ["packages/*"] } });
+ * // → { members: ["packages/*"] }
+ *
+ * readRootRelease({ release: { type: "lib-nodejs", slack: "#releases" } });
+ * // → { type: "lib-nodejs", slack: "#releases" }
+ *
+ * readRootRelease({ release: { automerge: true } });
+ * // → { automerge: true }
+ *
+ * readRootRelease({ name: "monorepo" });
+ * // → {}
+ * ```
+ */
+export function readRootRelease(packageJson: unknown): RootReleaseConfig {
+  if (typeof packageJson !== "object" || packageJson === null) {
+    fail("Invalid package.json — expected an object.");
+  }
+
+  if (!("release" in packageJson)) {
+    return {};
+  }
+
+  const raw: unknown = (packageJson as Record<string, unknown>).release;
+
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    fail(
+      `'release' in package.json must be an object. Got ${
+        Array.isArray(raw) ? "array" : typeof raw
+      }.`,
+    );
+  }
+
+  const release = raw as Record<string, unknown>;
+  const members = readMembers(release);
+  const hasType = "type" in release;
+
+  if (members && hasType) {
+    fail(
+      "'release.members' and 'release.type' are mutually exclusive at the root — pick monorepo mode (members) or standalone mode (type).",
+    );
+  }
+
+  const slack = readSlack(release);
+  const automerge = readAutomerge(release);
+  const config: RootReleaseConfig = {};
+
+  if (members) {
+    config.members = members;
+  } else if (hasType) {
+    config.type = readType(release);
+  }
+
+  if (slack !== undefined) {
+    config.slack = slack;
+  }
+
+  if (automerge !== undefined) {
+    config.automerge = automerge;
+  }
+
+  return config;
+}
+</file>
+
 <file path="packages/actions-core/package.json">
 {
   "name": "@code-assistants/actions-core",
@@ -29903,7 +30118,8 @@ export function parseRepo(repository: string): Repo {
   "exports": {
     "./fetchRawContent": "./src/fetchRawContent.ts",
     "./checkStatus": "./src/checkStatus.ts",
-    "./parseRepo": "./src/parseRepo.ts"
+    "./parseRepo": "./src/parseRepo.ts",
+    "./releaseField": "./src/releaseField.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -32345,6 +32561,9 @@ export default config;
     "node": ">=22"
   },
   "packageManager": "bun@1.3.9",
+  "release": {
+    "automerge": true
+  },
   "agents": {
     "rules": "Bun",
     "language": "typescript"
