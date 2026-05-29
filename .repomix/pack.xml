@@ -3792,7 +3792,12 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import {
+  buildRunSummary,
+  countToolRoundTrips,
+  deriveMode,
   detectLinuxLibc,
+  extractUsage,
+  findResultMessage,
   loadMcpServers,
   mcpConfigFileSchema,
   parseConfig,
@@ -3980,6 +3985,160 @@ describe("loadMcpServers", () => {
 
     const result = await loadMcpServers(filePath);
     expect(result).toEqual({});
+  });
+});
+
+describe("deriveMode", () => {
+  test("detects review mode from the pr-review prompt", () => {
+    expect(deriveMode("/autopilot:pr-review REPO: o/r PR_NUMBER: 1")).toBe("review");
+  });
+
+  test("detects react mode from the pr-answer prompt", () => {
+    expect(deriveMode("/autopilot:pr-answer REPO: o/r PR_NUMBER: 1")).toBe("react");
+  });
+
+  test("returns unknown for unrecognized prompts", () => {
+    expect(deriveMode("do something else")).toBe("unknown");
+  });
+
+  test("requires the trailing space — bare command returns unknown", () => {
+    expect(deriveMode("/autopilot:pr-review")).toBe("unknown");
+    expect(deriveMode("/autopilot:pr-answer")).toBe("unknown");
+  });
+});
+
+describe("findResultMessage", () => {
+  test("returns the last result message", () => {
+    const messages = [
+      { type: "assistant" },
+      { type: "result", subtype: "success", duration_ms: 10 },
+      { type: "result", subtype: "success", duration_ms: 20 },
+    ];
+    expect(findResultMessage(messages)).toEqual({
+      type: "result",
+      subtype: "success",
+      duration_ms: 20,
+    });
+  });
+
+  test("returns undefined when no result message exists", () => {
+    expect(findResultMessage([{ type: "assistant" }, "noise", null])).toBeUndefined();
+  });
+});
+
+describe("countToolRoundTrips", () => {
+  test("counts assistant turns with tool calls, not individual blocks", () => {
+    const messages = [
+      { type: "assistant", message: { content: [{ type: "text" }, { type: "tool_use" }] } },
+      { type: "assistant", message: { content: [{ type: "tool_use" }, { type: "tool_use" }] } },
+      { type: "user", message: { content: [{ type: "tool_result" }] } },
+      { type: "result", subtype: "success" },
+    ];
+    // Two assistant turns issued tool calls — the second's parallel blocks count once.
+    expect(countToolRoundTrips(messages)).toBe(2);
+  });
+
+  test("returns 0 for messages without tool_use blocks", () => {
+    expect(
+      countToolRoundTrips([{ type: "assistant", message: { content: [{ type: "text" }] } }])
+    ).toBe(0);
+  });
+
+  test("ignores malformed entries", () => {
+    expect(countToolRoundTrips([null, "noise", { type: "assistant" }, 42])).toBe(0);
+  });
+});
+
+describe("extractUsage", () => {
+  test("extracts usage and cost from a result message", () => {
+    const result = {
+      type: "result",
+      total_cost_usd: 0.42,
+      num_turns: 7,
+      usage: {
+        input_tokens: 1000,
+        output_tokens: 200,
+        cache_read_input_tokens: 800,
+        cache_creation_input_tokens: 50,
+      },
+    };
+    expect(extractUsage(result)).toEqual({
+      tokensIn: 1000,
+      tokensOut: 200,
+      cacheReadTokens: 800,
+      cacheCreationTokens: 50,
+      costUsd: 0.42,
+      numTurns: 7,
+    });
+  });
+
+  test("defaults all fields to 0 when usage is absent", () => {
+    expect(extractUsage(undefined)).toEqual({
+      tokensIn: 0,
+      tokensOut: 0,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      costUsd: 0,
+      numTurns: 0,
+    });
+  });
+
+  test("coerces non-numeric fields to 0", () => {
+    const result = { usage: { input_tokens: "lots" }, total_cost_usd: null };
+    expect(extractUsage(result)).toEqual({
+      tokensIn: 0,
+      tokensOut: 0,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      costUsd: 0,
+      numTurns: 0,
+    });
+  });
+});
+
+describe("buildRunSummary", () => {
+  test("maps timings and usage onto the snake_case log fields", () => {
+    const messages = [
+      { type: "assistant", message: { content: [{ type: "tool_use" }] } },
+      {
+        type: "result",
+        total_cost_usd: 0.12,
+        num_turns: 3,
+        usage: {
+          input_tokens: 500,
+          output_tokens: 100,
+          cache_read_input_tokens: 400,
+          cache_creation_input_tokens: 20,
+        },
+      },
+    ];
+    expect(buildRunSummary("review", messages, { fanoutMs: 1200, modelMs: 34000 })).toEqual({
+      mode: "review",
+      fanout_ms: 1200,
+      model_ms: 34000,
+      tokens_in: 500,
+      tokens_out: 100,
+      cache_read_tokens: 400,
+      cache_creation_tokens: 20,
+      cost_usd: 0.12,
+      num_turns: 3,
+      tool_round_trips: 1,
+    });
+  });
+
+  test("defaults usage fields to 0 when no result message is present", () => {
+    expect(buildRunSummary("react", [], { fanoutMs: 0, modelMs: 5 })).toEqual({
+      mode: "react",
+      fanout_ms: 0,
+      model_ms: 5,
+      tokens_in: 0,
+      tokens_out: 0,
+      cache_read_tokens: 0,
+      cache_creation_tokens: 0,
+      cost_usd: 0,
+      num_turns: 0,
+      tool_round_trips: 0,
+    });
   });
 });
 
@@ -4346,12 +4505,14 @@ async function run(): Promise<void> {
     "Starting Claude execution."
   );
 
+  const fanoutStart = performance.now();
   const precomputedReviewsPath = await runFanoutIfEnabled(
     config,
     settingSources as ("user" | "project")[],
     mcpServers,
     pathToClaudeCodeExecutable
   );
+  const fanoutMs = Math.round(performance.now() - fanoutStart);
 
   const messages: unknown[] = [];
 
@@ -4384,14 +4545,17 @@ async function run(): Promise<void> {
     },
   });
 
+  const queryStart = performance.now();
   for await (const message of q) {
     logMessage(log, message);
     messages.push(message);
   }
+  const modelMs = Math.round(performance.now() - queryStart);
 
   // Prevent the 30min timer from keeping the event loop alive after completion
   clearTimeout(timeout);
 
+  logRunSummary(log, deriveMode(config.prompt), messages, { fanoutMs, modelMs });
   await writeExecutionFile(log, config.outputFilePath, messages);
   await emitOutputs(log, config.outputFilePath, messages);
 }
@@ -4409,6 +4573,119 @@ async function writeExecutionFile(
   );
 }
 
+/** Derive the run mode from the prompt, for the instrumentation summary. */
+export function deriveMode(prompt: string): "review" | "react" | "unknown" {
+  if (prompt.includes("/autopilot:pr-review ")) return "review";
+  if (prompt.includes("/autopilot:pr-answer ")) return "react";
+  return "unknown";
+}
+
+/** Find the final SDK `result` message in the collected stream. */
+export function findResultMessage(messages: unknown[]): Record<string, unknown> | undefined {
+  return messages.findLast(
+    (m): m is Record<string, unknown> =>
+      typeof m === "object" && m !== null && (m as Record<string, unknown>).type === "result"
+  );
+}
+
+/** True when an assistant message content array holds at least one `tool_use` block. */
+function hasToolUseBlock(content: unknown): boolean {
+  if (!Array.isArray(content)) return false;
+  return content.some(
+    (block) =>
+      typeof block === "object" &&
+      block !== null &&
+      (block as Record<string, unknown>).type === "tool_use"
+  );
+}
+
+/**
+ * Count assistant turns that issued at least one tool call — i.e. model→tool
+ * round-trips. A single turn with several parallel `tool_use` blocks counts once.
+ */
+export function countToolRoundTrips(messages: unknown[]): number {
+  let count = 0;
+  for (const message of messages) {
+    if (typeof message !== "object" || message === null) continue;
+    const record = message as Record<string, unknown>;
+    if (record.type !== "assistant") continue;
+    if (hasToolUseBlock((record.message as { content?: unknown } | undefined)?.content)) count += 1;
+  }
+  return count;
+}
+
+/** Token and cost usage extracted from the SDK `result` message. */
+export interface UsageSummary {
+  tokensIn: number;
+  tokensOut: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  costUsd: number;
+  numTurns: number;
+}
+
+/** Extract usage/cost fields from the SDK `result` message, defaulting absent values to 0. */
+export function extractUsage(resultMessage: Record<string, unknown> | undefined): UsageSummary {
+  const usage = (resultMessage?.usage ?? {}) as Record<string, unknown>;
+  const toNumber = (value: unknown): number =>
+    typeof value === "number" && Number.isFinite(value) ? value : 0;
+
+  return {
+    tokensIn: toNumber(usage.input_tokens),
+    tokensOut: toNumber(usage.output_tokens),
+    cacheReadTokens: toNumber(usage.cache_read_input_tokens),
+    cacheCreationTokens: toNumber(usage.cache_creation_input_tokens),
+    costUsd: toNumber(resultMessage?.total_cost_usd),
+    numTurns: toNumber(resultMessage?.num_turns),
+  };
+}
+
+/** Wall-clock timings (ms) for the instrumented phases of a run. */
+export interface PhaseTimings {
+  fanoutMs: number;
+  modelMs: number;
+}
+
+/**
+ * Build the structured per-run summary: mode, phase timings, token usage, cost,
+ * and tool round-trips. Returns the snake_case-keyed object that is logged as a
+ * single line — separated from logging so the field mapping is unit-testable.
+ */
+export function buildRunSummary(
+  mode: string,
+  messages: unknown[],
+  timings: PhaseTimings
+): Record<string, number | string> {
+  const usage = extractUsage(findResultMessage(messages));
+
+  return {
+    mode,
+    fanout_ms: timings.fanoutMs,
+    model_ms: timings.modelMs,
+    tokens_in: usage.tokensIn,
+    tokens_out: usage.tokensOut,
+    cache_read_tokens: usage.cacheReadTokens,
+    cache_creation_tokens: usage.cacheCreationTokens,
+    cost_usd: usage.costUsd,
+    num_turns: usage.numTurns,
+    tool_round_trips: countToolRoundTrips(messages),
+  };
+}
+
+/**
+ * Emit the per-run summary as one structured log line. Logged before
+ * {@link emitOutputs} so it survives even when the run concludes with a
+ * non-success exit.
+ */
+function logRunSummary(
+  log: pino.Logger,
+  mode: string,
+  messages: unknown[],
+  timings: PhaseTimings
+): void {
+  log.info(buildRunSummary(mode, messages, timings), "Run summary.");
+}
+
 /**
  * Emit GitHub Actions outputs from the collected messages, flag long-running
  * sessions, and exit non-zero when the final result subtype isn't "success".
@@ -4418,10 +4695,7 @@ async function emitOutputs(
   outputFilePath: string,
   messages: unknown[]
 ): Promise<void> {
-  const resultMessage = messages.findLast(
-    (m): m is Record<string, unknown> =>
-      typeof m === "object" && m !== null && (m as Record<string, unknown>).type === "result"
-  );
+  const resultMessage = findResultMessage(messages);
 
   const structuredOutput = resultMessage?.structured_output;
   const conclusion = (resultMessage?.subtype as string) ?? "error";
