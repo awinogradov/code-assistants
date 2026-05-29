@@ -49,6 +49,13 @@ export interface SubagentResult {
   error?: string;
 }
 
+/** Aggregate fan-out counters surfaced in the per-run summary footer. */
+export interface FanoutStats {
+  agentCount: number;
+  failedCount: number;
+  parallelSpeedup: number;
+}
+
 /** In-memory representation of one loaded agent definition file. */
 interface AgentDefinition {
   subagent_type: string;
@@ -301,12 +308,29 @@ function buildSubagentOptions(
 }
 
 /**
- * Run all 12 `pr:review:*` sub-agents in parallel and return their markdown
- * review blocks. Individual failures are captured in the `error` field of the
- * corresponding result but do not abort the whole fan-out — this mirrors the
- * current root-model behavior where a failing sub-agent is skipped.
+ * Derive the fan-out summary counters from the per-agent results and the
+ * wall-clock duration. `parallelSpeedup` is sum(agent time) / wall time — the
+ * gain versus a hypothetical serial run — and is 0 when no wall time elapsed.
  */
-export async function runReviewFanout(ctx: FanoutContext): Promise<SubagentResult[]> {
+export function buildFanoutStats(results: SubagentResult[], totalMs: number): FanoutStats {
+  const totalAgentMs = results.reduce((sum, r) => sum + r.duration_ms, 0);
+  return {
+    agentCount: results.length,
+    failedCount: results.filter((r) => r.error).length,
+    parallelSpeedup: totalMs > 0 ? +(totalAgentMs / totalMs).toFixed(2) : 0,
+  };
+}
+
+/**
+ * Run all 12 `pr:review:*` sub-agents in parallel and return their markdown
+ * review blocks alongside the aggregate fan-out stats. Individual failures are
+ * captured in the `error` field of the corresponding result but do not abort the
+ * whole fan-out — this mirrors the current root-model behavior where a failing
+ * sub-agent is skipped.
+ */
+export async function runReviewFanout(
+  ctx: FanoutContext,
+): Promise<{ results: SubagentResult[]; stats: FanoutStats }> {
   ctx.log.info(
     { repo: ctx.repo, pr_number: ctx.prNumber, plugin_dir: ctx.pluginDir },
     "Parallel review fan-out starting.",
@@ -330,20 +354,19 @@ export async function runReviewFanout(ctx: FanoutContext): Promise<SubagentResul
 
   const totalMs = Math.round(performance.now() - start);
   const maxAgentMs = results.reduce((max, r) => Math.max(max, r.duration_ms), 0);
-  const totalAgentMs = results.reduce((sum, r) => sum + r.duration_ms, 0);
-  const failed = results.filter((r) => r.error).length;
+  const stats = buildFanoutStats(results, totalMs);
 
   ctx.log.info(
     {
       total_ms: totalMs,
       max_agent_ms: maxAgentMs,
       // Gain vs. a hypothetical serial run: sum(agent time) / wall time.
-      parallel_speedup: totalMs > 0 ? +(totalAgentMs / totalMs).toFixed(2) : 0,
-      agent_count: results.length,
-      failed_count: failed,
+      parallel_speedup: stats.parallelSpeedup,
+      agent_count: stats.agentCount,
+      failed_count: stats.failedCount,
     },
     "Parallel review fan-out complete.",
   );
 
-  return results;
+  return { results, stats };
 }
