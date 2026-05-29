@@ -47,3 +47,6 @@ jobs:
           bot_token: ${{ secrets.BOT_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_CODE_REVIEW }}
           release_pr_authors: ${{ vars.RELEASE_PR_AUTHORS }}
+          # Experiment (#155): run the 11 review sub-agents as parallel SDK calls
+          # from the orchestrator instead of fanning out inside the root model.
+          parallel_fanout: "true"
