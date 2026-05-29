@@ -1,5 +1,8 @@
 # Release auto-merge
 
+[![GitHub Release](https://img.shields.io/badge/release-v0.1.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
+
 Composite GitHub Action that merges a release PR once it is fully green and
 approved. It is event-driven and self-healing: re-evaluated on every relevant
 event, it merges as soon as the conditions are met, with no manual step.
