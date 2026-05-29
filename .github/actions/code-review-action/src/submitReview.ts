@@ -10,6 +10,13 @@ import type { Octokit } from "@octokit/rest";
 import type { ReviewEvent, ReviewThread } from "./github/githubReview.ts";
 import { buildRuleUrlMap, linkRuleCodes } from "./ruleUrls.ts";
 import {
+  extractValidLines,
+  formatInvalidComments,
+  isAlreadyMentioned,
+  isValidComment,
+  parseStructuredOutput,
+} from "./reviewOutput.ts";
+import {
   deletePendingReviews,
   fetchReviewThreads,
   getLastBotReview,
@@ -22,112 +29,10 @@ import {
   verdictToEvent,
 } from "./github/githubReview.ts";
 
-/** Inline comment on a specific file/line in the PR */
-interface InlineComment {
-  path: string;
-  line: number;
-  body: string;
-}
-
-/** Structured output from Claude review */
-interface StructuredOutput {
-  verdict: "approve" | "requestChanges" | "comment";
-  reviewComment: string;
-  inlineComments?: InlineComment[];
-}
-
-/** Valid line location in the PR diff */
-interface ValidLine {
-  path: string;
-  line: number;
-}
-
 /** Location of a comment (path and line) */
 interface CommentLocation {
   path: string;
   line: number;
-}
-
-/**
- * Parse and validate structured output from Claude.
- * Returns null if output is empty, null string, or invalid JSON.
- */
-function parseStructuredOutput(rawOutput: string): StructuredOutput | null {
-  const trimmed = rawOutput.trim();
-  if (!trimmed || trimmed === "null") {
-    return null;
-  }
-
-  const parsed: unknown = JSON.parse(trimmed);
-  if (typeof parsed !== "object" || parsed === null) {
-    return null;
-  }
-
-  const obj = parsed as Record<string, unknown>;
-  return {
-    verdict: (obj.verdict as StructuredOutput["verdict"]) ?? "comment",
-    reviewComment: (obj.reviewComment as string) ?? "Review completed.",
-    inlineComments: (obj.inlineComments as InlineComment[]) ?? [],
-  };
-}
-
-/**
- * Extract line range from a single diff hunk match.
- */
-function extractHunkLines(filename: string, match: RegExpMatchArray): ValidLine[] {
-  const start = Number(match[1]);
-  const count = match[2] ? Number(match[2]) : 1;
-
-  return Array.from({ length: count }, (_, i) => ({ path: filename, line: start + i }));
-}
-
-/**
- * Extract valid line numbers from PR diff hunks.
- * Parses unified diff format: @@ -old,count +new,count @@
- */
-function extractValidLines(patches: Array<{ filename: string; patch?: string }>): ValidLine[] {
-  const hunkHeaderRegex = /@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/g;
-
-  return patches
-    .filter((file) => file.patch)
-    .flatMap((file) =>
-      [...file.patch!.matchAll(hunkHeaderRegex)].flatMap((m) => extractHunkLines(file.filename, m))
-    );
-}
-
-/**
- * Check if a comment is on a valid diff line.
- */
-function isValidComment(comment: InlineComment, validLines: ValidLine[]): boolean {
-  return validLines.some((vl) => vl.path === comment.path && vl.line === comment.line);
-}
-
-/**
- * Check if a comment's file:line is already mentioned in the review body.
- * Prevents duplicate content when invalid inline comments would repeat issues.
- */
-function isAlreadyMentioned(comment: InlineComment, reviewBody: string): boolean {
-  const pattern = `${comment.path}:${comment.line}`;
-  return reviewBody.includes(pattern);
-}
-
-/**
- * Format invalid comments for inclusion in review body.
- * Downgrades blockers (🚧) to suggestions (🙋‍♂️) since they're supplementary.
- */
-function formatInvalidComments(comments: InlineComment[]): string {
-  if (comments.length === 0) {
-    return "";
-  }
-
-  const formatted = comments
-    .map((c) => {
-      const body = c.body.replaceAll("🚧", "🙋‍♂️");
-      return `**\`${c.path}:${c.line}\`**\n\n${body}`;
-    })
-    .join("\n\n");
-
-  return `\n\n---\n## Additional Comments (not in diff)\n\n${formatted}`;
 }
 
 /**
