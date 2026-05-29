@@ -2,6 +2,84 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [2.0.0](https://github.com/awinogradov/code-assistants/compare/files-sync-action@v1.0.0...files-sync-action@v2.0.0) (2026-05-29)
+
+## Release Notes
+
+Breaking change in how the files sync action authenticates - teams must update their workflows to use the new authentication inputs.
+
+## ⚠️ Breaking Changes
+
+### Authentication inputs renamed
+The action now uses `bot_token` instead of `token` or `github_token`. Update your workflow files to use the new input name:
+
+**Before:**
+```yaml
+- uses: awinogradov/code-assistants/.github/actions/files-sync@v1
+  with:
+    token: ${{ secrets.GH_TOKEN }}
+```
+
+**After:**
+```yaml
+- uses: awinogradov/code-assistants/.github/actions/files-sync@v2
+  with:
+    bot_token: ${{ secrets.BOT_TOKEN }}
+```
+
+## ✨ What's New
+
+### Customizable git author
+You can now specify which bot user creates the sync commits by setting `bot_username`. This helps teams track which automation created each file sync, especially when multiple bots operate in the same repository. When not specified, it defaults to `github-actions[bot]`.
+
+<details><summary>Related issues</summary>
+
+- [#96: Standardize actions on bot_token and bot_username](https://github.com/awinogradov/code-assistants/issues/96)
+</details>
+
+## 🐛 Bug Fixes
+
+### Bot email generation
+The action now correctly derives the bot's numeric ID from GitHub's API to generate proper noreply email addresses, ensuring git commits have valid author information that GitHub recognizes.
+
+<details><summary>Related issues</summary>
+
+- [#96: Standardize actions on bot_token and bot_username](https://github.com/awinogradov/code-assistants/issues/96)
+</details>
+
+## ⚙️ Configuration Required
+
+### Update your secrets
+Replace `secrets.GH_TOKEN` with `secrets.BOT_TOKEN` in your repository secrets. The token still requires the same permissions (`contents: write` and `pull-requests: write`).
+
+### Optional bot username variable
+If you want to customize the git author, add `vars.BOT_USERNAME` to your repository variables and pass it to the action:
+
+```yaml
+bot_username: ${{ vars.BOT_USERNAME }}
+```
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #96 | [#103](https://github.com/awinogradov/code-assistants/pull/103) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **actions:** inputs token and github_token are renamed to bot_token; consumers must
+update with: blocks to pass bot_token (and optional bot_username), and workflows now read
+secrets.BOT_TOKEN and vars.BOT_USERNAME instead of secrets.GH_TOKEN.
+
+### Features
+
+* **actions:** rename token inputs to bot_token, add bot_username ([160049b](https://github.com/awinogradov/code-assistants/commit/160049b998131e2e5c503559bf5d8e70e7ea8d5a))
+
+### Bug Fixes
+
+* **actions:** derive bot uid from github api for noreply email ([cd9b047](https://github.com/awinogradov/code-assistants/commit/cd9b0475830816e1be8f5e5d62362acf289d166e))
+* **actions:** remove vars expr from descriptions ([f5b2c74](https://github.com/awinogradov/code-assistants/commit/f5b2c74aef1561ca8366ed31da938ef6e7bfb514))
 ## 1.0.0 (2026-05-28)
 
 ## Release Notes
