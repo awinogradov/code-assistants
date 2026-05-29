@@ -34,6 +34,11 @@ jobs:
       - uses: awinogradov/code-assistants/.github/actions/release-action@v1
         with:
           mode: create
+          # Authors the release PR. When release PRs are auto-approved by
+          # code-review-action, this token's identity must differ from the
+          # reviewer's — GitHub forbids approving your own PR. This repo passes a
+          # separate GH_TOKEN here while the reviewer/publish steps use BOT_TOKEN
+          # (see Permissions). Repos without auto-approval can reuse one token.
           bot_token: ${{ secrets.BOT_TOKEN }}
           bot_username: ${{ vars.BOT_USERNAME }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_RELEASE_KEY }}
