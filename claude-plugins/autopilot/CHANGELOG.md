@@ -2,6 +2,85 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [0.3.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v0.2.0...autopilot@v0.3.0) (2026-05-29)
+
+## Release Notes
+
+Code review optimization brings faster responses and more thorough security checks to your pull request workflow.
+
+## ✨ What's New
+
+### Security-focused code reviews
+The code review system now includes a dedicated security agent that automatically checks for common vulnerabilities like hardcoded secrets, SQL injection risks, improper access controls, and insecure cryptography usage. This means your team gets an extra layer of security review on every pull request without any additional configuration.
+
+<details><summary>Related issues</summary>
+
+- [#148: Right-size review model tiers and add security/performance review checks](https://github.com/awinogradov/code-assistants/issues/148)
+- [#142: Optimize code-review-action: latency, tokens, follow-up flow, models, tests](https://github.com/awinogradov/code-assistants/issues/142)
+</details>
+
+### Model selection per review type
+You can now configure different AI models for different types of code reviews. For example, use a faster model for quick syntax checks and a more powerful model for architecture reviews. This gives you better control over review quality versus speed trade-offs.
+
+<details><summary>Related issues</summary>
+
+- [#148: Right-size review model tiers and add security/performance review checks](https://github.com/awinogradov/code-assistants/issues/148)
+</details>
+
+## 🐛 Bug Fixes
+
+### Reliable review submissions
+Code reviews are now posted more reliably, especially when multiple reviews happen quickly. The system checks for duplicate reviews more accurately and handles concurrent submissions better, preventing those confusing situations where the same review appears multiple times or reviews mysteriously disappear.
+
+<details><summary>Related issues</summary>
+
+- [#144: Fix code-review follow-up reply flow and submission-logic correctness](https://github.com/awinogradov/code-assistants/issues/144)
+</details>
+
+### Faster follow-up responses
+When you reply to a code review comment with a question or clarification, the response is now much faster. The system intelligently determines whether a full re-review is needed or just a quick reply, cutting response times significantly for simple follow-up discussions.
+
+<details><summary>Related issues</summary>
+
+- [#144: Fix code-review follow-up reply flow and submission-logic correctness](https://github.com/awinogradov/code-assistants/issues/144)
+</details>
+
+## ⚙️ Configuration Required
+
+### Review model overrides
+A new `review_model_overrides` configuration option lets you specify which AI model to use for each type of review. This is optional - if not configured, the system uses sensible defaults.
+
+## 📚 Documentation & Settings Updates
+
+### Performance review rules
+The code review documentation now includes new rules for identifying performance bottlenecks and dependency/license issues, helping teams catch these concerns early in the review process.
+
+<details><summary>Related issues</summary>
+
+- [#148: Right-size review model tiers and add security/performance review checks](https://github.com/awinogradov/code-assistants/issues/148)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #142 | [#157](https://github.com/awinogradov/code-assistants/pull/157) | @awinogradov |
+| #148 | [#157](https://github.com/awinogradov/code-assistants/pull/157) | @awinogradov |
+| #147 | [#154](https://github.com/awinogradov/code-assistants/pull/154) | @awinogradov |
+| #144 | [#152](https://github.com/awinogradov/code-assistants/pull/152) | @awinogradov |
+
+### Features
+
+* **code-review:** add security agent and model overrides ([31282af](https://github.com/awinogradov/code-assistants/commit/31282af6f3f9a9b5d5dad3bffca00421617bffb8))
+
+### Bug Fixes
+
+* **code-review:** gate verdict re-eval and harden review submission ([79cafc6](https://github.com/awinogradov/code-assistants/commit/79cafc62919ad63dfdd36aa58456eb7899866121))
+
+### Performance
+
+* **code-review:** resolve rule links in code, not in the model ([8adb856](https://github.com/awinogradov/code-assistants/commit/8adb8561b2675624b0c6c1641d37f85e38e38858))
 ## [0.2.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v0.1.0...autopilot@v0.2.0) (2026-05-29)
 
 ## Release Notes
