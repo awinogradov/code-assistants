@@ -14,10 +14,26 @@ import { describe, expect, test } from "bun:test";
 import { $ } from "bun";
 
 import { withTempRepo } from "../testHelpers.ts";
-import { emitMemberArtifacts, runCreate } from "./runCreate.ts";
+import { assertMonotonic, emitMemberArtifacts, runCreate } from "./runCreate.ts";
 
 async function writeJson(path: string, value: Record<string, unknown>): Promise<void> {
   await Bun.write(path, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+async function writePluginJson(repo: string, relPath: string, version: string): Promise<void> {
+  await mkdir(join(repo, relPath, ".claude-plugin"), { recursive: true });
+  await writeJson(join(repo, relPath, ".claude-plugin", "plugin.json"), {
+    name: "fixture-plugin",
+    version,
+  });
+}
+
+async function setMemberVersion(repo: string, relPath: string, version: string): Promise<void> {
+  await writeJson(join(repo, relPath, "package.json"), {
+    name: "@fixture/lib-a",
+    version,
+    release: { type: "lib-nodejs" },
+  });
 }
 
 async function commitInPath(
@@ -159,4 +175,70 @@ describe("runCreate", () => {
       expect(changelog).toContain("# Changelog");
       expect(changelog).not.toContain("## GitHub Issues");
     }));
+
+  test("bases the next version on a manifest floor above the latest tag (#163)", () =>
+    withTempRepo(async (repo) => {
+      await setupFixture(repo);
+      // lib-a was manually bumped to 0.5.3 in plugin.json only — never tagged.
+      await writePluginJson(repo, "packages/lib-a", "0.5.3");
+      await $`git add .`.cwd(repo).quiet();
+      await $`git commit -m ${"chore(lib-a): add plugin manifest at 0.5.3"}`.cwd(repo).quiet();
+      await $`git tag lib-a@v0.1.0 HEAD`.cwd(repo).quiet();
+      await $`git tag lib-b@v0.1.0 HEAD`.cwd(repo).quiet();
+      await commitInPath(repo, "packages/lib-a", "f1.txt", "feat(lib-a): add foo");
+
+      const result = await runCreate({ cwd: repo });
+      const libA = result.releases.find((r) => r.member.name === "lib-a");
+      // minor bump from the 0.5.3 manifest floor, NOT from the 0.1.0 tag.
+      expect(libA?.newVersion).toBe("0.6.0");
+      expect(libA?.tag).toBe("lib-a@v0.6.0");
+      // previousVersion stays the raw tag so downstream git-range refs resolve.
+      expect(libA?.previousVersion).toBe("0.1.0");
+    }));
+
+  test("uses the package.json version as the floor when it exceeds the tag (#163)", () =>
+    withTempRepo(async (repo) => {
+      await setupFixture(repo);
+      await setMemberVersion(repo, "packages/lib-a", "0.5.0");
+      await $`git add .`.cwd(repo).quiet();
+      await $`git commit -m ${"chore(lib-a): bump to 0.5.0"}`.cwd(repo).quiet();
+      await $`git tag lib-a@v0.1.0 HEAD`.cwd(repo).quiet();
+      await $`git tag lib-b@v0.1.0 HEAD`.cwd(repo).quiet();
+      await commitInPath(repo, "packages/lib-a", "f1.txt", "fix(lib-a): bug");
+
+      const result = await runCreate({ cwd: repo });
+      const libA = result.releases.find((r) => r.member.name === "lib-a");
+      expect(libA?.newVersion).toBe("0.5.1"); // patch from 0.5.0 floor, not 0.1.1
+      expect(libA?.previousVersion).toBe("0.1.0");
+    }));
+
+  test("floors on the manifest version when the member has no tags (#163)", () =>
+    withTempRepo(async (repo) => {
+      await setupFixture(repo);
+      await setMemberVersion(repo, "packages/lib-a", "0.3.0");
+      await $`git add .`.cwd(repo).quiet();
+      await $`git commit -m ${"chore(lib-a): bump to 0.3.0"}`.cwd(repo).quiet();
+      // Tag only lib-b so lib-a has no tag of its own.
+      await $`git tag lib-b@v0.1.0 HEAD`.cwd(repo).quiet();
+      await commitInPath(repo, "packages/lib-a", "f1.txt", "feat(lib-a): add foo");
+
+      const result = await runCreate({ cwd: repo });
+      const libA = result.releases.find((r) => r.member.name === "lib-a");
+      expect(libA?.previousVersion).toBeNull();
+      expect(libA?.newVersion).toBe("0.4.0"); // minor from the 0.3.0 floor
+    }));
+});
+
+describe("assertMonotonic", () => {
+  test("throws when the computed version does not exceed the base", () => {
+    expect(() => assertMonotonic("0.5.3", "0.5.3")).toThrow("not greater than");
+  });
+
+  test("passes when the computed version exceeds the base", () => {
+    expect(() => assertMonotonic("0.5.3", "0.6.0")).not.toThrow();
+  });
+
+  test("is a no-op when there is no base (first release)", () => {
+    expect(() => assertMonotonic(null, "0.1.0")).not.toThrow();
+  });
 });
