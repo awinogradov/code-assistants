@@ -18096,8 +18096,10 @@ import { describe, expect, test } from "bun:test";
 
 import {
   isApprovedDecision,
-  parseAutomergeOptIn,
+  parseAutomerge,
   pickReleasePr,
+  releaseMemberDir,
+  resolveAutomergeOptIn,
   selectMergeMethod,
 } from "./automerge.ts";
 
@@ -18163,22 +18165,20 @@ describe("isApprovedDecision", () => {
   });
 });
 
-describe("parseAutomergeOptIn", () => {
+describe("parseAutomerge", () => {
   const source = "owner/repo:package.json@abc1234";
 
-  test("false when raw content is null (missing file)", () => {
-    expect(parseAutomergeOptIn(null, source)).toBe(false);
+  test("undefined when raw content is null (missing file)", () => {
+    expect(parseAutomerge(null, source)).toBeUndefined();
   });
 
   test("true when release.automerge is true", () => {
-    expect(parseAutomergeOptIn(JSON.stringify({ release: { automerge: true } }), source)).toBe(
-      true,
-    );
+    expect(parseAutomerge(JSON.stringify({ release: { automerge: true } }), source)).toBe(true);
   });
 
   test("true alongside a monorepo members root", () => {
     expect(
-      parseAutomergeOptIn(
+      parseAutomerge(
         JSON.stringify({ release: { members: ["packages/*"], automerge: true } }),
         source,
       ),
@@ -18186,31 +18186,81 @@ describe("parseAutomergeOptIn", () => {
   });
 
   test("false when release.automerge is false", () => {
-    expect(parseAutomergeOptIn(JSON.stringify({ release: { automerge: false } }), source)).toBe(
-      false,
-    );
+    expect(parseAutomerge(JSON.stringify({ release: { automerge: false } }), source)).toBe(false);
   });
 
-  test("false when release.automerge is absent", () => {
+  test("undefined when release.automerge is absent", () => {
     expect(
-      parseAutomergeOptIn(JSON.stringify({ release: { type: "github-action" } }), source),
-    ).toBe(false);
+      parseAutomerge(JSON.stringify({ release: { type: "github-action" } }), source),
+    ).toBeUndefined();
   });
 
-  test("false when there is no release field", () => {
-    expect(parseAutomergeOptIn(JSON.stringify({ name: "x" }), source)).toBe(false);
+  test("undefined when there is no release field", () => {
+    expect(parseAutomerge(JSON.stringify({ name: "x" }), source)).toBeUndefined();
   });
 
   test("throws naming the source when JSON is malformed", () => {
-    expect(() => parseAutomergeOptIn("{ not json", source)).toThrow(
+    expect(() => parseAutomerge("{ not json", source)).toThrow(
       /Failed to read auto-merge opt-in from owner\/repo:package\.json@abc1234/,
     );
   });
 
   test("throws when release.automerge is not a boolean", () => {
-    expect(() =>
-      parseAutomergeOptIn(JSON.stringify({ release: { automerge: "yes" } }), source),
-    ).toThrow(/'release\.automerge'.*must be a boolean/);
+    expect(() => parseAutomerge(JSON.stringify({ release: { automerge: "yes" } }), source)).toThrow(
+      /'release\.automerge'.*must be a boolean/,
+    );
+  });
+});
+
+describe("resolveAutomergeOptIn", () => {
+  test("member true enables regardless of root", () => {
+    expect(resolveAutomergeOptIn(true, undefined)).toBe(true);
+    expect(resolveAutomergeOptIn(true, false)).toBe(true);
+  });
+
+  test("member false overrides an enabled root", () => {
+    expect(resolveAutomergeOptIn(false, true)).toBe(false);
+  });
+
+  test("unset member inherits the root default", () => {
+    expect(resolveAutomergeOptIn(undefined, true)).toBe(true);
+    expect(resolveAutomergeOptIn(undefined, false)).toBe(false);
+  });
+
+  test("disabled when both member and root are unset", () => {
+    expect(resolveAutomergeOptIn(undefined, undefined)).toBe(false);
+  });
+});
+
+describe("releaseMemberDir", () => {
+  test("returns the member directory from its release-notes file", () => {
+    expect(
+      releaseMemberDir([
+        "packages/actions-core/.release_notes/0.0.1.md",
+        "packages/actions-core/package.json",
+      ]),
+    ).toBe("packages/actions-core/");
+  });
+
+  test("returns empty string for a standalone repo (notes at root)", () => {
+    expect(releaseMemberDir([".release_notes/1.0.0.md", "CHANGELOG.md"])).toBe("");
+  });
+
+  test("null when no release-notes file is present", () => {
+    expect(releaseMemberDir(["packages/actions-core/package.json"])).toBeNull();
+  });
+
+  test("null when the release-notes path is nested below the notes dir", () => {
+    expect(releaseMemberDir(["packages/foo/.release_notes/sub/1.0.0.md"])).toBeNull();
+  });
+
+  test("null when multiple distinct members are referenced", () => {
+    expect(
+      releaseMemberDir([
+        "packages/a/.release_notes/1.0.0.md",
+        "packages/b/.release_notes/2.0.0.md",
+      ]),
+    ).toBeNull();
   });
 });
 </file>
@@ -18221,13 +18271,13 @@ describe("parseAutomergeOptIn", () => {
  *
  * Re-evaluated on every relevant event (check_suite, status, review), the action
  * merges a PR only when ALL of these hold: the head ref matches `^release-`, the
- * PR is open, the repo-root `package.json` opts in via `release.automerge === true`,
- * every sibling check is green, and the review decision is APPROVED. The opt-in is
- * read from the root `package.json` at the triggering head SHA, so the policy
- * travels with the release branch. Any unmet condition or unexpected error is
- * fail-closed — the action never merges on doubt. The merge is pinned to the
- * triggering head SHA so a push that lands mid-evaluation cannot be merged
- * unreviewed.
+ * PR is open, the releasing member opts in via `release.automerge === true`
+ * (the member's own `package.json` overrides the root default), every sibling
+ * check is green, and the review decision is APPROVED. The opt-in is read at the
+ * triggering head SHA, so the policy travels with the release branch. Any unmet
+ * condition or unexpected error is fail-closed — the action never merges on
+ * doubt. The merge is pinned to the triggering head SHA so a push that lands
+ * mid-evaluation cannot be merged unreviewed.
  *
  * @example
  * GH_TOKEN=xxx REPO=owner/repo HEAD_SHA=abc JOB_NAME=automerge bun run src/automerge.ts
@@ -18256,8 +18306,10 @@ export interface MergeMethodFlags {
 export type MergeMethod = "rebase" | "squash" | "merge";
 
 const releaseBranch = /^release-/;
-// Repo-wide auto-merge opt-in lives in the root package.json's `release` object.
+// Auto-merge opt-in lives in the `release` object of a member (or root) package.json.
 const rootPackageJsonPath = "package.json";
+// Per-member release-notes file that identifies the member a release PR belongs to.
+const releaseNotesFile = /(?:^|\/)\.release_notes\/[^/]+\.md$/;
 // GitHub merge-API responses that mean "nothing to do" rather than a real error:
 // 405 not mergeable / already merged, 409 head SHA moved (sha mismatch), 422 unprocessable.
 const idempotentMergeStatuses = new Set([405, 409, 422]);
@@ -18312,38 +18364,104 @@ export function isApprovedDecision(decision: string | null): boolean {
 }
 
 /**
- * Decide auto-merge opt-in from the raw root `package.json` content.
+ * Read the `release.automerge` tri-state from raw `package.json` content.
  *
- * Repo-wide opt-in holds only when `release.automerge === true`; any other value
- * — including an absent field — disables it. A `null` `raw` (missing file) is a
- * clean "disabled". Malformed JSON or an invalid `release` object throws, naming
- * `source`, so the fail-closed caller never merges on doubt.
+ * Returns `undefined` when the file is absent (`raw === null`) or the field is
+ * unset, so the caller can inherit the root default. Malformed JSON or an
+ * invalid `release` object throws, naming `source`, so the fail-closed caller
+ * never merges on doubt.
  */
-export function parseAutomergeOptIn(raw: string | null, source: string): boolean {
+export function parseAutomerge(raw: string | null, source: string): boolean | undefined {
   if (raw === null) {
-    return false;
+    return undefined;
   }
 
   try {
-    return readRootRelease(JSON.parse(raw)).automerge === true;
+    return readRootRelease(JSON.parse(raw)).automerge;
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to read auto-merge opt-in from ${source}: ${detail}`);
   }
 }
 
-/** Fetch the root `package.json` at the triggering head SHA and decide opt-in. */
-async function fetchAutomergeOptIn(config: AutomergeConfig): Promise<boolean> {
+/**
+ * Effective opt-in: a release member's own `automerge` overrides the root
+ * default; an unset member inherits root. Auto-merge holds only when the
+ * resolved value is exactly `true`.
+ */
+export function resolveAutomergeOptIn(
+  member: boolean | undefined,
+  root: boolean | undefined,
+): boolean {
+  return (member ?? root) === true;
+}
+
+/**
+ * Locate the releasing member's directory from a PR's changed file paths.
+ *
+ * Mirrors the publish pipeline's contract: a release PR carries exactly one
+ * `<member-rel-path>/.release_notes/<version>.md` file (the root, `""`, for a
+ * standalone repo). Returns `null` when zero or more than one distinct member
+ * is referenced, so the caller can fail closed on an unclassifiable PR.
+ */
+export function releaseMemberDir(filenames: string[]): string | null {
+  const dirs = new Set<string>();
+  for (const name of filenames) {
+    const marker = name.lastIndexOf(".release_notes/");
+    if (marker !== -1 && releaseNotesFile.test(name)) {
+      dirs.add(name.slice(0, marker));
+    }
+  }
+
+  if (dirs.size !== 1) {
+    return null;
+  }
+
+  const [dir] = dirs;
+  return dir ?? null;
+}
+
+/**
+ * Decide auto-merge opt-in for the release PR at the triggering head SHA.
+ *
+ * Resolves the releasing member from the PR's files, then reads
+ * `release.automerge` from that member's `package.json` (overriding) and the
+ * root `package.json` (default). An unclassifiable PR fails closed.
+ */
+async function fetchAutomergeOptIn(config: AutomergeConfig, pullNumber: number): Promise<boolean> {
   const { octokit, owner, repo, headSha } = config;
-  const raw = await fetchRawContent({
-    octokit,
+
+  const files = await octokit.paginate(octokit.rest.pulls.listFiles, {
     owner,
     repo,
-    path: rootPackageJsonPath,
-    ref: headSha,
+    pull_number: pullNumber,
+    per_page: 100,
   });
+  const memberDir = releaseMemberDir(files.map((file) => file.filename));
 
-  return parseAutomergeOptIn(raw, `${owner}/${repo}:${rootPackageJsonPath}@${headSha.slice(0, 7)}`);
+  if (memberDir === null) {
+    console.log("Skip: could not resolve a single release member from the PR's files");
+    return false;
+  }
+
+  const sourceAt = (path: string): string => `${owner}/${repo}:${path}@${headSha.slice(0, 7)}`;
+  const readAutomergeAt = async (path: string): Promise<boolean | undefined> =>
+    parseAutomerge(
+      await fetchRawContent({ octokit, owner, repo, path, ref: headSha }),
+      sourceAt(path),
+    );
+
+  // Standalone repo: the member IS the root, so only the root needs reading.
+  if (memberDir === "") {
+    return (await readAutomergeAt(rootPackageJsonPath)) === true;
+  }
+
+  // Member and root reads are independent — fetch them in one roundtrip.
+  const [member, root] = await Promise.all([
+    readAutomergeAt(`${memberDir}${rootPackageJsonPath}`),
+    readAutomergeAt(rootPackageJsonPath),
+  ]);
+  return resolveAutomergeOptIn(member, root);
 }
 
 /** Fetch the PR's aggregate review decision via GraphQL. */
@@ -18431,9 +18549,9 @@ async function run(config: AutomergeConfig): Promise<void> {
     return;
   }
 
-  if (!(await fetchAutomergeOptIn(config))) {
+  if (!(await fetchAutomergeOptIn(config, pr.number))) {
     console.log(
-      "Skip: auto-merge disabled — set release.automerge:true in the root package.json (see docs/release-automerge.md)",
+      "Skip: auto-merge disabled — set release.automerge:true on the release member or root package.json (see docs/release-automerge.md)",
     );
     return;
   }
@@ -18564,18 +18682,22 @@ A PR is merged only when **all** of the following hold:
 
 - the head ref matches `^release-`,
 - the PR is open,
-- the repo opted in via `release.automerge === true` in the root `package.json`
-  (read at the PR head SHA; default `false`),
+- the releasing member opted in: `release.automerge` resolves to `true`, taking
+  the member's own value and falling back to the root default — `member ?? root ??
+false`, read at the PR head SHA,
 - every sibling check is green (a failed check skips; a still-pending check skips),
   and
 - the PR's `reviewDecision` is `APPROVED`.
 
-> **Opt-in (default off).** Auto-merge is disabled unless the repo-root
-> `package.json` declares `release.automerge: true` (see the
-> [`release` field spec](../../../docs/release-field.md)). Because consumers
-> reference this action via `@main`, adopting the synced workflow alone does
-> **not** enable auto-merge — each repo must add the flag, or its release PRs
-> stay approved-but-unmerged for a human to merge.
+> **Opt-in (default off).** Auto-merge is disabled unless `release.automerge`
+> resolves to `true` (see the [`release` field spec](../../../docs/release-field.md)).
+> A monorepo opens one release PR per member (`release-<member>-<version>`), so the
+> gate resolves per member: it reads the member's own `release.automerge` and falls
+> back to the root default. Set it on the root to enable the whole repo, or on a
+> member to opt that package in or out. Because consumers reference this action via
+> `@main`, adopting the synced workflow alone does **not** enable auto-merge — each
+> repo must add the flag, or its release PRs stay approved-but-unmerged for a human
+> to merge.
 
 The merge is pinned to the triggering head commit, so a push that lands during
 evaluation is rejected rather than merged unreviewed. The check aggregation reuses
@@ -18657,9 +18779,12 @@ Store the token in a secret (e.g., `BOT_TOKEN`) and pass it via
 
 - Resolves the open release PR from the triggering commit via the
   commit-associated-PRs API, then bails unless its head ref matches `^release-`.
-- Reads the repo-root `package.json` at the head SHA and skips unless
-  `release.automerge === true`. A missing `package.json` is a clean skip; a
-  malformed one fails closed (no merge). A non-boolean `automerge` is rejected.
+- Identifies the releasing member from the PR's `<member>/.release_notes/<version>.md`
+  file, then reads `release.automerge` from that member's `package.json` (overriding)
+  and the root `package.json` (default) at the head SHA, skipping unless the resolved
+  value is `true`. A missing `package.json` is a clean skip; a malformed one fails
+  closed (no merge); a non-boolean `automerge` is rejected; an unresolvable member
+  is left unmerged.
 - Aggregates check runs and commit statuses in a single snapshot (no polling):
   any failed check or any still-pending check skips the merge until a later event.
 - Reads `reviewDecision` and merges only when it is `APPROVED`.
@@ -28638,7 +28763,7 @@ the merge with no manual step.
    │ release-automerge action                          │
    │ 1. resolve open PR for the head SHA               │
    │ 2. head ref ~ ^release-  AND  state == open ?     │
-   │ 3. root package.json release.automerge === true ? │
+   │ 3. release.automerge === true (member|root) ?     │
    │ 4. all checks green? (shared aggregation)         │
    │ 5. reviewDecision == APPROVED ?                   │
    │ 6. merge (sha-pinned) with an allowed method      │
@@ -28666,16 +28791,20 @@ the merge with no manual step.
   The check aggregation reuses the same logic as the AI-review preflight (see
   [the shared `checkStatus` helper][checkstatus]), deduplicated by name and
   excluding the action's own job.
-- **Opt-in gate (default off):** the action reads the repo-root `package.json` at
-  the triggering head SHA and merges only when `release.automerge === true` (see
-  the [`release` field spec](./release-field.md)). The flag travels with the
-  release branch — a PR that toggles it changes its own merge eligibility. A
-  missing `package.json` is a clean skip; a malformed one fails closed (no merge);
-  a non-boolean `automerge` is rejected. **Migration:** because downstream repos
-  reference the action via `@main`, this gate ships as a behavior change — every
-  repo that relied on auto-merge must add `release.automerge: true` to its root
-  `package.json`, or its release PRs will stay approved-but-unmerged until a human
-  merges them.
+- **Opt-in gate (default off):** the action merges only when `release.automerge`
+  resolves to `true` (see the [`release` field spec](./release-field.md)). Because
+  a monorepo opens one release PR **per member** (`release-<member>-<version>`),
+  the gate resolves per member: it identifies the releasing member from the PR's
+  `<member>/.release_notes/<version>.md` file (the same signal the publish step
+  uses), then takes the member's own `release.automerge`, falling back to the
+  root default — `member ?? root ?? false`. Both are read at the triggering head
+  SHA, so the flag travels with the release branch. A missing `package.json` is a
+  clean skip; a malformed one fails closed (no merge); a non-boolean `automerge`
+  is rejected; a PR whose releasing member cannot be resolved is left unmerged.
+  **Migration:** because downstream repos reference the action via `@main`, this
+  gate ships as a behavior change — every repo that relied on auto-merge must add
+  `release.automerge: true` to its root (or per-member) `package.json`, or its
+  release PRs will stay approved-but-unmerged until a human merges them.
 - **Merge method:** the action reads the repository's allowed merge methods
   (`allow_rebase_merge` / `allow_squash_merge` / `allow_merge_commit`) and prefers
   `rebase`, falling back to `squash` then `merge`. The merge is pinned to the
@@ -28776,6 +28905,7 @@ type ReleaseType =
 interface ReleaseConfig {
   type: ReleaseType; // required
   slack?: string; // optional Slack channel, e.g. "#releases"
+  automerge?: boolean; // member opt-in for release-automerge; overrides the root default
 }
 
 // Root-only superset (repository-root `package.json` in a monorepo)
@@ -28783,7 +28913,7 @@ interface RootReleaseConfig {
   members?: string[]; // monorepo: explicit member paths (mutually exclusive with `type`)
   type?: ReleaseType; // standalone: same shape as ReleaseConfig
   slack?: string;
-  automerge?: boolean; // root-only opt-in for release-automerge (default false)
+  automerge?: boolean; // repo-wide default opt-in for release-automerge (default false)
 }
 ```
 
@@ -28791,7 +28921,7 @@ interface RootReleaseConfig {
 
 At the **root** of a monorepo, `release.members` declares the workspace paths to release; `type` is omitted on the root in that case. When neither `members` nor `type` is present, `release-action` falls back to expanding the root's `workspaces` globs and using only members that declare their own `release.type`.
 
-`automerge` is a **root-only**, repo-wide boolean consumed only by [`release-automerge`](../.github/actions/release-automerge/README.md) (default `false`). It opts the repository into auto-merging approved, all-green release PRs; it is independent of `members`/`type` and is never read per member. It is **not** a `release.type` value, so it does not appear in the recognized-`type` table below and does not follow the type-extension workflow.
+`automerge` is a boolean consumed only by [`release-automerge`](../.github/actions/release-automerge/README.md) (default `false`) that opts into auto-merging approved, all-green release PRs. Because a monorepo opens one release PR **per member** (`release-<member>-<version>`), it resolves per member: a member's own `release.automerge` overrides the root value, an unset member inherits the root default, and the effective opt-in is `member ?? root ?? false`. Set it on the **root** to enable the whole repo, or on a **member** to opt that package in or out independently. It is independent of `members`/`type` and is **not** a `release.type` value, so it does not appear in the recognized-`type` table below and does not follow the type-extension workflow.
 
 ### Recognized `type` values
 
@@ -28809,11 +28939,11 @@ Any other value is treated as unrecognized and fails the action.
 
 ## Consumers
 
-| Tool                                                                  | Reads               | Behavior                                                                                                                                                                  | Source                                                    |
-| --------------------------------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| [`release-action`](../.github/actions/release-action/README.md)       | `release.type`      | Selects version source, npm-publish step, GitHub Release step, and major-version tag based on the value's table row.                                                      | `.github/actions/release-action/src/detectReleaseType.ts` |
-| [`release-action`](../.github/actions/release-action/README.md)       | `release.slack`     | When present, posts a Slack notification to this channel after publish. When absent, the Slack step is skipped.                                                           | `.github/actions/release-action/src/slackNotify.ts`       |
-| [`release-automerge`](../.github/actions/release-automerge/README.md) | `release.automerge` | Merges an approved, all-green release PR only when `true` (read from the repo-root `package.json` at the PR head SHA). When `false` or absent, leaves the PR for a human. | `packages/actions-core/src/releaseField.ts`               |
+| Tool                                                                  | Reads               | Behavior                                                                                                                                                                                                     | Source                                                    |
+| --------------------------------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
+| [`release-action`](../.github/actions/release-action/README.md)       | `release.type`      | Selects version source, npm-publish step, GitHub Release step, and major-version tag based on the value's table row.                                                                                         | `.github/actions/release-action/src/detectReleaseType.ts` |
+| [`release-action`](../.github/actions/release-action/README.md)       | `release.slack`     | When present, posts a Slack notification to this channel after publish. When absent, the Slack step is skipped.                                                                                              | `.github/actions/release-action/src/slackNotify.ts`       |
+| [`release-automerge`](../.github/actions/release-automerge/README.md) | `release.automerge` | Merges an approved, all-green release PR only when the effective opt-in (releasing member's value, else root default) is `true`, read at the PR head SHA. When `false` or absent, leaves the PR for a human. | `packages/actions-core/src/releaseField.ts`               |
 
 ## Detection algorithm
 
@@ -28901,7 +29031,19 @@ Version source switches to `plugin.json`; npm publish is skipped; GitHub Release
 }
 ```
 
-`release-automerge` merges approved, all-green `release-*` PRs without a manual click. Because `members`/`type` are omitted, `release-action` still discovers members via the `workspaces` fallback — `automerge` only governs the merge step and is read at the PR head SHA. Omitting `automerge` (or setting it `false`) leaves release PRs for a human to merge.
+`release-automerge` merges approved, all-green `release-*` PRs without a manual click. Because `members`/`type` are omitted, `release-action` still discovers members via the `workspaces` fallback — `automerge` only governs the merge step and is read at the PR head SHA. Set on the root, it becomes the default for every member's release PR; a member can override it in its own `package.json`:
+
+```json
+{
+  "name": "@org/experimental",
+  "release": {
+    "type": "lib-nodejs",
+    "automerge": false
+  }
+}
+```
+
+Here the `@org/experimental` member's `release-experimental-<version>` PR is left for a human even though the root default is `true`. Omitting `automerge` everywhere (or setting it `false`) leaves release PRs for a human to merge.
 
 ## Extending
 
