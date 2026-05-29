@@ -10,11 +10,34 @@ describe("isBareAcknowledgement", () => {
     expect(isBareAcknowledgement("@bot Fixed — removed the unused import.")).toBe(true);
   });
 
+  test("'Done' / 'Confirmed' acknowledgements are bare", () => {
+    expect(isBareAcknowledgement("@bot Done.")).toBe(true);
+    expect(isBareAcknowledgement("@bot Confirmed, good catch.")).toBe(true);
+  });
+
+  test("substantive pushback without an ack token is not bare", () => {
+    expect(
+      isBareAcknowledgement(
+        "@bot This is intentional — the mutation is required by the cache layer.",
+      ),
+    ).toBe(false);
+  });
+
+  test("an empty body is not a bare acknowledgement", () => {
+    expect(isBareAcknowledgement("")).toBe(false);
+  });
+
+  test("an ack token only matches on a word boundary", () => {
+    // "abandoned" contains "done", "rolled back" contains no ack token.
+    expect(isBareAcknowledgement("@bot I abandoned that approach.")).toBe(false);
+    expect(isBareAcknowledgement("@bot Rolled this back.")).toBe(false);
+  });
+
   test("a question is not bare", () => {
     expect(isBareAcknowledgement("@bot why is this a problem?")).toBe(false);
   });
 
-  test("a re-review request is not bare", () => {
+  test("a re-review request is not bare even with an ack token", () => {
     expect(isBareAcknowledgement("@bot done, please re-review")).toBe(false);
   });
 
@@ -23,7 +46,7 @@ describe("isBareAcknowledgement", () => {
   });
 
   test("keyword matching is case-insensitive", () => {
-    expect(isBareAcknowledgement("@bot Please take Another Look")).toBe(false);
+    expect(isBareAcknowledgement("@bot Fixed it. Please take Another Look")).toBe(false);
   });
 
   test("a question anywhere in a multi-line body is not bare", () => {
@@ -55,6 +78,12 @@ describe("shouldSkipModelReply", () => {
 
   test("an empty PR author never skips", () => {
     expect(shouldSkipModelReply({ ...ack, prAuthor: "", commentAuthor: "" })).toBe(false);
+  });
+
+  test("substantive author pushback still gets a reply", () => {
+    expect(
+      shouldSkipModelReply({ ...ack, body: "this is intentional, the pattern is required" }),
+    ).toBe(false);
   });
 
   test("a question from the author still gets a reply", () => {

@@ -2,9 +2,10 @@
  * Classify a react-mode triggering comment to decide whether it needs a model reply.
  *
  * A PR-author acknowledgement inside a bot-authored thread (e.g. "@bot Fixed — …")
- * that neither asks a question nor requests a re-review warrants no prose reply —
- * answering it just doubles the thread (issue #111). The action reacts with 👍
- * instead and skips the expensive model step entirely.
+ * warrants no prose reply — answering it just doubles the thread (issue #111). The
+ * action reacts with 👍 instead and skips the model step. An acknowledgement is
+ * recognised by a positive ack token, not merely the absence of a question, so
+ * substantive pushback like "this is intentional" still receives a real reply.
  *
  * Run as a GitHub Action step: reads the comment context from env and writes
  * `ack_only=true|false` to `$GITHUB_OUTPUT`.
@@ -13,7 +14,7 @@
  * BOT_IN_THREAD=true PR_AUTHOR=alice COMMENT_AUTHOR=alice COMMENT_BODY="Fixed — done." \
  *   bun run src/classifyReaction.ts   # writes ack_only=true to $GITHUB_OUTPUT
  */
-import { appendFile } from "node:fs/promises";
+import { setOutput } from "./actionsOutput.ts";
 
 /** Phrases that signal the author wants the bot to look again. */
 const reReviewKeywords = [
@@ -26,9 +27,26 @@ const reReviewKeywords = [
   "ptal",
 ];
 
+/** Whole-word signals that a reply positively acknowledges the bot's finding. */
+const acknowledgementPatterns = [
+  /\bfixed\b/,
+  /\bdone\b/,
+  /\baddressed\b/,
+  /\bresolved\b/,
+  /\bupdated\b/,
+  /\bconfirmed\b/,
+  /\backnowledged\b/,
+  /\bgood catch\b/,
+  /\bnice catch\b/,
+  /\bmakes sense\b/,
+  /\bwill do\b/,
+];
+
 /**
- * True when a comment body neither asks a question nor requests a re-review —
- * i.e. it is a bare acknowledgement that warrants no model reply.
+ * True when a comment body is a bare acknowledgement: it carries a positive
+ * acknowledgement signal and neither asks a question nor requests a re-review.
+ * Requiring a positive signal — rather than only the absence of one — keeps
+ * substantive pushback such as "this is intentional" from being silenced.
  */
 export function isBareAcknowledgement(body: string): boolean {
   if (body.includes("?")) {
@@ -36,7 +54,11 @@ export function isBareAcknowledgement(body: string): boolean {
   }
 
   const lower = body.toLowerCase();
-  return !reReviewKeywords.some((keyword) => lower.includes(keyword));
+  if (reReviewKeywords.some((keyword) => lower.includes(keyword))) {
+    return false;
+  }
+
+  return acknowledgementPatterns.some((pattern) => pattern.test(lower));
 }
 
 /** Inputs needed to decide whether a react-mode reply can skip the model. */
@@ -76,10 +98,7 @@ if (import.meta.main) {
     body: process.env.COMMENT_BODY ?? "",
   });
 
-  const outputFile = process.env.GITHUB_OUTPUT;
-  if (outputFile) {
-    await appendFile(outputFile, `ack_only=${ackOnly}\n`);
-  }
+  await setOutput("ack_only", String(ackOnly));
 
   if (ackOnly) {
     console.log("PR-author acknowledgement in bot thread — skipping model reply (issue #111)");

@@ -517,7 +517,7 @@ runs:
       shell: bash
       env:
         BOT_IN_THREAD: ${{ steps.ctx.outputs.bot_in_thread }}
-        PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        PR_AUTHOR: ${{ github.event.pull_request.user.login || github.event.issue.user.login }}
         COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
         COMMENT_BODY: ${{ steps.ctx.outputs.comment_body }}
       run: bun run "${{ github.action_path }}/src/classifyReaction.ts"

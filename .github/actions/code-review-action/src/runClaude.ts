@@ -10,8 +10,7 @@
  *
  * @see https://docs.anthropic.com/en/docs/agent-sdk/typescript - Agent SDK reference
  */
-import { randomUUID } from "node:crypto";
-import { access, appendFile, mkdir } from "node:fs/promises";
+import { access, mkdir } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 
@@ -20,6 +19,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import pino from "pino";
 import { z } from "zod";
 
+import { setOutput } from "./actionsOutput.ts";
 import { logMessage } from "./logClaudeMessage.ts";
 import { runReviewFanout, type FanoutContext } from "./reviewFanout.ts";
 
@@ -171,15 +171,6 @@ async function writeSettings(settingsJson: string | undefined): Promise<string[]
 
   process.env.CLAUDE_CONFIG_DIR = dir;
   return ["user", "project"];
-}
-
-/** Set a GitHub Actions output variable using heredoc delimiter for multi-line safety. */
-export async function setOutput(key: string, value: string): Promise<void> {
-  const outputFile = process.env.GITHUB_OUTPUT;
-  if (!outputFile) return;
-
-  const delimiter = `EOF_${randomUUID().replaceAll("-", "")}`;
-  await appendFile(outputFile, `${key}<<${delimiter}\n${value}\n${delimiter}\n`);
 }
 
 async function pathExists(path: string): Promise<boolean> {
