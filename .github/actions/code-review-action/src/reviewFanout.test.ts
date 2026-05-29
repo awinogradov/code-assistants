@@ -244,6 +244,28 @@ describe("collectStructuredFindings", () => {
     expect(result).toEqual({ findings: [validFinding] });
   });
 
+  test("falls back to the result text when structured_output is null", async () => {
+    const result = await collectStructuredFindings(
+      noopLog,
+      streamOf(
+        resultMessage({
+          subtype: "success",
+          structured_output: null,
+          result: JSON.stringify({ findings: [validFinding] }),
+        }),
+      ),
+    );
+    expect(result).toEqual({ findings: [validFinding] });
+  });
+
+  test("recovers findings from prose-wrapped result text via the brace slice", async () => {
+    const result = await collectStructuredFindings(
+      noopLog,
+      streamOf(resultMessage({ subtype: "success", result: 'Result: { "findings": [] } done' })),
+    );
+    expect(result).toEqual({ findings: [] });
+  });
+
   test("prefers structured_output over the result text when both are present", async () => {
     const result = await collectStructuredFindings(
       noopLog,
