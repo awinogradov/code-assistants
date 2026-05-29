@@ -18,45 +18,9 @@ import {
   loadMcpServers,
   mcpConfigFileSchema,
   parseConfig,
-  parseModelOverrides,
   resolveClaudeBinary,
   safeParseJson,
-  withFanoutStats,
 } from "./runClaude.ts";
-
-describe("parseModelOverrides", () => {
-  test("returns empty map for undefined or empty input", () => {
-    expect(parseModelOverrides(undefined)).toEqual({});
-    expect(parseModelOverrides("")).toEqual({});
-  });
-
-  test("parses a category-to-model map", () => {
-    expect(parseModelOverrides('{"correctness":"claude-opus-4-8","complexity":"claude-sonnet-4-6"}')).toEqual({
-      correctness: "claude-opus-4-8",
-      complexity: "claude-sonnet-4-6",
-    });
-  });
-
-  test("rejects the whole map when any value is not a string (strict Zod)", () => {
-    expect(parseModelOverrides('{"security":"sonnet","bogus":3}')).toEqual({});
-  });
-
-  test("returns empty map for malformed JSON or non-objects", () => {
-    expect(parseModelOverrides("{bad")).toEqual({});
-    expect(parseModelOverrides('"a string"')).toEqual({});
-    expect(parseModelOverrides("42")).toEqual({});
-  });
-
-  test("warns via the injected logger when the value is malformed", () => {
-    const warnings: string[] = [];
-    const logger = { warn: (msg: string) => warnings.push(msg) } as unknown as Parameters<
-      typeof parseModelOverrides
-    >[1];
-    parseModelOverrides("{bad", logger);
-    parseModelOverrides('{"x":3}', logger);
-    expect(warnings).toHaveLength(2);
-  });
-});
 
 describe("safeParseJson", () => {
   test("returns undefined for empty string", () => {
@@ -316,7 +280,8 @@ describe("extractUsage", () => {
       },
     };
     expect(extractUsage(result)).toEqual({
-      tokensIn: 1000,
+      // total input = input(1000) + cache_read(800) + cache_creation(50)
+      tokensIn: 1850,
       tokensOut: 200,
       cacheReadTokens: 800,
       cacheCreationTokens: 50,
@@ -373,11 +338,11 @@ describe("buildRunSummary", () => {
         },
       },
     ];
-    expect(buildRunSummary("review", messages, { fanoutMs: 1200, modelMs: 34000 })).toEqual({
+    expect(buildRunSummary("review", messages, { modelMs: 34000 })).toEqual({
       mode: "review",
-      fanout_ms: 1200,
       model_ms: 34000,
-      tokens_in: 500,
+      // total input = input(500) + cache_read(400) + cache_creation(20)
+      tokens_in: 920,
       tokens_out: 100,
       cache_read_tokens: 400,
       cache_creation_tokens: 20,
@@ -388,9 +353,8 @@ describe("buildRunSummary", () => {
   });
 
   test("defaults usage fields to 0 when no result message is present", () => {
-    expect(buildRunSummary("react", [], { fanoutMs: 0, modelMs: 5 })).toEqual({
+    expect(buildRunSummary("react", [], { modelMs: 5 })).toEqual({
       mode: "react",
-      fanout_ms: 0,
       model_ms: 5,
       tokens_in: 0,
       tokens_out: 0,
@@ -399,31 +363,6 @@ describe("buildRunSummary", () => {
       cost_usd: 0,
       num_turns: 0,
       tool_round_trips: 0,
-    });
-  });
-});
-
-describe("withFanoutStats", () => {
-  const summary = { mode: "review", cost_usd: 0.1 };
-
-  test("returns the summary unchanged when no fan-out stats are present", () => {
-    expect(withFanoutStats(summary, undefined)).toEqual(summary);
-  });
-
-  test("merges fan-out counters under snake_case keys", () => {
-    const stats = {
-      agentCount: 12,
-      failedCount: 1,
-      parallelSpeedup: 8.5,
-      agentDurations: [{ category: "common-sense", durationMs: 158000 }],
-    };
-    expect(withFanoutStats(summary, stats)).toEqual({
-      mode: "review",
-      cost_usd: 0.1,
-      agent_count: 12,
-      failed_count: 1,
-      parallel_speedup: 8.5,
-      agent_durations: [{ category: "common-sense", duration_ms: 158000 }],
     });
   });
 });

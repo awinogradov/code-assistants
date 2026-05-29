@@ -1,6 +1,6 @@
 ---
 name: pr:review
-description: Review a pull request and provide constructive feedback with structured verdict. Used by awinogradov/code-review-action@v3
+description: Review a pull request and provide constructive feedback with structured verdict. Used by awinogradov/code-review-action
 argument-hint: "REPO: <owner/repo> PR_NUMBER: <number> REVIEWER: <bot-login> PR_AUTHOR: <author-login>"
 allowed-tools:
   - Read
@@ -38,20 +38,22 @@ Do NOT prompt the user. Return structured output with an explicit error if input
 
 $ARGUMENTS
 
+You review the whole PR yourself in a single pass: load context, evaluate the diff against every check in Phase 2, then emit one structured verdict. There are no review sub-agents — Phase 2 is the complete rubric.
+
 ---
 
 ## Phase 1: Context Loading
 
 ### 1.1 PR Context
 
-Fetch PR metadata (always) and the diff (only when you will review it in-model):
+Fetch PR metadata and the diff:
 
 ```bash
 gh pr view <PR_NUMBER> -R <REPO> --json title,body,files,commits,reviews,comments
 gh pr diff <PR_NUMBER> -R <REPO>
 ```
 
-**Single-source the diff.** If `PRECOMPUTED_REVIEWS_PATH` is set (orchestrator fan-out, Phase 2.4), the sub-agents already received the diff and the root model only formats the pre-merged findings — **skip `gh pr diff` entirely** in that case. Fetch it only for in-model fan-out (Phase 2.3). Never embed the diff more than once.
+Fetch the diff exactly once and review it in-model. Never embed the diff more than once.
 
 ### 1.2 Load Context via Sub-Agents
 
@@ -91,9 +93,9 @@ If the `gh` call fails (auth/network error) inside `resolve-issue-context`, skip
 
 After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response. Store issue context and review data from the agents.
 
-**Read the pack, don't dump it.** The snapshot exists so you can pull _targeted_ context on demand — use `grep_repomix_output` (regex + `contextLines`) and `read_repomix_output` with a specific `startLine`/`endLine` slice. NEVER `read_repomix_output` over the whole range (that loads the entire codebase into context). When the diff is self-contained and needs no cross-file lookup (the common case), don't read the pack at all — the `outputId` stays available for sub-agents (e.g. architecture) that actually need to confirm a pattern elsewhere.
+**Read the pack, don't dump it.** The snapshot exists so you can pull _targeted_ context on demand — use `grep_repomix_output` (regex + `contextLines`) and `read_repomix_output` with a specific `startLine`/`endLine` slice. NEVER `read_repomix_output` over the whole range (that loads the entire codebase into context). When the diff is self-contained and needs no cross-file lookup (the common case), don't read the pack at all — pull cross-file context only for checks that need it (e.g. architecture reuse, duplicated logic).
 
-### 1.4 Review Round Handling
+### 1.3 Review Round Handling
 
 **First review (no previous reviews by REVIEWER):**
 
@@ -125,7 +127,7 @@ Do NOT produce the structured JSON output.
 - If new commits exist but no new issues → approve with empty `reviewComment` (no body text)
 - Only submit a full review body if new commits introduce genuinely NEW findings
 
-### 1.5 Extended Context
+### 1.4 Extended Context
 
 - **CLAUDE.md** - Apply project rules to each change
 - **context7/Ref/Exa** - Look up docs for unfamiliar APIs
@@ -133,7 +135,9 @@ Do NOT produce the structured JSON output.
 
 ---
 
-## Phase 2: Review via Sub-Agents
+## Phase 2: Review the Diff
+
+Review the diff against **all** checks below in a single pass and collect findings. Each finding is `{ severity, file, line, rule, title, detail }`: `severity` is `blocker | suggestion | nitpick`; `line` is `null` for out-of-diff findings; `rule` is the `CHECK-` code from the matched check (or `null` when a finding maps to no defined check — do NOT substitute `UNSPECIFIED`).
 
 ### 2.1 Detect Stack
 
@@ -142,176 +146,507 @@ Read `package.json` in the repository root (use Read tool or `grep_repomix_outpu
 - If the file exists: store the `rules` value (e.g., `Bun`, `NodeJS+React`, `Bun+React+Tailwind`, `NodeJS+React+Tailwind`)
 - If the file does not exist or `rules` is missing: set stack to `unknown`
 
-### 2.2 Select Review Source
+### 2.2 Review Principles
 
-The action orchestrator (`awinogradov/code-review-action`) may have pre-computed the 12 sub-agent reviews in parallel and written the results to a JSON file. The path is exposed via the `PRECOMPUTED_REVIEWS_PATH` env var. Pick the review source:
+These rules are mandatory. Apply them exactly as written. Exceptions are only those enumerated here or named by a check's own text.
 
-```bash
-echo "${PRECOMPUTED_REVIEWS_PATH:-}"
-```
+- **Read context to understand a rule; never to excuse it.** You may read surrounding code and configuration to understand what a rule means in this codebase.
+- **Project config files describe tooling behavior, not review policy.** `tsconfig.json`, `eslint.config.ts`, `.eslintrc`, `tailwind.config.ts` describe what the local toolchain permits — not what this review permits. They are never a source of exceptions.
+- **Prevalence is evidence of debt, not license.** Each new violation is a finding even if the codebase is already full of them. "Everyone does it" does not downgrade a finding.
+- **A check may be skipped only when:** (a) the rule's stated scope does not match the diff (wrong stack, wrong file type, no matching diff pattern), or (b) the rule text itself names an exception that applies. "Too hard to fix" and "project settings allow it" are not grounds.
+- **Severity is fixed.** A rule declared as blocker is reported as blocker. When in doubt, use the severity the rule declares. Do not invent intermediate severities.
+- **Evaluate only changes visible in the diff** (lines prefixed with `+` or `-`). Skip checks that do not apply to the diff.
 
-Store the echoed value as `<path>` — it is the concrete reference Phase 2.4 uses for reading the file and for the hard-failure diagnostic.
+### 2.3 Review Checks
 
-- **Empty or unset** → the root command runs the fan-out itself. Go to Phase 2.3 (in-model fan-out).
-- **Non-empty path** → read pre-computed results. Go to Phase 2.4 (pre-computed fan-out results).
+Each check below carries an HTML anchor so `code-review-action` can link its `CHECK-` code back to this file. Keep each `<a id="...">` immediately above its rule.
 
-### 2.3 In-Model Fan-Out
+#### Correctness & Bugs
 
-Used only when `PRECOMPUTED_REVIEWS_PATH` is empty or unset (see 2.2).
+<a id="CHECK-BUG-001"></a>
+**CHECK-BUG-001: Wrong variable referenced** — Severity: blocker
 
-Launch ALL 12 review agents **in parallel** (single message, multiple Agent tool calls). Each agent receives the stack and diff in its prompt. Some agents receive additional context.
+A variable from an outer scope, a similarly-named variable, or a copy-paste leftover is used instead of the intended one.
 
-**Prompt template for most agents:**
+- Example: function receives `requestConfig` but body uses `self.config`; loop variable shadowing an outer `item`.
 
-```
-Review for [category].
+<a id="CHECK-BUG-002"></a>
+**CHECK-BUG-002: Shared mutable state across async tasks** — Severity: blocker
 
-Stack: <STACK>
+Multiple async tasks reading/writing the same mutable object (dict, list, instance attribute) without synchronization; interleaved awaits can cause inconsistent state even in single-threaded async runtimes.
 
-Diff:
-<DIFF>
-```
+- Example: two coroutines appending to the same list with awaits between read and write.
 
-**pr:review:pr-hygiene also receives PR metadata and issue context:**
+<a id="CHECK-BUG-004"></a>
+**CHECK-BUG-004: Incorrect serialization/deserialization** — Severity: blocker
 
-```
-Review for PR hygiene.
+Data lost or corrupted during JSON/protobuf/HOCON serialization — missing fields, wrong types, enum value mismatch between producer and consumer.
 
-Stack: <STACK>
+- Example: `JSON.stringify` drops `undefined` fields the consumer expects as `null`.
 
-PR metadata:
-Title: <PR_TITLE>
-Body: <PR_BODY>
-Commits: <COMMIT_LIST>
+<a id="CHECK-PERF-001"></a>
+**CHECK-PERF-001: Repeated I/O or query inside a loop (N+1)** — Severity: suggestion
 
-Issue context:
-<ISSUE_CONTEXT or "No linked issue">
+A network call, database query, or filesystem read issued once per item in a loop where a single batched call would do.
 
-Diff:
-<DIFF>
-```
+- Example: `for (const id of ids) { await db.user(id) }` instead of one `db.users(ids)` batch.
 
-```
-Agent 1 — Correctness & Bugs (sonnet):
-  subagent_type: "autopilot:pr:review:correctness"
-  description: "Review: correctness"
+<a id="CHECK-PERF-002"></a>
+**CHECK-PERF-002: Quadratic or unbounded per-item work** — Severity: suggestion
 
-Agent 2 — Testing (sonnet):
-  subagent_type: "autopilot:pr:review:testing"
-  description: "Review: testing"
+An operation whose cost grows super-linearly with input — a nested scan (`Array.find`/`includes` inside a loop over a large collection) where a `Map`/`Set` would give O(1) lookup.
 
-Agent 3 — Complexity & Readability (haiku):
-  subagent_type: "autopilot:pr:review:complexity"
-  description: "Review: complexity"
+- Example: `items.filter((a) => others.find((b) => b.id === a.id))` with a large `others`.
+- Skip: collections known to be small and fixed by the surrounding code.
 
-Agent 4 — Platform Standards (haiku):
-  subagent_type: "autopilot:pr:review:standards"
-  description: "Review: standards"
+#### Security
 
-Agent 5 — Architecture & Patterns (sonnet):
-  subagent_type: "autopilot:pr:review:architecture"
-  description: "Review: architecture"
+<a id="CHECK-SEC-001"></a>
+**CHECK-SEC-001: Hardcoded secret or credential** — Severity: blocker
 
-Agent 6 — AI Code Smells (sonnet):
-  subagent_type: "autopilot:pr:review:ai-smells"
-  description: "Review: ai-smells"
+An API key, token, password, private key, or connection string with embedded credentials committed in source instead of read from a secret store or environment variable.
 
-Agent 7 — Common Sense (sonnet):
-  subagent_type: "autopilot:pr:review:common-sense"
-  description: "Review: common-sense"
+- Example: `const apiKey = "sk-live-..."`; a database URL with inline `user:password@host`.
+- Skip: obvious non-secret placeholders (`"xxx"`, `"<your-token>"`, `process.env.X` references).
 
-Agent 8 — PR Hygiene (sonnet):
-  subagent_type: "autopilot:pr:review:pr-hygiene"
-  description: "Review: pr-hygiene"
+<a id="CHECK-SEC-002"></a>
+**CHECK-SEC-002: Injection via unsanitized input** — Severity: blocker
 
-Agent 9 — Surface Correctness (haiku):
-  subagent_type: "autopilot:pr:review:surface-correctness"
-  description: "Review: surface-correctness"
+Untrusted input concatenated into a SQL query, shell command, file path, or HTML sink without parameterization, escaping, or validation.
 
-Agent 10 — Surface Testing & Quality (haiku):
-  subagent_type: "autopilot:pr:review:surface-testing"
-  description: "Review: surface-testing"
+- Example: `db.query("SELECT * FROM users WHERE id = " + req.params.id)`; user input in a filesystem path without normalization (path traversal).
 
-Agent 11 — Surface Naming & Structure (haiku):
-  subagent_type: "autopilot:pr:review:surface-naming"
-  description: "Review: surface-naming"
+<a id="CHECK-SEC-003"></a>
+**CHECK-SEC-003: Missing or broken access control** — Severity: blocker
 
-Agent 12 — Security (sonnet):
-  subagent_type: "autopilot:pr:review:security"
-  description: "Review: security"
-```
+A privileged action, route, or resource accessed without verifying authentication or the caller's authorization; a check present but trivially bypassed.
 
-Each agent returns a structured JSON object of the form `{ "findings": [ { "severity", "file", "line", "rule", "title", "detail" }, ... ] }` (see Phase 2.4 for the field contract). After all 12 agents complete, proceed to Phase 2.5 with the list of per-agent findings to merge in-model.
+- Example: a mutation endpoint that never checks the caller owns the resource; an `isAdmin` flag read from client-supplied input.
 
-### 2.4 Pre-Computed Fan-Out Results
+<a id="CHECK-SEC-004"></a>
+**CHECK-SEC-004: Weak or misused cryptography** — Severity: blocker
 
-Used only when `PRECOMPUTED_REVIEWS_PATH` is set to a non-empty path (see 2.2). The orchestrator has already run the 12 sub-agents in parallel as headless SDK queries, **merged their structured findings deterministically in code** (`aggregateReviews.ts`), and written the result to this file.
+A broken algorithm (MD5/SHA1 for security), a non-constant-time secret comparison, a hardcoded/static IV or salt, or `Math.random()` for security-sensitive values.
 
-Read the file with the Read tool. It is a JSON object holding the already-merged, severity-ordered findings:
+- Example: comparing tokens with `===` instead of `crypto.timingSafeEqual`.
 
-```json
-{
-  "findings": [
-    {
-      "severity": "blocker" | "suggestion" | "nitpick",
-      "file": "src/file.ts",
-      "line": 42,
-      "rule": "CHECK-BUG-002" | "CHECK-BUG-002, CHECK-AI-002" | null,
-      "title": "Short title",
-      "detail": "1-2 sentence description"
-    }
-  ]
-}
-```
+<a id="CHECK-SEC-005"></a>
+**CHECK-SEC-005: Unsafe deserialization or dynamic evaluation of untrusted input** — Severity: blocker
 
-**Extraction rules:**
+`eval`/`Function`, dynamic `import()`/`require()` with a user-controlled path, or deserializing attacker-controlled data into executable structures.
 
-1. Parse the file as JSON.
-2. The `findings` array is **already deduplicated by `(file, line)`, has rule codes merged, and is ordered blockers → suggestions → nitpicks**. Do NOT re-merge or re-order — the orchestrator did that. Per-agent failures were already dropped (their dimension contributes no findings) and counted in the run summary.
-3. Skip Phase 2.5 entirely (it applies only to the in-model path) and go straight to Phase 3 with this finding list.
+- Example: `eval(req.body.expr)`; `require(userSuppliedPath)`.
 
-**Hard-failure policy (orchestrator contract violation):**
+<a id="CHECK-SEC-006"></a>
+**CHECK-SEC-006: Secrets or PII written to logs or responses** — Severity: suggestion
 
-If any of the following is true, do NOT fall back silently — emit a `comment` verdict so the orchestrator bug is loudly visible in CI without blocking the PR author for a failure they cannot fix:
+Tokens, passwords, full request bodies with credentials, or personal data logged or returned in an API/error response.
 
-- The file at `$PRECOMPUTED_REVIEWS_PATH` does not exist or is not readable.
-- The file content is not valid JSON, or the top-level value is not an object with a `findings` array.
-- Any finding is missing a required field (`severity`, `file`, `title`, `detail` must be present; `line` and `rule` may be `null`).
+- Example: `console.log("auth", req.headers.authorization)`; an error handler returning a stack trace with a connection string to the client.
 
-In that case, skip Phase 2.5 and Phase 3's normal aggregation. Emit the following structured output directly and end the command:
+#### Testing
 
-```json
-{
-  "verdict": "comment",
-  "reviewComment": "### 💬 Comment\n\nReview aborted: orchestrator-mode precomputed reviews could not be loaded.\n\n- `PRECOMPUTED_REVIEWS_PATH`: `<path>`\n- Reason: `<one-line diagnostic — missing file, parse error, or schema mismatch>`\n\nThis indicates a bug in the `code-review-action` orchestrator, not in the PR. Re-run the review after the orchestrator is fixed, or disable `parallel_fanout`.",
-  "inlineComments": []
-}
-```
+<a id="CHECK-TEST-001"></a>
+**CHECK-TEST-001: Testing mock behavior, not real behavior** — Severity: blocker
 
-Replace `<path>` with the env var value and `<one-line diagnostic>` with the specific failure mode. Do not include file contents or stack traces in the review body.
+Test configures a mock to return X, then asserts the code got X. This tests the mock, not the code.
 
-### 2.5 Aggregate Findings (in-model path only)
+- Example: `mock_service.get.return_value = 42; result = handler(); assert result == 42`.
 
-**Skip this phase on the pre-computed path (Phase 2.4) — the orchestrator already merged the findings.** Apply it only to the in-model fan-out (Phase 2.3), where you hold 12 separate `{ "findings": [...] }` objects:
+<a id="CHECK-TEST-002"></a>
+**CHECK-TEST-002: Business logic duplicated in test** — Severity: blocker
 
-1. Each finding is a JSON object: `{ severity, file, line, rule, title, detail }`. `severity` is one of `blocker | suggestion | nitpick`; `line` is `null` for out-of-diff findings; `rule` is `null` when the finding maps to no `CHECK-` code (do NOT substitute `UNSPECIFIED`).
-2. If an agent failed or timed out, skip that dimension — do not block the review.
-3. Deduplicate findings by `(file, line)` — if two agents flag the same location, keep the higher severity (`blocker` > `suggestion` > `nitpick`) and merge their `rule` codes into one bare comma-separated list (e.g. `CHECK-BUG-002, CHECK-AI-002`). Findings with a `null` line are never merged.
-4. Merge all findings into a single list ordered by severity: blockers first, then suggestions, then nitpicks.
-5. Proceed to Phase 3 with this finding list.
+Test reimplements the same calculation/logic as production to compute the expected value instead of using known input/output pairs. If production is wrong, the test is wrong the same way.
 
-**Both paths**, when rendering findings into `reviewComment` and `inlineComments` in Phase 3: map `severity` to its emoji (`blocker` → 🚧, `suggestion` → 🙋‍♂️, `nitpick` → 💡) and append the **bare** ` [<RULE>]` (or ` [<CODE1>, <CODE2>]`) from the finding's `rule` field. Do NOT build markdown links and do NOT read agent files to construct URLs — `code-review-action` resolves every code to its canonical GitHub link deterministically after the model finishes (see §2.6). When `rule` is `null`, append nothing. The emoji stays first so downstream severity filters keep working.
+- Example: `expected = sum(items) * tax_rate + shipping; assert calculate_total(items) == expected`.
 
-### 2.6 Rule-to-URL Mapping (done by the action, not the model)
+<a id="CHECK-TEST-003"></a>
+**CHECK-TEST-003: Mock without verifying call arguments** — Severity: suggestion
 
-Rule codes are emitted **bare** (`[CHECK-BUG-002]`, or `[CHECK-BUG-002, CHECK-AI-002]` for a shared location). `code-review-action` resolves each code to its canonical GitHub link **deterministically in code** (`src/ruleUrls.ts`) after the model returns its structured output — it scans the `pr:review:*.md` agent files once in Node and rewrites bare codes into markdown links. This replaced the former model-side resolution, which read all agent files and slugified headings every review (~11 tool round-trips per run).
+Test creates a mock but never checks what arguments it was called with, only that the return value flowed through.
 
-The model MUST therefore:
+- Example: `mock_db.save.return_value = True` but no `assert_called_with(expected_record)`.
 
-- Emit bare codes only — never construct `https://github.com/...` links and never read agent files to build them.
+<a id="CHECK-TEST-004"></a>
+**CHECK-TEST-004: Error path untested** — Severity: suggestion
+
+Only the happy path is tested. Error conditions (invalid input, timeout, connection failure, empty result) have no coverage.
+
+- Example: tests for `fetchUser` only cover successful fetch, never user-not-found or network error.
+
+<a id="CHECK-TEST-005"></a>
+**CHECK-TEST-005: Edge cases of modified function not tested** — Severity: suggestion
+
+A function is modified (new parameter, changed boundary) but existing tests don't cover the new behavior.
+
+- Example: adding an `offset` parameter to a pagination function but no test exercises non-zero offset.
+
+<a id="CHECK-TEST-006"></a>
+**CHECK-TEST-006: Test fixtures duplicated across files** — Severity: suggestion
+
+Same test data or setup copy-pasted in multiple test files instead of shared fixtures.
+
+- Example: three test files each creating the same `mockGrpcChannel` with identical setup.
+
+<a id="CHECK-TEST-007"></a>
+**CHECK-TEST-007: Test asset (fixture data) inlined as giant string** — Severity: suggestion
+
+Large JSON blobs, XML payloads, or byte strings hardcoded in test files instead of loaded from `tests/assets/` or `tests/fixtures/`.
+
+- Example: 200-line JSON dict defined at top of test file.
+
+<a id="CHECK-TEST-008"></a>
+**CHECK-TEST-008: New public function without test** — Severity: suggestion
+
+A new public function, method, or endpoint added with zero test coverage. Every non-trivial public interface needs at least a happy-path test.
+
+- Example: new exported function `parseConfig` with no test file changes in the diff.
+
+<a id="CHECK-TEST-009"></a>
+**CHECK-TEST-009: Flaky test indicator — sleep or retry in test** — Severity: suggestion
+
+Tests using `time.sleep()`, `asyncio.sleep()`, `setTimeout`, or retry loops to wait for conditions — indicates a timing-dependent test.
+
+- Example: `await new Promise(r => setTimeout(r, 500)); expect(queue).toBeEmpty()`.
+
+#### Complexity & Readability
+
+<a id="CHECK-CPLX-001"></a>
+**CHECK-CPLX-001: Function exceeds 100 lines** — Severity: blocker
+
+Any function or method longer than 100 lines (all stacks).
+
+<a id="CHECK-CPLX-002"></a>
+**CHECK-CPLX-002: Nesting depth too deep**
+
+Control flow nested beyond the stack-specific threshold. Prefer early returns over nested conditionals.
+
+- **Bun / NodeJS+React / Bun+React+Tailwind / NodeJS+React+Tailwind**: blocker at 3+ levels (ESLint `max-depth: 2` per CLAUDE.md).
+- **unknown**: blocker at 5+ levels.
+
+<a id="CHECK-CPLX-003"></a>
+**CHECK-CPLX-003: Cyclomatic complexity exceeds 15** — Severity: suggestion
+
+Function has more than 15 independent code paths (branches, loops, exception handlers).
+
+<a id="CHECK-CPLX-004"></a>
+**CHECK-CPLX-004: File exceeds 1000 lines** — Severity: blocker
+
+Any code file longer than 1000 lines. Long files must be split.
+
+<a id="CHECK-CPLX-005"></a>
+**CHECK-CPLX-005: Misleading function/variable name** — Severity: blocker
+
+Name implies different behavior than the code does. `get*` that mutates state, `is*` that returns non-boolean, `validate*` that also transforms.
+
+- Example: `getUser()` that creates the user if not found.
+
+<a id="CHECK-CPLX-006"></a>
+**CHECK-CPLX-006: Inconsistent naming within module** — Severity: suggestion
+
+Same concept named differently in the same file or closely related files — `user_id`, `uid`, `userId`.
+
+- Scope: identifier (variable/function) naming **inside code**. Inconsistent **file/path** naming is CHECK-CS-008 — do not double-report.
+
+<a id="CHECK-CPLX-007"></a>
+**CHECK-CPLX-007: Magic numbers or magic strings** — Severity: suggestion
+
+Numeric or string literals used in logic without a named constant explaining their meaning.
+
+- Example: `if (buffer.length > 8192)` without explaining what 8192 represents.
+
+<a id="CHECK-CPLX-008"></a>
+**CHECK-CPLX-008: Long parameter list (>9 total or >6 positional)** — Severity: suggestion
+
+Function accepts more than 9 total parameters or more than 6 positional, indicating it should accept a config/options object instead.
+
+<a id="CHECK-CPLX-009"></a>
+**CHECK-CPLX-009: Comment explains "what" instead of "why"** — Severity: suggestion
+
+Comments describing what the code does (obvious from the code) instead of why.
+
+- Example: `// increment counter` above `counter += 1`.
+
+#### Platform Standards
+
+<a id="CHECK-PLAT-001"></a>
+**CHECK-PLAT-001: No issue IDs in commit messages** — Severity: blocker
+
+GitHub issue references (`#123`, `Closes #123`) must NOT appear in commit messages. The PR description handles issue linking via magic words.
+
+- Platform ref: `commitlint.config.mjs` custom rule `no-issue-id`.
+
+<a id="CHECK-PLAT-002"></a>
+**CHECK-PLAT-002: noqa / type: ignore / @ts-ignore / eslint-disable** — Severity: blocker
+
+Zero tolerance for lint/type suppression comments. Any `# noqa`, `# type: ignore`, `@ts-ignore`, `@ts-expect-error`, `eslint-disable`, `eslint-disable-next-line` is a blocker.
+
+- Example: `// @ts-ignore — TODO fix later`.
+
+<a id="CHECK-PLAT-003"></a>
+**CHECK-PLAT-003: Wrong validation library** — Severity: suggestion
+
+Data validation must use the stack-appropriate library, not manual validation or plain classes.
+
+- **Bun / NodeJS+React / Bun+React+Tailwind / NodeJS+React+Tailwind**: must use Zod, not manual validation or plain interfaces for runtime validation.
+- Skip if the diff does not add or modify validation logic.
+
+#### Architecture & Patterns
+
+<a id="CHECK-ARCH-001"></a>
+**CHECK-ARCH-001: Shared library utility not used** — Severity: suggestion
+
+Code reimplements functionality already available in a shared library (logging, telemetry, pooling, database client, metrics). Check shared libraries before writing new utilities. Use Grep to confirm an existing implementation when in doubt.
+
+<a id="CHECK-ARCH-002"></a>
+**CHECK-ARCH-002: Reinventing stdlib or well-known library** — Severity: suggestion
+
+Custom implementation of functionality available in the language stdlib or an approved dependency.
+
+- Example: a custom retry helper when `p-retry` is already a dependency.
+
+<a id="CHECK-ARCH-003"></a>
+**CHECK-ARCH-003: Copy-paste from another service without abstraction** — Severity: suggestion
+
+Large code blocks copied from another repo/service instead of extracting to a shared library.
+
+<a id="CHECK-ARCH-004"></a>
+**CHECK-ARCH-004: New dependency for trivial functionality** — Severity: suggestion
+
+Adding a package for something doable in <20 lines with stdlib. Each dependency adds supply-chain risk.
+
+- Example: adding `dotenv` to read 2 environment variables when `process.env` suffices.
+
+<a id="CHECK-DEP-001"></a>
+**CHECK-DEP-001: Deprecated or unmaintained dependency added** — Severity: suggestion
+
+A newly added dependency is deprecated, archived, or visibly unmaintained, or pulls a heavy/duplicate transitive tree for a small need.
+
+- Example: adding `request` (deprecated) instead of the built-in `fetch`.
+
+<a id="CHECK-DEP-002"></a>
+**CHECK-DEP-002: Dependency with incompatible or missing license** — Severity: suggestion
+
+A new dependency carries a license incompatible with the project (e.g. GPL into a permissively-licensed project) or has no discernible license.
+
+<a id="CHECK-ARCH-007"></a>
+**CHECK-ARCH-007: Inconsistent error handling pattern** — Severity: suggestion
+
+New code uses a different error-handling pattern than existing code in the same module (some methods raise, some return null).
+
+<a id="CHECK-ARCH-008"></a>
+**CHECK-ARCH-008: Inconsistent async pattern** — Severity: suggestion
+
+Mixing sync and async code in the same layer. If the module is async, new code should be async too.
+
+<a id="CHECK-ARCH-010"></a>
+**CHECK-ARCH-010: Duplicated logic across files** — Severity: suggestion
+
+Same or near-identical logic (>5 lines) appearing in multiple places. Should be extracted to a shared utility.
+
+- Example: 13-line gRPC channel setup duplicated in 3 service files.
+
+#### AI Code Smells
+
+<a id="CHECK-AI-001"></a>
+**CHECK-AI-001: Unnecessary abstraction layer** — Severity: suggestion
+
+Interface/protocol/base class with exactly one implementation and no plan for others.
+
+- Example: `AudioConverterProtocol` with only `WavConverter` implementing it.
+
+<a id="CHECK-AI-002"></a>
+**CHECK-AI-002: Output parameters (mutable args used for returning data)** — Severity: blocker
+
+Function mutates a passed-in object to "return" data through it instead of using actual return values. A C-ism with no place in TypeScript.
+
+- Example: `function getStatus(result) { result.status = "active"; result.code = 200; }` — should return a value.
+
+<a id="CHECK-AI-003"></a>
+**CHECK-AI-003: Unnecessary async wrapping** — Severity: suggestion
+
+Function marked `async` with no `await` — synchronous code wearing an async costume.
+
+- Example: `async function getConfig() { return { key: "value" }; }`.
+
+<a id="CHECK-AI-004"></a>
+**CHECK-AI-004: Logging every line of execution** — Severity: suggestion
+
+Debug logging at entry, exit, and every intermediate step. Logs should capture decisions and state changes, not trace every line.
+
+<a id="CHECK-AI-005"></a>
+**CHECK-AI-005: Excessive type annotations on obvious code** — Severity: suggestion
+
+Type annotations on every local variable, including trivially obvious ones, adding noise without aiding understanding.
+
+- Example: `const items: string[] = []; const count: number = 0;`.
+
+<a id="CHECK-AI-006"></a>
+**CHECK-AI-006: Placeholder implementation left in production code** — Severity: blocker
+
+`pass`, `...`, `NotImplementedError`, or `TODO` placeholder in code that should be fully implemented.
+
+- Example: `function handleError(error: Error) { throw new Error("Not implemented"); }` in production.
+
+#### Common Sense
+
+<a id="CHECK-CS-001"></a>
+**CHECK-CS-001: Constant value is clearly wrong** — Severity: blocker
+
+A constant whose value doesn't match what it represents — too large, too small, wrong units, or nonsensical for the domain.
+
+- Example: `TIMEOUT_MS = 1` (1ms is too short for most network calls).
+
+<a id="CHECK-CS-002"></a>
+**CHECK-CS-002: Timeout too short or too long** — Severity: suggestion
+
+Timeout values dangerously short (false failures) or too long (blocking resources). Compare against the expected operation duration.
+
+- Example: `GRPC_TIMEOUT = 0.5` for a call involving ML inference; `SESSION_TIMEOUT = 86400 * 30`.
+
+<a id="CHECK-CS-003"></a>
+**CHECK-CS-003: Unbounded growth — no limits on collections** — Severity: suggestion
+
+A data structure that grows without bound (cache, in-memory queue, log buffer) without eviction policy or size limit.
+
+- Example: `self.history = []` that appends every request but never trims.
+
+<a id="CHECK-CS-004"></a>
+**CHECK-CS-004: Error message doesn't help debugging** — Severity: suggestion
+
+An error message lacking enough context to diagnose — missing which value failed, what was expected, or what operation was attempted.
+
+- Example: `raise ValueError("invalid input")` instead of including the offending value.
+
+<a id="CHECK-CS-005"></a>
+**CHECK-CS-005: Log message at wrong level** — Severity: suggestion
+
+Expected/handled conditions logged as errors (noisy), or critical failures logged as warnings (hidden).
+
+- Example: `logger.error("user not found")` for a normal 404 flow.
+
+<a id="CHECK-CS-006"></a>
+**CHECK-CS-006: Feature flag or environment variable undocumented** — Severity: suggestion
+
+A new environment variable or feature flag added without documenting it in README, config template, or deployment docs.
+
+#### Surface Correctness
+
+<a id="CHECK-BUG-005"></a>
+**CHECK-BUG-005: Unreachable code after early return** — Severity: suggestion
+
+Code placed after an unconditional `return`, `raise`, `break`, or `continue` that can never execute.
+
+<a id="CHECK-BUG-006"></a>
+**CHECK-BUG-006: Timezone-naive datetime operations** — Severity: suggestion
+
+Mixing timezone-aware and timezone-naive datetimes, or assuming local time when UTC is required.
+
+- Example: `new Date()` without explicit UTC handling when the codebase standardizes on a UTC helper.
+
+<a id="CHECK-BUG-007"></a>
+**CHECK-BUG-007: Incorrect exception handling — catching too broadly** — Severity: suggestion
+
+Bare `catch (e) { ... }` that swallows errors without rethrowing — especially where an `AbortError` or a programmer error should propagate.
+
+- Example: `catch (e) { logger.error("failed"); }` swallowing an `AbortError` from a cancelled fetch.
+
+<a id="CHECK-BUG-008"></a>
+**CHECK-BUG-008: Return type mismatch with type annotation** — Severity: suggestion
+
+A function's actual return value doesn't match its type annotation on some code paths.
+
+- Example: `function getName(): string` with an implicit `return undefined` on cache miss.
+
+#### Surface Naming & Structure
+
+<a id="CHECK-CS-007"></a>
+**CHECK-CS-007: Filename too broad for its contents** — Severity: suggestion
+
+File named generically (`utils.ts`, `helpers.ts`, `common.ts`) when it contains code for a specific domain and sits among 10+ other files.
+
+- Example: `maintenance.ts` containing only queue maintenance routines should be `queueMaintenance.ts`.
+
+<a id="CHECK-CS-008"></a>
+**CHECK-CS-008: Inconsistent naming scheme across related files** — Severity: suggestion
+
+Related files follow different naming patterns — some `_client`, others `_service`, mixing conventions.
+
+- Scope: **file and path** naming. Inconsistent **identifier** naming inside code is CHECK-CPLX-006 — do not double-report.
+
+<a id="CHECK-CS-009"></a>
+**CHECK-CS-009: New file in wrong directory** — Severity: suggestion
+
+File placed in a directory that doesn't match its purpose per the project's directory-structure conventions.
+
+- Example: a service module placed in `src/api/` instead of `src/services/`.
+
+#### PR Hygiene
+
+Stack is not relevant for PR hygiene — these apply universally.
+
+**Issue alignment** (Severity: suggestion, `rule`: `null`) — if issue context is provided, every requirement in the linked issue must be addressed; flag unexplained scope creep. Skip if the issue description is vague or empty.
+
+<a id="CHECK-PR-001"></a>
+**CHECK-PR-001: Diff matches PR title/description** — Severity: blocker
+
+The actual changes must match what the PR title and description claim. No hidden changes, no scope creep, no "while I was here" additions.
+
+<a id="CHECK-PR-002"></a>
+**CHECK-PR-002: PR is atomic — single concern** — Severity: suggestion
+
+PR addresses one logical change. Bug fixes shouldn't include refactoring; features shouldn't include unrelated cleanup.
+
+<a id="CHECK-PR-003"></a>
+**CHECK-PR-003: PR is reviewable size (<1000 lines of meaningful diff)** — Severity: suggestion
+
+Exclude generated files, lockfiles, and config, but the meaningful code diff should be reviewable in one sitting.
+
+<a id="CHECK-PR-004"></a>
+**CHECK-PR-004: No merge commits in feature branch** — Severity: suggestion
+
+Feature branches should be rebased on main, not merged. Merge commits clutter history.
+
+<a id="CHECK-PR-005"></a>
+**CHECK-PR-005: No "fix review" or "address feedback" commits** — Severity: suggestion
+
+Review feedback should be squashed into the relevant original commit, not added as separate commits.
+
+<a id="CHECK-PR-006"></a>
+**CHECK-PR-006: No unrelated file changes** — Severity: suggestion
+
+Files modified that have nothing to do with the PR's purpose — whitespace, import reordering, formatting in unrelated files.
+
+<a id="CHECK-PR-007"></a>
+**CHECK-PR-007: Description explains "why", not just "what"** — Severity: suggestion
+
+The PR description should explain motivation and context, not just list changed files.
+
+<a id="CHECK-PR-008"></a>
+**CHECK-PR-008: Breaking changes called out** — Severity: blocker
+
+Breaking changes (API changes, config format changes, removed features) must be explicitly listed in the PR description with migration steps.
+
+<a id="CHECK-PR-009"></a>
+**CHECK-PR-009: Release notes section present for user-facing changes** — Severity: suggestion
+
+Feature/fix PRs affecting users should include a `**Release notes:**` section in the PR description.
+
+### 2.4 Aggregate Findings
+
+1. Collect every finding from Phase 2.3 as `{ severity, file, line, rule, title, detail }`.
+2. Deduplicate by `(file, line)` — if the same location matches more than one check, keep the higher severity (`blocker` > `suggestion` > `nitpick`) and merge their `rule` codes into one bare comma-separated list (e.g. `CHECK-BUG-002, CHECK-AI-002`). Findings with a `null` line are never merged.
+3. Order the merged list by severity: blockers first, then suggestions, then nitpicks.
+4. Proceed to Phase 3 with this list.
+
+### 2.5 Rule Codes (resolved to links by the action)
+
+Emit rule codes **bare** — `[CHECK-BUG-002]`, or `[CHECK-BUG-002, CHECK-AI-002]` for a shared location. `code-review-action` rewrites each bare code into a markdown link to this skill file's anchor (`src/ruleUrls.ts`) after the model returns its structured output. The model MUST therefore:
+
+- Emit bare codes only — never construct `https://github.com/...` links.
 - Append nothing when a finding has no rule code (do not emit `[UNSPECIFIED]`).
 
-Codes that don't resolve (rename, typo, drift) or an unreadable plugin directory degrade gracefully to the bare `[<CODE>]` text — the action never blocks the review over link resolution.
+Map `severity` to its emoji when rendering in Phase 3: `blocker` → 🚧, `suggestion` → 🙋‍♂️, `nitpick` → 💡. The emoji stays first so downstream severity filters keep working.
 
 ---
 
@@ -428,7 +763,7 @@ The `verdict` field drives the GitHub review event. An empty `reviewComment` mea
 
 **reviewComment body template (ONLY when there are findings):**
 
-Every blocker, suggestion, and nitpick line ends with the **bare** rule code (e.g. `[CHECK-BUG-002]`). If two agents flagged the same `(path, line)`, list all codes comma-separated inside a single bracket pair (e.g. `[CHECK-BUG-002, CHECK-AI-002]`). Do NOT build markdown links — `code-review-action` resolves codes to links after submission (§2.6). When the sub-agent emitted no `Rule:` field, omit the bracket suffix entirely.
+Every blocker, suggestion, and nitpick line ends with the **bare** rule code (e.g. `[CHECK-BUG-002]`). If two checks flagged the same `(path, line)`, list all codes comma-separated inside a single bracket pair (e.g. `[CHECK-BUG-002, CHECK-AI-002]`). Do NOT build markdown links — `code-review-action` resolves codes to links after submission (§2.5). When a finding has no rule code, omit the bracket suffix entirely.
 
 ```markdown
 [1 factual sentence: what this PR changes — no quality judgment]
@@ -458,7 +793,7 @@ Add inline comments for issues with specific code locations:
 - **🙋‍♂️ Suggestion** - Add if location is specific
 - **💡 Nitpicks** - Optional, can be in summary only
 
-Each inline comment: 1-2 sentences, start with severity emoji, end with the **bare** rule code (e.g. `🚧 No idempotency check — retries will duplicate charges [CHECK-BUG-002]`). `code-review-action` resolves it to a link after submission (§2.6).
+Each inline comment: 1-2 sentences, start with severity emoji, end with the **bare** rule code (e.g. `🚧 No idempotency check — retries will duplicate charges [CHECK-BUG-002]`). `code-review-action` resolves it to a link after submission (§2.5).
 
 ### Deduplication Rules
 
@@ -471,7 +806,7 @@ Each inline comment: 1-2 sentences, start with severity emoji, end with the **ba
 - ALWAYS full paths for all file references (e.g., `src/history/kafka/consumer.py:66`, NOT `consumer.py:66`)
 - Direct, confident language
 - Clear verdict (rationale only when requesting changes)
-- Bare rule code `[<CODE>]` (or `[<CODE1>, <CODE2>]`) suffix on every finding line (blocker, suggestion, nitpick) and every `inlineComments.body` — `code-review-action` resolves codes to links (§2.6); omit the suffix entirely when no rule code is available
+- Bare rule code `[<CODE>]` (or `[<CODE1>, <CODE2>]`) suffix on every finding line (blocker, suggestion, nitpick) and every `inlineComments.body` — `code-review-action` resolves codes to links (§2.5); omit the suffix entirely when no rule code is available
 
 ### Exclude
 

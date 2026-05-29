@@ -62,7 +62,6 @@ The `if` condition prevents runner provisioning for non-PR issue comments. All o
 | `model`              | no       | `claude-sonnet-4-6`      | Claude model to use.                                                                                                                                                |
 | `settings`           | no       | —                        | Claude Code settings JSON (e.g., env vars for MCP servers).                                                                                                         |
 | `mcp_config`         | no       | —                        | Additional MCP server configuration JSON, merged with repo `.mcp.json`.                                                                                             |
-| `parallel_fanout`    | no       | `false`                  | Run the PR-review sub-agents as parallel headless SDK calls. Opt-in until stable.                                                                                   |
 | `preflight_checks`   | no       | `true`                   | Wait for PR checks to pass before running review (review mode only).                                                                                                |
 | `poll_interval`      | no       | `10`                     | Seconds between check status polls.                                                                                                                                 |
 | `checks_timeout`     | no       | `600`                    | Maximum seconds to wait for checks.                                                                                                                                 |
@@ -78,14 +77,14 @@ The `if` condition prevents runner provisioning for non-PR issue comments. All o
 
 The action invokes Claude Code with the local `claude-plugins/autopilot` plugin and runs:
 
-- `/autopilot:pr-review` — review the PR diff and emit a structured verdict
+- `/autopilot:pr-review` — review the PR diff across all dimensions in a single pass and emit a structured verdict
 - `/autopilot:pr-answer` — reply to a PR comment thread and optionally resolve / update the existing review
 
-When `parallel_fanout: true`, the action's orchestrator fans out the `pr:review:*` sub-agents in parallel via the Agent SDK instead of letting the root model do it in-model.
+The `pr:review` skill carries the full review rubric (all `CHECK-*` rules) inline and reviews every dimension itself in one model pass — no review sub-agents and no orchestrator fan-out.
 
 ## Review run-summary footer
 
-Every review comment carries a collapsed **"Review run summary 🤖"** footer ("under the cut") with the run's latency, token usage, cache hits, cost, tool round-trips, and — when `parallel_fanout` is on — agent counts and parallel speedup. The metrics are computed in `runClaude.ts`, passed to `submitReview.ts` via the `run_summary` step output, and appended to the **main review comment only** (never inline, never on `react`-mode replies). The footer is wrapped in HTML-comment markers so it is stripped before duplicate-review detection, keeping run-varying numbers from defeating dedup.
+Every review comment carries a collapsed **"Review run summary 🤖"** footer ("under the cut") with the run's latency, token usage, cache hits, cost, and tool round-trips. The metrics are computed in `runClaude.ts`, passed to `submitReview.ts` via the `run_summary` step output, and appended to the **main review comment only** (never inline, never on `react`-mode replies). The footer is wrapped in HTML-comment markers so it is stripped before duplicate-review detection, keeping run-varying numbers from defeating dedup.
 
 See [Review run-summary footer](../../../docs/code-review-run-summary.md) for the full data flow and diagram.
 

@@ -1,8 +1,8 @@
 /**
  * Render and strip the per-run summary footer appended to a PR review comment.
  *
- * The review-run metrics (cost, latency, tokens, tool round-trips, optional
- * fan-out stats) are computed in `runClaude.ts` and serialized into the
+ * The review-run metrics (cost, latency, tokens, tool round-trips) are computed
+ * in `runClaude.ts` and serialized into the
  * `run_summary` step output. `submitReview.ts` parses that JSON and appends a
  * collapsible `<details>` footer to the main review comment. The footer is
  * wrapped in HTML-comment markers so the duplicate-suppression guard can strip
@@ -27,20 +27,9 @@ const footerEndMarker = "<!-- run-summary-end -->";
  * Schema for the serialized per-run summary passed via the `RUN_SUMMARY` env.
  * Strict (no coercion): every metric must already be a number and `mode` a
  * known literal, so a malformed value can never reach the rendered markdown.
- * Fan-out fields are present only when the parallel fan-out ran.
  */
-/**
- * One slowest-agent entry in the run summary. Keyed in snake_case to match the
- * serialized `run_summary` step-output contract the rest of this schema uses.
- */
-const agentDurationSchema = z.object({
-  category: z.string(),
-  duration_ms: z.number(),
-});
-
 export const runSummarySchema = z.object({
   mode: z.enum(["review", "react", "unknown"]),
-  fanout_ms: z.number(),
   model_ms: z.number(),
   tokens_in: z.number(),
   tokens_out: z.number(),
@@ -49,17 +38,10 @@ export const runSummarySchema = z.object({
   cost_usd: z.number(),
   num_turns: z.number(),
   tool_round_trips: z.number(),
-  agent_count: z.number().optional(),
-  failed_count: z.number().optional(),
-  parallel_speedup: z.number().optional(),
-  agent_durations: z.array(agentDurationSchema).optional(),
 });
 
 /** Validated per-run summary rendered into the review footer. */
 export type RunSummary = z.infer<typeof runSummarySchema>;
-
-/** Serialized slowest-agent entry merged into the run summary by `withFanoutStats`. */
-export type AgentDurationSummary = z.infer<typeof agentDurationSchema>;
 
 /**
  * Parse the untrusted `RUN_SUMMARY` env value into a {@link RunSummary}.
@@ -85,32 +67,17 @@ function formatSeconds(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-/** Build the markdown metric rows, adding fan-out rows only when present. */
+/** Build the markdown metric rows for the single-pass review run. */
 function buildRows(summary: RunSummary): string[] {
   const rows = [
     ["Mode", summary.mode],
     ["Model time", formatSeconds(summary.model_ms)],
-    ["Fan-out time", formatSeconds(summary.fanout_ms)],
     ["Tool round-trips", String(summary.tool_round_trips)],
     ["Assistant turns", String(summary.num_turns)],
     ["Tokens in / out", `${summary.tokens_in} / ${summary.tokens_out}`],
     ["Cache read / write", `${summary.cache_read_tokens} / ${summary.cache_creation_tokens}`],
     ["Cost (USD)", `$${summary.cost_usd.toFixed(2)}`],
   ];
-
-  if (summary.agent_count !== undefined) {
-    rows.push(["Agents", String(summary.agent_count)]);
-    rows.push(["Failed agents", String(summary.failed_count ?? 0)]);
-    if (summary.parallel_speedup !== undefined) {
-      rows.push(["Parallel speedup", `${summary.parallel_speedup}×`]);
-    }
-    if (summary.agent_durations && summary.agent_durations.length > 0) {
-      const slowest = summary.agent_durations
-        .map((d) => `${d.category} ${formatSeconds(d.duration_ms)}`)
-        .join(" · ");
-      rows.push(["Slowest agents", slowest]);
-    }
-  }
 
   return rows.map(([label, value]) => `| ${label} | ${value} |`);
 }
@@ -120,8 +87,7 @@ function buildRows(summary: RunSummary): string[] {
  *
  * Built from the shared {@link buildMarkedDetailsBlock} helper (also used by
  * `updatePrFooter.ts`); the two leading blank lines separate the footer from the
- * preceding review body. Fan-out rows (Agents / Failed agents / Parallel
- * speedup) appear only when the parallel fan-out ran.
+ * preceding review body.
  */
 export function renderRunSummaryFooter(summary: RunSummary): string {
   return [

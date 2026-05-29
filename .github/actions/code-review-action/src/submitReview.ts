@@ -8,7 +8,7 @@
 import type { Octokit } from "@octokit/rest";
 
 import type { ReviewEvent, ReviewThread } from "./github/githubReview.ts";
-import { agentsDirFromEnv, buildRuleUrlMap, linkRuleCodes } from "./ruleUrls.ts";
+import { linkRuleCodes } from "./ruleUrls.ts";
 import {
   extractValidLines,
   formatInvalidComments,
@@ -116,14 +116,12 @@ if (!output) {
   };
 }
 
-// Resolve bare rule codes (e.g. [CHECK-BUG-002]) to GitHub links in code, so the
-// review model no longer reads agent files per run to build them. Missing codes
-// stay bare; an unreadable plugin dir yields an empty map (links simply omitted).
-const ruleUrlMap = await buildRuleUrlMap(agentsDirFromEnv());
-output.reviewComment = linkRuleCodes(output.reviewComment, ruleUrlMap);
+// Resolve bare rule codes (e.g. [CHECK-BUG-002]) to GitHub links by templating the
+// skill's anchor for each code — no file scan. Already-linked codes are left alone.
+output.reviewComment = linkRuleCodes(output.reviewComment);
 output.inlineComments = (output.inlineComments ?? []).map((c) => ({
   ...c,
-  body: linkRuleCodes(c.body, ruleUrlMap),
+  body: linkRuleCodes(c.body),
 }));
 
 const event = verdictToEvent[output.verdict] ?? "COMMENT";

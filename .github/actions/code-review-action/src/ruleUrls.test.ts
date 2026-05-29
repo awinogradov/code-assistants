@@ -1,130 +1,45 @@
 /**
- * Tests for ruleUrls.ts — deterministic rule-code → GitHub-link resolution.
+ * Tests for ruleUrls.ts — rule-code → GitHub-link resolution by anchor templating.
  */
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { describe, expect, test } from "bun:test";
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-
-import { agentsDirFromEnv, buildRuleUrlMap, linkRuleCodes, slugifyHeading } from "./ruleUrls.ts";
-
-describe("agentsDirFromEnv", () => {
-  const original = process.env.CLAUDE_PLUGIN_DIR;
-  afterEach(() => {
-    process.env.CLAUDE_PLUGIN_DIR = original;
-  });
-
-  test("appends /agents to the plugin dir from the env", () => {
-    process.env.CLAUDE_PLUGIN_DIR = "/plugins/autopilot";
-    expect(agentsDirFromEnv()).toBe("/plugins/autopilot/agents");
-  });
-
-  test("falls back to /agents when the env var is unset", () => {
-    delete process.env.CLAUDE_PLUGIN_DIR;
-    expect(agentsDirFromEnv()).toBe("/agents");
-  });
-});
-
-describe("slugifyHeading", () => {
-  test("strips the marker, lowercases, drops punctuation, hyphenates", () => {
-    expect(slugifyHeading("### B. Concurrency and Async Issues")).toBe(
-      "b-concurrency-and-async-issues"
-    );
-  });
-
-  test("collapses repeated hyphens and trims", () => {
-    expect(slugifyHeading("###   A — Code  Reuse ")).toBe("a-code-reuse");
-  });
-});
+import { linkRuleCodes, rulesDocUrl } from "./ruleUrls.ts";
 
 describe("linkRuleCodes", () => {
-  const map = new Map([
-    ["CHECK-BUG-002", "https://example.com/bug#b"],
-    ["CHECK-AI-002", "https://example.com/ai#a"],
-  ]);
+  const base = "https://example.com/rules.md";
 
-  test("links a single bare code", () => {
-    expect(linkRuleCodes("retries duplicate [CHECK-BUG-002]", map)).toBe(
-      "retries duplicate [CHECK-BUG-002](https://example.com/bug#b)"
+  test("links a single bare code to the base-url anchor", () => {
+    expect(linkRuleCodes("retries duplicate [CHECK-BUG-002]", base)).toBe(
+      "retries duplicate [CHECK-BUG-002](https://example.com/rules.md#CHECK-BUG-002)"
     );
   });
 
   test("links a merged bare-code group, preserving the nested form", () => {
-    expect(linkRuleCodes("dup [CHECK-BUG-002, CHECK-AI-002]", map)).toBe(
-      "dup [[CHECK-BUG-002](https://example.com/bug#b), [CHECK-AI-002](https://example.com/ai#a)]"
+    expect(linkRuleCodes("dup [CHECK-BUG-002, CHECK-AI-002]", base)).toBe(
+      "dup [[CHECK-BUG-002](https://example.com/rules.md#CHECK-BUG-002), [CHECK-AI-002](https://example.com/rules.md#CHECK-AI-002)]"
     );
   });
 
-  test("leaves unknown codes bare", () => {
-    expect(linkRuleCodes("x [CHECK-XYZ-999]", map)).toBe("x [CHECK-XYZ-999]");
+  test("defaults to the consolidated skill anchor when no base url is passed", () => {
+    expect(linkRuleCodes("x [CHECK-SEC-001]")).toBe(`x [CHECK-SEC-001](${rulesDocUrl}#CHECK-SEC-001)`);
   });
 
   test("does not double-link already-linked codes", () => {
-    const already = "x [CHECK-BUG-002](https://example.com/bug#b)";
-    expect(linkRuleCodes(already, map)).toBe(already);
+    const already = "x [CHECK-BUG-002](https://example.com/rules.md#CHECK-BUG-002)";
+    expect(linkRuleCodes(already, base)).toBe(already);
   });
 
   test("ignores brackets that are not rule-code groups", () => {
-    expect(linkRuleCodes("see [the docs](https://x) and [a note]", map)).toBe(
+    expect(linkRuleCodes("see [the docs](https://x) and [a note]", base)).toBe(
       "see [the docs](https://x) and [a note]"
-    );
-  });
-
-  test("links known codes and leaves unknown ones bare within a merged group", () => {
-    expect(linkRuleCodes("mix [CHECK-BUG-002, CHECK-XYZ-999]", map)).toBe(
-      "mix [[CHECK-BUG-002](https://example.com/bug#b), [CHECK-XYZ-999]]"
     );
   });
 });
 
-describe("buildRuleUrlMap", () => {
-  let dir: string;
-
-  beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), "ruleurls-"));
-    await Bun.write(
-      join(dir, "pr:review:correctness.md"),
-      "### A. Logic Errors\n**CHECK-BUG-001: Wrong variable** — Severity: blocker\n\n### B. Concurrency and Async Issues\n**CHECK-BUG-002: Shared mutable state** — Severity: blocker\n"
+describe("rulesDocUrl", () => {
+  test("points at the consolidated pr:review skill with a percent-encoded colon", () => {
+    expect(rulesDocUrl).toBe(
+      "https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/pr%3Areview/SKILL.md"
     );
-    // A second pr:review agent file — codes from all files should be collected.
-    await Bun.write(
-      join(dir, "pr:review:security.md"),
-      "### A. Secrets and Credentials\n**CHECK-SEC-001: Hardcoded secret** — Severity: blocker\n"
-    );
-    // A non-matching file should be ignored.
-    await Bun.write(join(dir, "other.md"), "**CHECK-ZZZ-001: nope**\n");
-  });
-
-  afterEach(async () => {
-    await rm(dir, { recursive: true });
-  });
-
-  test("maps codes to anchored GitHub URLs from the owning section", async () => {
-    const map = await buildRuleUrlMap(dir);
-    expect(map.get("CHECK-BUG-001")).toBe(
-      "https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/pr%3Areview%3Acorrectness.md#a-logic-errors"
-    );
-    expect(map.get("CHECK-BUG-002")).toBe(
-      "https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/pr%3Areview%3Acorrectness.md#b-concurrency-and-async-issues"
-    );
-  });
-
-  test("collects codes across multiple pr:review files", async () => {
-    const map = await buildRuleUrlMap(dir);
-    expect(map.get("CHECK-SEC-001")).toBe(
-      "https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/pr%3Areview%3Asecurity.md#a-secrets-and-credentials"
-    );
-    expect(map.has("CHECK-BUG-001")).toBe(true);
-  });
-
-  test("ignores files that are not pr:review agents", async () => {
-    const map = await buildRuleUrlMap(dir);
-    expect(map.has("CHECK-ZZZ-001")).toBe(false);
-  });
-
-  test("returns an empty map for an unreadable directory", async () => {
-    const map = await buildRuleUrlMap(join(dir, "does-not-exist"));
-    expect(map.size).toBe(0);
   });
 });

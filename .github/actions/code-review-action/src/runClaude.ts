@@ -20,15 +20,7 @@ import pino from "pino";
 import { z } from "zod";
 
 import { setOutput } from "./actionsOutput.ts";
-import { aggregateReviews } from "./aggregateReviews.ts";
 import { logMessage } from "./logClaudeMessage.ts";
-import {
-  runReviewFanout,
-  toAgentReviews,
-  type FanoutContext,
-  type FanoutStats,
-} from "./reviewFanout.ts";
-import type { AgentDurationSummary } from "./runSummaryFooter.ts";
 
 /** Duration above which a Claude session is considered long-running (triggers artifact upload). */
 const longRunMs = 5 * 60 * 1000;
@@ -95,7 +87,6 @@ export interface RunClaudeConfig {
   settingsJson: string | undefined;
   outputFilePath: string;
   timeoutMs: number;
-  modelOverrides: Record<string, string>;
 }
 
 /**
@@ -148,7 +139,6 @@ export function parseConfig(): RunClaudeConfig {
       process.env.EXECUTION_OUTPUT_FILE ??
       `${process.env.RUNNER_TEMP ?? "/tmp"}/claude-execution-output.json`,
     timeoutMs: timeoutMinutes * 60 * 1000,
-    modelOverrides: parseModelOverrides(process.env.REVIEW_MODEL_OVERRIDES, log),
   };
 }
 
@@ -273,88 +263,6 @@ export async function resolveClaudeBinary(
 
 let log: pino.Logger | undefined;
 
-/**
- * Check whether orchestrator-side parallel fan-out should run before the root
- * query. Requires the feature flag, review mode, and a resolvable PR context.
- */
-function shouldRunFanout(config: RunClaudeConfig): boolean {
-  if (process.env.PARALLEL_FANOUT !== "true") return false;
-  if (!config.prompt.includes(reviewCommand)) return false;
-  if (!config.pluginDir) return false;
-  if (!process.env.GITHUB_REPOSITORY || !process.env.PR_NUMBER) return false;
-  return true;
-}
-
-/** Zod schema for the optional per-category model-override map (category → model). */
-const modelOverridesSchema = z.record(z.string(), z.string());
-
-/**
- * Parse the optional per-category model-override map from env, validated with Zod.
- * A malformed value yields an empty map (never blocks the review) but emits a
- * warning so an operator knows their overrides were ignored.
- */
-export function parseModelOverrides(
-  raw: string | undefined,
-  logger?: pino.Logger
-): Record<string, string> {
-  if (!raw) return {};
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    logger?.warn("Ignoring REVIEW_MODEL_OVERRIDES: not valid JSON.");
-    return {};
-  }
-
-  const result = modelOverridesSchema.safeParse(parsed);
-  if (!result.success) {
-    logger?.warn(
-      "Ignoring REVIEW_MODEL_OVERRIDES: expected a JSON object of category→model strings."
-    );
-    return {};
-  }
-  return result.data;
-}
-
-/** Spawn the 12 review sub-agents in parallel and persist their results. */
-async function runFanoutIfEnabled(
-  config: RunClaudeConfig,
-  settingSources: ("user" | "project")[],
-  mcpServers: Record<string, McpServerConfig>,
-  pathToClaudeCodeExecutable: string | undefined
-): Promise<{ outputPath: string; stats: FanoutStats } | undefined> {
-  if (!log || !shouldRunFanout(config)) return undefined;
-
-  const fanoutCtx: FanoutContext = {
-    log,
-    repo: process.env.GITHUB_REPOSITORY ?? "",
-    prNumber: process.env.PR_NUMBER ?? "",
-    pluginDir: config.pluginDir ?? "",
-    mcpServers,
-    settingSources,
-    pathToClaudeCodeExecutable,
-    fallbackModel: config.model,
-    modelOverrides: config.modelOverrides,
-    inheritedAllowedTools: config.allowedTools,
-    inheritedDisallowedTools: config.disallowedTools,
-    // Give each sub-agent 10 min — rfc-compliance historically hits ~77s.
-    subagentTimeoutMs: 10 * 60 * 1000,
-  };
-
-  const { results, stats } = await runReviewFanout(fanoutCtx);
-  // Merge the per-agent findings deterministically in code so the root model
-  // receives a single ready-to-format list instead of re-deduping 12 blocks.
-  const findings = aggregateReviews(toAgentReviews(results));
-  const outputPath = `${process.env.RUNNER_TEMP ?? "/tmp"}/precomputed-reviews.json`;
-  await Bun.write(outputPath, JSON.stringify({ findings }, null, 2));
-  log.info(
-    { output_path: outputPath, finding_count: findings.length, failed_count: stats.failedCount },
-    "Aggregated review findings written."
-  );
-  return { outputPath, stats };
-}
-
 /** Run Claude Code and write outputs. Exported for visibility, called from main guard. */
 async function run(): Promise<void> {
   log = await createLogger();
@@ -375,15 +283,6 @@ async function run(): Promise<void> {
     },
     "Starting Claude execution."
   );
-
-  const fanoutStart = performance.now();
-  const fanout = await runFanoutIfEnabled(
-    config,
-    settingSources as ("user" | "project")[],
-    mcpServers,
-    pathToClaudeCodeExecutable
-  );
-  const fanoutMs = Math.round(performance.now() - fanoutStart);
 
   const messages: unknown[] = [];
 
@@ -411,7 +310,6 @@ async function run(): Promise<void> {
         ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? "",
         CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN ?? "",
         GH_TOKEN: process.env.GH_TOKEN ?? "",
-        PRECOMPUTED_REVIEWS_PATH: fanout?.outputPath ?? "",
       },
     },
   });
@@ -429,9 +327,9 @@ async function run(): Promise<void> {
   // Emit the run summary (log + step output) BEFORE emitOutputs, which may
   // process.exit(1) on a non-success result — keeping the footer data available
   // to the separate submitReview step even on a failed run.
-  const summary = buildRunSummary(deriveMode(config.prompt), messages, { fanoutMs, modelMs });
+  const summary = buildRunSummary(deriveMode(config.prompt), messages, { modelMs });
   log.info(summary, "Run summary.");
-  await setOutput("run_summary", JSON.stringify(withFanoutStats(summary, fanout?.stats)));
+  await setOutput("run_summary", JSON.stringify(summary));
 
   await writeExecutionFile(log, config.outputFilePath, messages);
   await emitOutputs(log, config.outputFilePath, messages);
@@ -507,11 +405,17 @@ export function extractUsage(resultMessage: Record<string, unknown> | undefined)
   const toNumber = (value: unknown): number =>
     typeof value === "number" && Number.isFinite(value) ? value : 0;
 
+  const cacheReadTokens = toNumber(usage.cache_read_input_tokens);
+  const cacheCreationTokens = toNumber(usage.cache_creation_input_tokens);
+
   return {
-    tokensIn: toNumber(usage.input_tokens),
+    // Total input the model consumed: fresh + cache-read + cache-creation. Reading
+    // only `input_tokens` reports the tiny uncached residual (an implausible ~9
+    // under heavy prompt caching); the breakdown stays in the cache fields below.
+    tokensIn: toNumber(usage.input_tokens) + cacheReadTokens + cacheCreationTokens,
     tokensOut: toNumber(usage.output_tokens),
-    cacheReadTokens: toNumber(usage.cache_read_input_tokens),
-    cacheCreationTokens: toNumber(usage.cache_creation_input_tokens),
+    cacheReadTokens,
+    cacheCreationTokens,
     costUsd: toNumber(resultMessage?.total_cost_usd),
     numTurns: toNumber(resultMessage?.num_turns),
   };
@@ -519,7 +423,6 @@ export function extractUsage(resultMessage: Record<string, unknown> | undefined)
 
 /** Wall-clock timings (ms) for the instrumented phases of a run. */
 export interface PhaseTimings {
-  fanoutMs: number;
   modelMs: number;
 }
 
@@ -537,7 +440,6 @@ export function buildRunSummary(
 
   return {
     mode,
-    fanout_ms: timings.fanoutMs,
     model_ms: timings.modelMs,
     tokens_in: usage.tokensIn,
     tokens_out: usage.tokensOut,
@@ -546,28 +448,6 @@ export function buildRunSummary(
     cost_usd: usage.costUsd,
     num_turns: usage.numTurns,
     tool_round_trips: countToolRoundTrips(messages),
-  };
-}
-
-/**
- * Merge the optional fan-out counters (snake_case) into the run summary so the
- * review footer can render them. Returns the summary unchanged when fan-out did
- * not run (react mode or a non-fan-out review).
- */
-export function withFanoutStats(
-  summary: Record<string, number | string>,
-  stats: FanoutStats | undefined
-): Record<string, number | string | AgentDurationSummary[]> {
-  if (!stats) return summary;
-  return {
-    ...summary,
-    agent_count: stats.agentCount,
-    failed_count: stats.failedCount,
-    parallel_speedup: stats.parallelSpeedup,
-    agent_durations: stats.agentDurations.map((d) => ({
-      category: d.category,
-      duration_ms: d.durationMs,
-    })),
   };
 }
 
