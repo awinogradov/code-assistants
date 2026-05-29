@@ -15,6 +15,8 @@
  */
 import { z } from "zod";
 
+import { buildMarkedDetailsBlock } from "./markedDetailsBlock.ts";
+
 /** Opening marker bounding the run-summary footer, used for dedup stripping. */
 const footerStartMarker = "<!-- run-summary-start -->";
 
@@ -97,28 +99,21 @@ function buildRows(summary: RunSummary): string[] {
 /**
  * Render the marker-wrapped, collapsible run-summary footer.
  *
- * Mirrors the "under the cut" pattern in `updatePrFooter.ts`: the start marker
- * sits directly above the `---` rule, and a blank line follows `<br />` so the
- * GitHub-flavored markdown table renders inside the `<details>` block. Fan-out
- * rows (Agents / Failed agents / Parallel speedup) appear only when the
- * parallel fan-out ran.
+ * Built from the shared {@link buildMarkedDetailsBlock} helper (also used by
+ * `updatePrFooter.ts`); the two leading blank lines separate the footer from the
+ * preceding review body. Fan-out rows (Agents / Failed agents / Parallel
+ * speedup) appear only when the parallel fan-out ran.
  */
 export function renderRunSummaryFooter(summary: RunSummary): string {
   return [
     "",
     "",
-    footerStartMarker,
-    "---",
-    "<details>",
-    "<summary>Review run summary 🤖</summary>",
-    "<br />",
-    "",
-    "| Metric | Value |",
-    "| --- | --- |",
-    ...buildRows(summary),
-    "",
-    "</details>",
-    footerEndMarker,
+    buildMarkedDetailsBlock({
+      startMarker: footerStartMarker,
+      endMarker: footerEndMarker,
+      summary: "Review run summary 🤖",
+      bodyLines: ["| Metric | Value |", "| --- | --- |", ...buildRows(summary)],
+    }),
   ].join("\n");
 }
 
