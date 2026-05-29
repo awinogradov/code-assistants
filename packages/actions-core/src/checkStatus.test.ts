@@ -10,7 +10,13 @@ import type { Octokit } from "@octokit/rest";
 
 import { describe, expect, test } from "bun:test";
 
-import { deduplicateCheckRuns, fetchCheckStatuses, normalizeCheckName } from "./checkStatus.ts";
+import {
+  type CheckResult,
+  deduplicateCheckRuns,
+  fetchCheckStatuses,
+  normalizeCheckName,
+  pollCheckStatuses,
+} from "./checkStatus.ts";
 
 interface FakeRun {
   id: number;
@@ -35,7 +41,7 @@ interface CapturedCalls {
  */
 function fakeOctokit(
   runs: FakeRun[],
-  statuses: FakeStatus[]
+  statuses: FakeStatus[],
 ): { octokit: Octokit; calls: CapturedCalls } {
   const calls: CapturedCalls = { paginate: [], combined: [] };
   const octokit = {
@@ -82,7 +88,7 @@ describe("fetchCheckStatuses", () => {
   test("all green completed runs pass", async () => {
     const { octokit } = fakeOctokit(
       [{ id: 1, name: "build", status: "completed", conclusion: "success" }],
-      []
+      [],
     );
     const result = await fetchCheckStatuses(octokit, "o", "r", "sha", "automerge");
     expect(result).toEqual({
@@ -103,7 +109,7 @@ describe("fetchCheckStatuses", () => {
   test("excludes its own check by normalized name", async () => {
     const { octokit } = fakeOctokit(
       [{ id: 1, name: "Release Automerge", status: "in_progress", conclusion: null }],
-      []
+      [],
     );
     const result = await fetchCheckStatuses(octokit, "o", "r", "sha", "release-automerge");
     expect(result.allCompleted).toBe(true);
@@ -113,7 +119,7 @@ describe("fetchCheckStatuses", () => {
   test("incomplete sibling run counts as pending", async () => {
     const { octokit } = fakeOctokit(
       [{ id: 1, name: "build", status: "in_progress", conclusion: null }],
-      []
+      [],
     );
     const result = await fetchCheckStatuses(octokit, "o", "r", "sha", "automerge");
     expect(result.allCompleted).toBe(false);
@@ -126,7 +132,7 @@ describe("fetchCheckStatuses", () => {
         { id: 1, name: "build", status: "completed", conclusion: "failure" },
         { id: 2, name: "build", status: "completed", conclusion: "success" },
       ],
-      []
+      [],
     );
     const result = await fetchCheckStatuses(octokit, "o", "r", "sha", "automerge");
     expect(result.hasFailed).toBe(false);
@@ -136,7 +142,7 @@ describe("fetchCheckStatuses", () => {
   test("cancelled-only run carries no signal and does not block the gate", async () => {
     const { octokit } = fakeOctokit(
       [{ id: 1, name: "flaky", status: "completed", conclusion: "cancelled" }],
-      []
+      [],
     );
     const result = await fetchCheckStatuses(octokit, "o", "r", "sha", "automerge");
     expect(result.allCompleted).toBe(true);
@@ -147,7 +153,7 @@ describe("fetchCheckStatuses", () => {
   test("failed conclusion is reported", async () => {
     const { octokit } = fakeOctokit(
       [{ id: 1, name: "lint", status: "completed", conclusion: "timed_out" }],
-      []
+      [],
     );
     const result = await fetchCheckStatuses(octokit, "o", "r", "sha", "automerge");
     expect(result.hasFailed).toBe(true);
@@ -160,12 +166,107 @@ describe("fetchCheckStatuses", () => {
       [
         { context: "ci/pending", state: "pending" },
         { context: "ci/broken", state: "error" },
-      ]
+      ],
     );
     const result = await fetchCheckStatuses(octokit, "o", "r", "sha", "automerge");
     expect(result.allCompleted).toBe(false);
     expect(result.pendingNames).toEqual(["ci/pending"]);
     expect(result.hasFailed).toBe(true);
     expect(result.failedNames).toEqual(["ci/broken"]);
+  });
+});
+
+describe("pollCheckStatuses", () => {
+  const pending: CheckResult = {
+    allCompleted: false,
+    hasFailed: false,
+    failedNames: [],
+    pendingNames: ["ci"],
+  };
+  const completed: CheckResult = {
+    allCompleted: true,
+    hasFailed: false,
+    failedNames: [],
+    pendingNames: [],
+  };
+  const failed: CheckResult = {
+    allCompleted: false,
+    hasFailed: true,
+    failedNames: ["ci"],
+    pendingNames: [],
+  };
+  const noSleep = (): Promise<void> => Promise.resolve();
+
+  test("returns immediately when all checks are already complete (no sleep)", async () => {
+    let fetched = 0;
+    let slept = 0;
+    const result = await pollCheckStatuses(
+      () => {
+        fetched += 1;
+        return Promise.resolve(completed);
+      },
+      {
+        pollIntervalMs: 1000,
+        timeoutMs: 10_000,
+        sleep: () => {
+          slept += 1;
+          return Promise.resolve();
+        },
+      },
+    );
+    expect(result.allCompleted).toBe(true);
+    expect(fetched).toBe(1);
+    expect(slept).toBe(0);
+  });
+
+  test("returns immediately when a check has already failed", async () => {
+    let fetched = 0;
+    const result = await pollCheckStatuses(
+      () => {
+        fetched += 1;
+        return Promise.resolve(failed);
+      },
+      { pollIntervalMs: 1000, timeoutMs: 10_000, sleep: noSleep },
+    );
+    expect(result.hasFailed).toBe(true);
+    expect(fetched).toBe(1);
+  });
+
+  test("polls until checks settle, sleeping between fetches", async () => {
+    const sequence = [pending, pending, completed];
+    let i = 0;
+    let slept = 0;
+    const result = await pollCheckStatuses(() => Promise.resolve(sequence[i++] ?? completed), {
+      pollIntervalMs: 1000,
+      timeoutMs: 10_000,
+      sleep: () => {
+        slept += 1;
+        return Promise.resolve();
+      },
+    });
+    expect(result.allCompleted).toBe(true);
+    expect(i).toBe(3); // fetched three times
+    expect(slept).toBe(2); // slept between the three fetches
+  });
+
+  test("returns the pending result once the wall-clock timeout elapses", async () => {
+    let fetched = 0;
+    let tick = 0;
+    const result = await pollCheckStatuses(
+      () => {
+        fetched += 1;
+        return Promise.resolve(pending);
+      },
+      {
+        pollIntervalMs: 1000,
+        timeoutMs: 3000,
+        sleep: noSleep,
+        now: () => tick++ * 1000, // 0, 1000, 2000, ... advances each call
+      },
+    );
+    expect(result.allCompleted).toBe(false);
+    expect(result.pendingNames).toEqual(["ci"]);
+    // Bounded: start + initial-elapsed + two ticks under 3000ms, then exits.
+    expect(fetched).toBeLessThanOrEqual(4);
   });
 });

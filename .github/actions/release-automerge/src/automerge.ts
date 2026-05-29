@@ -14,7 +14,7 @@
  * @example
  * GH_TOKEN=xxx REPO=owner/repo HEAD_SHA=abc JOB_NAME=automerge bun run src/automerge.ts
  */
-import { fetchCheckStatuses, type CheckResult } from "@code-assistants/actions-core/checkStatus";
+import { fetchCheckStatuses, pollCheckStatuses } from "@code-assistants/actions-core/checkStatus";
 import { fetchRawContent } from "@code-assistants/actions-core/fetchRawContent";
 import { parseRepo } from "@code-assistants/actions-core/parseRepo";
 import { readRootRelease } from "@code-assistants/actions-core/releaseField";
@@ -272,32 +272,9 @@ async function mergeRelease(config: AutomergeConfig, pullNumber: number): Promis
   }
 }
 
-/**
- * Poll the aggregated check status until every sibling check completes, fails, or
- * the timeout elapses. Mirrors code-review-action's preflight poll loop: an
- * approval commonly fires this action before CI finishes, so wait for the checks
- * to settle rather than skip (no later event reliably re-runs the merge).
- */
-async function waitForChecks(config: AutomergeConfig): Promise<CheckResult> {
-  const { octokit, owner, repo, headSha, jobName } = config;
-  let elapsed = 0;
-  let result = await fetchCheckStatuses(octokit, owner, repo, headSha, jobName);
-
-  while (!result.hasFailed && !result.allCompleted && elapsed < checksTimeoutMs) {
-    console.log(
-      `Waiting for checks: ${result.pendingNames.join(", ")} (${Math.round(elapsed / 1000)}s / ${checksTimeoutMs / 1000}s)`,
-    );
-    await Bun.sleep(checksPollIntervalMs);
-    elapsed += checksPollIntervalMs;
-    result = await fetchCheckStatuses(octokit, owner, repo, headSha, jobName);
-  }
-
-  return result;
-}
-
 /** Evaluate the merge gate for the triggering commit and merge when satisfied. */
 async function run(config: AutomergeConfig): Promise<void> {
-  const { octokit, owner, repo, headSha } = config;
+  const { octokit, owner, repo, headSha, jobName } = config;
 
   const { data: associated } = await octokit.rest.repos.listPullRequestsAssociatedWithCommit({
     owner,
@@ -327,7 +304,20 @@ async function run(config: AutomergeConfig): Promise<void> {
     return;
   }
 
-  const checks = await waitForChecks(config);
+  // An approval routinely fires this action before CI finishes, and GitHub does
+  // not redeliver check_suite events for GITHUB_TOKEN suites — so poll until the
+  // checks settle rather than skip on the first pending read.
+  const checks = await pollCheckStatuses(
+    () => fetchCheckStatuses(octokit, owner, repo, headSha, jobName),
+    {
+      pollIntervalMs: checksPollIntervalMs,
+      timeoutMs: checksTimeoutMs,
+      onPending: (pendingNames, elapsedMs) =>
+        console.log(
+          `Waiting for checks: ${pendingNames.join(", ")} (${Math.round(elapsedMs / 1000)}s / ${checksTimeoutMs / 1000}s)`,
+        ),
+    },
+  );
   if (checks.hasFailed) {
     console.log(`Skip: failed checks — ${checks.failedNames.join(", ")}`);
     return;

@@ -59,7 +59,7 @@ export async function fetchCheckStatuses(
   owner: string,
   repo: string,
   ref: string,
-  jobName: string
+  jobName: string,
 ): Promise<CheckResult> {
   const normalizedJobName = normalizeCheckName(jobName);
 
@@ -69,7 +69,7 @@ export async function fetchCheckStatuses(
   ]);
 
   const allSiblingRuns = checkRuns.filter(
-    (run) => normalizeCheckName(run.name) !== normalizedJobName
+    (run) => normalizeCheckName(run.name) !== normalizedJobName,
   );
   // A cancelled run carries no pass/fail/pending signal (e.g. a path-filter-skipped
   // job, or a run superseded by a newer push). Excluding cancelled runs entirely —
@@ -78,7 +78,7 @@ export async function fetchCheckStatuses(
   // poll loop to recover, and GitHub's merge API still enforces genuinely required
   // checks regardless.
   const siblingRuns = deduplicateCheckRuns(
-    allSiblingRuns.filter((run) => run.conclusion !== "cancelled")
+    allSiblingRuns.filter((run) => run.conclusion !== "cancelled"),
   );
 
   const pendingRuns = siblingRuns
@@ -104,4 +104,59 @@ export async function fetchCheckStatuses(
     failedNames: allFailed,
     pendingNames: allPending,
   };
+}
+
+/** Options for {@link pollCheckStatuses}. */
+export interface PollCheckOptions {
+  /** Delay between polls, in milliseconds. */
+  pollIntervalMs: number;
+  /** Wall-clock budget before giving up, in milliseconds. */
+  timeoutMs: number;
+  /** Sleep implementation; injected in tests. Defaults to a `setTimeout` promise. */
+  sleep?: (ms: number) => Promise<void>;
+  /** Monotonic clock in milliseconds; injected in tests. Defaults to `Date.now`. */
+  now?: () => number;
+  /** Invoked once per still-pending tick before sleeping (e.g. to log progress). */
+  onPending?: (pendingNames: string[], elapsedMs: number) => void;
+}
+
+const defaultSleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+/**
+ * Poll a {@link CheckResult} source until checks fail, all complete, or the
+ * timeout elapses. Elapsed time is measured on a wall clock (`now()`), so the
+ * latency of each status fetch counts toward the cap — the loop cannot overrun
+ * the budget by the aggregate fetch time. Returns the final result; the caller
+ * decides how to treat a still-pending (timed-out) result.
+ *
+ * `fetchStatus`, `sleep`, and `now` are injectable so the loop is testable
+ * without real timers or a GitHub client.
+ *
+ * @example
+ *   const result = await pollCheckStatuses(
+ *     () => fetchCheckStatuses(octokit, owner, repo, sha, jobName),
+ *     { pollIntervalMs: 15_000, timeoutMs: 480_000 },
+ *   );
+ */
+export async function pollCheckStatuses(
+  fetchStatus: () => Promise<CheckResult>,
+  options: PollCheckOptions,
+): Promise<CheckResult> {
+  const sleep = options.sleep ?? defaultSleep;
+  const now = options.now ?? Date.now;
+  const start = now();
+
+  let result = await fetchStatus();
+  let elapsed = now() - start;
+  while (!result.hasFailed && !result.allCompleted && elapsed < options.timeoutMs) {
+    options.onPending?.(result.pendingNames, elapsed);
+    await sleep(options.pollIntervalMs);
+    result = await fetchStatus();
+    elapsed = now() - start;
+  }
+
+  return result;
 }
