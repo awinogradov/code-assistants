@@ -231,6 +231,7 @@ claude-plugins/
       pr:review:complexity.md
       pr:review:correctness.md
       pr:review:pr-hygiene.md
+      pr:review:security.md
       pr:review:standards.md
       pr:review:surface-correctness.md
       pr:review:surface-naming.md
@@ -3626,6 +3627,9 @@ export interface FanoutContext {
   settingSources: ("user" | "project")[];
   pathToClaudeCodeExecutable: string | undefined;
   fallbackModel: string;
+  /** Per-category model overrides (e.g. `{ "correctness": "opus" }`), keyed by the
+   * bare review category. Takes precedence over the agent's frontmatter model. */
+  modelOverrides: Record<string, string>;
   /** Tools inherited from the root query — used when the agent file declares none. */
   inheritedAllowedTools: string[];
   inheritedDisallowedTools: string[];
@@ -3733,6 +3737,12 @@ export async function loadReviewAgents(pluginDir: string): Promise<AgentDefiniti
   );
 }
 
+/** Resolve a sub-agent's model: per-category override > frontmatter > fallback. */
+function resolveModel(ctx: FanoutContext, agent: AgentDefinition): string {
+  const category = agent.subagent_type.replace("autopilot:pr:review:", "");
+  return ctx.modelOverrides[category] ?? agent.model ?? ctx.fallbackModel;
+}
+
 /** Build the `Stack: ... Diff: ...` user prompt each review sub-agent expects. */
 export function buildSubagentPrompt(stack: string, diff: string): string {
   return `Stack: ${stack}\n\nDiff:\n\`\`\`diff\n${diff}\n\`\`\``;
@@ -3812,7 +3822,7 @@ async function runSubagent(
   const abortController = new AbortController();
   const timeout = setTimeout(() => abortController.abort(), ctx.subagentTimeoutMs);
 
-  const model = agent.model ?? ctx.fallbackModel;
+  const model = resolveModel(ctx, agent);
   let markdown = "";
   let error: string | undefined;
 
@@ -3862,7 +3872,7 @@ function buildSubagentOptions(
   abortController: AbortController,
 ): Parameters<typeof query>[0]["options"] {
   return {
-    model: agent.model ?? ctx.fallbackModel,
+    model: resolveModel(ctx, agent),
     allowedTools: agent.allowedTools ?? ctx.inheritedAllowedTools,
     disallowedTools: ctx.inheritedDisallowedTools,
     plugins: [{ type: "local" as const, path: ctx.pluginDir }],
@@ -4154,9 +4164,36 @@ import {
   loadMcpServers,
   mcpConfigFileSchema,
   parseConfig,
+  parseModelOverrides,
   resolveClaudeBinary,
   safeParseJson,
 } from "./runClaude.ts";
+
+describe("parseModelOverrides", () => {
+  test("returns empty map for undefined or empty input", () => {
+    expect(parseModelOverrides(undefined)).toEqual({});
+    expect(parseModelOverrides("")).toEqual({});
+  });
+
+  test("parses a category-to-model map", () => {
+    expect(parseModelOverrides('{"correctness":"claude-opus-4-8","complexity":"claude-sonnet-4-6"}')).toEqual({
+      correctness: "claude-opus-4-8",
+      complexity: "claude-sonnet-4-6",
+    });
+  });
+
+  test("drops non-string values and keeps string ones", () => {
+    expect(parseModelOverrides('{"security":"sonnet","bogus":3,"x":null}')).toEqual({
+      security: "sonnet",
+    });
+  });
+
+  test("returns empty map for malformed JSON or non-objects", () => {
+    expect(parseModelOverrides("{bad")).toEqual({});
+    expect(parseModelOverrides('"a string"')).toEqual({});
+    expect(parseModelOverrides("42")).toEqual({});
+  });
+});
 
 describe("safeParseJson", () => {
   test("returns undefined for empty string", () => {
@@ -4806,6 +4843,23 @@ function shouldRunFanout(config: RunClaudeConfig): boolean {
   return true;
 }
 
+/**
+ * Parse the optional per-category model-override map from env. String values only;
+ * a malformed value yields an empty map so it never blocks the review.
+ */
+export function parseModelOverrides(raw: string | undefined): Record<string, string> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (typeof parsed !== "object" || parsed === null) return {};
+    return Object.fromEntries(
+      Object.entries(parsed).filter(([, v]) => typeof v === "string")
+    ) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
 /** Spawn the 12 review sub-agents in parallel and persist their results. */
 async function runFanoutIfEnabled(
   config: RunClaudeConfig,
@@ -4824,6 +4878,7 @@ async function runFanoutIfEnabled(
     settingSources,
     pathToClaudeCodeExecutable,
     fallbackModel: config.model,
+    modelOverrides: parseModelOverrides(process.env.REVIEW_MODEL_OVERRIDES),
     inheritedAllowedTools: config.allowedTools,
     inheritedDisallowedTools: config.disallowedTools,
     // Give each sub-agent 10 min — rfc-compliance historically hits ~77s.
@@ -5681,6 +5736,10 @@ inputs:
     description: "Run PR-review sub-agents as parallel headless SDK calls from the action orchestrator instead of delegating fan-out to the root model. Cuts review-phase wall time when working correctly. Opt-in until fan-out is stable."
     required: false
     default: "false"
+  review_model_overrides:
+    description: 'Optional JSON map of review category to model, overriding the per-agent default (orchestrator fan-out only). Example: {"correctness":"claude-opus-4-8","complexity":"claude-sonnet-4-6"}. Keys are the bare category (e.g. correctness, security, surface-naming).'
+    required: false
+    default: ""
   preflight_checks:
     description: "Wait for all PR checks to pass before running AI review (review mode only)"
     required: false
@@ -6093,6 +6152,7 @@ runs:
         EXECUTION_OUTPUT_FILE: ${{ runner.temp }}/claude-execution-output.json
         LOG_LEVEL: ${{ inputs.debug_logs == 'true' && 'debug' || 'info' }}
         PARALLEL_FANOUT: ${{ inputs.parallel_fanout }}
+        REVIEW_MODEL_OVERRIDES: ${{ inputs.review_model_overrides }}
         PR_NUMBER: ${{ steps.ctx.outputs.pr_number }}
       run: bun run "${{ github.action_path }}/src/runClaude.ts"
 
@@ -21826,6 +21886,18 @@ Adding a new package dependency for something that could be done in <20 lines wi
 
 - Example violation: Adding `dotenv` to read 2 environment variables when `process.env` or `os.getenv()` suffices.
 
+**CHECK-DEP-001: Deprecated or unmaintained dependency added** — Severity: suggestion
+
+A newly added dependency is deprecated, archived, or visibly unmaintained (no releases in years, known successor), or pulls a heavy/duplicate transitive tree for a small need.
+
+- Example violation: adding `request` (deprecated) instead of the built-in `fetch`.
+
+**CHECK-DEP-002: Dependency with incompatible or missing license** — Severity: suggestion
+
+A new dependency carries a license incompatible with the project (e.g. GPL into a permissively-licensed project) or has no discernible license.
+
+- Example violation: adding a GPL-3.0 package to an MIT-licensed library distributed to downstream consumers.
+
 ### C. Pattern Consistency
 
 **CHECK-ARCH-007: Inconsistent error handling pattern** — Severity: suggestion
@@ -21950,9 +22022,25 @@ New environment variable or feature flag added without documenting it in README,
 
 - Example violation: Code reads `ENABLE_CANARY_ROUTING` from env but no documentation mentions this variable.
 
+### D. Performance
+
+**CHECK-PERF-001: Repeated I/O or query inside a loop (N+1)** — Severity: suggestion
+
+A network call, database query, or filesystem read issued once per item in a loop where a single batched call would do. Cost scales with input and is a common latency/cost regression.
+
+- Example violation: `for (const id of ids) { await db.user(id) }` instead of one `db.users(ids)` batch.
+- Example violation: `await fetch(...)` per array element in a `for...of` with no batching or concurrency limit.
+
+**CHECK-PERF-002: Quadratic or unbounded per-item work** — Severity: suggestion
+
+An operation whose cost grows super-linearly with input — a nested scan (`Array.find`/`includes` inside a loop over a large collection) where a `Map`/`Set` would give O(1) lookup.
+
+- Example violation: `items.filter((a) => others.find((b) => b.id === a.id))` with a large `others` (build a `Set` of ids).
+- Skip: collections known to be small and fixed by the surrounding code.
+
 ## Stack-Specific Guidance
 
-- **Bun / NodeJS+React**: Check for `process.env` without docs, `setTimeout`/`setInterval` values, memory-unbounded Maps/Sets
+- **Bun / NodeJS+React**: Check for `process.env` without docs, `setTimeout`/`setInterval` values, memory-unbounded Maps/Sets, `Array.find`/`includes` inside loops, `await` inside `for...of` over large arrays
 - **unknown**: Apply language-agnostic common sense checks only
 
 ## Output
@@ -22052,6 +22140,7 @@ Name implies different behavior than what the code does. `get_*`/`get*` that mut
 Same concept named differently in the same file or closely related files — `user_id` in one function, `uid` in another, `userId` in a third.
 
 - Example violation: `getSessionConfig()` and `fetchSessionSettings()` in the same module doing similar things.
+- Scope: identifier (variable/function) naming **inside code**. Inconsistent **file/path** naming is CHECK-CS-008 (surface-naming) — do not double-report.
 
 ### C. Code Structure
 
@@ -22357,6 +22446,130 @@ No issues found.
 ```
 </file>
 
+<file path="claude-plugins/autopilot/agents/pr:review:security.md">
+---
+name: pr:review:security
+description: Review PR diff for security vulnerabilities. Use as sub-agent of pr:review for isolated security analysis.
+model: sonnet
+---
+
+You are a security reviewer. Analyze the PR diff for secrets, injection, broken access control, weak cryptography, unsafe deserialization, and sensitive-data exposure. Do not output intermediate steps — only the final structured block.
+
+## Review Principles
+
+Rules in this agent are mandatory. Apply them exactly as written. Exceptions are enumerated below and are the only ones permitted.
+
+- **Read context to understand a rule; never to excuse it.** You may read surrounding code and configuration files to understand what a rule means in this codebase.
+- **Project config files describe tooling behavior, not review policy.** Files such as `tsconfig.json`, `eslint.config.ts`, `.eslintrc`, and `tailwind.config.ts` describe what the local toolchain happens to permit — not what this review permits. They are never a source of exceptions.
+- **Prevalence is evidence of debt, not license.** Each new violation is a finding even if the codebase is already full of them. "Everyone does it" does not downgrade a finding.
+- **A check may be skipped only when:** (a) the rule's stated scope does not match the diff (wrong stack, wrong file type, no matching diff pattern), or (b) the rule text itself names an exception that applies. No other grounds exist. "Too hard to fix" and "project settings allow it" are not grounds.
+- **Severity is fixed.** A rule declared as blocker is reported as blocker. If in doubt about severity, use the severity declared in the rule. Do not invent intermediate severities.
+- **Rule-level `Skip` clauses still apply.** This preamble forbids inventing new skips, not following the ones the rule text itself declares.
+
+## Input
+
+The invoking command provides in the prompt:
+
+- **Stack**: Technology stack (Bun, NodeJS+React, Bun+React+Tailwind, NodeJS+React+Tailwind, or unknown)
+- **Diff**: Full PR unified diff
+
+## Checks
+
+Evaluate only changes visible in the diff (lines prefixed with `+` or `-`). Skip checks that do not apply to the diff.
+
+### A. Secrets and Credentials
+
+**CHECK-SEC-001: Hardcoded secret or credential** — Severity: blocker
+
+An API key, token, password, private key, or connection string with embedded credentials committed in source instead of read from a secret store or environment variable.
+
+- Example violation: `const apiKey = "sk-live-..."` in source.
+- Example violation: a database URL with inline `user:password@host`.
+- Skip: obvious non-secret placeholders (`"xxx"`, `"<your-token>"`, `process.env.X` references).
+
+### B. Injection
+
+**CHECK-SEC-002: Injection via unsanitized input** — Severity: blocker
+
+Untrusted input concatenated into a SQL query, shell command, file path, or HTML sink without parameterization, escaping, or validation.
+
+- Example violation: `db.query("SELECT * FROM users WHERE id = " + req.params.id)`.
+- Example violation: `Bun.spawn(["sh", "-c", \`rm \${userInput}\`])`.
+- Example violation: user input used in a filesystem path without normalization (path traversal).
+
+### C. Authentication and Authorization
+
+**CHECK-SEC-003: Missing or broken access control** — Severity: blocker
+
+A privileged action, route, or resource accessed without verifying authentication or the caller's authorization; a check that is present but trivially bypassed.
+
+- Example violation: a mutation endpoint that never checks the caller owns the resource.
+- Example violation: an `isAdmin` flag read from client-supplied input.
+
+### D. Cryptography
+
+**CHECK-SEC-004: Weak or misused cryptography** — Severity: blocker
+
+Use of a broken algorithm (MD5/SHA1 for security), a non-constant-time secret comparison, a hardcoded/static IV or salt, or `Math.random()` for security-sensitive values.
+
+- Example violation: comparing tokens with `===` instead of `crypto.timingSafeEqual`.
+- Example violation: deriving a key with an empty or constant salt.
+
+### E. Unsafe Deserialization and Evaluation
+
+**CHECK-SEC-005: Unsafe deserialization or dynamic evaluation of untrusted input** — Severity: blocker
+
+`eval`/`Function`, dynamic `import()`/`require()` with a user-controlled path, or deserializing attacker-controlled data into executable structures.
+
+- Example violation: `eval(req.body.expr)`.
+- Example violation: `require(userSuppliedPath)`.
+
+### F. Sensitive Data Exposure
+
+**CHECK-SEC-006: Secrets or PII written to logs or responses** — Severity: suggestion
+
+Tokens, passwords, full request bodies with credentials, or personal data logged or returned in an API/error response.
+
+- Example violation: `console.log("auth", req.headers.authorization)`.
+- Example violation: an error handler returning a stack trace with a connection string to the client.
+
+## Stack-Specific Guidance
+
+- **Bun / NodeJS+React / Bun+React+Tailwind / NodeJS+React+Tailwind**: XSS via `dangerouslySetInnerHTML` or unescaped template output; missing `timingSafeEqual` for secret comparison; `child_process`/`Bun.spawn` with shell strings; secrets passed via `Object.assign` from untrusted data.
+- **unknown**: Apply language-agnostic security checks only.
+
+## Output
+
+For each finding, `[Rule]` is the identifier from this agent's Checks section (e.g. `CHECK-SEC-002`). Use `UNSPECIFIED` only when a finding does not map to any defined check.
+
+Output ONLY the structured block. No preamble or commentary:
+
+```
+## Review: Security
+
+### Findings
+
+#### [emoji] [Title]
+- **File:** `path/to/file`
+- **Line:** N
+- **Rule:** CHECK-SEC-XXX
+- **Detail:** [1-2 sentence description]
+
+### Summary
+- Blockers: N
+- Suggestions: N
+- Nitpicks: N
+```
+
+If no findings:
+
+```
+## Review: Security
+
+No issues found.
+```
+</file>
+
 <file path="claude-plugins/autopilot/agents/pr:review:standards.md">
 ---
 name: pr:review:standards
@@ -22601,6 +22814,7 @@ File named generically (e.g., `utils.ts`, `helpers.ts`, `common.ts`, `maintenanc
 Related files follow different naming patterns — some use `_client` suffix, others use `_service`, mixing conventions.
 
 - Example violation: `audioClient.ts`, `speechService.ts`, `ttsHandler.ts` — inconsistent suffixes within a single domain.
+- Scope: **file and path** naming conventions. Inconsistent **identifier** naming inside code is CHECK-CPLX-006 (complexity) — do not double-report.
 
 **CHECK-CS-009: New file in wrong directory** — Severity: suggestion
 
@@ -27785,7 +27999,7 @@ Store the echoed value as `<path>` — it is the concrete reference Phase 2.4 us
 
 Used only when `PRECOMPUTED_REVIEWS_PATH` is empty or unset (see 2.2).
 
-Launch ALL 11 review agents **in parallel** (single message, multiple Agent tool calls). Each agent receives the stack and diff in its prompt. Some agents receive additional context.
+Launch ALL 12 review agents **in parallel** (single message, multiple Agent tool calls). Each agent receives the stack and diff in its prompt. Some agents receive additional context.
 
 **Prompt template for most agents:**
 
@@ -27861,9 +28075,13 @@ Agent 10 — Surface Testing & Quality (haiku):
 Agent 11 — Surface Naming & Structure (haiku):
   subagent_type: "autopilot:pr:review:surface-naming"
   description: "Review: surface-naming"
+
+Agent 12 — Security (sonnet):
+  subagent_type: "autopilot:pr:review:security"
+  description: "Review: security"
 ```
 
-After all 11 agents complete, proceed to Phase 2.5 with the list of structured review blocks.
+After all 12 agents complete, proceed to Phase 2.5 with the list of structured review blocks.
 
 ### 2.4 Pre-Computed Fan-Out Results
 
