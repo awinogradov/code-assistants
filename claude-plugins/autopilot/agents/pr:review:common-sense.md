@@ -70,9 +70,25 @@ New environment variable or feature flag added without documenting it in README,
 
 - Example violation: Code reads `ENABLE_CANARY_ROUTING` from env but no documentation mentions this variable.
 
+### D. Performance
+
+**CHECK-PERF-001: Repeated I/O or query inside a loop (N+1)** — Severity: suggestion
+
+A network call, database query, or filesystem read issued once per item in a loop where a single batched call would do. Cost scales with input and is a common latency/cost regression.
+
+- Example violation: `for (const id of ids) { await db.user(id) }` instead of one `db.users(ids)` batch.
+- Example violation: `await fetch(...)` per array element in a `for...of` with no batching or concurrency limit.
+
+**CHECK-PERF-002: Quadratic or unbounded per-item work** — Severity: suggestion
+
+An operation whose cost grows super-linearly with input — a nested scan (`Array.find`/`includes` inside a loop over a large collection) where a `Map`/`Set` would give O(1) lookup.
+
+- Example violation: `items.filter((a) => others.find((b) => b.id === a.id))` with a large `others` (build a `Set` of ids).
+- Skip: collections known to be small and fixed by the surrounding code.
+
 ## Stack-Specific Guidance
 
-- **Bun / NodeJS+React**: Check for `process.env` without docs, `setTimeout`/`setInterval` values, memory-unbounded Maps/Sets
+- **Bun / NodeJS+React**: Check for `process.env` without docs, `setTimeout`/`setInterval` values, memory-unbounded Maps/Sets, `Array.find`/`includes` inside loops, `await` inside `for...of` over large arrays
 - **unknown**: Apply language-agnostic common sense checks only
 
 ## Output

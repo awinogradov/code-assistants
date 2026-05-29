@@ -31,6 +31,9 @@ export interface FanoutContext {
   settingSources: ("user" | "project")[];
   pathToClaudeCodeExecutable: string | undefined;
   fallbackModel: string;
+  /** Per-category model overrides (e.g. `{ "correctness": "opus" }`), keyed by the
+   * bare review category. Takes precedence over the agent's frontmatter model. */
+  modelOverrides: Record<string, string>;
   /** Tools inherited from the root query — used when the agent file declares none. */
   inheritedAllowedTools: string[];
   inheritedDisallowedTools: string[];
@@ -138,6 +141,12 @@ export async function loadReviewAgents(pluginDir: string): Promise<AgentDefiniti
   );
 }
 
+/** Resolve a sub-agent's model: per-category override > frontmatter > fallback. */
+function resolveModel(ctx: FanoutContext, agent: AgentDefinition): string {
+  const category = agent.subagent_type.replace("autopilot:pr:review:", "");
+  return ctx.modelOverrides[category] ?? agent.model ?? ctx.fallbackModel;
+}
+
 /** Build the `Stack: ... Diff: ...` user prompt each review sub-agent expects. */
 export function buildSubagentPrompt(stack: string, diff: string): string {
   return `Stack: ${stack}\n\nDiff:\n\`\`\`diff\n${diff}\n\`\`\``;
@@ -217,7 +226,7 @@ async function runSubagent(
   const abortController = new AbortController();
   const timeout = setTimeout(() => abortController.abort(), ctx.subagentTimeoutMs);
 
-  const model = agent.model ?? ctx.fallbackModel;
+  const model = resolveModel(ctx, agent);
   let markdown = "";
   let error: string | undefined;
 
@@ -267,7 +276,7 @@ function buildSubagentOptions(
   abortController: AbortController,
 ): Parameters<typeof query>[0]["options"] {
   return {
-    model: agent.model ?? ctx.fallbackModel,
+    model: resolveModel(ctx, agent),
     allowedTools: agent.allowedTools ?? ctx.inheritedAllowedTools,
     disallowedTools: ctx.inheritedDisallowedTools,
     plugins: [{ type: "local" as const, path: ctx.pluginDir }],

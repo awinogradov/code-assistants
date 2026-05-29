@@ -65,6 +65,10 @@ inputs:
     description: "Run PR-review sub-agents as parallel headless SDK calls from the action orchestrator instead of delegating fan-out to the root model. Cuts review-phase wall time when working correctly. Opt-in until fan-out is stable."
     required: false
     default: "false"
+  review_model_overrides:
+    description: 'Optional JSON map of review category to model, overriding the per-agent default (orchestrator fan-out only). Example: {"correctness":"claude-opus-4-8","complexity":"claude-sonnet-4-6"}. Keys are the bare category (e.g. correctness, security, surface-naming).'
+    required: false
+    default: ""
   preflight_checks:
     description: "Wait for all PR checks to pass before running AI review (review mode only)"
     required: false
@@ -477,6 +481,7 @@ runs:
         EXECUTION_OUTPUT_FILE: ${{ runner.temp }}/claude-execution-output.json
         LOG_LEVEL: ${{ inputs.debug_logs == 'true' && 'debug' || 'info' }}
         PARALLEL_FANOUT: ${{ inputs.parallel_fanout }}
+        REVIEW_MODEL_OVERRIDES: ${{ inputs.review_model_overrides }}
         PR_NUMBER: ${{ steps.ctx.outputs.pr_number }}
       run: bun run "${{ github.action_path }}/src/runClaude.ts"
 
