@@ -16,6 +16,9 @@ import {
   getCurrentVersion,
   insertTicketsInRelease,
   main,
+  readPackageJsonVersion,
+  readPluginVersions,
+  readPyprojectVersion,
   startOfLastReleasePattern,
 } from "./release.ts";
 import { createCommit, createInitialCommitAndTag, withTempRepo } from "./testHelpers.ts";
@@ -438,6 +441,71 @@ describe("release CLI", () => {
         const changelog = await Bun.file(join(testRepo, "CHANGELOG.md")).text();
         expect(changelog).toContain("### Chores");
         expect(changelog).toContain("update readme");
+      }));
+  });
+});
+
+describe("version-file readers", () => {
+  describe("readPackageJsonVersion()", () => {
+    test("returns the version field", () =>
+      withTempRepo(async (repo) => {
+        await createPackageJson(repo, "1.4.0");
+        expect(await readPackageJsonVersion(repo)).toBe("1.4.0");
+      }));
+
+    test("returns null when the file is absent", () =>
+      withTempRepo(async (repo) => {
+        expect(await readPackageJsonVersion(repo)).toBeNull();
+      }));
+
+    test("returns null when no version field is present", () =>
+      withTempRepo(async (repo) => {
+        await Bun.write(join(repo, "package.json"), JSON.stringify({ name: "x" }));
+        expect(await readPackageJsonVersion(repo)).toBeNull();
+      }));
+  });
+
+  describe("readPluginVersions()", () => {
+    test("collects versions from plugin manifests", () =>
+      withTempRepo(async (repo) => {
+        await createPluginJson(repo, "my-plugin", "3.1.0");
+        expect(await readPluginVersions(repo)).toEqual(["3.1.0"]);
+      }));
+
+    test("returns an empty array when none exist", () =>
+      withTempRepo(async (repo) => {
+        expect(await readPluginVersions(repo)).toEqual([]);
+      }));
+  });
+
+  describe("readPyprojectVersion()", () => {
+    test("reads the [project] version (double quotes)", () =>
+      withTempRepo(async (repo) => {
+        await createPyprojectToml(repo, "0.7.0");
+        expect(await readPyprojectVersion(repo)).toBe("0.7.0");
+      }));
+
+    test("reads a single-quoted [project] version", () =>
+      withTempRepo(async (repo) => {
+        await Bun.write(
+          join(repo, "pyproject.toml"),
+          "[project]\nname = 'x'\nversion = '0.8.0'\n",
+        );
+        expect(await readPyprojectVersion(repo)).toBe("0.8.0");
+      }));
+
+    test("does not read a version from a later table when [project] has none", () =>
+      withTempRepo(async (repo) => {
+        await Bun.write(
+          join(repo, "pyproject.toml"),
+          '[project]\nname = "x"\ndynamic = ["version"]\n\n[tool.poetry]\nversion = "9.9.9"\n',
+        );
+        expect(await readPyprojectVersion(repo)).toBeNull();
+      }));
+
+    test("returns null when the file is absent", () =>
+      withTempRepo(async (repo) => {
+        expect(await readPyprojectVersion(repo)).toBeNull();
       }));
   });
 });
