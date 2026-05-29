@@ -21,6 +21,7 @@ import {
   parseModelOverrides,
   resolveClaudeBinary,
   safeParseJson,
+  withFanoutStats,
 } from "./runClaude.ts";
 
 describe("parseModelOverrides", () => {
@@ -398,6 +399,26 @@ describe("buildRunSummary", () => {
       cost_usd: 0,
       num_turns: 0,
       tool_round_trips: 0,
+    });
+  });
+});
+
+describe("withFanoutStats", () => {
+  const summary = { mode: "review", cost_usd: 0.1 };
+
+  test("returns the summary unchanged when no fan-out stats are present", () => {
+    expect(withFanoutStats(summary, undefined)).toEqual(summary);
+  });
+
+  test("merges fan-out counters under snake_case keys", () => {
+    expect(
+      withFanoutStats(summary, { agentCount: 12, failedCount: 1, parallelSpeedup: 8.5 })
+    ).toEqual({
+      mode: "review",
+      cost_usd: 0.1,
+      agent_count: 12,
+      failed_count: 1,
+      parallel_speedup: 8.5,
     });
   });
 });

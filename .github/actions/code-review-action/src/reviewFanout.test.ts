@@ -12,8 +12,9 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import type { FanoutContext } from "./reviewFanout.ts";
+import type { FanoutContext, SubagentResult } from "./reviewFanout.ts";
 import {
+  buildFanoutStats,
   buildSubagentPrompt,
   detectStack,
   loadReviewAgents,
@@ -21,6 +22,37 @@ import {
   resolveModel,
   splitFrontmatter,
 } from "./reviewFanout.ts";
+
+describe("buildFanoutStats", () => {
+  const result = (duration_ms: number, error?: string): SubagentResult => ({
+    subagent_type: "autopilot:pr:review:correctness",
+    markdown: "",
+    duration_ms,
+    error,
+  });
+
+  test("counts agents and failures", () => {
+    const stats = buildFanoutStats([result(100), result(200, "boom"), result(150)], 250);
+    expect(stats.agentCount).toBe(3);
+    expect(stats.failedCount).toBe(1);
+  });
+
+  test("computes parallel speedup as sum(agent time) / wall time", () => {
+    expect(buildFanoutStats([result(100), result(300)], 200).parallelSpeedup).toBe(2);
+  });
+
+  test("returns 0 speedup when no wall time elapsed", () => {
+    expect(buildFanoutStats([result(100)], 0).parallelSpeedup).toBe(0);
+  });
+
+  test("handles an empty result set", () => {
+    expect(buildFanoutStats([], 100)).toEqual({
+      agentCount: 0,
+      failedCount: 0,
+      parallelSpeedup: 0,
+    });
+  });
+});
 
 describe("resolveModel", () => {
   const ctx = (overrides: Record<string, string>) =>
