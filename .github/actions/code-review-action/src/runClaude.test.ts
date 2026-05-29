@@ -31,7 +31,9 @@ describe("parseModelOverrides", () => {
   });
 
   test("parses a category-to-model map", () => {
-    expect(parseModelOverrides('{"correctness":"claude-opus-4-8","complexity":"claude-sonnet-4-6"}')).toEqual({
+    expect(
+      parseModelOverrides('{"correctness":"claude-opus-4-8","complexity":"claude-sonnet-4-6"}'),
+    ).toEqual({
       correctness: "claude-opus-4-8",
       complexity: "claude-sonnet-4-6",
     });
@@ -74,7 +76,7 @@ describe("safeParseJson", () => {
 
   test("throws on invalid JSON with descriptive message", () => {
     expect(() => safeParseJson("{bad", "CLAUDE_JSON_SCHEMA")).toThrow(
-      "Invalid JSON in CLAUDE_JSON_SCHEMA"
+      "Invalid JSON in CLAUDE_JSON_SCHEMA",
     );
   });
 
@@ -293,7 +295,7 @@ describe("countToolRoundTrips", () => {
 
   test("returns 0 for messages without tool_use blocks", () => {
     expect(
-      countToolRoundTrips([{ type: "assistant", message: { content: [{ type: "text" }] } }])
+      countToolRoundTrips([{ type: "assistant", message: { content: [{ type: "text" }] } }]),
     ).toBe(0);
   });
 
@@ -412,13 +414,19 @@ describe("withFanoutStats", () => {
 
   test("merges fan-out counters under snake_case keys", () => {
     expect(
-      withFanoutStats(summary, { agentCount: 12, failedCount: 1, parallelSpeedup: 8.5 })
+      withFanoutStats(summary, {
+        agentCount: 12,
+        failedCount: 1,
+        parallelSpeedup: 8.5,
+        agentDurations: [{ category: "common-sense", durationMs: 158000 }],
+      }),
     ).toEqual({
       mode: "review",
       cost_usd: 0.1,
       agent_count: 12,
       failed_count: 1,
       parallel_speedup: 8.5,
+      agent_durations: [{ category: "common-sense", duration_ms: 158000 }],
     });
   });
 });

@@ -21,12 +21,18 @@ import {
   parseAgentFrontmatter,
   resolveModel,
   splitFrontmatter,
+  toAgentReviews,
 } from "./reviewFanout.ts";
+import type { ReviewFinding } from "./reviewFindings.ts";
 
 describe("buildFanoutStats", () => {
-  const result = (duration_ms: number, error?: string): SubagentResult => ({
-    subagent_type: "autopilot:pr:review:correctness",
-    markdown: "",
+  const result = (
+    duration_ms: number,
+    error?: string,
+    subagent_type = "autopilot:pr:review:correctness",
+  ): SubagentResult => ({
+    subagent_type,
+    findings: [],
     duration_ms,
     error,
   });
@@ -45,12 +51,54 @@ describe("buildFanoutStats", () => {
     expect(buildFanoutStats([result(100)], 0).parallelSpeedup).toBe(0);
   });
 
+  test("surfaces the top 3 slowest agents (descending) keyed by bare category", () => {
+    const stats = buildFanoutStats(
+      [
+        result(100, undefined, "autopilot:pr:review:standards"),
+        result(400, undefined, "autopilot:pr:review:common-sense"),
+        result(200, undefined, "autopilot:pr:review:testing"),
+        result(300, undefined, "autopilot:pr:review:surface-testing"),
+      ],
+      400,
+    );
+    expect(stats.agentDurations).toEqual([
+      { category: "common-sense", durationMs: 400 },
+      { category: "surface-testing", durationMs: 300 },
+      { category: "testing", durationMs: 200 },
+    ]);
+  });
+
   test("handles an empty result set", () => {
     expect(buildFanoutStats([], 100)).toEqual({
       agentCount: 0,
       failedCount: 0,
       parallelSpeedup: 0,
+      agentDurations: [],
     });
+  });
+});
+
+describe("toAgentReviews", () => {
+  const finding: ReviewFinding = {
+    severity: "blocker",
+    file: "src/a.ts",
+    line: 1,
+    rule: null,
+    title: "t",
+    detail: "d",
+  };
+
+  test("drops errored agents and tags survivors with their bare category", () => {
+    const reviews = toAgentReviews([
+      { subagent_type: "autopilot:pr:review:correctness", findings: [finding], duration_ms: 10 },
+      {
+        subagent_type: "autopilot:pr:review:security",
+        findings: [],
+        duration_ms: 5,
+        error: "boom",
+      },
+    ]);
+    expect(reviews).toEqual([{ category: "correctness", findings: [finding] }]);
   });
 });
 
@@ -61,15 +109,18 @@ describe("resolveModel", () => {
     ({ subagent_type, model }) as Parameters<typeof resolveModel>[1];
 
   test("prefers a per-category override over the frontmatter model", () => {
-    expect(resolveModel(ctx({ correctness: "opus" }), agent("autopilot:pr:review:correctness", "sonnet"))).toBe(
-      "opus"
-    );
+    expect(
+      resolveModel(
+        ctx({ correctness: "opus" }),
+        agent("autopilot:pr:review:correctness", "sonnet"),
+      ),
+    ).toBe("opus");
   });
 
   test("falls back to the frontmatter model when no override matches", () => {
-    expect(resolveModel(ctx({ testing: "opus" }), agent("autopilot:pr:review:correctness", "sonnet"))).toBe(
-      "sonnet"
-    );
+    expect(
+      resolveModel(ctx({ testing: "opus" }), agent("autopilot:pr:review:correctness", "sonnet")),
+    ).toBe("sonnet");
   });
 
   test("falls back to the context model when neither override nor frontmatter is set", () => {
@@ -77,9 +128,12 @@ describe("resolveModel", () => {
   });
 
   test("keys overrides by the bare category (autopilot:pr:review: stripped)", () => {
-    expect(resolveModel(ctx({ "surface-naming": "haiku" }), agent("autopilot:pr:review:surface-naming", "sonnet"))).toBe(
-      "haiku"
-    );
+    expect(
+      resolveModel(
+        ctx({ "surface-naming": "haiku" }),
+        agent("autopilot:pr:review:surface-naming", "sonnet"),
+      ),
+    ).toBe("haiku");
   });
 });
 

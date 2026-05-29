@@ -29,6 +29,15 @@ const footerEndMarker = "<!-- run-summary-end -->";
  * known literal, so a malformed value can never reach the rendered markdown.
  * Fan-out fields are present only when the parallel fan-out ran.
  */
+/**
+ * One slowest-agent entry in the run summary. Keyed in snake_case to match the
+ * serialized `run_summary` step-output contract the rest of this schema uses.
+ */
+const agentDurationSchema = z.object({
+  category: z.string(),
+  duration_ms: z.number(),
+});
+
 export const runSummarySchema = z.object({
   mode: z.enum(["review", "react", "unknown"]),
   fanout_ms: z.number(),
@@ -43,10 +52,14 @@ export const runSummarySchema = z.object({
   agent_count: z.number().optional(),
   failed_count: z.number().optional(),
   parallel_speedup: z.number().optional(),
+  agent_durations: z.array(agentDurationSchema).optional(),
 });
 
 /** Validated per-run summary rendered into the review footer. */
 export type RunSummary = z.infer<typeof runSummarySchema>;
+
+/** Serialized slowest-agent entry merged into the run summary by `withFanoutStats`. */
+export type AgentDurationSummary = z.infer<typeof agentDurationSchema>;
 
 /**
  * Parse the untrusted `RUN_SUMMARY` env value into a {@link RunSummary}.
@@ -90,6 +103,12 @@ function buildRows(summary: RunSummary): string[] {
     rows.push(["Failed agents", String(summary.failed_count ?? 0)]);
     if (summary.parallel_speedup !== undefined) {
       rows.push(["Parallel speedup", `${summary.parallel_speedup}×`]);
+    }
+    if (summary.agent_durations && summary.agent_durations.length > 0) {
+      const slowest = summary.agent_durations
+        .map((d) => `${d.category} ${formatSeconds(d.duration_ms)}`)
+        .join(" · ");
+      rows.push(["Slowest agents", slowest]);
     }
   }
 

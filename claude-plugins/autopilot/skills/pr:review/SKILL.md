@@ -51,7 +51,7 @@ gh pr view <PR_NUMBER> -R <REPO> --json title,body,files,commits,reviews,comment
 gh pr diff <PR_NUMBER> -R <REPO>
 ```
 
-**Single-source the diff.** If `PRECOMPUTED_REVIEWS_PATH` is set (orchestrator fan-out, Phase 2.4), the sub-agents already received the diff and the root model only aggregates their findings — **skip `gh pr diff` entirely** in that case. Fetch it only for in-model fan-out (Phase 2.3). Never embed the diff more than once.
+**Single-source the diff.** If `PRECOMPUTED_REVIEWS_PATH` is set (orchestrator fan-out, Phase 2.4), the sub-agents already received the diff and the root model only formats the pre-merged findings — **skip `gh pr diff` entirely** in that case. Fetch it only for in-model fan-out (Phase 2.3). Never embed the diff more than once.
 
 ### 1.2 Load Context via Sub-Agents
 
@@ -241,38 +241,42 @@ Agent 12 — Security (sonnet):
   description: "Review: security"
 ```
 
-After all 12 agents complete, proceed to Phase 2.5 with the list of structured review blocks.
+Each agent returns a structured JSON object of the form `{ "findings": [ { "severity", "file", "line", "rule", "title", "detail" }, ... ] }` (see Phase 2.4 for the field contract). After all 12 agents complete, proceed to Phase 2.5 with the list of per-agent findings to merge in-model.
 
 ### 2.4 Pre-Computed Fan-Out Results
 
-Used only when `PRECOMPUTED_REVIEWS_PATH` is set to a non-empty path (see 2.2). The orchestrator has already run the 11 sub-agents in parallel as headless SDK queries and written their markdown to this file.
+Used only when `PRECOMPUTED_REVIEWS_PATH` is set to a non-empty path (see 2.2). The orchestrator has already run the 12 sub-agents in parallel as headless SDK queries, **merged their structured findings deterministically in code** (`aggregateReviews.ts`), and written the result to this file.
 
-Read the file with the Read tool. It is a JSON array where each element matches:
+Read the file with the Read tool. It is a JSON object holding the already-merged, severity-ordered findings:
 
 ```json
 {
-  "subagent_type": "autopilot:pr:review:<category>",
-  "markdown": "...structured review block...",
-  "duration_ms": 12345,
-  "error": "<optional>"
+  "findings": [
+    {
+      "severity": "blocker" | "suggestion" | "nitpick",
+      "file": "src/file.ts",
+      "line": 42,
+      "rule": "CHECK-BUG-002" | "CHECK-BUG-002, CHECK-AI-002" | null,
+      "title": "Short title",
+      "detail": "1-2 sentence description"
+    }
+  ]
 }
 ```
 
 **Extraction rules:**
 
 1. Parse the file as JSON.
-2. For each array entry:
-   - If `error` is a non-empty string, **skip** that entry — same policy as a failed in-model sub-agent (do not block the review for orchestrator-side failures; that dimension just contributes no findings).
-   - Otherwise, treat `markdown` as the output that the `subagent_type` sub-agent would have produced. It is already in the structured format Phase 2.5 expects.
-3. After processing all entries, you have a list of structured review blocks. Proceed to Phase 2.5.
+2. The `findings` array is **already deduplicated by `(file, line)`, has rule codes merged, and is ordered blockers → suggestions → nitpicks**. Do NOT re-merge or re-order — the orchestrator did that. Per-agent failures were already dropped (their dimension contributes no findings) and counted in the run summary.
+3. Skip Phase 2.5 entirely (it applies only to the in-model path) and go straight to Phase 3 with this finding list.
 
 **Hard-failure policy (orchestrator contract violation):**
 
 If any of the following is true, do NOT fall back silently — emit a `comment` verdict so the orchestrator bug is loudly visible in CI without blocking the PR author for a failure they cannot fix:
 
 - The file at `$PRECOMPUTED_REVIEWS_PATH` does not exist or is not readable.
-- The file content is not valid JSON, or the top-level value is not an array.
-- Any array entry is missing the required `subagent_type` or `markdown` field (both must be strings).
+- The file content is not valid JSON, or the top-level value is not an object with a `findings` array.
+- Any finding is missing a required field (`severity`, `file`, `title`, `detail` must be present; `line` and `rule` may be `null`).
 
 In that case, skip Phase 2.5 and Phase 3's normal aggregation. Emit the following structured output directly and end the command:
 
@@ -286,16 +290,17 @@ In that case, skip Phase 2.5 and Phase 3's normal aggregation. Emit the followin
 
 Replace `<path>` with the env var value and `<one-line diagnostic>` with the specific failure mode. Do not include file contents or stack traces in the review body.
 
-### 2.5 Aggregate Findings
+### 2.5 Aggregate Findings (in-model path only)
 
-After all review results are available — whether produced in Phase 2.3 (in-model) or Phase 2.4 (pre-computed) — apply the same aggregation pipeline:
+**Skip this phase on the pre-computed path (Phase 2.4) — the orchestrator already merged the findings.** Apply it only to the in-model fan-out (Phase 2.3), where you hold 12 separate `{ "findings": [...] }` objects:
 
-1. Parse each review block's structured output (findings with severity emoji, file, line, **rule** code, detail). The rule code is the value of the `- **Rule:**` field (regex anchor: `^- \*\*Rule:\*\* ([A-Z0-9-]+)$`). If an agent omits the field, the finding has no rule code — do NOT substitute `UNSPECIFIED`; the suffix is simply omitted in step 5.
-2. If a review block indicates the agent failed or timed out (in-model) or had `error` set (pre-computed), skip that dimension — do not block the review.
-3. Deduplicate findings by `(path, line)` — if two agents flag the same location, keep the higher severity (🚧 > 🙋‍♂️ > 💡) and merge descriptions if complementary. Merge rule codes as a bare comma-separated list inside one bracket pair: `[CHECK-BUG-002, CHECK-AI-002]`.
+1. Each finding is a JSON object: `{ severity, file, line, rule, title, detail }`. `severity` is one of `blocker | suggestion | nitpick`; `line` is `null` for out-of-diff findings; `rule` is `null` when the finding maps to no `CHECK-` code (do NOT substitute `UNSPECIFIED`).
+2. If an agent failed or timed out, skip that dimension — do not block the review.
+3. Deduplicate findings by `(file, line)` — if two agents flag the same location, keep the higher severity (`blocker` > `suggestion` > `nitpick`) and merge their `rule` codes into one bare comma-separated list (e.g. `CHECK-BUG-002, CHECK-AI-002`). Findings with a `null` line are never merged.
 4. Merge all findings into a single list ordered by severity: blockers first, then suggestions, then nitpicks.
-5. Propagate the rule code to the final review: append a **bare** ` [<RULE>]` (or ` [<CODE1>, <CODE2>]` when several codes share a location) to the end of each finding line in `reviewComment` and each `inlineComments.body`. Do NOT build markdown links and do NOT read agent files to construct URLs — `code-review-action` resolves every code to its canonical GitHub link deterministically after the model finishes (see §2.6). When the sub-agent emitted no rule code, append nothing (do not emit `[UNSPECIFIED]`). The emoji stays first so downstream severity filters keep working.
-6. Proceed to Phase 3.
+5. Proceed to Phase 3 with this finding list.
+
+**Both paths**, when rendering findings into `reviewComment` and `inlineComments` in Phase 3: map `severity` to its emoji (`blocker` → 🚧, `suggestion` → 🙋‍♂️, `nitpick` → 💡) and append the **bare** ` [<RULE>]` (or ` [<CODE1>, <CODE2>]`) from the finding's `rule` field. Do NOT build markdown links and do NOT read agent files to construct URLs — `code-review-action` resolves every code to its canonical GitHub link deterministically after the model finishes (see §2.6). When `rule` is `null`, append nothing. The emoji stays first so downstream severity filters keep working.
 
 ### 2.6 Rule-to-URL Mapping (done by the action, not the model)
 

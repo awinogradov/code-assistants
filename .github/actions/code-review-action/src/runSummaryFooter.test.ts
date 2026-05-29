@@ -30,6 +30,10 @@ const fanoutSummary: RunSummary = {
   agent_count: 12,
   failed_count: 1,
   parallel_speedup: 8.5,
+  agent_durations: [
+    { category: "common-sense", duration_ms: 158000 },
+    { category: "surface-testing", duration_ms: 127000 },
+  ],
 };
 
 describe("parseRunSummary", () => {
@@ -98,6 +102,19 @@ describe("renderRunSummaryFooter", () => {
     expect(footer).toContain("| Failed agents | 1 |");
     expect(footer).toContain("| Parallel speedup | 8.5× |");
   });
+
+  test("renders the slowest-agents row as a category/seconds list", () => {
+    expect(renderRunSummaryFooter(fanoutSummary)).toContain(
+      "| Slowest agents | common-sense 158.0s · surface-testing 127.0s |",
+    );
+  });
+
+  test("omits the slowest-agents row when durations are absent or empty", () => {
+    expect(renderRunSummaryFooter(coreSummary)).not.toContain("Slowest agents");
+    expect(renderRunSummaryFooter({ ...fanoutSummary, agent_durations: [] })).not.toContain(
+      "Slowest agents",
+    );
+  });
 });
 
 describe("stripRunSummaryFooter", () => {
@@ -113,7 +130,7 @@ describe("stripRunSummaryFooter", () => {
   test("round-trips: stripping an appended footer yields the original content", () => {
     const reviewComment = "### Review\n\nLGTM";
     expect(stripRunSummaryFooter(reviewComment + renderRunSummaryFooter(coreSummary))).toBe(
-      reviewComment
+      reviewComment,
     );
   });
 

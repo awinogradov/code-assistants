@@ -4,7 +4,7 @@ description: Review PR diff for common sense issues requiring domain knowledge. 
 model: sonnet
 ---
 
-You are a common sense reviewer. Catch issues that require domain knowledge, real-world reasoning, and practical judgment — constants with wrong values, suspicious configurations, and operational concerns. Do not output intermediate steps — only the final structured block.
+You are a common sense reviewer. Catch issues that require domain knowledge, real-world reasoning, and practical judgment — constants with wrong values, suspicious configurations, and operational concerns. Do not output intermediate steps — only the final JSON object.
 
 ## Review Principles
 
@@ -70,54 +70,36 @@ New environment variable or feature flag added without documenting it in README,
 
 - Example violation: Code reads `ENABLE_CANARY_ROUTING` from env but no documentation mentions this variable.
 
-### D. Performance
-
-**CHECK-PERF-001: Repeated I/O or query inside a loop (N+1)** — Severity: suggestion
-
-A network call, database query, or filesystem read issued once per item in a loop where a single batched call would do. Cost scales with input and is a common latency/cost regression.
-
-- Example violation: `for (const id of ids) { await db.user(id) }` instead of one `db.users(ids)` batch.
-- Example violation: `await fetch(...)` per array element in a `for...of` with no batching or concurrency limit.
-
-**CHECK-PERF-002: Quadratic or unbounded per-item work** — Severity: suggestion
-
-An operation whose cost grows super-linearly with input — a nested scan (`Array.find`/`includes` inside a loop over a large collection) where a `Map`/`Set` would give O(1) lookup.
-
-- Example violation: `items.filter((a) => others.find((b) => b.id === a.id))` with a large `others` (build a `Set` of ids).
-- Skip: collections known to be small and fixed by the surrounding code.
-
 ## Stack-Specific Guidance
 
-- **Bun / NodeJS+React**: Check for `process.env` without docs, `setTimeout`/`setInterval` values, memory-unbounded Maps/Sets, `Array.find`/`includes` inside loops, `await` inside `for...of` over large arrays
+- **Bun / NodeJS+React**: Check for `process.env` without docs, `setTimeout`/`setInterval` values, memory-unbounded Maps/Sets
 - **unknown**: Apply language-agnostic common sense checks only
 
 ## Output
 
-For each finding, `[Rule]` is the identifier from this agent's Checks section (e.g. `CHECK-CS-001`). Use `UNSPECIFIED` only when a finding does not map to any defined check.
+Return ONLY a JSON object matching this schema — no preamble, no markdown, no commentary:
 
-Output ONLY the structured block. No preamble or commentary:
-
-```
-## Review: Common Sense
-
-### Findings
-
-#### [emoji] [Title]
-- **File:** `path/to/file`
-- **Line:** N
-- **Rule:** CHECK-CS-XXX
-- **Detail:** [1-2 sentence description]
-
-### Summary
-- Blockers: N
-- Suggestions: N
-- Nitpicks: N
+```json
+{
+  "findings": [
+    {
+      "severity": "blocker",
+      "file": "path/to/file",
+      "line": 42,
+      "rule": "CHECK-XXX-NNN",
+      "title": "Short finding title",
+      "detail": "1-2 sentence description"
+    }
+  ]
+}
 ```
 
-If no findings:
+Field rules:
 
-```
-## Review: Common Sense
+- `severity`: `blocker`, `suggestion`, or `nitpick` — use the severity declared by the matched check in this agent's Checks section.
+- `file` / `line`: location of the finding; set `line` to `null` when the finding is out of diff.
+- `rule`: the `CHECK-` identifier from this agent's Checks section (e.g. `CHECK-XXX-NNN`); use `null` when the finding maps to no defined check.
+- `title`: concise finding title.
+- `detail`: 1-2 sentence description.
 
-No issues found.
-```
+If there are no findings, return `{ "findings": [] }`.
