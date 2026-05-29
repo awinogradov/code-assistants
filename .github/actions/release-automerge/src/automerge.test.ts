@@ -9,8 +9,10 @@ import { describe, expect, test } from "bun:test";
 
 import {
   isApprovedDecision,
-  parseAutomergeOptIn,
+  parseAutomerge,
   pickReleasePr,
+  releaseMemberDir,
+  resolveAutomergeOptIn,
   selectMergeMethod,
 } from "./automerge.ts";
 
@@ -76,53 +78,88 @@ describe("isApprovedDecision", () => {
   });
 });
 
-describe("parseAutomergeOptIn", () => {
+describe("parseAutomerge", () => {
   const source = "owner/repo:package.json@abc1234";
 
-  test("false when raw content is null (missing file)", () => {
-    expect(parseAutomergeOptIn(null, source)).toBe(false);
+  test("undefined when raw content is null (missing file)", () => {
+    expect(parseAutomerge(null, source)).toBeUndefined();
   });
 
   test("true when release.automerge is true", () => {
-    expect(parseAutomergeOptIn(JSON.stringify({ release: { automerge: true } }), source)).toBe(
-      true,
-    );
-  });
-
-  test("true alongside a monorepo members root", () => {
-    expect(
-      parseAutomergeOptIn(
-        JSON.stringify({ release: { members: ["packages/*"], automerge: true } }),
-        source,
-      ),
-    ).toBe(true);
+    expect(parseAutomerge(JSON.stringify({ release: { automerge: true } }), source)).toBe(true);
   });
 
   test("false when release.automerge is false", () => {
-    expect(parseAutomergeOptIn(JSON.stringify({ release: { automerge: false } }), source)).toBe(
-      false,
-    );
+    expect(parseAutomerge(JSON.stringify({ release: { automerge: false } }), source)).toBe(false);
   });
 
-  test("false when release.automerge is absent", () => {
+  test("undefined when release.automerge is absent", () => {
     expect(
-      parseAutomergeOptIn(JSON.stringify({ release: { type: "github-action" } }), source),
-    ).toBe(false);
+      parseAutomerge(JSON.stringify({ release: { type: "github-action" } }), source),
+    ).toBeUndefined();
   });
 
-  test("false when there is no release field", () => {
-    expect(parseAutomergeOptIn(JSON.stringify({ name: "x" }), source)).toBe(false);
+  test("undefined when there is no release field", () => {
+    expect(parseAutomerge(JSON.stringify({ name: "x" }), source)).toBeUndefined();
   });
 
   test("throws naming the source when JSON is malformed", () => {
-    expect(() => parseAutomergeOptIn("{ not json", source)).toThrow(
+    expect(() => parseAutomerge("{ not json", source)).toThrow(
       /Failed to read auto-merge opt-in from owner\/repo:package\.json@abc1234/,
     );
   });
 
   test("throws when release.automerge is not a boolean", () => {
-    expect(() =>
-      parseAutomergeOptIn(JSON.stringify({ release: { automerge: "yes" } }), source),
-    ).toThrow(/'release\.automerge'.*must be a boolean/);
+    expect(() => parseAutomerge(JSON.stringify({ release: { automerge: "yes" } }), source)).toThrow(
+      /'release\.automerge'.*must be a boolean/,
+    );
+  });
+});
+
+describe("resolveAutomergeOptIn", () => {
+  test("member true enables regardless of root", () => {
+    expect(resolveAutomergeOptIn(true, undefined)).toBe(true);
+    expect(resolveAutomergeOptIn(true, false)).toBe(true);
+  });
+
+  test("member false overrides an enabled root", () => {
+    expect(resolveAutomergeOptIn(false, true)).toBe(false);
+  });
+
+  test("unset member inherits the root default", () => {
+    expect(resolveAutomergeOptIn(undefined, true)).toBe(true);
+    expect(resolveAutomergeOptIn(undefined, false)).toBe(false);
+  });
+
+  test("disabled when both member and root are unset", () => {
+    expect(resolveAutomergeOptIn(undefined, undefined)).toBe(false);
+  });
+});
+
+describe("releaseMemberDir", () => {
+  test("returns the member directory from its release-notes file", () => {
+    expect(
+      releaseMemberDir([
+        "packages/actions-core/.release_notes/0.0.1.md",
+        "packages/actions-core/package.json",
+      ]),
+    ).toBe("packages/actions-core/");
+  });
+
+  test("returns empty string for a standalone repo (notes at root)", () => {
+    expect(releaseMemberDir([".release_notes/1.0.0.md", "CHANGELOG.md"])).toBe("");
+  });
+
+  test("null when no release-notes file is present", () => {
+    expect(releaseMemberDir(["packages/actions-core/package.json"])).toBeNull();
+  });
+
+  test("null when multiple distinct members are referenced", () => {
+    expect(
+      releaseMemberDir([
+        "packages/a/.release_notes/1.0.0.md",
+        "packages/b/.release_notes/2.0.0.md",
+      ]),
+    ).toBeNull();
   });
 });
