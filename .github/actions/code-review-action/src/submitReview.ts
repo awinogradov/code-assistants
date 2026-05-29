@@ -29,6 +29,11 @@ import {
   unresolveThread,
   verdictToEvent,
 } from "./github/githubReview.ts";
+import {
+  parseRunSummary,
+  renderRunSummaryFooter,
+  stripRunSummaryFooter,
+} from "./runSummaryFooter.ts";
 
 /**
  * Cleanup bot review threads by resolving outdated ones, duplicates, and fixed blockers.
@@ -138,7 +143,16 @@ const invalidComments = allComments
   .filter((c) => !isValidComment(c, validLines))
   .filter((c) => !isAlreadyMentioned(c, output.reviewComment));
 
-const finalBody = output.reviewComment + formatInvalidComments(invalidComments);
+// Append the per-run metrics as a collapsible footer on the main review comment
+// only (never inline, never react replies). Fail-open: no footer when RUN_SUMMARY
+// is absent or invalid.
+const runSummary = parseRunSummary(process.env.RUN_SUMMARY);
+const runSummaryFooter = runSummary ? renderRunSummaryFooter(runSummary) : "";
+const finalBody = output.reviewComment + formatInvalidComments(invalidComments) + runSummaryFooter;
+
+// The footer carries run-varying numbers (cost, latency); strip it from both
+// bodies so the duplicate-suppression guard compares the stable content only.
+const dedupKey = (body: string): string => normalizeBody(stripRunSummaryFooter(body));
 
 console.log(
   `Submitting ${event} review: ${validComments.length} inline comments, ${invalidComments.length} moved to body...`
@@ -163,7 +177,7 @@ if (resolvedCount > 0) {
 const lastBotReview = await getLastBotReview(octokit, owner, repoName, pullNumber, reviewer);
 
 // Skip if last bot review has identical body (prevents duplicate from concurrent posting)
-if (lastBotReview && normalizeBody(lastBotReview.body ?? "") === normalizeBody(finalBody)) {
+if (lastBotReview && dedupKey(lastBotReview.body ?? "") === dedupKey(finalBody)) {
   console.log("✓ Review already posted, skipping duplicate");
   process.exit(0);
 }
@@ -186,7 +200,7 @@ await deletePendingReviews(octokit, owner, repoName, pullNumber);
 // A concurrent run (the per-comment concurrency group does not serialize same-PR
 // runs) may have posted an identical body since the check above — skip if so.
 const guardReview = await getLastBotReview(octokit, owner, repoName, pullNumber, reviewer);
-if (guardReview && normalizeBody(guardReview.body ?? "") === normalizeBody(finalBody)) {
+if (guardReview && dedupKey(guardReview.body ?? "") === dedupKey(finalBody)) {
   console.log("✓ Identical review appeared concurrently, skipping duplicate");
   process.exit(0);
 }

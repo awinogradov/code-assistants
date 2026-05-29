@@ -21,7 +21,7 @@ import { z } from "zod";
 
 import { setOutput } from "./actionsOutput.ts";
 import { logMessage } from "./logClaudeMessage.ts";
-import { runReviewFanout, type FanoutContext } from "./reviewFanout.ts";
+import { runReviewFanout, type FanoutContext, type FanoutStats } from "./reviewFanout.ts";
 
 /** Duration above which a Claude session is considered long-running (triggers artifact upload). */
 const longRunMs = 5 * 60 * 1000;
@@ -316,7 +316,7 @@ async function runFanoutIfEnabled(
   settingSources: ("user" | "project")[],
   mcpServers: Record<string, McpServerConfig>,
   pathToClaudeCodeExecutable: string | undefined
-): Promise<string | undefined> {
+): Promise<{ outputPath: string; stats: FanoutStats } | undefined> {
   if (!log || !shouldRunFanout(config)) return undefined;
 
   const fanoutCtx: FanoutContext = {
@@ -335,11 +335,11 @@ async function runFanoutIfEnabled(
     subagentTimeoutMs: 10 * 60 * 1000,
   };
 
-  const results = await runReviewFanout(fanoutCtx);
+  const { results, stats } = await runReviewFanout(fanoutCtx);
   const outputPath = `${process.env.RUNNER_TEMP ?? "/tmp"}/precomputed-reviews.json`;
   await Bun.write(outputPath, JSON.stringify(results, null, 2));
   log.info({ output_path: outputPath, count: results.length }, "Fan-out results written.");
-  return outputPath;
+  return { outputPath, stats };
 }
 
 /** Run Claude Code and write outputs. Exported for visibility, called from main guard. */
@@ -364,7 +364,7 @@ async function run(): Promise<void> {
   );
 
   const fanoutStart = performance.now();
-  const precomputedReviewsPath = await runFanoutIfEnabled(
+  const fanout = await runFanoutIfEnabled(
     config,
     settingSources as ("user" | "project")[],
     mcpServers,
@@ -398,7 +398,7 @@ async function run(): Promise<void> {
         ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? "",
         CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN ?? "",
         GH_TOKEN: process.env.GH_TOKEN ?? "",
-        PRECOMPUTED_REVIEWS_PATH: precomputedReviewsPath ?? "",
+        PRECOMPUTED_REVIEWS_PATH: fanout?.outputPath ?? "",
       },
     },
   });
@@ -413,7 +413,13 @@ async function run(): Promise<void> {
   // Prevent the 30min timer from keeping the event loop alive after completion
   clearTimeout(timeout);
 
-  logRunSummary(log, deriveMode(config.prompt), messages, { fanoutMs, modelMs });
+  // Emit the run summary (log + step output) BEFORE emitOutputs, which may
+  // process.exit(1) on a non-success result — keeping the footer data available
+  // to the separate submitReview step even on a failed run.
+  const summary = buildRunSummary(deriveMode(config.prompt), messages, { fanoutMs, modelMs });
+  log.info(summary, "Run summary.");
+  await setOutput("run_summary", JSON.stringify(withFanoutStats(summary, fanout?.stats)));
+
   await writeExecutionFile(log, config.outputFilePath, messages);
   await emitOutputs(log, config.outputFilePath, messages);
 }
@@ -531,17 +537,21 @@ export function buildRunSummary(
 }
 
 /**
- * Emit the per-run summary as one structured log line. Logged before
- * {@link emitOutputs} so it survives even when the run concludes with a
- * non-success exit.
+ * Merge the optional fan-out counters (snake_case) into the run summary so the
+ * review footer can render them. Returns the summary unchanged when fan-out did
+ * not run (react mode or a non-fan-out review).
  */
-function logRunSummary(
-  log: pino.Logger,
-  mode: string,
-  messages: unknown[],
-  timings: PhaseTimings
-): void {
-  log.info(buildRunSummary(mode, messages, timings), "Run summary.");
+export function withFanoutStats(
+  summary: Record<string, number | string>,
+  stats: FanoutStats | undefined
+): Record<string, number | string> {
+  if (!stats) return summary;
+  return {
+    ...summary,
+    agent_count: stats.agentCount,
+    failed_count: stats.failedCount,
+    parallel_speedup: stats.parallelSpeedup,
+  };
 }
 
 /**

@@ -1,0 +1,138 @@
+/**
+ * Render and strip the per-run summary footer appended to a PR review comment.
+ *
+ * The review-run metrics (cost, latency, tokens, tool round-trips, optional
+ * fan-out stats) are computed in `runClaude.ts` and serialized into the
+ * `run_summary` step output. `submitReview.ts` parses that JSON and appends a
+ * collapsible `<details>` footer to the main review comment. The footer is
+ * wrapped in HTML-comment markers so the duplicate-suppression guard can strip
+ * the run-varying numbers before comparing review bodies.
+ *
+ * @example
+ * const summary = parseRunSummary(process.env.RUN_SUMMARY);
+ * const body = reviewComment + (summary ? renderRunSummaryFooter(summary) : "");
+ * // dedup: normalizeBody(stripRunSummaryFooter(body))
+ */
+import { z } from "zod";
+
+/** Opening marker bounding the run-summary footer, used for dedup stripping. */
+const footerStartMarker = "<!-- run-summary-start -->";
+
+/** Closing marker bounding the run-summary footer, used for dedup stripping. */
+const footerEndMarker = "<!-- run-summary-end -->";
+
+/**
+ * Schema for the serialized per-run summary passed via the `RUN_SUMMARY` env.
+ * Strict (no coercion): every metric must already be a number and `mode` a
+ * known literal, so a malformed value can never reach the rendered markdown.
+ * Fan-out fields are present only when the parallel fan-out ran.
+ */
+export const runSummarySchema = z.object({
+  mode: z.enum(["review", "react", "unknown"]),
+  fanout_ms: z.number(),
+  model_ms: z.number(),
+  tokens_in: z.number(),
+  tokens_out: z.number(),
+  cache_read_tokens: z.number(),
+  cache_creation_tokens: z.number(),
+  cost_usd: z.number(),
+  num_turns: z.number(),
+  tool_round_trips: z.number(),
+  agent_count: z.number().optional(),
+  failed_count: z.number().optional(),
+  parallel_speedup: z.number().optional(),
+});
+
+/** Validated per-run summary rendered into the review footer. */
+export type RunSummary = z.infer<typeof runSummarySchema>;
+
+/**
+ * Parse the untrusted `RUN_SUMMARY` env value into a {@link RunSummary}.
+ * Fails open: returns `undefined` for an empty, non-JSON, or schema-invalid
+ * value so the review is posted without a footer rather than blocked.
+ */
+export function parseRunSummary(raw: string | undefined): RunSummary | undefined {
+  if (!raw) return undefined;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+
+  const result = runSummarySchema.safeParse(parsed);
+  return result.success ? result.data : undefined;
+}
+
+/** Format a millisecond duration as seconds with one decimal (e.g. `34.0s`). */
+function formatSeconds(ms: number): string {
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+/** Build the markdown metric rows, adding fan-out rows only when present. */
+function buildRows(summary: RunSummary): string[] {
+  const rows = [
+    ["Mode", summary.mode],
+    ["Model time", formatSeconds(summary.model_ms)],
+    ["Fan-out time", formatSeconds(summary.fanout_ms)],
+    ["Tool round-trips", String(summary.tool_round_trips)],
+    ["Assistant turns", String(summary.num_turns)],
+    ["Tokens in / out", `${summary.tokens_in} / ${summary.tokens_out}`],
+    ["Cache read / write", `${summary.cache_read_tokens} / ${summary.cache_creation_tokens}`],
+    ["Cost (USD)", `$${summary.cost_usd.toFixed(2)}`],
+  ];
+
+  if (summary.agent_count !== undefined) {
+    rows.push(["Agents", String(summary.agent_count)]);
+    rows.push(["Failed agents", String(summary.failed_count ?? 0)]);
+    if (summary.parallel_speedup !== undefined) {
+      rows.push(["Parallel speedup", `${summary.parallel_speedup}×`]);
+    }
+  }
+
+  return rows.map(([label, value]) => `| ${label} | ${value} |`);
+}
+
+/**
+ * Render the marker-wrapped, collapsible run-summary footer.
+ *
+ * Mirrors the "under the cut" pattern in `updatePrFooter.ts`: the start marker
+ * sits directly above the `---` rule, and a blank line follows `<br />` so the
+ * GitHub-flavored markdown table renders inside the `<details>` block. Fan-out
+ * rows (Agents / Failed agents / Parallel speedup) appear only when the
+ * parallel fan-out ran.
+ */
+export function renderRunSummaryFooter(summary: RunSummary): string {
+  return [
+    "",
+    "",
+    footerStartMarker,
+    "---",
+    "<details>",
+    "<summary>Review run summary 🤖</summary>",
+    "<br />",
+    "",
+    "| Metric | Value |",
+    "| --- | --- |",
+    ...buildRows(summary),
+    "",
+    "</details>",
+    footerEndMarker,
+  ].join("\n");
+}
+
+/**
+ * Remove the marker-bounded run-summary footer (inclusive of the `---` rule)
+ * from a review body so duplicate detection compares the stable content only.
+ * Returns the body unchanged when either marker is absent.
+ */
+export function stripRunSummaryFooter(body: string): string {
+  const start = body.indexOf(footerStartMarker);
+  if (start === -1) return body;
+
+  const end = body.indexOf(footerEndMarker, start);
+  if (end === -1) return body;
+
+  return (body.slice(0, start) + body.slice(end + footerEndMarker.length)).trimEnd();
+}
