@@ -34,7 +34,7 @@ the merge with no manual step.
    │ release-automerge action                          │
    │ 1. resolve open PR for the head SHA               │
    │ 2. head ref ~ ^release-  AND  state == open ?     │
-   │ 3. root package.json release.automerge === true ? │
+   │ 3. release.automerge === true (member|root) ?     │
    │ 4. all checks green? (shared aggregation)         │
    │ 5. reviewDecision == APPROVED ?                   │
    │ 6. merge (sha-pinned) with an allowed method      │
@@ -62,16 +62,20 @@ the merge with no manual step.
   The check aggregation reuses the same logic as the AI-review preflight (see
   [the shared `checkStatus` helper][checkstatus]), deduplicated by name and
   excluding the action's own job.
-- **Opt-in gate (default off):** the action reads the repo-root `package.json` at
-  the triggering head SHA and merges only when `release.automerge === true` (see
-  the [`release` field spec](./release-field.md)). The flag travels with the
-  release branch — a PR that toggles it changes its own merge eligibility. A
-  missing `package.json` is a clean skip; a malformed one fails closed (no merge);
-  a non-boolean `automerge` is rejected. **Migration:** because downstream repos
-  reference the action via `@main`, this gate ships as a behavior change — every
-  repo that relied on auto-merge must add `release.automerge: true` to its root
-  `package.json`, or its release PRs will stay approved-but-unmerged until a human
-  merges them.
+- **Opt-in gate (default off):** the action merges only when `release.automerge`
+  resolves to `true` (see the [`release` field spec](./release-field.md)). Because
+  a monorepo opens one release PR **per member** (`release-<member>-<version>`),
+  the gate resolves per member: it identifies the releasing member from the PR's
+  `<member>/.release_notes/<version>.md` file (the same signal the publish step
+  uses), then takes the member's own `release.automerge`, falling back to the
+  root default — `member ?? root ?? false`. Both are read at the triggering head
+  SHA, so the flag travels with the release branch. A missing `package.json` is a
+  clean skip; a malformed one fails closed (no merge); a non-boolean `automerge`
+  is rejected; a PR whose releasing member cannot be resolved is left unmerged.
+  **Migration:** because downstream repos reference the action via `@main`, this
+  gate ships as a behavior change — every repo that relied on auto-merge must add
+  `release.automerge: true` to its root (or per-member) `package.json`, or its
+  release PRs will stay approved-but-unmerged until a human merges them.
 - **Merge method:** the action reads the repository's allowed merge methods
   (`allow_rebase_merge` / `allow_squash_merge` / `allow_merge_commit`) and prefers
   `rebase`, falling back to `squash` then `merge`. The merge is pinned to the

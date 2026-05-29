@@ -37,6 +37,7 @@ type ReleaseType =
 interface ReleaseConfig {
   type: ReleaseType; // required
   slack?: string; // optional Slack channel, e.g. "#releases"
+  automerge?: boolean; // member opt-in for release-automerge; overrides the root default
 }
 
 // Root-only superset (repository-root `package.json` in a monorepo)
@@ -44,7 +45,7 @@ interface RootReleaseConfig {
   members?: string[]; // monorepo: explicit member paths (mutually exclusive with `type`)
   type?: ReleaseType; // standalone: same shape as ReleaseConfig
   slack?: string;
-  automerge?: boolean; // root-only opt-in for release-automerge (default false)
+  automerge?: boolean; // repo-wide default opt-in for release-automerge (default false)
 }
 ```
 
@@ -52,7 +53,7 @@ interface RootReleaseConfig {
 
 At the **root** of a monorepo, `release.members` declares the workspace paths to release; `type` is omitted on the root in that case. When neither `members` nor `type` is present, `release-action` falls back to expanding the root's `workspaces` globs and using only members that declare their own `release.type`.
 
-`automerge` is a **root-only**, repo-wide boolean consumed only by [`release-automerge`](../.github/actions/release-automerge/README.md) (default `false`). It opts the repository into auto-merging approved, all-green release PRs; it is independent of `members`/`type` and is never read per member. It is **not** a `release.type` value, so it does not appear in the recognized-`type` table below and does not follow the type-extension workflow.
+`automerge` is a boolean consumed only by [`release-automerge`](../.github/actions/release-automerge/README.md) (default `false`) that opts into auto-merging approved, all-green release PRs. Because a monorepo opens one release PR **per member** (`release-<member>-<version>`), it resolves per member: a member's own `release.automerge` overrides the root value, an unset member inherits the root default, and the effective opt-in is `member ?? root ?? false`. Set it on the **root** to enable the whole repo, or on a **member** to opt that package in or out independently. It is independent of `members`/`type` and is **not** a `release.type` value, so it does not appear in the recognized-`type` table below and does not follow the type-extension workflow.
 
 ### Recognized `type` values
 
@@ -70,11 +71,11 @@ Any other value is treated as unrecognized and fails the action.
 
 ## Consumers
 
-| Tool                                                                  | Reads               | Behavior                                                                                                                                                                  | Source                                                    |
-| --------------------------------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| [`release-action`](../.github/actions/release-action/README.md)       | `release.type`      | Selects version source, npm-publish step, GitHub Release step, and major-version tag based on the value's table row.                                                      | `.github/actions/release-action/src/detectReleaseType.ts` |
-| [`release-action`](../.github/actions/release-action/README.md)       | `release.slack`     | When present, posts a Slack notification to this channel after publish. When absent, the Slack step is skipped.                                                           | `.github/actions/release-action/src/slackNotify.ts`       |
-| [`release-automerge`](../.github/actions/release-automerge/README.md) | `release.automerge` | Merges an approved, all-green release PR only when `true` (read from the repo-root `package.json` at the PR head SHA). When `false` or absent, leaves the PR for a human. | `packages/actions-core/src/releaseField.ts`               |
+| Tool                                                                  | Reads               | Behavior                                                                                                                                                                                                     | Source                                                    |
+| --------------------------------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
+| [`release-action`](../.github/actions/release-action/README.md)       | `release.type`      | Selects version source, npm-publish step, GitHub Release step, and major-version tag based on the value's table row.                                                                                         | `.github/actions/release-action/src/detectReleaseType.ts` |
+| [`release-action`](../.github/actions/release-action/README.md)       | `release.slack`     | When present, posts a Slack notification to this channel after publish. When absent, the Slack step is skipped.                                                                                              | `.github/actions/release-action/src/slackNotify.ts`       |
+| [`release-automerge`](../.github/actions/release-automerge/README.md) | `release.automerge` | Merges an approved, all-green release PR only when the effective opt-in (releasing member's value, else root default) is `true`, read at the PR head SHA. When `false` or absent, leaves the PR for a human. | `packages/actions-core/src/releaseField.ts`               |
 
 ## Detection algorithm
 
@@ -162,7 +163,19 @@ Version source switches to `plugin.json`; npm publish is skipped; GitHub Release
 }
 ```
 
-`release-automerge` merges approved, all-green `release-*` PRs without a manual click. Because `members`/`type` are omitted, `release-action` still discovers members via the `workspaces` fallback — `automerge` only governs the merge step and is read at the PR head SHA. Omitting `automerge` (or setting it `false`) leaves release PRs for a human to merge.
+`release-automerge` merges approved, all-green `release-*` PRs without a manual click. Because `members`/`type` are omitted, `release-action` still discovers members via the `workspaces` fallback — `automerge` only governs the merge step and is read at the PR head SHA. Set on the root, it becomes the default for every member's release PR; a member can override it in its own `package.json`:
+
+```json
+{
+  "name": "@org/experimental",
+  "release": {
+    "type": "lib-nodejs",
+    "automerge": false
+  }
+}
+```
+
+Here the `@org/experimental` member's `release-experimental-<version>` PR is left for a human even though the root default is `true`. Omitting `automerge` everywhere (or setting it `false`) leaves release PRs for a human to merge.
 
 ## Extending
 
