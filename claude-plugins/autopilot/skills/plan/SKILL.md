@@ -6,6 +6,7 @@ allowed-tools:
   - Read
   - Grep
   - Glob
+  - Agent
   - Bash(git *)
   - Bash(gh *)
   - MCP(context7:*)
