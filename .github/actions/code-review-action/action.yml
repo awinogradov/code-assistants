@@ -407,6 +407,7 @@ runs:
         GH_TOKEN: ${{ inputs.bot_token }}
         REPO: ${{ github.repository }}
         PR_NUMBER: ${{ steps.ctx.outputs.pr_number }}
+        REVIEWER: ${{ inputs.reviewer }}
         HELP_ID: code-review-action
         HELP_TEXT: |
           - `@${{ inputs.reviewer }} <comment>` — Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.
