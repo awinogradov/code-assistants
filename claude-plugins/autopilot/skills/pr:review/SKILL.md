@@ -56,7 +56,9 @@ gh pr diff <PR_NUMBER> -R <REPO>
 
 Fetch the diff exactly once and review it in-model. Never embed the diff more than once.
 
-This `gh pr view` output is the authoritative source for prior-review state — previous reviews by REVIEWER, their verdicts, and inline comments. Do NOT use `gh api` to fetch review data: `gh api` is blocked in the review action, and a denied fetch must never be silently treated as "no prior findings" (that path produces an empty, content-free approval).
+This `gh pr view` output is the authoritative source for prior-review state: `reviews`/`latestReviews` carry each prior review's verdict and summary body (the body lists that round's findings). Do NOT use `gh api` to fetch review data: `gh api` is blocked in the review action, and a denied fetch must never be silently treated as "no prior findings" (that path produces an empty, content-free approval).
+
+Per-line inline annotations are not available through any allowed `gh pr view` field — they live only behind the blocked `gh api .../reviews/{id}/comments` (and the GraphQL `reviewThreads`, also `gh api`). Treat the prior review **bodies** as the record of past findings: the review skill writes a self-contained summary body for every non-empty review (see §"reviewComment Format"), so a finding worth tracking across rounds is in the body even when its inline twin is not fetchable. Do not block or bail when inline history is unavailable — it is a known, accepted limitation, not a fetch failure.
 
 ### 1.2 Load Context via Sub-Agents
 
@@ -106,8 +108,8 @@ After all calls complete, store the `outputId` from the snapshot acquisition (at
 
 **Follow-up review (previous review by REVIEWER exists):**
 
-1. Read all previous review comments and their findings
-2. Check if issues were addressed
+1. Read all previous review findings from the `reviews`/`latestReviews` bodies loaded in §1.1 (inline-comment history is not fetchable under the action's allowed tools — see §1.1)
+2. Check if issues were addressed by re-examining the current diff for each finding named in those bodies
 3. Compare current findings against previous review
 4. **SKIP (no structured JSON)** if: all findings are identical to previous review, OR no new findings and no unresolved issues
 5. If previous review was CHANGES_REQUESTED and all blockers are now fixed with no new findings → approve with empty `reviewComment` (no body text)
