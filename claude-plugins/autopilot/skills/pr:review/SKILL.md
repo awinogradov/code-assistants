@@ -50,11 +50,13 @@ You review the whole PR yourself in a single pass: load context, evaluate the di
 Fetch PR metadata and the diff:
 
 ```bash
-gh pr view <PR_NUMBER> -R <REPO> --json title,body,files,commits,reviews,comments
+gh pr view <PR_NUMBER> -R <REPO> --json title,body,files,commits,reviews,latestReviews,comments,reviewDecision
 gh pr diff <PR_NUMBER> -R <REPO>
 ```
 
 Fetch the diff exactly once and review it in-model. Never embed the diff more than once.
+
+This `gh pr view` output is the authoritative source for prior-review state — previous reviews by REVIEWER, their verdicts, and inline comments. Do NOT use `gh api` to fetch review data: `gh api` is blocked in the review action, and a denied fetch must never be silently treated as "no prior findings" (that path produces an empty, content-free approval).
 
 ### 1.2 Load Context via Sub-Agents
 
@@ -63,7 +65,7 @@ Extract the linked issue ID from PR metadata. Check in order, stop at first matc
 1. **PR body `Issues:` section** — lines starting with `Closes` or `Related to` followed by a ticket ID
 2. **Branch name** — leading `[a-z]+-[0-9]+` segment, convert to UPPERCASE
 
-Launch context-loading calls **in parallel**. If a linked issue was found, launch 3 calls; otherwise launch 2:
+Prior-review state (previous reviews, verdicts, inline comments) already comes from the §1.1 `gh pr view` output — do NOT launch a separate review-fetch agent here (that path used `gh api`, which the review action blocks). Load only the remaining context in parallel: the codebase snapshot, and the linked-issue context when an issue was found.
 
 ```
 Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
@@ -75,24 +77,18 @@ Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
     - `compress`: true
     - `includePatterns`: ".claude/**, **.md, **.yml, .github/**"
 
-Agent 1 (fetch-pr-reviews):
-  Use the Agent tool with:
-  - `subagent_type`: "autopilot:fetch-pr-reviews"
-  - `prompt`: "Fetch reviews for PR #<PR_NUMBER>. Repo: <REPO>. Author: <PR_AUTHOR>."
-  - `description`: "Fetch PR reviews"
-
-Agent 2 (resolve-issue-context) — only if linked issue found:
+Agent (resolve-issue-context) — only if linked issue found:
   Use the Agent tool with:
   - `subagent_type`: "autopilot:resolve-issue-context"
   - `prompt`: "Fetch issue context. Issue number: [N]. Repository: <REPO>."
   - `description`: "Resolve issue context"
 ```
 
-If no issue number found, output: "No linked issue — skipping issue comparison" and skip Agent 2.
+If no issue number found, output: "No linked issue — skipping issue comparison" and skip the issue-context agent.
 
 If the `gh` call fails (auth/network error) inside `resolve-issue-context`, skip issue context entirely.
 
-After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response. Store issue context and review data from the agents.
+After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response and the issue context from the agent. Use the prior-review data already loaded in §1.1 for the round handling below.
 
 **Read the pack, don't dump it.** The snapshot exists so you can pull _targeted_ context on demand — use `grep_repomix_output` (regex + `contextLines`) and `read_repomix_output` with a specific `startLine`/`endLine` slice. NEVER `read_repomix_output` over the whole range (that loads the entire codebase into context). When the diff is self-contained and needs no cross-file lookup (the common case), don't read the pack at all — pull cross-file context only for checks that need it (e.g. architecture reuse, duplicated logic).
 
