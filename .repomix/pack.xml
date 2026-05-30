@@ -4964,6 +4964,8 @@ if (import.meta.main) {
 import { describe, expect, test } from "bun:test";
 
 import {
+  buildReviewBody,
+  cleanApprovalBody,
   parseRunSummary,
   renderRunSummaryFooter,
   stripRunSummaryFooter,
@@ -5065,11 +5067,42 @@ describe("stripRunSummaryFooter", () => {
     expect(stripRunSummaryFooter(first)).toBe(stripRunSummaryFooter(second));
   });
 });
+
+describe("buildReviewBody", () => {
+  const footer = renderRunSummaryFooter(coreSummary);
+
+  test("substitutes the clean-approval line for an empty body with no inline comments", () => {
+    expect(buildReviewBody("", footer, false)).toBe(cleanApprovalBody + footer);
+  });
+
+  test("treats a whitespace-only body as a clean approval", () => {
+    expect(buildReviewBody("   \n", footer, false)).toBe(cleanApprovalBody + footer);
+  });
+
+  test("never posts a footer-only comment for a clean approval", () => {
+    const body = buildReviewBody("", footer, false);
+    expect(body).not.toBe(footer);
+    expect(body.startsWith(cleanApprovalBody)).toBe(true);
+  });
+
+  test("keeps a content-bearing body and appends the footer", () => {
+    const reviewComment = "### 👍 Approve\n\nLGTM";
+    expect(buildReviewBody(reviewComment, footer, false)).toBe(reviewComment + footer);
+  });
+
+  test("leaves an empty body unchanged when inline comments exist", () => {
+    expect(buildReviewBody("", footer, true)).toBe(footer);
+  });
+
+  test("still posts the no-issues line for a clean approval without a footer", () => {
+    expect(buildReviewBody("", "", false)).toBe(cleanApprovalBody);
+  });
+});
 </file>
 
 <file path=".github/actions/code-review-action/src/runSummaryFooter.ts">
 /**
- * Render and strip the per-run summary footer appended to a PR review comment.
+ * Assemble the review comment body and render/strip the per-run summary footer.
  *
  * The review-run metrics (cost, latency, tokens, tool round-trips) are computed
  * in `runClaude.ts` and serialized into the
@@ -5080,7 +5113,8 @@ describe("stripRunSummaryFooter", () => {
  *
  * @example
  * const summary = parseRunSummary(process.env.RUN_SUMMARY);
- * const body = reviewComment + (summary ? renderRunSummaryFooter(summary) : "");
+ * const footer = summary ? renderRunSummaryFooter(summary) : "";
+ * const body = buildReviewBody(reviewComment, footer, inlineComments.length > 0);
  * // dedup: normalizeBody(stripRunSummaryFooter(body))
  */
 import { z } from "zod";
@@ -5172,6 +5206,27 @@ export function renderRunSummaryFooter(summary: RunSummary): string {
   ].join("\n");
 }
 
+/** Minimal body posted for a clean approval so the comment is never footer-only. */
+export const cleanApprovalBody = "✅ No issues found.";
+
+/**
+ * Assemble the main review body, then append the run-summary footer.
+ *
+ * A clean approval — an empty review body with no inline comments — gets the
+ * {@link cleanApprovalBody} line so the action never posts a footer-only,
+ * stats-only comment that reads as an empty (or broken) review. The pr:review
+ * skill deliberately returns an empty `reviewComment` for this case, so the
+ * minimal line is substituted here rather than in the model output.
+ */
+export function buildReviewBody(
+  reviewBody: string,
+  footer: string,
+  hasInlineComments: boolean,
+): string {
+  const body = reviewBody.trim() === "" && !hasInlineComments ? cleanApprovalBody : reviewBody;
+  return body + footer;
+}
+
 /**
  * Remove the marker-bounded run-summary footer (inclusive of the `---` rule)
  * from a review body so duplicate detection compares the stable content only.
@@ -5220,6 +5275,7 @@ import {
   verdictToEvent,
 } from "./github/githubReview.ts";
 import {
+  buildReviewBody,
   parseRunSummary,
   renderRunSummaryFooter,
   stripRunSummaryFooter,
@@ -5323,12 +5379,15 @@ const invalidComments = allComments
   .filter((c) => !isValidComment(c, validLines))
   .filter((c) => !isAlreadyMentioned(c, output.reviewComment));
 
-// Append the per-run metrics as a collapsible footer on the main review comment
-// only (never inline, never react replies). Fail-open: no footer when RUN_SUMMARY
-// is absent or invalid.
+// Assemble the main review body, then append the per-run metrics as a collapsible
+// footer (main review comment only — never inline, never react replies). A clean
+// approval (empty body, no inline comments) gets a minimal "no issues found" line
+// via buildReviewBody so the action never posts a footer-only, stats-only comment.
+// Fail-open: no footer when RUN_SUMMARY is absent or invalid.
+const reviewBody = output.reviewComment + formatInvalidComments(invalidComments);
 const runSummary = parseRunSummary(process.env.RUN_SUMMARY);
-const runSummaryFooter = runSummary ? renderRunSummaryFooter(runSummary) : "";
-const finalBody = output.reviewComment + formatInvalidComments(invalidComments) + runSummaryFooter;
+const footer = runSummary ? renderRunSummaryFooter(runSummary) : "";
+const finalBody = buildReviewBody(reviewBody, footer, validComments.length > 0);
 
 // The footer carries run-varying numbers (cost, latency); strip it from both
 // bodies so the duplicate-suppression guard compares the stable content only.
@@ -30038,7 +30097,7 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 │        │  "---" + <details> table, wrapped in                     │
 │        │  <!-- run-summary-start … end --> markers                │
 │        ▼                                                           │
-│  finalBody = reviewComment + invalidComments + footer            │
+│  finalBody = buildReviewBody(body, footer, hasInline)            │
 │        │                                                          │
 │        ├──④──▶ dedupKey = normalizeBody(stripRunSummaryFooter(·)) │
 │        │        applied to BOTH bodies before comparison          │
@@ -30083,14 +30142,18 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 
 **Tokens in** is the total input the model consumed — fresh input plus cache reads plus cache creation — so it stays plausible under heavy prompt caching (reading only the uncached `input_tokens` reports a misleading near-zero residual). **Cache read / write** is the breakdown of that total.
 
+## Clean approvals
+
+The pr:review skill returns an empty `reviewComment` for an approval with no findings — by contract no review prose is written, the APPROVE event speaks for itself. Posting a comment that is _only_ the stats footer reads as an empty (or broken) review and is indistinguishable from a genuine content-free-approval failure, so `submitReview.ts` builds the body through `buildReviewBody`: when the review body is empty and there are no inline comments, it substitutes a minimal `✅ No issues found.` line before appending the footer. Reviews that carry findings are unchanged. The dedup and consecutive-approval guards still compare the raw (empty) `reviewComment`, so repeat clean approvals are skipped rather than re-posted.
+
 ## Source map
 
-| File                      | Responsibility                                                                           |
-| ------------------------- | ---------------------------------------------------------------------------------------- |
-| `src/runClaude.ts`        | Runs the single review pass, computes the summary, emits the `run_summary` output        |
-| `src/runSummaryFooter.ts` | `runSummarySchema`, `parseRunSummary`, `renderRunSummaryFooter`, `stripRunSummaryFooter` |
-| `src/submitReview.ts`     | Appends the footer to the main review body; strips it for dedup                          |
-| `action.yml`              | Bridges `run_summary` into the Submit Review step as `RUN_SUMMARY`                       |
+| File                      | Responsibility                                                                                              |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `src/runClaude.ts`        | Runs the single review pass, computes the summary, emits the `run_summary` output                           |
+| `src/runSummaryFooter.ts` | `runSummarySchema`, `parseRunSummary`, `renderRunSummaryFooter`, `stripRunSummaryFooter`, `buildReviewBody` |
+| `src/submitReview.ts`     | Builds the review body via `buildReviewBody` (clean-approval line + footer); strips the footer for dedup    |
+| `action.yml`              | Bridges `run_summary` into the Submit Review step as `RUN_SUMMARY`                                          |
 </file>
 
 <file path="docs/plan-skills-audit.md">
