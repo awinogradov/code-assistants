@@ -1,5 +1,5 @@
 /**
- * Render and strip the per-run summary footer appended to a PR review comment.
+ * Assemble the review comment body and render/strip the per-run summary footer.
  *
  * The review-run metrics (cost, latency, tokens, tool round-trips) are computed
  * in `runClaude.ts` and serialized into the
@@ -10,7 +10,8 @@
  *
  * @example
  * const summary = parseRunSummary(process.env.RUN_SUMMARY);
- * const body = reviewComment + (summary ? renderRunSummaryFooter(summary) : "");
+ * const footer = summary ? renderRunSummaryFooter(summary) : "";
+ * const body = buildReviewBody(reviewComment, footer, inlineComments.length > 0);
  * // dedup: normalizeBody(stripRunSummaryFooter(body))
  */
 import { z } from "zod";
@@ -100,6 +101,27 @@ export function renderRunSummaryFooter(summary: RunSummary): string {
       bodyLines: ["| Metric | Value |", "| --- | --- |", ...buildRows(summary)],
     }),
   ].join("\n");
+}
+
+/** Minimal body posted for a clean approval so the comment is never footer-only. */
+export const cleanApprovalBody = "✅ No issues found.";
+
+/**
+ * Assemble the main review body, then append the run-summary footer.
+ *
+ * A clean approval — an empty review body with no inline comments — gets the
+ * {@link cleanApprovalBody} line so the action never posts a footer-only,
+ * stats-only comment that reads as an empty (or broken) review. The pr:review
+ * skill deliberately returns an empty `reviewComment` for this case, so the
+ * minimal line is substituted here rather than in the model output.
+ */
+export function buildReviewBody(
+  reviewBody: string,
+  footer: string,
+  hasInlineComments: boolean,
+): string {
+  const body = reviewBody.trim() === "" && !hasInlineComments ? cleanApprovalBody : reviewBody;
+  return body + footer;
 }
 
 /**

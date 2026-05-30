@@ -39,7 +39,7 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 │        │  "---" + <details> table, wrapped in                     │
 │        │  <!-- run-summary-start … end --> markers                │
 │        ▼                                                           │
-│  finalBody = reviewComment + invalidComments + footer            │
+│  finalBody = buildReviewBody(body, footer, hasInline)            │
 │        │                                                          │
 │        ├──④──▶ dedupKey = normalizeBody(stripRunSummaryFooter(·)) │
 │        │        applied to BOTH bodies before comparison          │
@@ -84,11 +84,15 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 
 **Tokens in** is the total input the model consumed — fresh input plus cache reads plus cache creation — so it stays plausible under heavy prompt caching (reading only the uncached `input_tokens` reports a misleading near-zero residual). **Cache read / write** is the breakdown of that total.
 
+## Clean approvals
+
+The pr:review skill returns an empty `reviewComment` for an approval with no findings — by contract no review prose is written, the APPROVE event speaks for itself. Posting a comment that is _only_ the stats footer reads as an empty (or broken) review and is indistinguishable from a genuine content-free-approval failure, so `submitReview.ts` builds the body through `buildReviewBody`: when the review body is empty and there are no inline comments, it substitutes a minimal `✅ No issues found.` line before appending the footer. Reviews that carry findings are unchanged. The dedup and consecutive-approval guards still compare the raw (empty) `reviewComment`, so repeat clean approvals are skipped rather than re-posted.
+
 ## Source map
 
-| File                      | Responsibility                                                                           |
-| ------------------------- | ---------------------------------------------------------------------------------------- |
-| `src/runClaude.ts`        | Runs the single review pass, computes the summary, emits the `run_summary` output        |
-| `src/runSummaryFooter.ts` | `runSummarySchema`, `parseRunSummary`, `renderRunSummaryFooter`, `stripRunSummaryFooter` |
-| `src/submitReview.ts`     | Appends the footer to the main review body; strips it for dedup                          |
-| `action.yml`              | Bridges `run_summary` into the Submit Review step as `RUN_SUMMARY`                       |
+| File                      | Responsibility                                                                                              |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `src/runClaude.ts`        | Runs the single review pass, computes the summary, emits the `run_summary` output                           |
+| `src/runSummaryFooter.ts` | `runSummarySchema`, `parseRunSummary`, `renderRunSummaryFooter`, `stripRunSummaryFooter`, `buildReviewBody` |
+| `src/submitReview.ts`     | Builds the review body via `buildReviewBody` (clean-approval line + footer); strips the footer for dedup    |
+| `action.yml`              | Bridges `run_summary` into the Submit Review step as `RUN_SUMMARY`                                          |

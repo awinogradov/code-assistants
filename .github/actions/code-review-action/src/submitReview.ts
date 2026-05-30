@@ -29,6 +29,7 @@ import {
   verdictToEvent,
 } from "./github/githubReview.ts";
 import {
+  buildReviewBody,
   parseRunSummary,
   renderRunSummaryFooter,
   stripRunSummaryFooter,
@@ -132,12 +133,15 @@ const invalidComments = allComments
   .filter((c) => !isValidComment(c, validLines))
   .filter((c) => !isAlreadyMentioned(c, output.reviewComment));
 
-// Append the per-run metrics as a collapsible footer on the main review comment
-// only (never inline, never react replies). Fail-open: no footer when RUN_SUMMARY
-// is absent or invalid.
+// Assemble the main review body, then append the per-run metrics as a collapsible
+// footer (main review comment only — never inline, never react replies). A clean
+// approval (empty body, no inline comments) gets a minimal "no issues found" line
+// via buildReviewBody so the action never posts a footer-only, stats-only comment.
+// Fail-open: no footer when RUN_SUMMARY is absent or invalid.
+const reviewBody = output.reviewComment + formatInvalidComments(invalidComments);
 const runSummary = parseRunSummary(process.env.RUN_SUMMARY);
-const runSummaryFooter = runSummary ? renderRunSummaryFooter(runSummary) : "";
-const finalBody = output.reviewComment + formatInvalidComments(invalidComments) + runSummaryFooter;
+const footer = runSummary ? renderRunSummaryFooter(runSummary) : "";
+const finalBody = buildReviewBody(reviewBody, footer, validComments.length > 0);
 
 // The footer carries run-varying numbers (cost, latency); strip it from both
 // bodies so the duplicate-suppression guard compares the stable content only.
