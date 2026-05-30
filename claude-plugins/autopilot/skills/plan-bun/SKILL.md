@@ -9,6 +9,7 @@ allowed-tools:
   - Read
   - Grep
   - Glob
+  - Agent
   - Bash(git *)
   - MCP(context7:*)
   - MCP(Ref:*)
