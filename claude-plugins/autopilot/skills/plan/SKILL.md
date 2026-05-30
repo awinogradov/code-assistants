@@ -151,7 +151,7 @@ Present the `resolve-issue-context` agent's output along with TODO search result
 
 ### Steelmanned Intent
 
-After the issue context and TODOs, emit a single-line **Steelmanned intent**: the user's request restated in its strongest form, with any vague language tightened. One sentence, ≤200 characters. This becomes the stable target for the stack skill's expert reviewers and lands verbatim in the Phase 5 plan file `## Summary` block.
+After the issue context and TODOs, emit a single-line **Steelmanned intent**: the user's request restated in its strongest form, with any vague language tightened. One sentence, ≤200 characters. This becomes the stable target for the stack skill's expert reviewers and lands verbatim in the plan file `## Summary` block.
 
 Format:
 
@@ -247,7 +247,7 @@ The generated plan MUST update this documentation after implementation: its `## 
 
 ### Plan File Header (MANDATORY)
 
-Every plan file written by any stack skill MUST begin with a single `# <Title>` line on line 1, followed by a blank line. This rule is stack-agnostic and supersedes any stack-specific Phase 5 template that omits the header.
+Every plan file written by any stack skill MUST begin with a single `# <Title>` line on line 1, followed by a blank line. This rule is stack-agnostic and supersedes any stack-specific plan template that omits the header.
 
 **Title derivation:**
 
@@ -274,7 +274,7 @@ Map each planned change to project rules defined in CLAUDE.md.
 
 ### Visualize with ASCII Schemas
 
-When the planned change is structural or visual, invoke `Skill(autopilot:ascii-schemas)` to generate diagrams and embed them in the plan's `## Diagrams` section (see the stack skill's Phase 5 output template).
+When the planned change is structural or visual, invoke `Skill(autopilot:ascii-schemas)` to generate diagrams and embed them in the plan's `## Diagrams` section (see the stack skill's plan output template).
 
 **Trigger** — invoke the skill when the change touches any of:
 

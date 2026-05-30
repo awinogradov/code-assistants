@@ -73,71 +73,11 @@ Analyze each dimension before planning. Use `mcp__repomix__grep_repomix_output` 
 
 After completing deep analysis, call TaskUpdate to set task 3 ("Analyze codebase") to `status: "completed"`.
 
-## Phase 3: Validation Scoring
-
-**FIRST**, call TaskUpdate to set task 4 ("Validate plan scores") to `status: "in_progress"`.
-
-Rate the plan (20 points each dimension = 100 total):
-
-| Dimension        | Criteria                                                                                                                            | Score |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----- |
-| **Alignment**    | Follows CLAUDE.md, project patterns, naming conventions                                                                             | /20   |
-| **Completeness** | All requirements addressed, no missing steps                                                                                        | /20   |
-| **Type Safety**  | Proper types, Zod schemas, no unsafe `as` assertions                                                                                | /20   |
-| **Testability**  | Clear test strategy, edge cases identified                                                                                          | /20   |
-| **Simplicity**   | Minimal code, reuses existing functions, no over-engineering, every change traces to steelmanned intent, no opportunistic refactors | /20   |
-
-### Auto-Iteration Protocol (Target: 95+)
-
-If score < 95, automatically:
-
-1. Identify weak dimensions (score < 19)
-2. Ask clarifying questions in quiz format
-3. Re-analyze and re-score internally (do not output retry details)
-4. Repeat until 95+ achieved
-
-After scoring completes, call TaskUpdate to set task 4 ("Validate plan scores") to `status: "completed"`.
-
-## Phase 4: Dynamic Expert Review
-
-**FIRST**, call TaskUpdate to set task 5 ("Review with experts") to `status: "in_progress"`.
-
-**Always include the Pre-mortem Analyst**, then select 2-3 additional experts based on task scope:
-
-| Expert                         | When to Include           | Focus Areas                                                                                                        |
-| ------------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| **Pre-mortem Analyst**         | Always (default reviewer) | Imagine the plan failed 6 months from now — return ranked failure narratives, early warning signs, and mitigations |
-| **Principal Node.js Engineer** | Server-side logic, APIs   | Performance, async, error handling, memory                                                                         |
-| **DBA**                        | Database changes          | Query efficiency, indexes, transactions, migrations                                                                |
-| **Principal DevOps Engineer**  | Infra, env, deployment    | Env vars, scaling, monitoring, CI/CD                                                                               |
-| **Senior Frontend Engineer**   | UI changes                | React patterns, state, UX, accessibility                                                                           |
-| **Senior QA Engineer**         | Any code change           | Test coverage, edge cases, regression risk                                                                         |
-| **CISO**                       | Auth, data, APIs, infra   | Security architecture, OWASP, compliance, reliability                                                              |
-| **Principal Designer**         | UI/UX changes             | Fast, beautiful, simple, minimal; design patterns                                                                  |
-| **Principal SRE**              | Production systems        | Scalability, metrics, stability, performance                                                                       |
-| **Boring Tech Writer**         | User-facing changes       | README clarity, usage instructions, JSDoc, comments                                                                |
-
-For each selected expert, launch a `autopilot:expert-review` sub-agent. Launch all experts **in parallel** (single message, multiple Agent tool calls):
-
-```
-Use the Agent tool with:
-- `subagent_type`: "autopilot:expert-review"
-- `prompt`: "You are a [Expert Role]. Review this implementation plan.
-  Focus areas: [from table above].
-  Scoring target: 95+.
-  Limit your report to the 3–5 strongest findings — depth over breadth.
-
-  [full plan text from Phase 5 output]"
-- `description`: "Expert review: [Role]"
-```
-
-Wait for all agents to complete. Use their findings to refine the implementation plan internally. Do not include expert report blocks in the plan output.
-
-After all expert reviews complete, call TaskUpdate to set task 5 ("Review with experts") to `status: "completed"`.
-
-## Phase 5: Output Format
+## Phase 3: Draft Plan
 
 **FIRST**, call TaskUpdate to set task 6 ("Output final plan") to `status: "in_progress"`.
+
+Assemble a complete plan draft now — before scoring and expert review — so both operate on a concrete artifact instead of an imagined one. Build the draft from the output template below and keep it available for Phase 4 (expert review) and Phase 5 (scoring). Leave the `Score:` line as a placeholder; Phase 5 fills it. Do NOT mark task 6 completed yet — it stays in progress until Phase 6 finalizes the plan.
 
 The template below starts with `# <Title>` — see the canonical "Plan File Header (MANDATORY)" rule in `plan/SKILL.md` `## Common Instructions` for title derivation and section ordering.
 
@@ -147,7 +87,7 @@ The template below starts with `# <Title>` — see the canonical "Plan File Head
 ## Summary
 [1-2 sentences: what and why]
 Steelmanned intent: [verbatim from Phase 0 Steelmanned Intent block]
-Score: [X]/100
+Score: [filled in Phase 5 — leave as a placeholder in the draft]
 
 <!-- Include the ## Diagrams section only if the change is architectural/visual/UI/flow-related. Generate diagrams via Skill(autopilot:ascii-schemas) per the plan skill's "Visualize with ASCII Schemas" guidance. -->
 ## Diagrams
@@ -192,6 +132,74 @@ After the user selects their option:
 - "Create PR": invoke `Skill(autopilot:pr-create)` with the flags shown in the option description
 - "Done": no further action needed
 ```
+
+Keep task 6 in progress — Phase 6 marks it completed after the plan is finalized.
+
+## Phase 4: Dynamic Expert Review
+
+**FIRST**, call TaskUpdate to set task 5 ("Review with experts") to `status: "in_progress"`.
+
+**Always include the Pre-mortem Analyst**, then select 2-3 additional experts based on task scope:
+
+| Expert                         | When to Include           | Focus Areas                                                                                                        |
+| ------------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **Pre-mortem Analyst**         | Always (default reviewer) | Imagine the plan failed 6 months from now — return ranked failure narratives, early warning signs, and mitigations |
+| **Principal Node.js Engineer** | Server-side logic, APIs   | Performance, async, error handling, memory                                                                         |
+| **DBA**                        | Database changes          | Query efficiency, indexes, transactions, migrations                                                                |
+| **Principal DevOps Engineer**  | Infra, env, deployment    | Env vars, scaling, monitoring, CI/CD                                                                               |
+| **Senior Frontend Engineer**   | UI changes                | React patterns, state, UX, accessibility                                                                           |
+| **Senior QA Engineer**         | Any code change           | Test coverage, edge cases, regression risk                                                                         |
+| **CISO**                       | Auth, data, APIs, infra   | Security architecture, OWASP, compliance, reliability                                                              |
+| **Principal Designer**         | UI/UX changes             | Fast, beautiful, simple, minimal; design patterns                                                                  |
+| **Principal SRE**              | Production systems        | Scalability, metrics, stability, performance                                                                       |
+| **Boring Tech Writer**         | User-facing changes       | README clarity, usage instructions, JSDoc, comments                                                                |
+
+For each selected expert, launch a `autopilot:expert-review` sub-agent. Launch all experts **in parallel** (single message, multiple Agent tool calls):
+
+```
+Use the Agent tool with:
+- `subagent_type`: "autopilot:expert-review"
+- `prompt`: "You are a [Expert Role]. Review this implementation plan.
+  Focus areas: [from table above].
+  Scoring target: 95+.
+  Limit your report to the 3–5 strongest findings — depth over breadth.
+
+  [full plan text from the Phase 3 draft]"
+- `description`: "Expert review: [Role]"
+```
+
+Wait for all agents to complete. Use their findings to refine the Phase 3 draft internally. Do not include expert report blocks in the plan output.
+
+After all expert reviews complete, call TaskUpdate to set task 5 ("Review with experts") to `status: "completed"`.
+
+## Phase 5: Validation Scoring
+
+**FIRST**, call TaskUpdate to set task 4 ("Validate plan scores") to `status: "in_progress"`.
+
+Rate the reviewed plan (20 points each dimension = 100 total):
+
+| Dimension        | Criteria                                                                                                                            | Score |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| **Alignment**    | Follows CLAUDE.md, project patterns, naming conventions                                                                             | /20   |
+| **Completeness** | All requirements addressed, no missing steps                                                                                        | /20   |
+| **Type Safety**  | Proper types, Zod schemas, no unsafe `as` assertions                                                                                | /20   |
+| **Testability**  | Clear test strategy, edge cases identified                                                                                          | /20   |
+| **Simplicity**   | Minimal code, reuses existing functions, no over-engineering, every change traces to steelmanned intent, no opportunistic refactors | /20   |
+
+### Auto-Iteration Protocol (Target: 95+)
+
+If score < 95, automatically:
+
+1. Identify weak dimensions (score < 19)
+2. Ask clarifying questions in quiz format
+3. Re-analyze and re-score internally (do not output retry details)
+4. Repeat until 95+ achieved
+
+After scoring completes, call TaskUpdate to set task 4 ("Validate plan scores") to `status: "completed"`.
+
+## Phase 6: Finalize Output
+
+Apply the expert findings (Phase 4) and the validated score (Phase 5) to the Phase 3 draft, then write the final plan file. Replace the `Score:` placeholder in the `## Summary` block with the Phase 5 result (`Score: [X]/100`).
 
 After outputting the final plan, call TaskUpdate to set task 6 ("Output final plan") to `status: "completed"`.
 
