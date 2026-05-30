@@ -6,6 +6,8 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  buildReviewBody,
+  cleanApprovalBody,
   parseRunSummary,
   renderRunSummaryFooter,
   stripRunSummaryFooter,
@@ -105,5 +107,36 @@ describe("stripRunSummaryFooter", () => {
     const second =
       reviewComment + renderRunSummaryFooter({ ...coreSummary, cost_usd: 0.99, model_ms: 1 });
     expect(stripRunSummaryFooter(first)).toBe(stripRunSummaryFooter(second));
+  });
+});
+
+describe("buildReviewBody", () => {
+  const footer = renderRunSummaryFooter(coreSummary);
+
+  test("substitutes the clean-approval line for an empty body with no inline comments", () => {
+    expect(buildReviewBody("", footer, false)).toBe(cleanApprovalBody + footer);
+  });
+
+  test("treats a whitespace-only body as a clean approval", () => {
+    expect(buildReviewBody("   \n", footer, false)).toBe(cleanApprovalBody + footer);
+  });
+
+  test("never posts a footer-only comment for a clean approval", () => {
+    const body = buildReviewBody("", footer, false);
+    expect(body).not.toBe(footer);
+    expect(body.startsWith(cleanApprovalBody)).toBe(true);
+  });
+
+  test("keeps a content-bearing body and appends the footer", () => {
+    const reviewComment = "### 👍 Approve\n\nLGTM";
+    expect(buildReviewBody(reviewComment, footer, false)).toBe(reviewComment + footer);
+  });
+
+  test("leaves an empty body unchanged when inline comments exist", () => {
+    expect(buildReviewBody("", footer, true)).toBe(footer);
+  });
+
+  test("still posts the no-issues line for a clean approval without a footer", () => {
+    expect(buildReviewBody("", "", false)).toBe(cleanApprovalBody);
   });
 });
