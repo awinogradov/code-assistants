@@ -25115,12 +25115,10 @@ Use these IDs for all TaskUpdate calls in the phases below.
 1. **Branch Changes** - Analyze all changes since diverging from main:
    - `git log origin/main..HEAD --oneline` - commits on this branch
    - `git diff origin/main...HEAD` - all code changes
-2. **Codebase Exploration** - Launch Explore agents (parallel) to understand:
-   - Start from TODO locations found in Phase 0 (if any)
-   - Related existing implementations and patterns
-   - Similar features and how they were built
-   - Test patterns for comparable functionality
-   - Search in `*.ts` and `*.tsx` files
+2. **Codebase Exploration** - Decide where context comes from before crawling, so the snapshot and live tools don't re-traverse the same tree:
+   - **Snapshot (default — broad/whole-repo reads):** the Phase 0 repomix snapshot already covers the whole tree. Search it with `grep_repomix_output`/`read_repomix_output` (step 6) for related implementations, similar features, and test patterns. Do NOT crawl the tree live for what the snapshot can answer.
+   - **Live tools (Explore agents / Grep / Glob — only what the snapshot cannot serve):** the snapshot reflects `main` at the last merge, so on a feature branch it lags by the in-flight changes; those are in the Phase 1 branch diff (step 1), not the pack. Reach for live tools only for in-flight working-tree code, or a targeted fresh read the snapshot is too stale or too coarse to answer.
+   - Launch Explore agents (parallel) ONLY when the rule above calls for a live read; otherwise skip them. When you do, start from TODO locations found in Phase 0 (if any) and search `*.ts`/`*.tsx` files.
 3. **Documentation Lookup** (MANDATORY) - Look up docs for ALL task-relevant libraries. Identify libraries from: `package.json`, issue/ticket description, and codebase exploration results (e.g., `zod`, `hono`, `@effect/schema`). Use all available documentation sources. If a source is unavailable or returns no results, continue with remaining sources.
    - **context7** — For each library, call in sequence: (1) `mcp__context7__resolve-library-id` with the library name to get `libraryId`, then (2) `mcp__context7__query-docs` with `libraryId` and a task-relevant topic. Run multiple `resolve-library-id` calls in parallel, then multiple `query-docs` in parallel.
    - **Ref** — For official documentation: `mcp__Ref__ref_search_documentation` with the technology name and topic, then `mcp__Ref__ref_read_url` to read specific pages from results.
@@ -25330,12 +25328,10 @@ Use these IDs for all TaskUpdate calls in the phases below.
 1. **Branch Changes** - Analyze all changes since diverging from main:
    - `git log origin/main..HEAD --oneline` - commits on this branch
    - `git diff origin/main...HEAD` - all code changes
-2. **Codebase Exploration** - Launch Explore agents (parallel) to understand:
-   - Start from TODO locations found in Phase 0 (if any)
-   - Related existing implementations and patterns
-   - Similar features and how they were built
-   - Test patterns for comparable functionality
-   - Search in `*.ts` and `*.tsx` files
+2. **Codebase Exploration** - Decide where context comes from before crawling, so the snapshot and live tools don't re-traverse the same tree:
+   - **Snapshot (default — broad/whole-repo reads):** the Phase 0 repomix snapshot already covers the whole tree. Search it with `grep_repomix_output`/`read_repomix_output` (step 6) for related implementations, similar features, and test patterns. Do NOT crawl the tree live for what the snapshot can answer.
+   - **Live tools (Explore agents / Grep / Glob — only what the snapshot cannot serve):** the snapshot reflects `main` at the last merge, so on a feature branch it lags by the in-flight changes; those are in the Phase 1 branch diff (step 1), not the pack. Reach for live tools only for in-flight working-tree code, or a targeted fresh read the snapshot is too stale or too coarse to answer.
+   - Launch Explore agents (parallel) ONLY when the rule above calls for a live read; otherwise skip them. When you do, start from TODO locations found in Phase 0 (if any) and search `*.ts`/`*.tsx` files.
 3. **Documentation Lookup** (MANDATORY) - Look up docs for ALL task-relevant libraries. Identify libraries from: `package.json`, issue/ticket description, and codebase exploration results (e.g., `react`, `next`, `@tanstack/react-query`). Use all available documentation sources. If a source is unavailable or returns no results, continue with remaining sources.
    - **context7** — For each library, call in sequence: (1) `mcp__context7__resolve-library-id` with the library name to get `libraryId`, then (2) `mcp__context7__query-docs` with `libraryId` and a task-relevant topic. Run multiple `resolve-library-id` calls in parallel, then multiple `query-docs` in parallel.
    - **Ref** — For official documentation: `mcp__Ref__ref_search_documentation` with the technology name and topic, then `mcp__Ref__ref_read_url` to read specific pages from results.
