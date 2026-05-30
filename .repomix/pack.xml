@@ -24682,6 +24682,7 @@ allowed-tools:
   - Read
   - Grep
   - Glob
+  - Agent
   - Bash(git *)
   - Bash(gh *)
   - MCP(context7:*)
@@ -25082,6 +25083,7 @@ allowed-tools:
   - Read
   - Grep
   - Glob
+  - Agent
   - Bash(git *)
   - MCP(context7:*)
   - MCP(Ref:*)
@@ -25296,6 +25298,7 @@ allowed-tools:
   - Read
   - Grep
   - Glob
+  - Agent
   - Bash(git *)
   - MCP(context7:*)
   - MCP(Ref:*)
