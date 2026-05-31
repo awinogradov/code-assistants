@@ -68,6 +68,7 @@ The content is organized as follows:
         0.1.0.md
         0.2.0.md
         0.3.0.md
+        1.0.0.md
       src/
         github/
           githubReview.test.ts
@@ -94,6 +95,7 @@ The content is organized as follows:
         updatePrFooter.ts
       action.yml
       CHANGELOG.md
+      MIGRATING.md
       package.json
       README.md
       tsconfig.json
@@ -1739,6 +1741,118 @@ You can now customize which AI models handle different types of code review thro
 
 * **code-review:** extract review-output module for tests ([2987044](https://github.com/awinogradov/code-assistants/commit/2987044aac4b5bddd7acf0c3c9782699518fb665))
 * **code-review:** validate output with zod and reuse helpers ([a4f5f94](https://github.com/awinogradov/code-assistants/commit/a4f5f942442bb38e40f237861f24c64717c866ef))
+</file>
+
+<file path=".github/actions/code-review-action/.release_notes/1.0.0.md">
+## [1.0.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v0.3.0...code-review-action@v1.0.0) (2026-05-31)
+
+## Release Notes
+
+Major improvements to AI code review speed and reliability, with transparent run metrics on every review.
+
+## ✨ What's New
+
+### Single-pass code review architecture
+AI code reviews now complete in one efficient pass, eliminating the multi-agent fan-out that could leave empty reviews when sub-agents failed. The system processes the entire pull request at once, providing more consistent and reliable results.
+
+<details><summary>Related issues</summary>
+
+- [#177: Simplify code-review-action to one pr:review pass with anchored rule links](https://github.com/awinogradov/code-assistants/issues/177)
+- [#174: Code-review fan-out fails: all review sub-agents return no findings object](https://github.com/awinogradov/code-assistants/issues/174)
+- [#161: Phase 6: cut code review per-agent and aggregation latency](https://github.com/awinogradov/code-assistants/issues/161)
+</details>
+
+### Review run metrics in every comment
+Each AI review now includes detailed performance metrics in a collapsible footer, showing exactly how much the review cost, how long it took, token usage, and cache efficiency. This transparency helps teams track AI usage costs and identify performance bottlenecks.
+
+<details><summary>Related issues</summary>
+
+- [#162: Include the per-run summary report in the footer (under the cut) of every review comment](https://github.com/awinogradov/code-assistants/issues/162)
+</details>
+
+### Smart rule code linking
+Code review findings now generate proper markdown links to rule documentation directly, without post-processing. Each CHECK-* rule code links straight to its detailed explanation in the skill documentation.
+
+<details><summary>Related issues</summary>
+
+- [#179: Generate CHECK rule links inside the review skill instead of a resolver script](https://github.com/awinogradov/code-assistants/issues/179)
+</details>
+
+## 🐛 Bug Fixes
+
+### Clear feedback on clean pull requests
+When the AI approves a PR with no issues, it now posts a clear "✅ No issues found." message alongside the metrics footer, instead of what appeared to be an empty or broken review containing only statistics.
+
+<details><summary>Related issues</summary>
+
+- [#196: Code review posts a stats-only comment on clean approvals](https://github.com/awinogradov/code-assistants/issues/196)
+</details>
+
+### Accurate token usage reporting
+The run summary now correctly shows total input tokens including cached content, fixing the previously implausible near-zero values that made cost tracking unreliable.
+
+<details><summary>Related issues</summary>
+
+- [#175: Revalidate run-summary metrics: implausible token counts and likely undercounted cost](https://github.com/awinogradov/code-assistants/issues/175)
+</details>
+
+### Review metrics footer deployment
+The PR help footer containing review metrics now posts correctly instead of failing silently due to missing environment configuration.
+
+## ⚠️ Breaking Changes
+
+### Removed configuration options
+The `parallel_fanout` and `review_model_overrides` action inputs have been removed as part of the single-pass architecture. If you were using these inputs to customize review behavior, remove them from your workflow configuration. The new single-pass system provides better performance without requiring these options.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #196 | [#197](https://github.com/awinogradov/code-assistants/pull/197) | @awinogradov |
+| #179 | [#180](https://github.com/awinogradov/code-assistants/pull/180) | @awinogradov |
+| #177 | [#178](https://github.com/awinogradov/code-assistants/pull/178) | @awinogradov |
+| #174 | [#178](https://github.com/awinogradov/code-assistants/pull/178) | @awinogradov |
+| #175 | [#178](https://github.com/awinogradov/code-assistants/pull/178) | @awinogradov |
+| #161 | [#169](https://github.com/awinogradov/code-assistants/pull/169) | @awinogradov |
+| #162 | [#168](https://github.com/awinogradov/code-assistants/pull/168) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **code-review:** removed the parallel_fanout and review_model_overrides action inputs
+
+### Features
+
+* **code-review:** add per-run summary footer to review comments ([0a169d4](https://github.com/awinogradov/code-assistants/commit/0a169d4275bda84db4a0740b06c56dfe7d7c94aa))
+
+### Bug Fixes
+
+* **code-review:** log agent errors and flatten aggregation loop ([47937cf](https://github.com/awinogradov/code-assistants/commit/47937cfddfec97f3fce836099dce395fe490bfe2))
+* **code-review:** pass reviewer env to footer step ([e95d144](https://github.com/awinogradov/code-assistants/commit/e95d14417fa620aaba87f44248f2d35d08dcf27c))
+* **code-review:** post a no-issues line on clean approvals ([6c03c51](https://github.com/awinogradov/code-assistants/commit/6c03c5126be8064ddcff5cf92c1fdaffefd8aeae))
+
+### Performance
+
+* **code-review:** aggregate findings in code via structured output ([4b53af9](https://github.com/awinogradov/code-assistants/commit/4b53af9c77da054ffe0a7e0fd583c352fb560416))
+
+### Documentation
+
+* **code-review:** document run-summary footer flow ([776741f](https://github.com/awinogradov/code-assistants/commit/776741f53e76baa31d66cd19fb13c33d99a80b69))
+
+### Refactoring
+
+* **code-review:** build rule-code links in the review skill ([db457ff](https://github.com/awinogradov/code-assistants/commit/db457ff08007ad0cb3c73f0155cc76ea30d041f5))
+* **code-review:** extract shared marked-details footer builder ([8665adb](https://github.com/awinogradov/code-assistants/commit/8665adbddb0cfa2e08faacbdfe4a2017b693b851))
+* **code-review:** replace fan-out with single-pass review skill ([44b3c98](https://github.com/awinogradov/code-assistants/commit/44b3c9836414a2d3fcff57308d6312fa03b0520f))
+* **code-review:** simplify finding sort and cover fanout paths ([5107033](https://github.com/awinogradov/code-assistants/commit/510703378b326f9bed5cb63d56f96c7bc791f5f8))
+
+### Tests
+
+* **code-review:** cover run-summary footer and fan-out stats ([13b4ba6](https://github.com/awinogradov/code-assistants/commit/13b4ba6837fd830ffb18848ba341b7c543c8cb25))
+
+### CI
+
+* **code-review:** pass run_summary output to submit review step ([7f6b3e7](https://github.com/awinogradov/code-assistants/commit/7f6b3e73cb4c9bae64471616e2cd493845df2c3c))
 </file>
 
 <file path=".github/actions/code-review-action/src/github/githubReview.test.ts">
@@ -6227,6 +6341,115 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.0.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v0.3.0...code-review-action@v1.0.0) (2026-05-31)
+
+## Release Notes
+
+Major improvements to AI code review speed and reliability, with transparent run metrics on every review.
+
+## ✨ What's New
+
+### Single-pass code review architecture
+AI code reviews now complete in one efficient pass, eliminating the multi-agent fan-out that could leave empty reviews when sub-agents failed. The system processes the entire pull request at once, providing more consistent and reliable results.
+
+<details><summary>Related issues</summary>
+
+- [#177: Simplify code-review-action to one pr:review pass with anchored rule links](https://github.com/awinogradov/code-assistants/issues/177)
+- [#174: Code-review fan-out fails: all review sub-agents return no findings object](https://github.com/awinogradov/code-assistants/issues/174)
+- [#161: Phase 6: cut code review per-agent and aggregation latency](https://github.com/awinogradov/code-assistants/issues/161)
+</details>
+
+### Review run metrics in every comment
+Each AI review now includes detailed performance metrics in a collapsible footer, showing exactly how much the review cost, how long it took, token usage, and cache efficiency. This transparency helps teams track AI usage costs and identify performance bottlenecks.
+
+<details><summary>Related issues</summary>
+
+- [#162: Include the per-run summary report in the footer (under the cut) of every review comment](https://github.com/awinogradov/code-assistants/issues/162)
+</details>
+
+### Smart rule code linking
+Code review findings now generate proper markdown links to rule documentation directly, without post-processing. Each CHECK-* rule code links straight to its detailed explanation in the skill documentation.
+
+<details><summary>Related issues</summary>
+
+- [#179: Generate CHECK rule links inside the review skill instead of a resolver script](https://github.com/awinogradov/code-assistants/issues/179)
+</details>
+
+## 🐛 Bug Fixes
+
+### Clear feedback on clean pull requests
+When the AI approves a PR with no issues, it now posts a clear "✅ No issues found." message alongside the metrics footer, instead of what appeared to be an empty or broken review containing only statistics.
+
+<details><summary>Related issues</summary>
+
+- [#196: Code review posts a stats-only comment on clean approvals](https://github.com/awinogradov/code-assistants/issues/196)
+</details>
+
+### Accurate token usage reporting
+The run summary now correctly shows total input tokens including cached content, fixing the previously implausible near-zero values that made cost tracking unreliable.
+
+<details><summary>Related issues</summary>
+
+- [#175: Revalidate run-summary metrics: implausible token counts and likely undercounted cost](https://github.com/awinogradov/code-assistants/issues/175)
+</details>
+
+### Review metrics footer deployment
+The PR help footer containing review metrics now posts correctly instead of failing silently due to missing environment configuration.
+
+## ⚠️ Breaking Changes
+
+### Removed configuration options
+The `parallel_fanout` and `review_model_overrides` action inputs have been removed as part of the single-pass architecture. If you were using these inputs to customize review behavior, remove them from your workflow configuration. The new single-pass system provides better performance without requiring these options.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #196 | [#197](https://github.com/awinogradov/code-assistants/pull/197) | @awinogradov |
+| #179 | [#180](https://github.com/awinogradov/code-assistants/pull/180) | @awinogradov |
+| #177 | [#178](https://github.com/awinogradov/code-assistants/pull/178) | @awinogradov |
+| #174 | [#178](https://github.com/awinogradov/code-assistants/pull/178) | @awinogradov |
+| #175 | [#178](https://github.com/awinogradov/code-assistants/pull/178) | @awinogradov |
+| #161 | [#169](https://github.com/awinogradov/code-assistants/pull/169) | @awinogradov |
+| #162 | [#168](https://github.com/awinogradov/code-assistants/pull/168) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **code-review:** removed the parallel_fanout and review_model_overrides action inputs
+
+### Features
+
+* **code-review:** add per-run summary footer to review comments ([0a169d4](https://github.com/awinogradov/code-assistants/commit/0a169d4275bda84db4a0740b06c56dfe7d7c94aa))
+
+### Bug Fixes
+
+* **code-review:** log agent errors and flatten aggregation loop ([47937cf](https://github.com/awinogradov/code-assistants/commit/47937cfddfec97f3fce836099dce395fe490bfe2))
+* **code-review:** pass reviewer env to footer step ([e95d144](https://github.com/awinogradov/code-assistants/commit/e95d14417fa620aaba87f44248f2d35d08dcf27c))
+* **code-review:** post a no-issues line on clean approvals ([6c03c51](https://github.com/awinogradov/code-assistants/commit/6c03c5126be8064ddcff5cf92c1fdaffefd8aeae))
+
+### Performance
+
+* **code-review:** aggregate findings in code via structured output ([4b53af9](https://github.com/awinogradov/code-assistants/commit/4b53af9c77da054ffe0a7e0fd583c352fb560416))
+
+### Documentation
+
+* **code-review:** document run-summary footer flow ([776741f](https://github.com/awinogradov/code-assistants/commit/776741f53e76baa31d66cd19fb13c33d99a80b69))
+
+### Refactoring
+
+* **code-review:** build rule-code links in the review skill ([db457ff](https://github.com/awinogradov/code-assistants/commit/db457ff08007ad0cb3c73f0155cc76ea30d041f5))
+* **code-review:** extract shared marked-details footer builder ([8665adb](https://github.com/awinogradov/code-assistants/commit/8665adbddb0cfa2e08faacbdfe4a2017b693b851))
+* **code-review:** replace fan-out with single-pass review skill ([44b3c98](https://github.com/awinogradov/code-assistants/commit/44b3c9836414a2d3fcff57308d6312fa03b0520f))
+* **code-review:** simplify finding sort and cover fanout paths ([5107033](https://github.com/awinogradov/code-assistants/commit/510703378b326f9bed5cb63d56f96c7bc791f5f8))
+
+### Tests
+
+* **code-review:** cover run-summary footer and fan-out stats ([13b4ba6](https://github.com/awinogradov/code-assistants/commit/13b4ba6837fd830ffb18848ba341b7c543c8cb25))
+
+### CI
+
+* **code-review:** pass run_summary output to submit review step ([7f6b3e7](https://github.com/awinogradov/code-assistants/commit/7f6b3e73cb4c9bae64471616e2cd493845df2c3c))
 ## [0.3.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v0.2.0...code-review-action@v0.3.0) (2026-05-29)
 
 ## Release Notes
@@ -6449,10 +6672,20 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 * pin actions with floating semver tags ([d1e0af8](https://github.com/awinogradov/code-assistants/commit/d1e0af8ce106b938140a5d6f42d31a8055909c73))
 </file>
 
+<file path=".github/actions/code-review-action/MIGRATING.md">
+# MIGRATING
+
+## From 0.3.0 to 1.0.0
+
+### Breaking changes
+
+- removed the parallel_fanout and review_model_overrides action inputs
+</file>
+
 <file path=".github/actions/code-review-action/package.json">
 {
   "name": "@code-assistants/code-review-action",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "description": "Composite GitHub Action that runs AI code review on pull requests via Claude Code.",
   "private": true,
   "type": "module",
@@ -6486,7 +6719,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/README.md">
 # Code review action
 
-[![GitHub Release](https://img.shields.io/badge/release-v0.3.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that runs AI code review on pull requests using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Has two modes:
@@ -6614,7 +6847,7 @@ uses: awinogradov/code-assistants/.github/actions/code-review-action@v1
 </file>
 
 <file path=".github/actions/code-review-action/version">
-0.3.0
+1.0.0
 </file>
 
 <file path=".github/actions/code-review-sync/action.yml">
