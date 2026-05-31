@@ -3,9 +3,12 @@ name: run
 description: Plan, implement, commit, create PR, and monitor until approved
 argument-hint: "<task description, GitHub issue number, or GitHub issue URL>"
 allowed-tools:
+  - TaskCreate
+  - TaskUpdate
   - Read
   - Grep
   - Glob
+  - Agent
   - Edit
   - Write
   - Bash(git *)
