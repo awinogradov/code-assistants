@@ -135,11 +135,7 @@ Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
     - `compress`: true
 ```
 
-After all calls complete:
-
-1. Store the `outputId` from the snapshot acquisition (attach or pack) response for use throughout all phases
-2. Use `grep_repomix_output` with the `outputId` for a shallow, task-relevant lookup — only enough to render the issue context and orient (keywords from issue title/description, related module names). This is NOT codebase analysis: the single broad codebase pass runs later in the pipeline's **Context Gathering** phase, and **Deep Analysis** synthesizes over it. Do not crawl the tree here.
-3. Use `read_repomix_output` with `startLine`/`endLine` only to read the specific sections that lookup surfaces
+After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response — Phase 1 (Context Gathering) is the single phase that reads the codebase from it. Phase 0 does NOT grep or read code: build the issue context, Steelmanned Intent, and Assumptions below from the resolved issue JSON (title, body, comments) and the TODO results alone. Defer every codebase read to Phase 1.
 
 ### Issue Context Output
 
@@ -402,6 +398,8 @@ Use these IDs for all TaskUpdate calls in the phases below.
 
 **FIRST**, call TaskUpdate to set task 2 ("Gather context") to `status: "in_progress"`.
 
+This is the pipeline's single codebase-reading pass: Phase 0 read no code and Phase 2 only synthesizes, so gather here everything the rest of planning needs about the code and record it in the **Context Map** (step 7).
+
 1. **Branch Changes** - Analyze all changes since diverging from main:
    - `git log origin/main..HEAD --oneline` - commits on this branch
    - `git diff origin/main...HEAD` - all code changes
@@ -413,6 +411,12 @@ Use these IDs for all TaskUpdate calls in the phases below.
 4. **Repository Documentation** (MANDATORY) - Follow the **Repository Documentation** rule in `## Common Instructions`.
 5. **CLAUDE.md Compliance** - Follow the **CLAUDE.md Compliance** rule in `## Common Instructions`.
 6. **Repomix** - Search codebase via `mcp__repomix__grep_repomix_output` (outputId from Phase 0). Use `mcp__repomix__read_repomix_output` with `startLine`/`endLine` for specific sections only.
+7. **Context Map (the output of this pass)** - Because this is the only phase that reads the codebase, record a compact written inventory of what it found, enough that every later phase reasons over the map instead of re-reading:
+   - Relevant files/modules and their role in the change
+   - Existing patterns and similar implementations to mirror
+   - Key types, interfaces, and Zod schemas in play
+   - Test conventions and fixtures that apply
+   - In-flight changes from the branch diff (step 1) the snapshot does not reflect
 
 After completing all context gathering, call TaskUpdate to set task 2 ("Gather context") to `status: "completed"`.
 
@@ -420,11 +424,11 @@ After completing all context gathering, call TaskUpdate to set task 2 ("Gather c
 
 **FIRST**, call TaskUpdate to set task 3 ("Analyze codebase") to `status: "in_progress"`.
 
-This is a synthesis step, not a second crawl — Phase 1 (Context Gathering) already traversed the codebase. Reason over the context Phase 1 gathered across the dimensions below; do not re-grep or re-read the whole tree Phase 1 already covered.
+This is a synthesis step, not a second crawl. Reason over the **Context Map** Phase 1 produced — that map is the codebase read, and it already holds the files, patterns, types, tests, and in-flight changes this analysis needs. Work the dimensions below against it; do not re-grep or re-read the tree to reconstruct what the map already contains.
 
-Reach for an additional read only under the same snapshot-vs-live rule Phase 1 applies, and only for what that rule allows:
+Reach for an additional read only if the Context Map is genuinely missing something the analysis turns on, and only under the same snapshot-vs-live rule Phase 1 applies — then fold the result back into the map:
 
-- a targeted `mcp__repomix__grep_repomix_output`/`mcp__repomix__read_repomix_output` (outputId from Phase 0) for one specific section the synthesis still needs, or
+- a targeted `mcp__repomix__grep_repomix_output`/`mcp__repomix__read_repomix_output` (outputId from Phase 0) for the one missing section, or
 - a live Grep/Read/Glob for in-flight working-tree code the snapshot is too stale to show (the branch's uncommitted changes).
 
 | Dimension        | Key Questions                                             |
