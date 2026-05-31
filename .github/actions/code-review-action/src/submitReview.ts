@@ -16,6 +16,7 @@ import {
   parseStructuredOutput,
   type ValidLine,
 } from "./reviewOutput/reviewOutput.ts";
+import { buildReviewComments } from "./reviewOutput/inlineCommentBody.ts";
 import {
   deletePendingReviews,
   fetchReviewThreads,
@@ -205,7 +206,7 @@ const { data: submittedReview } = await octokit.rest.pulls.createReview({
   pull_number: pullNumber,
   event,
   body: finalBody,
-  comments: validComments,
+  comments: buildReviewComments(validComments, prFiles),
 });
 
 console.log("✓ Review submitted successfully");

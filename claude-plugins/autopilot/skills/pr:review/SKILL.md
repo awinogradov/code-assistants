@@ -690,10 +690,13 @@ Map `severity` to its emoji when rendering in Phase 3: `blocker` → 🚧, `sugg
   "reviewComment": "...",
   "inlineComments": [
     {"path": "src/file.py", "line": 42, "body": "🚧 Issue description"},
-    {"path": "src/other.py", "line": 15, "body": "🙋‍♂️ Suggestion here"}
+    {"path": "src/other.py", "line": 15, "body": "🙋‍♂️ Suggestion here"},
+    {"path": "src/calc.py", "line": 8, "startLine": 7, "body": "🚧 Off-by-one in the running sum [CHECK-BUG-003](<RULES_DOC_URL>#CHECK-BUG-003)", "suggestion": "    for i in range(n):\n        total += items[i]"}
   ]
 }
 ```
+
+`startLine` (first line of a multi-line range) and `suggestion` (verbatim replacement for the anchored line(s)) are optional per-comment fields — emit them only for concrete, mechanical fixes (see [Code suggestions](#code-suggestions)).
 
 ### reviewComment Format (~30 lines max)
 
@@ -797,6 +800,15 @@ Add inline comments for issues with specific code locations:
 
 Each inline comment: 1-2 sentences, start with severity emoji, end with the rule code rendered as a markdown link per §2.5 (e.g. `🚧 No idempotency check — retries will duplicate charges [CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002)`).
 
+### Code suggestions
+
+Add an optional `suggestion` to an inline comment when the fix is concrete and mechanical — a rename, a guard clause, a corrected operator — and you can write it as exact replacement text. The action renders it as a one-click GitHub suggestion block ("Commit suggestion").
+
+- `suggestion` REPLACES the anchored line(s). Reproduce the original line(s) verbatim except for your change, **including leading indentation** — GitHub applies the text as-is, so a stray space silently reindents the file.
+- Provide raw replacement code only: no ` ```suggestion ` fence, no `+`/`-` diff markers, no prose (the action wraps it).
+- Single-line fix: set `line` only. Multi-line fix: set `startLine` (first line) and `line` (last line) over a **contiguous range fully inside the diff**. If the fix touches lines outside the diff, describe it in prose and omit `suggestion`.
+- Emit `suggestion` only when confident it applies cleanly; otherwise keep the prose finding alone.
+
 ### Deduplication Rules
 
 - NEVER mention the same issue in BOTH reviewComment AND inlineComments
@@ -812,7 +824,7 @@ Each inline comment: 1-2 sentences, start with severity emoji, end with the rule
 
 ### Exclude
 
-- Code examples or implementation suggestions
+- Code examples or implementation suggestions in the comment prose — put a concrete, mechanical fix in the structured `suggestion` field instead (see Code suggestions); it renders as a one-click GitHub suggestion block
 - "## Summary", "## Verdict", or any top-level markdown headers in review body
 - "Observations", "Positive Observations", or any praise/compliment sections
 - Multi-sentence greetings or praise after the opening greeting ("Great work", "Clean implementation", "well-structured", etc.)

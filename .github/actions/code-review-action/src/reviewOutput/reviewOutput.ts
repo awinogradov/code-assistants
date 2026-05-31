@@ -13,6 +13,10 @@ export const inlineCommentSchema = z.object({
   path: z.string(),
   line: z.number(),
   body: z.string(),
+  /** First line of a multi-line range; omit for a single-line comment (`line` is then the only line). */
+  startLine: z.number().optional(),
+  /** Verbatim replacement for the anchored line(s), rendered as a GitHub `suggestion` block. */
+  suggestion: z.string().optional(),
 });
 export type InlineComment = z.infer<typeof inlineCommentSchema>;
 
@@ -99,9 +103,25 @@ export function extractValidLines(patches: Array<{ filename: string; patch?: str
     );
 }
 
-/** True when a comment targets a line that exists in the diff. */
+/**
+ * True when a comment's target exists in the diff. For a single-line comment that
+ * is just `line`; for a multi-line comment the entire `[startLine, line]` range must
+ * be in-diff. A range that straddles a gap between hunks is rejected — GitHub would
+ * 422 the whole `createReview` call, not just the offending comment.
+ */
 export function isValidComment(comment: InlineComment, validLines: ValidLine[]): boolean {
-  return validLines.some((vl) => vl.path === comment.path && vl.line === comment.line);
+  const inDiff = (line: number): boolean =>
+    validLines.some((vl) => vl.path === comment.path && vl.line === line);
+
+  const { startLine, line } = comment;
+  if (startLine === undefined) {
+    return inDiff(line);
+  }
+  if (startLine > line) {
+    return false;
+  }
+  const range = Array.from({ length: line - startLine + 1 }, (_, i) => startLine + i);
+  return range.every(inDiff);
 }
 
 /**
