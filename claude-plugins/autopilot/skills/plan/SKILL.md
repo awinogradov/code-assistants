@@ -3,6 +3,8 @@ name: plan
 description: Perform deep analysis of the codebase, recent changes, and the requested task. Create a validated, expert-reviewed implementation plan
 argument-hint: "<task description, GitHub issue number, or GitHub issue URL>"
 allowed-tools:
+  - TaskCreate
+  - TaskUpdate
   - Read
   - Grep
   - Glob
