@@ -25145,18 +25145,6 @@ Then invoke `/autopilot:branch-create --<chosen-prefix> "<description>"` using t
 
 Do NOT add `## Pre-Implementation` — already on a feature branch with active work.
 
-## Quiz Mode Format
-
-When clarification needed:
-
-```
-**Q[N]**: [Clear question]
-A) [Option with brief explanation]
-B) [Option with brief explanation]
-C) [Option with brief explanation]
-D) Other: ___
-```
-
 ## Stack Pipeline (Phases 1–6)
 
 The stack skills (`plan-bun`, `plan-nodejs-react`) execute this shared pipeline after the Phase 1 delegation above, supplying their three deltas (example libraries, expert table, verify examples) from their own `## Stack Deltas` section. The pipeline is defined ONCE here so the two stacks cannot drift; wherever a phase says "your stack's <delta>", read the value from the delegating stack skill. These "Phase 1–6" are the stack-execution phases — distinct from this orchestrator's Phase 0–2 above — and the stack skill runs them in order after being delegated to.
@@ -25307,7 +25295,7 @@ Rate the reviewed plan (20 points each dimension = 100 total):
 If score < 95, automatically:
 
 1. Identify weak dimensions (score < 19)
-2. Ask clarifying questions in quiz format
+2. Ask clarifying questions via `AskUserQuestion` if a weak dimension hinges on a material ambiguity
 3. Re-analyze and re-score internally (do not output retry details)
 4. Repeat until 95+ achieved
 
