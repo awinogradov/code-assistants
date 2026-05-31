@@ -94,7 +94,7 @@ on:
     branches: [main]
 
 concurrency:
-  group: auto-label-${{ github.repository }}
+  group: auto-label-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
