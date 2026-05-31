@@ -12,10 +12,13 @@ on:
   push:
     branches: [main]
 
-# Shared group across both events so a push-triggered prune never runs concurrently
-# with a pull_request-triggered label sync (which would race on the same labels).
+# Per-PR concurrency: concurrent PRs never cancel each other's label sync, and a
+# newer sync for the same PR supersedes the older run. The push-prune runs in its
+# own (github.ref) group so PR activity never cancels it. A prune may briefly
+# overlap a PR sync, but that is self-healing — the next push re-prunes and each
+# PR's labels reflect its own diff.
 concurrency:
-  group: auto-label-${{ github.repository }}
+  group: auto-label-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
