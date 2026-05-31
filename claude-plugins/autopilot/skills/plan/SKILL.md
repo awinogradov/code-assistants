@@ -55,8 +55,8 @@ Create all 6 tasks using TaskCreate, in order, before starting any work:
 | 1   | Resolve input        | Resolving input        | plan   |
 | 2   | Gather context       | Gathering context      | skill  |
 | 3   | Analyze codebase     | Analyzing codebase     | skill  |
-| 4   | Validate plan scores | Validating plan scores | skill  |
-| 5   | Review with experts  | Reviewing with experts | skill  |
+| 4   | Review with experts  | Reviewing with experts | skill  |
+| 5   | Validate plan scores | Validating plan scores | skill  |
 | 6   | Output final plan    | Outputting final plan  | skill  |
 
 Create each task with:
@@ -135,11 +135,7 @@ Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
     - `compress`: true
 ```
 
-After all calls complete:
-
-1. Store the `outputId` from the snapshot acquisition (attach or pack) response for use throughout all phases
-2. Use `grep_repomix_output` with the `outputId` to search for task-relevant code (keywords from issue title/description, related module names)
-3. Use `read_repomix_output` with `startLine`/`endLine` only to read specific sections found via grep
+After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response — Phase 1 (Context Gathering) is the single phase that reads the codebase from it. Phase 0 does NOT grep or read code: build the issue context, Steelmanned Intent, and Assumptions below from the resolved issue JSON (title, body, comments) and the TODO results alone. Defer every codebase read to Phase 1.
 
 ### Issue Context Output
 
@@ -392,8 +388,8 @@ Call TaskList to find the planning tasks created by the plan command. Match task
 
 - Task 2: "Gather context"
 - Task 3: "Analyze codebase"
-- Task 4: "Validate plan scores"
-- Task 5: "Review with experts"
+- Task 4: "Review with experts"
+- Task 5: "Validate plan scores"
 - Task 6: "Output final plan"
 
 Use these IDs for all TaskUpdate calls in the phases below.
@@ -401,6 +397,8 @@ Use these IDs for all TaskUpdate calls in the phases below.
 ### Phase 1: Context Gathering
 
 **FIRST**, call TaskUpdate to set task 2 ("Gather context") to `status: "in_progress"`.
+
+This is the pipeline's single codebase-reading pass: Phase 0 read no code and Phase 2 only synthesizes, so gather here everything the rest of planning needs about the code and record it in the **Context Map** (step 7).
 
 1. **Branch Changes** - Analyze all changes since diverging from main:
    - `git log origin/main..HEAD --oneline` - commits on this branch
@@ -413,6 +411,12 @@ Use these IDs for all TaskUpdate calls in the phases below.
 4. **Repository Documentation** (MANDATORY) - Follow the **Repository Documentation** rule in `## Common Instructions`.
 5. **CLAUDE.md Compliance** - Follow the **CLAUDE.md Compliance** rule in `## Common Instructions`.
 6. **Repomix** - Search codebase via `mcp__repomix__grep_repomix_output` (outputId from Phase 0). Use `mcp__repomix__read_repomix_output` with `startLine`/`endLine` for specific sections only.
+7. **Context Map (the output of this pass)** - Because this is the only phase that reads the codebase, record a compact written inventory of what it found, enough that every later phase reasons over the map instead of re-reading:
+   - Relevant files/modules and their role in the change
+   - Existing patterns and similar implementations to mirror
+   - Key types, interfaces, and Zod schemas in play
+   - Test conventions and fixtures that apply
+   - In-flight changes from the branch diff (step 1) the snapshot does not reflect
 
 After completing all context gathering, call TaskUpdate to set task 2 ("Gather context") to `status: "completed"`.
 
@@ -420,7 +424,12 @@ After completing all context gathering, call TaskUpdate to set task 2 ("Gather c
 
 **FIRST**, call TaskUpdate to set task 3 ("Analyze codebase") to `status: "in_progress"`.
 
-Analyze each dimension before planning. Use `mcp__repomix__grep_repomix_output` (outputId from Phase 0) to search for relevant code, and `mcp__repomix__read_repomix_output` with `startLine`/`endLine` to read specific sections. Fall back to Grep, Read, or Glob when Repomix results are insufficient.
+This is a synthesis step, not a second crawl. Reason over the **Context Map** Phase 1 produced — that map is the codebase read, and it already holds the files, patterns, types, tests, and in-flight changes this analysis needs. Work the dimensions below against it; do not re-grep or re-read the tree to reconstruct what the map already contains.
+
+Reach for an additional read only if the Context Map is genuinely missing something the analysis turns on, and only under the same snapshot-vs-live rule Phase 1 applies — then fold the result back into the map:
+
+- a targeted `mcp__repomix__grep_repomix_output`/`mcp__repomix__read_repomix_output` (outputId from Phase 0) for the one missing section, or
+- a live Grep/Read/Glob for in-flight working-tree code the snapshot is too stale to show (the branch's uncommitted changes).
 
 | Dimension        | Key Questions                                             |
 | ---------------- | --------------------------------------------------------- |
@@ -434,9 +443,7 @@ After completing deep analysis, call TaskUpdate to set task 3 ("Analyze codebase
 
 ### Phase 3: Draft Plan
 
-**FIRST**, call TaskUpdate to set task 6 ("Output final plan") to `status: "in_progress"`.
-
-Assemble a complete plan draft now — before scoring and expert review — so both operate on a concrete artifact instead of an imagined one. Build the draft from the output template below and keep it available for Phase 4 (expert review) and Phase 5 (scoring). Leave the `Score:` line as a placeholder; Phase 5 fills it. Do NOT mark task 6 completed yet — it stays in progress until Phase 6 finalizes the plan.
+Assemble a complete plan draft now — before scoring and expert review — so both operate on a concrete artifact instead of an imagined one. Build the draft from the output template below and keep it available for Phase 4 (expert review) and Phase 5 (scoring). Leave the `Score:` line as a placeholder; Phase 5 fills it. This draft is interim — do NOT flip any task status here; it flows directly into the Phase 4 review. Task 6 ("Output final plan") activates in Phase 6 when the final plan is written, so the progress list advances in numeric order (Review and Validate finish before Output begins).
 
 The template below starts with `# <Title>` — see the canonical "Plan File Header (MANDATORY)" rule in `## Common Instructions` above for title derivation and section ordering.
 
@@ -487,11 +494,9 @@ After the user selects their option:
 - "Done": no further action needed
 ```
 
-Keep task 6 in progress — Phase 6 marks it completed after the plan is finalized.
-
 ### Phase 4: Dynamic Expert Review
 
-**FIRST**, call TaskUpdate to set task 5 ("Review with experts") to `status: "in_progress"`.
+**FIRST**, call TaskUpdate to set task 4 ("Review with experts") to `status: "in_progress"`.
 
 Select experts from your stack's **expert table** delta — always include the Pre-mortem Analyst, then 2-3 additional experts based on task scope.
 
@@ -511,11 +516,11 @@ Use the Agent tool with:
 
 Wait for all agents to complete. Each returns a JSON object (`expertRole`, `score`, `verdict`, `findings`, `revision`). Aggregate the `findings` across experts to refine the Phase 3 draft internally, and treat any `needs-revision` verdict as a signal to address that expert's findings before finalizing. Do not include the raw expert JSON in the plan output.
 
-After all expert reviews complete, call TaskUpdate to set task 5 ("Review with experts") to `status: "completed"`.
+After all expert reviews complete, call TaskUpdate to set task 4 ("Review with experts") to `status: "completed"`.
 
 ### Phase 5: Validation Scoring
 
-**FIRST**, call TaskUpdate to set task 4 ("Validate plan scores") to `status: "in_progress"`.
+**FIRST**, call TaskUpdate to set task 5 ("Validate plan scores") to `status: "in_progress"`.
 
 Rate the reviewed plan (20 points each dimension = 100 total):
 
@@ -536,9 +541,11 @@ If score < 95, automatically:
 3. Re-analyze and re-score internally (do not output retry details)
 4. Repeat until 95+ achieved
 
-After scoring completes, call TaskUpdate to set task 4 ("Validate plan scores") to `status: "completed"`.
+After scoring completes, call TaskUpdate to set task 5 ("Validate plan scores") to `status: "completed"`.
 
 ### Phase 6: Finalize Output
+
+**FIRST**, call TaskUpdate to set task 6 ("Output final plan") to `status: "in_progress"`.
 
 Apply the expert findings (Phase 4) and the validated score (Phase 5) to the Phase 3 draft, then write the final plan file. Replace the `Score:` placeholder in the `## Summary` block with the Phase 5 result (`Score: [X]/100`).
 

@@ -47,7 +47,7 @@ The two skills share the same front half. `plan` produces the plan and stops, as
 
 **Flow Legend:**
 
-- ① Resolve the input (issue vs. description) and gather context in parallel — repomix snapshot plus, for issues, two context sub-agents.
+- ① Resolve the input (issue vs. description) in parallel — attach the repomix snapshot (no code read yet) plus, for issues, two context sub-agents.
 - ② `preflight-check` validates branch/worktree state and that `main` is current before any work.
 - ③ Cross-cutting rules (doc-lookup, repo-docs, CLAUDE.md, ASCII schemas) declared once and reused by the pipeline.
 - ④ Read `package.json` `agents.rules` and delegate to one stack skill.
@@ -101,10 +101,10 @@ The skill detects the input type from its arguments and gathers context **in par
 | contains `github.com` | GitHub issue URL  |
 | anything else         | Plain description |
 
-- **Codebase snapshot (always).** Prefer the committed `.repomix/pack.xml` via `attach_packed_output`; fall back to a live `pack_codebase` when it is absent. The returned `outputId` is reused by every later phase. See [Committed Repomix pack](./repomix-pack.md).
+- **Codebase snapshot (always).** Prefer the committed `.repomix/pack.xml` via `attach_packed_output`; fall back to a live `pack_codebase` when it is absent. Phase 0 only _attaches_ the pack — it does not read code from it; the returned `outputId` is handed to Phase 1, the single phase that reads the codebase. See [Committed Repomix pack](./repomix-pack.md).
 - **For GitHub issues (parallel sub-agents).** `resolve-issue-context` fetches the issue (and, when the caller opts in, idempotently self-assigns the current user); `search-codebase-todos` finds TODOs referencing the issue. Both return JSON (see [Sub-agents](#sub-agents-and-their-json-contracts)).
 
-The skill then emits, for the user's review: the rendered **issue context**, a one-line **steelmanned intent** (the request restated in its strongest form — the stable target for expert reviewers, copied verbatim into the plan's `## Summary`), and **Assumptions & Open Questions**. Any load-bearing open question is raised via `AskUserQuestion` before delegating.
+The skill then emits, for the user's review (all derived from the resolved issue JSON and TODOs, not a codebase scan): the rendered **issue context**, a one-line **steelmanned intent** (the request restated in its strongest form — the stable target for expert reviewers, copied verbatim into the plan's `## Summary`), and **Assumptions & Open Questions**. Any load-bearing open question is raised via `AskUserQuestion` before delegating.
 
 ## Preflight check
 
@@ -145,11 +145,11 @@ The delegated stack skill discovers the planning tasks (via `TaskList`) and runs
 
 ### Phase 1 · Context Gathering
 
-Gather the branch diff (`git log/diff origin/main...HEAD`), then decide **where context comes from** before crawling: the Phase 0 snapshot serves broad/whole-repo reads, while live tools (Explore agents / Grep / Glob) serve only what the snapshot cannot — in-flight working-tree code or targeted fresh reads. This one rule stops the snapshot and live tools from re-traversing the same tree. Documentation lookup, repository documentation, and CLAUDE.md compliance follow the Common Instructions.
+This is the pipeline's **single codebase-reading pass** — Phase 0 reads no code and Phase 2 only synthesizes. Gather the branch diff (`git log/diff origin/main...HEAD`), then decide **where context comes from** before crawling: the Phase 0 snapshot serves broad/whole-repo reads, while live tools (Explore agents / Grep / Glob) serve only what the snapshot cannot — in-flight working-tree code or targeted fresh reads. The pass ends by recording a **Context Map** — files and their roles, patterns to mirror, key types/schemas, test conventions, and in-flight changes — which becomes the single artifact every later phase reasons over instead of re-reading. Documentation lookup, repository documentation, and CLAUDE.md compliance follow the Common Instructions.
 
 ### Phase 2 · Deep Analysis
 
-Analyze the change across five dimensions before planning: **Architecture** (where it fits), **Patterns** (what existing code to follow), **Data Flow** (source of truth), **Types** (interfaces/schemas, what needs Zod), and **Edge Cases** (failure/null/race conditions).
+A synthesis step, not a second crawl: reason over the **Context Map** from Phase 1 across five dimensions — **Architecture** (where it fits), **Patterns** (what existing code to follow), **Data Flow** (source of truth), **Types** (interfaces/schemas, what needs Zod), and **Edge Cases** (failure/null/race conditions). The map is the codebase read; an extra lookup is allowed only when it is genuinely missing something, under the same snapshot-vs-live rule as Phase 1, with the result folded back into the map — never a re-crawl of the tree.
 
 ### Phase 3 · Draft Plan
 

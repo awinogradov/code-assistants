@@ -59,8 +59,8 @@ Create all 6 tasks using TaskCreate, in order, before starting any work:
 | 1   | Resolve input        | Resolving input        | autopilot |
 | 2   | Gather context       | Gathering context      | skill     |
 | 3   | Analyze codebase     | Analyzing codebase     | skill     |
-| 4   | Validate plan scores | Validating plan scores | skill     |
-| 5   | Review with experts  | Reviewing with experts | skill     |
+| 4   | Review with experts  | Reviewing with experts | skill     |
+| 5   | Validate plan scores | Validating plan scores | skill     |
 | 6   | Output final plan    | Outputting final plan  | skill     |
 
 Create each task with:
@@ -139,11 +139,7 @@ Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
     - `compress`: true
 ```
 
-After all calls complete:
-
-1. Store the `outputId` from the snapshot acquisition (attach or pack) response for use throughout all phases
-2. Use `grep_repomix_output` with the `outputId` to search for task-relevant code (keywords from issue title/description, related module names)
-3. Use `read_repomix_output` with `startLine`/`endLine` only to read specific sections found via grep
+After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response — the stack pipeline's Context Gathering phase is the single place that reads the codebase from it. Phase 0 does NOT grep or read code: render the issue context below from the resolved issue JSON and the TODO results alone. Defer every codebase read to Context Gathering.
 
 ### Issue Context Output
 
