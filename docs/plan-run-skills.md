@@ -149,7 +149,7 @@ Gather the branch diff (`git log/diff origin/main...HEAD`), then decide **where 
 
 ### Phase 2 · Deep Analysis
 
-Analyze the change across five dimensions before planning: **Architecture** (where it fits), **Patterns** (what existing code to follow), **Data Flow** (source of truth), **Types** (interfaces/schemas, what needs Zod), and **Edge Cases** (failure/null/race conditions).
+A synthesis step, not a second crawl: reason over the context Phase 1 already gathered, across five dimensions — **Architecture** (where it fits), **Patterns** (what existing code to follow), **Data Flow** (source of truth), **Types** (interfaces/schemas, what needs Zod), and **Edge Cases** (failure/null/race conditions). Any extra read obeys the same snapshot-vs-live rule as Phase 1 — a targeted lookup only, never a re-crawl of the tree Phase 1 covered.
 
 ### Phase 3 · Draft Plan
 
