@@ -143,11 +143,11 @@ After all calls complete:
 
 ### Issue Context Output
 
-Present the `resolve-issue-context` agent's output along with TODO search results from `search-codebase-todos`. The agents return structured blocks. Output the issue context directly, then append the TODO results:
+The `resolve-issue-context` and `search-codebase-todos` agents each return a single JSON object (see each agent's output schema). Parse both, then render the issue context for display from the `resolve-issue-context` fields — `source`, `title`, `status`, `labels`, `assignee` (only when non-null), `description`, and `comments` — and append the TODO results rendered from `search-codebase-todos`:
 
 ```
 ### Related TODOs in Codebase
-[output from search-codebase-todos agent]
+[render from the `todos` array (each as `location` — `text`) and `total`; when `total` is 0, output "No related TODOs found"]
 ```
 
 ### Steelmanned Intent
@@ -525,7 +525,7 @@ Use the Agent tool with:
 - `description`: "Expert review: [Role]"
 ```
 
-Wait for all agents to complete. Use their findings to refine the Phase 3 draft internally. Do not include expert report blocks in the plan output.
+Wait for all agents to complete. Each returns a JSON object (`expertRole`, `score`, `verdict`, `findings`, `revision`). Aggregate the `findings` across experts to refine the Phase 3 draft internally, and treat any `needs-revision` verdict as a signal to address that expert's findings before finalizing. Do not include the raw expert JSON in the plan output.
 
 After all expert reviews complete, call TaskUpdate to set task 5 ("Review with experts") to `status: "completed"`.
 

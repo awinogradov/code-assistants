@@ -147,11 +147,11 @@ After all calls complete:
 
 ### Issue Context Output
 
-Present the `resolve-issue-context` agent's output along with TODO search results from `search-codebase-todos`. The agents return structured blocks. Output the issue context directly, then append the TODO results:
+The `resolve-issue-context` and `search-codebase-todos` agents each return a single JSON object (see each agent's output schema). Parse both, then render the issue context for display from the `resolve-issue-context` fields — `source`, `title`, `status`, `labels`, `assignee` (only when non-null), `description`, and `comments` — and append the TODO results rendered from `search-codebase-todos`:
 
 ```
 ### Related TODOs in Codebase
-[output from search-codebase-todos agent]
+[render from the `todos` array (each as `location` — `text`) and `total`; when `total` is 0, output "No related TODOs found"]
 ```
 
 After completing the Issue Context Output, call TaskUpdate to set task 1 ("Resolve input") to `status: "completed"`.

@@ -82,23 +82,32 @@ Resolve the status with these steps:
 
 ## Phase 3: Output
 
-Output ONLY the structured block. No preamble or commentary. Include the `**Assignee:**` line only when Phase 2 ran (caller opted in); omit it entirely for read-only invocations.
+Output ONLY a single JSON object matching the schema below — no preamble, no surrounding code fence, no commentary. The parent parses it directly, so any extra text breaks consumption.
 
+| Field         | Type           | Constraint                                                                            |
+| ------------- | -------------- | ------------------------------------------------------------------------------------- |
+| `source`      | string         | e.g. `"GitHub Issue #42"`                                                             |
+| `issueId`     | integer        | The issue number                                                                      |
+| `title`       | string         | Issue title                                                                           |
+| `status`      | string         | Issue state (e.g. `"OPEN"`, `"CLOSED"`)                                               |
+| `labels`      | string[]       | Label names; empty array when none                                                    |
+| `assignee`    | string \| null | The Phase 2 status string when Phase 2 ran; `null` for read-only callers that skip it |
+| `description` | string         | Issue body                                                                            |
+| `comments`    | object[]       | `{ "author": string, "date": string, "body": string }` per comment; empty when none   |
+
+Example:
+
+```json
+{
+  "source": "GitHub Issue #42",
+  "issueId": 42,
+  "title": "Add JWT refresh endpoint",
+  "status": "OPEN",
+  "labels": ["enhancement"],
+  "assignee": "@octocat (just assigned)",
+  "description": "We need a refresh endpoint...",
+  "comments": [{ "author": "octocat", "date": "2026-05-30", "body": "Agreed." }]
+}
 ```
-## Issue Context
 
-**Source:** GitHub Issue #<N>
-**Issue ID:** <N>
-**Title:** [title]
-**Status:** [state]
-**Labels:** [labels]
-**Assignee:** [status from Phase 2 — include this line ONLY when Phase 2 ran]
-
-### Description
-[body]
-
-### Comments (N)
-- **@author** (date): [comment body]
-```
-
-If the comments list is empty, output `### Comments (0)` with no items.
+Emit the raw object, not the fenced form. Set `assignee` to `null` (not the string `"null"`) when Phase 2 did not run.
