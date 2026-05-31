@@ -53,6 +53,7 @@ Worked examples:
 | [`agents-rules-sync`](../.github/actions/agents-rules-sync/)   | root entry + `src/` | `${{ github.action_path }}/agents-rules-sync.ts` |
 | [`release-action`](../.github/actions/release-action/)         | `src/`-only         | `${{ github.action_path }}/src/<entry>.ts`       |
 | [`code-review-action`](../.github/actions/code-review-action/) | `src/`-only         | `${{ github.action_path }}/src/<entry>.ts`       |
+| [`auto-label`](../.github/actions/auto-label/)                 | `src/`-only         | `${{ github.action_path }}/src/autoLabel.ts`     |
 
 Required `package.json` scripts: see [Workspace scripts](#workspace-scripts).
 
