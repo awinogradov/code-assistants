@@ -63,6 +63,26 @@ The content is organized as follows:
       README.md
       tsconfig.json
       version
+    auto-label/
+      src/
+        autoLabel.ts
+        collectMembers.test.ts
+        collectMembers.ts
+        enumerateWorkspaces.test.ts
+        enumerateWorkspaces.ts
+        eventPayload.test.ts
+        eventPayload.ts
+        githubApi.ts
+        labelPr.test.ts
+        labelPr.ts
+        pruneLabels.test.ts
+        pruneLabels.ts
+        reconcileLabels.test.ts
+        reconcileLabels.ts
+      action.yml
+      package.json
+      README.md
+      tsconfig.json
     code-review-action/
       .release_notes/
         0.1.0.md
@@ -212,6 +232,7 @@ The content is organized as follows:
       action.yml
       README.md
   workflows/
+    auto-label.yml
     code-review.yml
     contributing.yml
     release-automerge.yml
@@ -1515,6 +1536,1179 @@ uses: awinogradov/code-assistants/.github/actions/agents-rules-sync@v1
 
 <file path=".github/actions/agents-rules-sync/version">
 2.0.0
+</file>
+
+<file path=".github/actions/auto-label/src/autoLabel.ts">
+/**
+ * Entry point for the auto-label composite action. Reads the GitHub Actions
+ * environment, derives the label prefix (from the `label-prefix` input or the root
+ * `package.json` scope), dispatches to the mode matching `github.event_name`
+ * (`pull_request` → label-PR, `push` → prune-labels), and writes a step summary.
+ * All inputs/payloads are validated before any label is mutated.
+ */
+import * as core from "@actions/core";
+import { Octokit } from "@octokit/rest";
+
+import { parseRepo } from "@code-assistants/actions-core/parseRepo";
+
+import { deriveLabelPrefix } from "./enumerateWorkspaces.ts";
+import { readPullRequestEvent } from "./eventPayload.ts";
+import { createGitHubApi, type GitHubApi } from "./githubApi.ts";
+import { labelPr, type LabelPrResult } from "./labelPr.ts";
+import { pruneLabels, type PruneResult } from "./pruneLabels.ts";
+
+const defaultColor = "5319e7";
+const defaultDescriptionTemplate = "Auto-applied: PR touches {label}";
+
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+  return value;
+}
+
+async function resolvePrefix(api: GitHubApi, ref: string, override: string): Promise<string> {
+  if (override) {
+    return override.endsWith("/") ? override : `${override}/`;
+  }
+  const rootPkg = await api.readPackageJson("", ref);
+  return deriveLabelPrefix(rootPkg?.name);
+}
+
+async function writeSummary(title: string, lines: string[]): Promise<void> {
+  core.summary.addRaw(`### ${title}\n\n${lines.join("\n")}\n`, true);
+  await core.summary.write();
+}
+
+function bullets(label: string, values: string[]): string {
+  return values.length > 0 ? `**${label}:**\n${values.map((v) => `- ${v}`).join("\n")}` : `**${label}:** _(none)_`;
+}
+
+async function runPullRequest(api: GitHubApi, prefixOverride: string): Promise<void> {
+  const event = readPullRequestEvent(requireEnv("GITHUB_EVENT_PATH"));
+  const prefix = await resolvePrefix(api, event.headSha, prefixOverride);
+  const result: LabelPrResult = await labelPr(api, {
+    prNumber: event.prNumber,
+    baseSha: event.baseSha,
+    headSha: event.headSha,
+    prefix,
+    labelColor: process.env.LABEL_COLOR || defaultColor,
+    labelDescriptionTemplate: process.env.LABEL_DESCRIPTION_TEMPLATE || defaultDescriptionTemplate,
+  });
+  await writeSummary(`Auto label · PR #${event.prNumber}`, [
+    `Prefix: \`${prefix}\``,
+    bullets("Touched", result.touched),
+    bullets("Added", result.added),
+    bullets("Removed", result.removed),
+  ]);
+}
+
+async function runPush(api: GitHubApi, prefixOverride: string): Promise<void> {
+  const ref = requireEnv("GITHUB_SHA");
+  const prefix = await resolvePrefix(api, ref, prefixOverride);
+  const result: PruneResult = await pruneLabels(api, { ref, prefix });
+  await writeSummary("Auto label · prune", [`Prefix: \`${prefix}\``, bullets("Deleted", result.deleted)]);
+}
+
+async function run(): Promise<void> {
+  const token = requireEnv("GH_TOKEN");
+  const eventName = requireEnv("GITHUB_EVENT_NAME");
+  const { owner, repo } = parseRepo(requireEnv("GITHUB_REPOSITORY"));
+  const prefixOverride = (process.env.LABEL_PREFIX ?? "").trim();
+
+  const api = createGitHubApi(new Octokit({ auth: token }), owner, repo);
+
+  if (eventName === "pull_request") {
+    await runPullRequest(api, prefixOverride);
+    return;
+  }
+  if (eventName === "push") {
+    await runPush(api, prefixOverride);
+    return;
+  }
+  core.info(`auto-label: no action for event "${eventName}"`);
+}
+
+run().catch((error: unknown) => {
+  core.setFailed(error instanceof Error ? error.message : String(error));
+});
+</file>
+
+<file path=".github/actions/auto-label/src/collectMembers.test.ts">
+import { describe, expect, it } from "bun:test";
+
+import { collectMembers } from "./collectMembers.ts";
+import type { PackageJson } from "./enumerateWorkspaces.ts";
+import type { GitHubApi } from "./githubApi.ts";
+
+function buildApi(overrides: Partial<GitHubApi>): GitHubApi {
+  const notImplemented = (): never => {
+    throw new Error("not implemented");
+  };
+  return {
+    readPackageJson: async () => null,
+    listSubdirs: async () => [],
+    listChangedFiles: notImplemented,
+    listPrLabels: notImplemented,
+    listRepoLabels: notImplemented,
+    ensureLabel: notImplemented,
+    addLabels: notImplemented,
+    removeLabel: notImplemented,
+    deleteLabel: notImplemented,
+    ...overrides,
+  };
+}
+
+describe("collectMembers", () => {
+  it("resolves literal + glob members at a ref via the API", async () => {
+    const pkgByPath: Record<string, PackageJson> = {
+      "": { name: "@code-assistants", workspaces: [".github/actions/files-sync", "packages/*"] },
+      ".github/actions/files-sync": { name: "@code-assistants/files-sync-action" },
+      "packages/actions-core": { name: "@code-assistants/actions-core" },
+    };
+    const api = buildApi({
+      readPackageJson: async (dir) => pkgByPath[dir] ?? null,
+      listSubdirs: async (parent) => (parent === "packages" ? ["actions-core"] : []),
+    });
+
+    expect(await collectMembers(api, "headsha", "code-assistants/")).toEqual([
+      {
+        dir: ".github/actions/files-sync",
+        name: "@code-assistants/files-sync-action",
+        label: "code-assistants/files-sync-action",
+      },
+      {
+        dir: "packages/actions-core",
+        name: "@code-assistants/actions-core",
+        label: "code-assistants/actions-core",
+      },
+    ]);
+  });
+
+  it("returns no members when the root manifest is absent at the ref", async () => {
+    const api = buildApi({ readPackageJson: async () => null });
+    expect(await collectMembers(api, "missing", "code-assistants/")).toEqual([]);
+  });
+});
+</file>
+
+<file path=".github/actions/auto-label/src/collectMembers.ts">
+/**
+ * Async orchestration that fetches a repo's workspace members at a git ref via the
+ * injected {@link GitHubApi} and turns them into labelable members using the pure
+ * helpers in `./enumerateWorkspaces.ts`. Directory listings and member
+ * `package.json` files are pre-fetched, then the pure (sync) `enumerateMembers`
+ * runs — so the transform stays unit-tested without mocks and the network work
+ * runs concurrently.
+ */
+import {
+  enumerateMembers,
+  resolveWorkspaceDirs,
+  type PackageJson,
+  type WorkspaceMember,
+} from "./enumerateWorkspaces.ts";
+import type { GitHubApi } from "./githubApi.ts";
+
+function globParents(workspaces: string[]): string[] {
+  const parents: string[] = [];
+  for (const raw of workspaces) {
+    const pattern = raw.replace(/\/+$/, "");
+    if (pattern.endsWith("/*")) {
+      parents.push(pattern.slice(0, -2));
+    }
+  }
+  return parents;
+}
+
+/** Resolves `{ dir, name, label }` for every workspace member present at `ref`. */
+export async function collectMembers(
+  api: GitHubApi,
+  ref: string,
+  prefix: string,
+): Promise<WorkspaceMember[]> {
+  const rootPkg = (await api.readPackageJson("", ref)) ?? {};
+  const workspaces = rootPkg.workspaces ?? [];
+
+  const subdirEntries = await Promise.all(
+    globParents(workspaces).map(
+      async (parent) => [parent, await api.listSubdirs(parent, ref)] as const,
+    ),
+  );
+  const subdirs = new Map<string, string[]>(subdirEntries);
+  const listSubdirs = (parent: string): string[] => subdirs.get(parent) ?? [];
+
+  const dirs = resolveWorkspaceDirs(workspaces, listSubdirs);
+  const pkgEntries = await Promise.all(
+    dirs.map(async (dir) => [dir, await api.readPackageJson(dir, ref)] as const),
+  );
+  const pkgs = new Map<string, PackageJson | null>(pkgEntries);
+  const readPackageJson = (dir: string): PackageJson | null => pkgs.get(dir) ?? null;
+
+  return enumerateMembers(rootPkg, prefix, readPackageJson, listSubdirs);
+}
+</file>
+
+<file path=".github/actions/auto-label/src/enumerateWorkspaces.test.ts">
+import { describe, expect, it } from "bun:test";
+
+import {
+  buildLabel,
+  deriveLabelPrefix,
+  enumerateMembers,
+  memberSegment,
+  resolveWorkspaceDirs,
+  type PackageJson,
+} from "./enumerateWorkspaces.ts";
+
+describe("resolveWorkspaceDirs", () => {
+  it("keeps literal paths verbatim (the upstream-bug fix)", () => {
+    expect(resolveWorkspaceDirs([".github/actions/files-sync"], () => [])).toEqual([
+      ".github/actions/files-sync",
+    ]);
+  });
+
+  it("expands <parent>/* globs one level", () => {
+    const dirs = resolveWorkspaceDirs(["packages/*"], (parent) =>
+      parent === "packages" ? ["actions-core", "other"] : [],
+    );
+    expect(dirs).toEqual(["packages/actions-core", "packages/other"]);
+  });
+
+  it("mixes literal paths and globs and trims trailing slashes", () => {
+    const dirs = resolveWorkspaceDirs([".github/actions/files-sync", "packages/*/"], () => [
+      "actions-core",
+    ]);
+    expect(dirs).toEqual([".github/actions/files-sync", "packages/actions-core"]);
+  });
+});
+
+describe("deriveLabelPrefix", () => {
+  it("derives the prefix from the root name scope", () => {
+    expect(deriveLabelPrefix("@code-assistants")).toBe("code-assistants/");
+    expect(deriveLabelPrefix("@acme/monorepo")).toBe("acme/");
+  });
+
+  it("throws when the root name has no scope", () => {
+    expect(() => deriveLabelPrefix("autopilot")).toThrow(/no @scope/);
+    expect(() => deriveLabelPrefix(undefined)).toThrow(/no @scope/);
+  });
+});
+
+describe("memberSegment", () => {
+  it("drops the scope from a scoped name", () => {
+    expect(memberSegment("@code-assistants/files-sync-action")).toBe("files-sync-action");
+  });
+
+  it("keeps an unscoped name as-is", () => {
+    expect(memberSegment("autopilot")).toBe("autopilot");
+  });
+});
+
+describe("buildLabel", () => {
+  it("joins prefix and segment for scoped and unscoped members", () => {
+    expect(buildLabel("code-assistants/", "@code-assistants/files-sync-action")).toBe(
+      "code-assistants/files-sync-action",
+    );
+    expect(buildLabel("code-assistants/", "autopilot")).toBe("code-assistants/autopilot");
+  });
+
+  it("rejects oversized or malformed label names (injection guard)", () => {
+    expect(() => buildLabel("code-assistants/", `@x/${"a".repeat(60)}`)).toThrow(/unsafe label/);
+    expect(() => buildLabel("code-assistants/", "@x/bad name!")).toThrow(/unsafe label/);
+  });
+});
+
+describe("enumerateMembers", () => {
+  const rootPkg: PackageJson = {
+    name: "@code-assistants",
+    workspaces: [".github/actions/files-sync", "claude-plugins/*", "packages/*"],
+  };
+  const pkgByDir: Record<string, PackageJson> = {
+    ".github/actions/files-sync": { name: "@code-assistants/files-sync-action" },
+    "claude-plugins/autopilot": { name: "autopilot" },
+    "packages/actions-core": { name: "@code-assistants/actions-core" },
+  };
+  const listSubdirs = (parent: string): string[] => {
+    if (parent === "claude-plugins") return ["autopilot"];
+    if (parent === "packages") return ["actions-core"];
+    return [];
+  };
+  const readPackageJson = (dir: string): PackageJson | null => pkgByDir[dir] ?? null;
+
+  it("resolves literal + glob members to {dir,name,label}, unscoped member included", () => {
+    expect(enumerateMembers(rootPkg, "code-assistants/", readPackageJson, listSubdirs)).toEqual([
+      {
+        dir: ".github/actions/files-sync",
+        name: "@code-assistants/files-sync-action",
+        label: "code-assistants/files-sync-action",
+      },
+      { dir: "claude-plugins/autopilot", name: "autopilot", label: "code-assistants/autopilot" },
+      {
+        dir: "packages/actions-core",
+        name: "@code-assistants/actions-core",
+        label: "code-assistants/actions-core",
+      },
+    ]);
+  });
+
+  it("skips directories without a package.json name", () => {
+    const members = enumerateMembers(
+      { name: "@code-assistants", workspaces: ["packages/*"] },
+      "code-assistants/",
+      () => null,
+      () => ["empty-dir"],
+    );
+    expect(members).toEqual([]);
+  });
+});
+</file>
+
+<file path=".github/actions/auto-label/src/enumerateWorkspaces.ts">
+/**
+ * Pure helpers that turn a repo's `package.json` `workspaces` field into the set
+ * of labelable members. The logic is deliberately I/O-free: callers inject how to
+ * read a `package.json` and how to list a directory's children, so the PR path
+ * (GitHub Contents API at base/head) and the prune path (working tree) reuse the
+ * same code and unit tests need no network or filesystem.
+ *
+ * @example
+ *   const prefix = deriveLabelPrefix(rootPkg.name); // "@code-assistants" -> "code-assistants/"
+ *   const members = enumerateMembers(rootPkg, prefix, readPackageJson, listSubdirs);
+ *   // [{ dir: ".github/actions/files-sync", name: "@code-assistants/files-sync-action",
+ *   //    label: "code-assistants/files-sync-action" }, ...]
+ *
+ * @see ./labelPr.ts and ./pruneLabels.ts — the two callers.
+ */
+
+/** A workspace member resolved to exactly what the labeler needs. */
+export interface WorkspaceMember {
+  /** Repo-relative directory of the member (e.g. `.github/actions/files-sync`). */
+  dir: string;
+  /** The member's `package.json` `name` (e.g. `@code-assistants/files-sync-action`). */
+  name: string;
+  /** The label applied for this member (e.g. `code-assistants/files-sync-action`). */
+  label: string;
+}
+
+/** The slice of a `package.json` this module reads. */
+export interface PackageJson {
+  name?: string;
+  workspaces?: string[];
+}
+
+/** Conservative charset for a derived label — guards against injection from a hostile member name. */
+const labelPattern = /^[a-z0-9._/-]+$/i;
+const maxLabelLength = 50;
+
+/**
+ * Expands a `workspaces` array into concrete member directories.
+ *
+ * Handles BOTH forms this repo uses: `<parent>/*` globs (expanded one level via
+ * `listSubdirs`) and literal paths (kept verbatim). The literal branch is the fix
+ * for the upstream bug, which skipped every non-`<parent>/*` entry.
+ */
+export function resolveWorkspaceDirs(
+  patterns: string[],
+  listSubdirs: (parent: string) => string[],
+): string[] {
+  const dirs: string[] = [];
+  for (const raw of patterns) {
+    const pattern = raw.replace(/\/+$/, "");
+    if (!pattern.endsWith("/*")) {
+      dirs.push(pattern);
+      continue;
+    }
+    const parent = pattern.slice(0, -2);
+    for (const child of listSubdirs(parent)) {
+      dirs.push(`${parent}/${child}`);
+    }
+  }
+  return dirs;
+}
+
+/**
+ * Derives the label prefix from the root package name's npm scope so the action
+ * is drop-in for any repo (`@code-assistants` → `code-assistants/`, `@acme/x` →
+ * `acme/`). Throws when no scope exists, so a misconfigured consumer fails loudly
+ * instead of creating `/<member>` or `undefined/<member>` labels.
+ */
+export function deriveLabelPrefix(rootName: string | undefined): string {
+  const scope = rootName?.startsWith("@") ? rootName.slice(1).split("/")[0] : "";
+  if (!scope) {
+    throw new Error(
+      `Cannot derive a label prefix: root package.json "name" (${rootName ?? "missing"}) has no @scope. Set the "label-prefix" input explicitly.`,
+    );
+  }
+  return `${scope}/`;
+}
+
+/**
+ * Returns a member's label segment: a scoped name drops its scope
+ * (`@code-assistants/files-sync-action` → `files-sync-action`); an unscoped name
+ * is kept as-is (`autopilot` → `autopilot`).
+ */
+export function memberSegment(name: string): string {
+  return name.startsWith("@") ? name.slice(name.indexOf("/") + 1) : name;
+}
+
+/**
+ * Builds and validates the label for a member. A hostile `package.json` `name`
+ * in a fork PR must not yield arbitrary or oversized labels, so anything outside
+ * a conservative charset/length throws.
+ */
+export function buildLabel(prefix: string, name: string): string {
+  const label = `${prefix}${memberSegment(name)}`;
+  if (label.length > maxLabelLength || !labelPattern.test(label)) {
+    throw new Error(`Refusing to use unsafe label derived from package name "${name}": "${label}"`);
+  }
+  return label;
+}
+
+/**
+ * Resolves every workspace member to `{ dir, name, label }`. Directories with no
+ * readable `package.json` `name` are skipped — a `<parent>/*` glob can match
+ * non-package directories, and a member may not exist at a given git ref. Callers
+ * match changed files by `dir` and reconcile labels by `label` from this single
+ * struct so the two can never drift apart.
+ */
+export function enumerateMembers(
+  rootPkg: PackageJson,
+  prefix: string,
+  readPackageJson: (dir: string) => PackageJson | null,
+  listSubdirs: (parent: string) => string[],
+): WorkspaceMember[] {
+  const members: WorkspaceMember[] = [];
+  for (const dir of resolveWorkspaceDirs(rootPkg.workspaces ?? [], listSubdirs)) {
+    const pkg = readPackageJson(dir);
+    if (!pkg?.name) {
+      continue;
+    }
+    members.push({ dir, name: pkg.name, label: buildLabel(prefix, pkg.name) });
+  }
+  return members;
+}
+</file>
+
+<file path=".github/actions/auto-label/src/eventPayload.test.ts">
+import { describe, expect, it } from "bun:test";
+
+import { parsePullRequestEvent } from "./eventPayload.ts";
+
+describe("parsePullRequestEvent", () => {
+  it("extracts pr number and base/head shas", () => {
+    expect(
+      parsePullRequestEvent({
+        pull_request: { number: 42, base: { sha: "base123" }, head: { sha: "head456" } },
+      }),
+    ).toEqual({ prNumber: 42, baseSha: "base123", headSha: "head456" });
+  });
+
+  it("throws on a malformed payload (untrusted input guard)", () => {
+    expect(() => parsePullRequestEvent({ pull_request: { number: 0 } })).toThrow();
+    expect(() => parsePullRequestEvent({})).toThrow();
+  });
+});
+</file>
+
+<file path=".github/actions/auto-label/src/eventPayload.ts">
+/**
+ * Reads and validates the GitHub Actions event payload (`GITHUB_EVENT_PATH`).
+ * The payload is untrusted external input, so it is parsed through a Zod schema
+ * that throws a descriptive error on anything unexpected.
+ *
+ * @example
+ *   const { prNumber, baseSha, headSha } = readPullRequestEvent(process.env.GITHUB_EVENT_PATH!);
+ */
+import { readFileSync } from "node:fs";
+
+import { z } from "zod";
+
+const pullRequestEventSchema = z.object({
+  pull_request: z.object({
+    number: z.number().int().positive(),
+    base: z.object({ sha: z.string().min(1) }),
+    head: z.object({ sha: z.string().min(1) }),
+  }),
+});
+
+/** The pull-request coordinates label-PR mode needs. */
+export interface PullRequestEvent {
+  prNumber: number;
+  baseSha: string;
+  headSha: string;
+}
+
+/** Validates an already-parsed payload object — the pure, unit-testable core. */
+export function parsePullRequestEvent(payload: unknown): PullRequestEvent {
+  const parsed = pullRequestEventSchema.parse(payload);
+  return {
+    prNumber: parsed.pull_request.number,
+    baseSha: parsed.pull_request.base.sha,
+    headSha: parsed.pull_request.head.sha,
+  };
+}
+
+export function readPullRequestEvent(eventPath: string): PullRequestEvent {
+  return parsePullRequestEvent(JSON.parse(readFileSync(eventPath, "utf8")));
+}
+</file>
+
+<file path=".github/actions/auto-label/src/githubApi.ts">
+/**
+ * GitHub I/O for the auto-label action, behind a small interface so the two modes
+ * (labelPr, pruneLabels) are unit-testable with a fake. The concrete implementation
+ * wraps `@octokit/rest` and reuses actions-core's `fetchRawContent` (which returns
+ * `null` on 404) to read `package.json` at a ref — no checkout or `git` required.
+ *
+ * @example
+ *   const api = createGitHubApi(new Octokit({ auth: token }), owner, repo);
+ *   const pkg = await api.readPackageJson(".github/actions/files-sync", headSha);
+ */
+import { Octokit } from "@octokit/rest";
+
+import { fetchRawContent } from "@code-assistants/actions-core/fetchRawContent";
+
+import type { PackageJson } from "./enumerateWorkspaces.ts";
+
+/** A file changed by a pull request, with its pre-rename path when applicable. */
+export interface ChangedFile {
+  filename: string;
+  previousFilename: string | null;
+}
+
+/** Fields needed to create a repository label. */
+export interface LabelSpec {
+  name: string;
+  color: string;
+  description: string;
+}
+
+/** The GitHub operations the modes depend on — injected so logic is testable without a network. */
+export interface GitHubApi {
+  /** Parse the `package.json` inside `dir` at `ref` (`""`/`"."` → repo-root manifest). `null` when absent. */
+  readPackageJson(dir: string, ref: string): Promise<PackageJson | null>;
+  /** Immediate child directory names of `parent` at `ref` (empty when the path is missing). */
+  listSubdirs(parent: string, ref: string): Promise<string[]>;
+  /** Files changed by the PR, including pre-rename paths. */
+  listChangedFiles(prNumber: number): Promise<ChangedFile[]>;
+  /** Label names currently on the PR. */
+  listPrLabels(prNumber: number): Promise<string[]>;
+  /** All label names defined in the repository. */
+  listRepoLabels(): Promise<string[]>;
+  /** Create the label; idempotent (an already-existing label is ignored). */
+  ensureLabel(spec: LabelSpec): Promise<void>;
+  addLabels(prNumber: number, names: string[]): Promise<void>;
+  removeLabel(prNumber: number, name: string): Promise<void>;
+  deleteLabel(name: string): Promise<void>;
+}
+
+function packageJsonPath(dir: string): string {
+  return dir === "" || dir === "." ? "package.json" : `${dir}/package.json`;
+}
+
+function statusOf(error: unknown): number | undefined {
+  return (error as { status?: number }).status;
+}
+
+/** Builds the production {@link GitHubApi} backed by `@octokit/rest`. */
+export function createGitHubApi(octokit: Octokit, owner: string, repo: string): GitHubApi {
+  return {
+    async readPackageJson(dir, ref) {
+      const raw = await fetchRawContent({ octokit, owner, repo, path: packageJsonPath(dir), ref });
+      return raw === null ? null : (JSON.parse(raw) as PackageJson);
+    },
+
+    async listSubdirs(parent, ref) {
+      try {
+        const { data } = await octokit.rest.repos.getContent({ owner, repo, path: parent, ref });
+        if (!Array.isArray(data)) {
+          return [];
+        }
+        return data.filter((entry) => entry.type === "dir").map((entry) => entry.name);
+      } catch (error) {
+        if (statusOf(error) === 404) {
+          return [];
+        }
+        throw error;
+      }
+    },
+
+    async listChangedFiles(prNumber) {
+      const files = await octokit.paginate(octokit.rest.pulls.listFiles, {
+        owner,
+        repo,
+        pull_number: prNumber,
+        per_page: 100,
+      });
+      return files.map((file) => ({
+        filename: file.filename,
+        previousFilename: file.previous_filename ?? null,
+      }));
+    },
+
+    async listPrLabels(prNumber) {
+      const labels = await octokit.paginate(octokit.rest.issues.listLabelsOnIssue, {
+        owner,
+        repo,
+        issue_number: prNumber,
+        per_page: 100,
+      });
+      return labels.map((label) => label.name);
+    },
+
+    async listRepoLabels() {
+      const labels = await octokit.paginate(octokit.rest.issues.listLabelsForRepo, {
+        owner,
+        repo,
+        per_page: 100,
+      });
+      return labels.map((label) => label.name);
+    },
+
+    async ensureLabel({ name, color, description }) {
+      try {
+        await octokit.rest.issues.createLabel({ owner, repo, name, color, description });
+      } catch (error) {
+        // 422 = label already exists; any other status is a real failure.
+        if (statusOf(error) !== 422) {
+          throw error;
+        }
+      }
+    },
+
+    async addLabels(prNumber, names) {
+      if (names.length === 0) {
+        return;
+      }
+      await octokit.rest.issues.addLabels({ owner, repo, issue_number: prNumber, labels: names });
+    },
+
+    async removeLabel(prNumber, name) {
+      await octokit.rest.issues.removeLabel({ owner, repo, issue_number: prNumber, name });
+    },
+
+    async deleteLabel(name) {
+      await octokit.rest.issues.deleteLabel({ owner, repo, name });
+    },
+  };
+}
+</file>
+
+<file path=".github/actions/auto-label/src/labelPr.test.ts">
+import { describe, expect, it } from "bun:test";
+
+import type { PackageJson } from "./enumerateWorkspaces.ts";
+import type { ChangedFile, GitHubApi } from "./githubApi.ts";
+import { labelPr } from "./labelPr.ts";
+
+function buildApi(overrides: Partial<GitHubApi>): GitHubApi {
+  const notImplemented = (): never => {
+    throw new Error("not implemented");
+  };
+  return {
+    readPackageJson: async () => null,
+    listSubdirs: async () => [],
+    listChangedFiles: notImplemented,
+    listPrLabels: notImplemented,
+    listRepoLabels: notImplemented,
+    ensureLabel: notImplemented,
+    addLabels: notImplemented,
+    removeLabel: notImplemented,
+    deleteLabel: notImplemented,
+    ...overrides,
+  };
+}
+
+const rootPkg: PackageJson = {
+  name: "@code-assistants",
+  workspaces: [".github/actions/files-sync", "packages/*"],
+};
+const pkgByPath: Record<string, PackageJson> = {
+  "": rootPkg,
+  ".github/actions/files-sync": { name: "@code-assistants/files-sync-action" },
+  "packages/actions-core": { name: "@code-assistants/actions-core" },
+};
+const readPackageJson = async (dir: string): Promise<PackageJson | null> => pkgByPath[dir] ?? null;
+const listSubdirs = async (parent: string): Promise<string[]> =>
+  parent === "packages" ? ["actions-core"] : [];
+
+const baseInput = {
+  prNumber: 7,
+  baseSha: "base",
+  headSha: "head",
+  prefix: "code-assistants/",
+  labelColor: "5319e7",
+  labelDescriptionTemplate: "Auto-applied: PR touches {label}",
+};
+
+describe("labelPr", () => {
+  it("creates touched labels and reconciles (add new, remove stale, keep foreign)", async () => {
+    const created: string[] = [];
+    const added: string[] = [];
+    const removed: string[] = [];
+    const changed: ChangedFile[] = [
+      { filename: ".github/actions/files-sync/src/main.ts", previousFilename: null },
+    ];
+    const api = buildApi({
+      readPackageJson,
+      listSubdirs,
+      listChangedFiles: async () => changed,
+      listPrLabels: async () => ["code-assistants/actions-core", "needs-review"],
+      ensureLabel: async (spec) => {
+        created.push(spec.name);
+      },
+      addLabels: async (_prNumber, names) => {
+        added.push(...names);
+      },
+      removeLabel: async (_prNumber, name) => {
+        removed.push(name);
+      },
+    });
+
+    const result = await labelPr(api, baseInput);
+
+    expect(result.touched).toEqual(["code-assistants/files-sync-action"]);
+    expect(created).toEqual(["code-assistants/files-sync-action"]);
+    expect(added).toEqual(["code-assistants/files-sync-action"]);
+    // stale prefixed label is removed; the foreign "needs-review" label is left alone
+    expect(removed).toEqual(["code-assistants/actions-core"]);
+  });
+
+  it("matches a renamed file's previous path to its source member", async () => {
+    const added: string[] = [];
+    const api = buildApi({
+      readPackageJson,
+      listSubdirs,
+      listChangedFiles: async () => [
+        { filename: "docs/moved.md", previousFilename: ".github/actions/files-sync/old.md" },
+      ],
+      listPrLabels: async () => [],
+      ensureLabel: async () => {},
+      addLabels: async (_prNumber, names) => {
+        added.push(...names);
+      },
+      removeLabel: async () => {},
+    });
+
+    const result = await labelPr(api, baseInput);
+
+    expect(result.touched).toEqual(["code-assistants/files-sync-action"]);
+    expect(added).toEqual(["code-assistants/files-sync-action"]);
+  });
+});
+</file>
+
+<file path=".github/actions/auto-label/src/pruneLabels.test.ts">
+import { describe, expect, it } from "bun:test";
+
+import type { PackageJson } from "./enumerateWorkspaces.ts";
+import type { GitHubApi } from "./githubApi.ts";
+import { pruneLabels } from "./pruneLabels.ts";
+
+function buildApi(overrides: Partial<GitHubApi>): GitHubApi {
+  const notImplemented = (): never => {
+    throw new Error("not implemented");
+  };
+  return {
+    readPackageJson: async () => null,
+    listSubdirs: async () => [],
+    listChangedFiles: notImplemented,
+    listPrLabels: notImplemented,
+    listRepoLabels: notImplemented,
+    ensureLabel: notImplemented,
+    addLabels: notImplemented,
+    removeLabel: notImplemented,
+    deleteLabel: notImplemented,
+    ...overrides,
+  };
+}
+
+describe("pruneLabels", () => {
+  it("deletes orphan <prefix>/* labels and keeps live + foreign ones", async () => {
+    const pkgByPath: Record<string, PackageJson> = {
+      "": { name: "@code-assistants", workspaces: ["packages/*"] },
+      "packages/actions-core": { name: "@code-assistants/actions-core" },
+    };
+    const deleted: string[] = [];
+    const api = buildApi({
+      readPackageJson: async (dir) => pkgByPath[dir] ?? null,
+      listSubdirs: async (parent) => (parent === "packages" ? ["actions-core"] : []),
+      listRepoLabels: async () => [
+        "code-assistants/actions-core",
+        "code-assistants/removed-member",
+        "needs-review",
+      ],
+      deleteLabel: async (name) => {
+        deleted.push(name);
+      },
+    });
+
+    const result = await pruneLabels(api, { ref: "sha", prefix: "code-assistants/" });
+
+    expect(result.deleted).toEqual(["code-assistants/removed-member"]);
+    expect(deleted).toEqual(["code-assistants/removed-member"]);
+  });
+});
+</file>
+
+<file path=".github/actions/auto-label/src/pruneLabels.ts">
+/**
+ * prune-labels mode: enumerate the current workspace members at the pushed ref and
+ * delete any `<prefix>/*` repository label whose member no longer exists, keeping
+ * the label set in lockstep with the workspace.
+ */
+import { collectMembers } from "./collectMembers.ts";
+import type { GitHubApi } from "./githubApi.ts";
+
+/** Inputs for prune mode, resolved from the push event + inputs. */
+export interface PruneInput {
+  ref: string;
+  prefix: string;
+}
+
+/** Deleted orphan labels, for the step summary. */
+export interface PruneResult {
+  deleted: string[];
+}
+
+export async function pruneLabels(api: GitHubApi, input: PruneInput): Promise<PruneResult> {
+  const members = await collectMembers(api, input.ref, input.prefix);
+  const live = new Set(members.map((member) => member.label));
+
+  const existing = (await api.listRepoLabels()).filter((label) => label.startsWith(input.prefix));
+  const orphans = existing.filter((label) => !live.has(label)).sort();
+
+  for (const label of orphans) {
+    await api.deleteLabel(label);
+  }
+  return { deleted: orphans };
+}
+</file>
+
+<file path=".github/actions/auto-label/src/reconcileLabels.test.ts">
+import { describe, expect, it } from "bun:test";
+
+import { reconcileLabels } from "./reconcileLabels.ts";
+
+describe("reconcileLabels", () => {
+  it("adds desired labels missing from current", () => {
+    expect(reconcileLabels([], ["a/x", "a/y"])).toEqual({ add: ["a/x", "a/y"], remove: [] });
+  });
+
+  it("removes current labels no longer desired", () => {
+    expect(reconcileLabels(["a/x", "a/y"], [])).toEqual({ add: [], remove: ["a/x", "a/y"] });
+  });
+
+  it("computes the intersection delta", () => {
+    expect(reconcileLabels(["a/x", "a/old"], ["a/x", "a/new"])).toEqual({
+      add: ["a/new"],
+      remove: ["a/old"],
+    });
+  });
+
+  it("is a no-op when the sets match", () => {
+    expect(reconcileLabels(["a/x"], ["a/x"])).toEqual({ add: [], remove: [] });
+  });
+});
+</file>
+
+<file path=".github/actions/auto-label/src/reconcileLabels.ts">
+/**
+ * Pure set-reconciliation for a PR's workspace labels. Given the labels currently
+ * on the PR (already filtered to our prefix) and the labels the diff should carry,
+ * it returns which to add and which to remove — no I/O, so it is trivially tested.
+ *
+ * @example
+ *   reconcileLabels(["a/old", "a/x"], ["a/x", "a/new"]);
+ *   // { add: ["a/new"], remove: ["a/old"] }
+ */
+
+/** The add/remove delta to apply to a pull request's labels. */
+export interface LabelReconciliation {
+  add: string[];
+  remove: string[];
+}
+
+/**
+ * Computes the add/remove delta between the current and desired label sets.
+ * Order-independent; both lists are de-duplicated and sorted for stable output.
+ */
+export function reconcileLabels(current: string[], desired: string[]): LabelReconciliation {
+  const currentSet = new Set(current);
+  const desiredSet = new Set(desired);
+  return {
+    add: dedupeSorted(desired.filter((label) => !currentSet.has(label))),
+    remove: dedupeSorted(current.filter((label) => !desiredSet.has(label))),
+  };
+}
+
+function dedupeSorted(values: string[]): string[] {
+  return [...new Set(values)].sort();
+}
+</file>
+
+<file path=".github/actions/auto-label/action.yml">
+name: Auto label
+description: Label pull requests with `<scope>/<workspace-member>` labels based on the workspace members a diff touches, and prune orphan labels on the default branch.
+
+inputs:
+  token:
+    description: |
+      GitHub token with `pull-requests: write` and `issues: write` (the latter covers repo-level label management). The workflow's default `GITHUB_TOKEN` is sufficient; on fork PRs it is read-only, so gate the calling job behind a fork check.
+    required: true
+  label-prefix:
+    description: |
+      Override the auto-derived label prefix. When empty (default), the prefix is derived from the root `package.json` `name`'s npm scope (e.g. `@code-assistants` → `code-assistants/`). A trailing `/` is added when missing.
+    required: false
+    default: ""
+  label-color:
+    description: Hex color (no leading `#`) for labels the action creates.
+    required: false
+    default: "5319e7"
+  label-description-template:
+    description: Template for created label descriptions. `{label}` is replaced with the label name.
+    required: false
+    default: "Auto-applied: PR touches {label}"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: 1.x
+
+    - name: Install action dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: bun install --frozen-lockfile --filter @code-assistants/auto-label-action
+
+    - name: Auto label
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        LABEL_PREFIX: ${{ inputs.label-prefix }}
+        LABEL_COLOR: ${{ inputs.label-color }}
+        LABEL_DESCRIPTION_TEMPLATE: ${{ inputs.label-description-template }}
+      run: bun "${{ github.action_path }}/src/autoLabel.ts"
+</file>
+
+<file path=".github/actions/auto-label/package.json">
+{
+  "name": "@code-assistants/auto-label-action",
+  "version": "0.1.0",
+  "description": "Composite GitHub Action that labels pull requests with `<scope>/<workspace-member>` labels and prunes orphan labels on the default branch.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "release": {
+    "type": "github-action"
+  },
+  "agents": {
+    "rules": "Bun",
+    "language": "typescript"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "clean": "rm -rf node_modules .turbo"
+  },
+  "dependencies": {
+    "@actions/core": "3.0.1",
+    "@code-assistants/actions-core": "workspace:*",
+    "@octokit/request-error": "7.1.0",
+    "@octokit/rest": "22.0.1",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "typescript": "6.0.3"
+  }
+}
+</file>
+
+<file path=".github/actions/auto-label/README.md">
+# Auto label
+
+Composite GitHub Action that keeps `<scope>/<workspace-member>` labels in sync with the workspace
+members a pull request touches, and prunes orphan labels on the default branch. It is a TypeScript
+(Bun) action that reads everything through the GitHub Contents API — no `actions/checkout` is
+required.
+
+The label prefix is **derived** from the root `package.json` `name`'s npm scope, so the action is
+drop-in for any Bun/npm workspace (`@code-assistants` → `code-assistants/`, `@symbiot/…` →
+`symbiot/`). Pass `label-prefix` to override. Member directories are read from the `workspaces`
+field, handling **both** literal paths (`.github/actions/files-sync`) and `<parent>/*` globs
+(`packages/*`).
+
+## How it works
+
+The action auto-detects its mode from `github.event_name`:
+
+```
+                        ┌────────────────────────────┐
+                        │  Consumer workflow           │
+                        │  auto-label.yml              │
+                        └──────────────┬───────────────┘
+                                       │
+                    ┌───────── ① ──────┴────── ② ───────┐
+                    ▼                                    ▼
+    ┌────────────────────────────┐    ┌────────────────────────────┐
+    │        label-PR mode         │    │      prune-labels mode       │
+    ├────────────────────────────┤    ├────────────────────────────┤
+    │ • enumerate workspace        │    │ • enumerate workspace        │
+    │   members (literal + glob)   │    │   members                    │
+    │ • compute labels touched     │    │ • delete orphan <prefix>/*   │
+    │   by the PR's changed files  │    │   labels (member removed)    │
+    │ • reconcile PR <prefix>/*    │    │                              │
+    │   labels: add new/remove old │    │                              │
+    └────────────────────────────┘    └────────────────────────────┘
+```
+
+**Flow Legend:**
+
+- ① `pull_request` to the default branch → label-PR mode
+- ② `push` to the default branch → prune-labels mode
+- Both modes derive `<prefix>` from the root `package.json` name's scope and read members via the
+  GitHub Contents API at the relevant ref.
+
+The action lives in `awinogradov/code-assistants`; its workflow is distributed to consumer repos by
+[`contributing-sync`](../contributing-sync/README.md), so every consumer runs the same logic from a
+single source:
+
+```
+┌────────────────────────────────────────────────────────────┐
+│  awinogradov/code-assistants  (source of truth)              │
+│   .github/actions/auto-label/       the composite action     │
+│   .github/workflows/auto-label.yml  canonical workflow       │
+└───────────────────────────────┬──────────────────────────────┘
+                                 │ ①
+                                 ▼
+                     ┌──────────────────────────────┐
+                     │  contributing-sync             │
+                     │  (files list + auto-label.yml) │
+                     └───────────────┬────────────────┘
+                                     │ ②
+                                     ▼
+                     ┌──────────────────────────────┐
+                     │  upstream.yml                  │
+                     │  (sync-contributing job)       │
+                     └───────────────┬────────────────┘
+                                     │ ③
+                                     ▼
+┌────────────────────────────────────────────────────────────┐
+│  Downstream repo (e.g. awinogradov/symbiot)                  │
+│   receives auto-label.yml via maintenance PR                 │
+│   uses …/auto-label@main → derives  symbiot/   ④             │
+└────────────────────────────────────────────────────────────┘
+```
+
+**Flow Legend:**
+
+- ① `auto-label.yml` is added to `contributing-sync`'s synced files list
+- ② `upstream.yml`'s `sync-contributing` job runs `contributing-sync@main` on schedule
+- ③ the downstream repo receives `auto-label.yml` as a maintenance PR
+- ④ the synced workflow consumes the upstream action and derives its prefix from the downstream
+  repo's own root scope
+
+## Usage
+
+```yaml
+name: Auto label
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+concurrency:
+  group: auto-label-${{ github.repository }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  auto-label:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: awinogradov/code-assistants/.github/actions/auto-label@v1
+        with:
+          token: ${{ github.token }}
+```
+
+## Inputs
+
+| Input                        | Required | Default                            | Description                                                                                                                           |
+| ---------------------------- | -------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `token`                      | yes      | —                                  | Token with `pull-requests: write` + `issues: write`. The default `GITHUB_TOKEN` is sufficient (read-only on fork PRs — see Behavior). |
+| `label-prefix`               | no       | _(derived)_                        | Override the auto-derived prefix. Empty → derived from the root `package.json` `name` scope. A trailing `/` is added when missing.    |
+| `label-color`                | no       | `5319e7`                           | Hex color (no leading `#`) for labels the action creates.                                                                             |
+| `label-description-template` | no       | `Auto-applied: PR touches {label}` | Template for created label descriptions. `{label}` is replaced with the label name.                                                   |
+
+## Permissions
+
+- `issues: write` — repository label CRUD (`createLabel`/`deleteLabel`); this is the load-bearing
+  scope, since PR labels are managed through the issues API.
+- `pull-requests: write` — add/remove labels on the pull request.
+- `contents: read` — default; the action reads `package.json` via the API and needs no checkout.
+
+## Behavior
+
+**label-PR mode** (`pull_request`): enumerates members at the PR's base and head SHAs (so members
+added or renamed in the PR are caught), derives the labels touched by the PR's changed files
+(including a renamed file's previous path), ensures each touched label exists, then reconciles the
+PR's `<prefix>/*` labels — adding new ones and removing stale ones. Labels outside `<prefix>` are
+never touched.
+
+**prune-labels mode** (`push` to the default branch): enumerates the current members and deletes any
+`<prefix>/*` repository label whose member no longer exists.
+
+A hostile `package.json` `name` cannot inject arbitrary labels: every derived label is validated
+against a conservative charset/length before use.
+
+## Notes
+
+- **Scope the triggers.** The mode is chosen from `github.event_name`, so a `push` to _any_ branch
+  would run prune. Consumers MUST filter `push: branches: [<default>]` (and `pull_request:
+branches`) so prune only runs on the default branch.
+- **`pull_request`, not `pull_request_target`.** The action runs untrusted fork code with a
+  read-only token plus the fork guard in the job `if:`. Do not switch to `pull_request_target` to
+  obtain a write token on fork PRs — that is a security regression.
+
+## Versioning
+
+Reference the action by a tag of the autopilot repo, e.g.:
+
+```yaml
+uses: awinogradov/code-assistants/.github/actions/auto-label@v1
+```
+
+The synced `auto-label.yml` workflow references the action via `@main` so consumers always pick up
+the latest behavior. Pin to a tag if you want explicit control.
+</file>
+
+<file path=".github/actions/auto-label/tsconfig.json">
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["bun"]
+  },
+  "include": ["*.ts", "src/**/*.ts"]
+}
 </file>
 
 <file path=".github/actions/code-review-action/.release_notes/0.1.0.md">
@@ -7167,7 +8361,7 @@ The synced `contributing.yml` workflow references the action via `@main` so cons
 
 <file path=".github/actions/contributing-sync/action.yml">
 name: Contributing sync
-description: Sync CONTRIBUTING.md, CODE_OF_CONDUCT.md, LICENSE.md, and the contributing workflow from an upstream repository into the current repository.
+description: Sync CONTRIBUTING.md, CODE_OF_CONDUCT.md, LICENSE.md, the contributing workflow, and the auto-label workflow from an upstream repository into the current repository.
 
 inputs:
   bot_token:
@@ -7214,6 +8408,7 @@ runs:
           CODE_OF_CONDUCT.md
           LICENSE.md
           .github/workflows/contributing.yml
+          .github/workflows/auto-label.yml
         )
         {
           echo "files<<__EOF__"
@@ -7252,12 +8447,16 @@ The synced set is:
 - `CODE_OF_CONDUCT.md`
 - `LICENSE.md`
 - `.github/workflows/contributing.yml`
+- `.github/workflows/auto-label.yml`
 
-The first three are the contributor-facing documentation. The workflow propagates the CI that
-runs the [`contributing-check`](../contributing-check/README.md) action on every PR — the
-action itself stays in the upstream repository and is referenced from the synced workflow via
-`awinogradov/code-assistants/.github/actions/contributing-check@main`, so consumers do not need
-a local copy.
+The first three are the contributor-facing documentation. The two workflows propagate CI that
+references upstream actions on every run — the actions themselves stay in the upstream
+repository, so consumers do not need a local copy:
+
+- `contributing.yml` runs [`contributing-check`](../contributing-check/README.md) via
+  `awinogradov/code-assistants/.github/actions/contributing-check@main`.
+- `auto-label.yml` runs [`auto-label`](../auto-label/README.md) via
+  `awinogradov/code-assistants/.github/actions/auto-label@main`.
 
 The action builds the sync list and delegates the diff and PR mechanics to the
 [`files-sync`](../files-sync/README.md) action. It does not require `actions/checkout` and
@@ -7324,8 +8523,8 @@ See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/a
 ## Behavior
 
 - Delegates to `files-sync` with a fixed sync list — `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`,
-  `LICENSE.md`, and `.github/workflows/contributing.yml` — sourced from `source-repo` at
-  `source-ref`.
+  `LICENSE.md`, `.github/workflows/contributing.yml`, and `.github/workflows/auto-label.yml` —
+  sourced from `source-repo` at `source-ref`.
 - The PR is opened on the fixed branch `maintenance-sync-contributing` with the title
   `MAINTENANCE: Sync contributing files from upstream` and the commit message
   `chore: sync contributing files from upstream`. These values are not configurable so the
@@ -21603,6 +22802,45 @@ uses: awinogradov/code-assistants/.github/actions/repomix-sync@v1
 ```
 </file>
 
+<file path=".github/workflows/auto-label.yml">
+# Source: https://github.com/awinogradov/code-assistants/blob/main/.github/workflows/auto-label.yml
+# This file is distributed to downstream repositories by an automated sync.
+# Edits made downstream are overwritten on the next run.
+# To change it, open a pull request against the source file above.
+
+name: Auto label
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+# Shared group across both events so a push-triggered prune never runs concurrently
+# with a pull_request-triggered label sync (which would race on the same labels).
+concurrency:
+  group: auto-label-${{ github.repository }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  auto-label:
+    name: Auto label
+    # Fork PRs run with a read-only token and cannot write labels; skip them.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: awinogradov/code-assistants/.github/actions/auto-label@main
+        with:
+          token: ${{ github.token }}
+</file>
+
 <file path=".github/workflows/code-review.yml">
 # Source: https://github.com/awinogradov/code-assistants/blob/main/.github/workflows/code-review.yml
 # This file is distributed to downstream repositories by an automated sync.
@@ -21980,6 +23218,16 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: awinogradov/code-assistants/.github/actions/release-sync@main
+        with:
+          bot_token: ${{ secrets.BOT_TOKEN }}
+          bot_username: ${{ vars.BOT_USERNAME }}
+
+  sync-contributing:
+    name: Sync contributing files
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: awinogradov/code-assistants/.github/actions/contributing-sync@main
         with:
           bot_token: ${{ secrets.BOT_TOKEN }}
           bot_username: ${{ vars.BOT_USERNAME }}
@@ -31695,6 +32943,7 @@ Worked examples:
 | [`agents-rules-sync`](../.github/actions/agents-rules-sync/)   | root entry + `src/` | `${{ github.action_path }}/agents-rules-sync.ts` |
 | [`release-action`](../.github/actions/release-action/)         | `src/`-only         | `${{ github.action_path }}/src/<entry>.ts`       |
 | [`code-review-action`](../.github/actions/code-review-action/) | `src/`-only         | `${{ github.action_path }}/src/<entry>.ts`       |
+| [`auto-label`](../.github/actions/auto-label/)                 | `src/`-only         | `${{ github.action_path }}/src/autoLabel.ts`     |
 
 Required `package.json` scripts: see [Workspace scripts](#workspace-scripts).
 
@@ -35368,7 +36617,7 @@ export default config;
 
 <file path="package.json">
 {
-  "name": "autopilot",
+  "name": "@code-assistants",
   "version": "0.1.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "private": true,
@@ -35393,6 +36642,7 @@ export default config;
     ".github/actions/release-action",
     ".github/actions/release-automerge",
     ".github/actions/code-review-action",
+    ".github/actions/auto-label",
     "claude-plugins/*",
     "packages/*"
   ],
@@ -35473,6 +36723,7 @@ See the [plugin README](./claude-plugins/autopilot/README.md#installation) for s
 - [`release-action`](./.github/actions/release-action/README.md) — conventional-commit-driven release pipeline for npm packages, GitHub Actions, and Claude plugins
 - [`release-automerge`](./.github/actions/release-automerge/README.md) — merge an approved, all-green release PR (`^release-`), driven by an event-based workflow so `release-publish.yml` runs without a manual click
 - [`code-review-action`](./.github/actions/code-review-action/README.md) — AI code review for pull requests via Claude Code, with a react mode for replying to bot mentions
+- [`auto-label`](./.github/actions/auto-label/README.md) — label PRs with `<scope>/<workspace-member>` labels for the workspace members a diff touches, and prune orphan labels on merge
 - [`repomix-sync`](./.github/actions/repomix-sync/README.md) — sync the `repomix-pack` workflow and `repomix.config.json` from upstream so each consumer commits its own codebase snapshot
 - [`release-sync`](./.github/actions/release-sync/README.md) — sync the release pipeline workflows (`release`, `publish`, `release-automerge`) from upstream so each consumer runs the same release flow
 
