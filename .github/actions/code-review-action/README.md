@@ -5,7 +5,7 @@
 
 Composite GitHub Action that runs AI code review on pull requests using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Has two modes:
 
-- **`review`** — runs the `/autopilot:pr-review` skill against the PR diff and submits a structured review (approve / request changes / comment) with optional inline findings.
+- **`review`** — runs the `/autopilot:pr-review` skill against the PR diff and submits a structured review (approve / request changes / comment) with optional inline findings, each carrying a one-click suggestion fix and a "Prompt for AI agents" block where applicable.
 - **`react`** — runs the `/autopilot:pr-answer` skill against a triggering PR comment to draft a reply, resolve threads, and optionally update the existing review.
 
 Auto-detection routes events from `pull_request`, `issue_comment`, and `pull_request_review_comment` triggers to the correct mode. Drafts, release branches, and dependabot PRs are skipped automatically.
@@ -88,6 +88,12 @@ The `pr:review` skill carries the full review rubric (all `CHECK-*` rules) inlin
 Every review comment carries a collapsed **"Review run summary 🤖"** footer ("under the cut") with the run's latency, token usage, cache hits, cost, and tool round-trips. The metrics are computed in `runClaude.ts`, passed to `submitReview.ts` via the `run_summary` step output, and appended to the **main review comment only** (never inline, never on `react`-mode replies). The footer is wrapped in HTML-comment markers so it is stripped before duplicate-review detection, keeping run-varying numbers from defeating dedup.
 
 See [Review run-summary footer](../../../docs/code-review-run-summary.md) for the full data flow and diagram.
+
+## Inline suggestions & AI-agent prompts
+
+Each inline finding can carry a one-click GitHub **`suggestion`** block (the author commits the fix in one click) and a collapsible **"Prompt for AI agents"** block (a ready-to-paste prompt with the finding and the surrounding diff hunk). The `pr:review` skill emits an optional `suggestion` (verbatim replacement) and `startLine` (multi-line range) per comment; `submitReview.ts` renders the suggestion fence and the deterministic agent prompt and posts them through the existing `createReview` call — adding `start_line`/`side` for multi-line ranges. The feature is always-on; no inputs configure it.
+
+See [Inline suggestions and AI-agent prompts](../../../docs/code-review-suggestions.md) for the full data flow, a rendered example, and the source map.
 
 ## Labels
 

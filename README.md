@@ -24,6 +24,7 @@ See the [plugin README](./claude-plugins/autopilot/README.md#installation) for s
 - [Release auto-merge flow](./docs/release-automerge.md) — the event-driven action that merges approved, all-green release PRs, and how its workflow is propagated downstream
 - [Committed Repomix pack](./docs/repomix-pack.md) — the `.repomix/pack.xml` snapshot, the merge-triggered workflow that refreshes it, and the snapshot-first contract skills follow
 - [Review run-summary footer](./docs/code-review-run-summary.md) — how `code-review-action` surfaces per-run cost/latency/token metrics in a collapsible footer on the main review comment
+- [Inline suggestions and AI-agent prompts](./docs/code-review-suggestions.md) — how `code-review-action` adds one-click GitHub suggestion blocks and a "Prompt for AI agents" block to each inline finding
 - [Plan and run skills](./docs/plan-run-skills.md) — how the `plan` and `run` skills work end to end: phases, orchestrator↔stack delegation, sub-agent fan-out, and run's automated post-implementation, with ASCII diagrams
 - [Plan skills audit](./docs/plan-skills-audit.md) — a dimension-by-dimension audit of the `plan`, `plan-bun`, and `plan-nodejs-react` skills with a prioritized optimization plan
 - [Stack rule sets](./rules/) — `Bun`, `Bun+React+Tailwind`, `NodeJS+React`, `NodeJS+React+Tailwind`
