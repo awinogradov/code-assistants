@@ -69,15 +69,25 @@ async function openOrUpdatePr(release: MemberRelease, cwd: string): Promise<stri
   return created.stdout.toString().trim();
 }
 
-function resolveBranchTemplate(): string {
+/**
+ * Resolve the per-member branch template for monorepo mode.
+ *
+ * Returns `INPUT_BRANCH` verbatim when it already contains `{member}`. An unset
+ * input — or the standalone `release-{version}` default from `action.yml` that
+ * leaks through when the workflow leaves `branch` unset — falls back silently to
+ * `release-{member}-{version}`. Any other member-less template is the operator's
+ * own choice, so `{member}` is injected and a `::warning::` is emitted.
+ */
+export function resolveBranchTemplate(): string {
   const raw = process.env.INPUT_BRANCH;
   const fallback = "release-{member}-{version}";
-  if (!raw || raw.length === 0) return fallback;
+  // `release-{version}` is the standalone `action.yml` default; treat it as unset.
+  const standaloneDefault = "release-{version}";
+  if (!raw || raw.length === 0 || raw === standaloneDefault) return fallback;
   if (raw.includes("{member}")) return raw;
-  // The standalone default `release-{version}` (the action.yml default) and
-  // any other user-supplied template without `{member}` would collapse all
-  // members onto the same branch. Inject `{member}` so per-member PRs stay
-  // distinct, and warn so the operator can override the input explicitly.
+  // A template the operator set themselves still lacks `{member}`, which would
+  // collapse every member onto the same branch. Inject `{member}` so per-member
+  // PRs stay distinct, and warn so they can fix the input explicitly.
   const injected = raw.replace(/\{version\}/, "{member}-{version}");
   const finalTemplate = injected.includes("{member}") ? injected : `${raw}-{member}`;
   console.log(
