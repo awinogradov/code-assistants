@@ -22088,26 +22088,29 @@ Repeat until the target is met or you determine the gaps are acceptable trade-of
 
 ## Phase 4: Output
 
-Output ONLY the structured report block. No preamble, no explanation outside this format. Key findings MUST be capped at 3–5 entries — depth over breadth. Stack minor objections together rather than listing them separately; if you have more than 5 candidate findings, drop the weakest until you are at 5.
+Output ONLY a single JSON object matching the schema below — no preamble, no surrounding code fence, no commentary. The parent parses it directly, so any extra text breaks consumption.
 
-```
-### [Your Expert Role]
-- Score: [X]/100
-- Verdict: Approved | Needs revision
-- Key findings (3–5):
-  - [Finding 1]
-  - [Finding 2]
-  - [Finding 3]
+| Field        | Type                               | Constraint                                                                                  |
+| ------------ | ---------------------------------- | ------------------------------------------------------------------------------------------- |
+| `expertRole` | string                             | Your expert role, verbatim from the prompt                                                  |
+| `score`      | integer                            | 0–100; the final score after any Phase 3 iteration                                          |
+| `verdict`    | `"approved"` \| `"needs-revision"` | `"approved"` when `score` meets the target, otherwise `"needs-revision"`                    |
+| `findings`   | string[]                           | 3–5 entries, strongest first; stack minor objections together rather than listing each      |
+| `revision`   | object \| null                     | `null` when no Phase 3 iteration ran; otherwise `{ "changed": string, "rescore": integer }` |
+
+Example (illustrative — emit the raw object, not this fenced form):
+
+```json
+{
+  "expertRole": "Principal Bun/NodeJS Engineer",
+  "score": 92,
+  "verdict": "approved",
+  "findings": ["Finding 1", "Finding 2", "Finding 3"],
+  "revision": null
+}
 ```
 
-If auto-iteration occurred, append:
-
-```
-  → Revised: [what changed in the plan assessment]
-  → Rescored: [Y]/100 (Approved)
-```
-
-Do not output intermediate reasoning, analysis steps, or commentary. Only the structured report block.
+Do not output intermediate reasoning, analysis steps, or commentary — only the JSON object.
 </file>
 
 <file path="claude-plugins/autopilot/agents/fetch-pr-reviews.md">
@@ -22319,26 +22322,35 @@ Resolve the status with these steps:
 
 ## Phase 3: Output
 
-Output ONLY the structured block. No preamble or commentary. Include the `**Assignee:**` line only when Phase 2 ran (caller opted in); omit it entirely for read-only invocations.
+Output ONLY a single JSON object matching the schema below — no preamble, no surrounding code fence, no commentary. The parent parses it directly, so any extra text breaks consumption.
 
+| Field         | Type           | Constraint                                                                            |
+| ------------- | -------------- | ------------------------------------------------------------------------------------- |
+| `source`      | string         | e.g. `"GitHub Issue #42"`                                                             |
+| `issueId`     | integer        | The issue number                                                                      |
+| `title`       | string         | Issue title                                                                           |
+| `status`      | string         | Issue state (e.g. `"OPEN"`, `"CLOSED"`)                                               |
+| `labels`      | string[]       | Label names; empty array when none                                                    |
+| `assignee`    | string \| null | The Phase 2 status string when Phase 2 ran; `null` for read-only callers that skip it |
+| `description` | string         | Issue body                                                                            |
+| `comments`    | object[]       | `{ "author": string, "date": string, "body": string }` per comment; empty when none   |
+
+Example:
+
+```json
+{
+  "source": "GitHub Issue #42",
+  "issueId": 42,
+  "title": "Add JWT refresh endpoint",
+  "status": "OPEN",
+  "labels": ["enhancement"],
+  "assignee": "@octocat (just assigned)",
+  "description": "We need a refresh endpoint...",
+  "comments": [{ "author": "octocat", "date": "2026-05-30", "body": "Agreed." }]
+}
 ```
-## Issue Context
 
-**Source:** GitHub Issue #<N>
-**Issue ID:** <N>
-**Title:** [title]
-**Status:** [state]
-**Labels:** [labels]
-**Assignee:** [status from Phase 2 — include this line ONLY when Phase 2 ran]
-
-### Description
-[body]
-
-### Comments (N)
-- **@author** (date): [comment body]
-```
-
-If the comments list is empty, output `### Comments (0)` with no items.
+Emit the raw object, not the fenced form. Set `assignee` to `null` (not the string `"null"`) when Phase 2 did not run.
 </file>
 
 <file path="claude-plugins/autopilot/agents/scan-and-analyze-todos.md">
@@ -22470,22 +22482,26 @@ Search for both `issues/<NUMBER>` and `#<NUMBER>` across source files using Grep
 
 ## Phase 2: Output
 
-Output ONLY the structured block. No preamble or commentary:
+Output ONLY a single JSON object matching the schema below — no preamble, no surrounding code fence, no commentary. The parent parses it directly, so any extra text breaks consumption.
 
+| Field   | Type     | Constraint                                                                    |
+| ------- | -------- | ----------------------------------------------------------------------------- |
+| `todos` | object[] | `{ "location": string, "text": string }` per match; `location` is `path:line` |
+| `total` | integer  | Count of matches; equals `todos.length`                                       |
+
+Example:
+
+```json
+{
+  "todos": [
+    { "location": "src/path/file.ts:42", "text": "TODO: refactor this" },
+    { "location": "src/path/other.ts:88", "text": "references #42" }
+  ],
+  "total": 2
+}
 ```
-## Related TODOs
 
-- `src/path/file.ts:42` - TODO: [description or matching line content]
-- `src/path/other.ts:88` - [matching line content]
-
-Total: N TODOs found
-```
-
-If no matches found, output:
-
-```
-No related TODOs found
-```
+When no matches are found, emit `{ "todos": [], "total": 0 }`. Emit the raw object, not the fenced form.
 </file>
 
 <file path="claude-plugins/autopilot/skills/ascii-schemas/SKILL.md">
@@ -24890,11 +24906,11 @@ After all calls complete:
 
 ### Issue Context Output
 
-Present the `resolve-issue-context` agent's output along with TODO search results from `search-codebase-todos`. The agents return structured blocks. Output the issue context directly, then append the TODO results:
+The `resolve-issue-context` and `search-codebase-todos` agents each return a single JSON object (see each agent's output schema). Parse both, then render the issue context for display from the `resolve-issue-context` fields — `source`, `title`, `status`, `labels`, `assignee` (only when non-null), `description`, and `comments` — and append the TODO results rendered from `search-codebase-todos`:
 
 ```
 ### Related TODOs in Codebase
-[output from search-codebase-todos agent]
+[render from the `todos` array (each as `location` — `text`) and `total`; when `total` is 0, output "No related TODOs found"]
 ```
 
 ### Steelmanned Intent
@@ -25272,7 +25288,7 @@ Use the Agent tool with:
 - `description`: "Expert review: [Role]"
 ```
 
-Wait for all agents to complete. Use their findings to refine the Phase 3 draft internally. Do not include expert report blocks in the plan output.
+Wait for all agents to complete. Each returns a JSON object (`expertRole`, `score`, `verdict`, `findings`, `revision`). Aggregate the `findings` across experts to refine the Phase 3 draft internally, and treat any `needs-revision` verdict as a signal to address that expert's findings before finalizing. Do not include the raw expert JSON in the plan output.
 
 After all expert reviews complete, call TaskUpdate to set task 5 ("Review with experts") to `status: "completed"`.
 
@@ -28843,11 +28859,11 @@ After all calls complete:
 
 ### Issue Context Output
 
-Present the `resolve-issue-context` agent's output along with TODO search results from `search-codebase-todos`. The agents return structured blocks. Output the issue context directly, then append the TODO results:
+The `resolve-issue-context` and `search-codebase-todos` agents each return a single JSON object (see each agent's output schema). Parse both, then render the issue context for display from the `resolve-issue-context` fields — `source`, `title`, `status`, `labels`, `assignee` (only when non-null), `description`, and `comments` — and append the TODO results rendered from `search-codebase-todos`:
 
 ```
 ### Related TODOs in Codebase
-[output from search-codebase-todos agent]
+[render from the `todos` array (each as `location` — `text`) and `total`; when `total` is 0, output "No related TODOs found"]
 ```
 
 After completing the Issue Context Output, call TaskUpdate to set task 1 ("Resolve input") to `status: "completed"`.
