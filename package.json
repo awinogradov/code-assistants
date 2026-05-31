@@ -1,5 +1,5 @@
 {
-  "name": "autopilot",
+  "name": "@code-assistants",
   "version": "0.1.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "private": true,
@@ -24,6 +24,7 @@
     ".github/actions/release-action",
     ".github/actions/release-automerge",
     ".github/actions/code-review-action",
+    ".github/actions/auto-label",
     "claude-plugins/*",
     "packages/*"
   ],

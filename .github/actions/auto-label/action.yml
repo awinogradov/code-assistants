@@ -1,0 +1,43 @@
+name: Auto label
+description: Label pull requests with `<scope>/<workspace-member>` labels based on the workspace members a diff touches, and prune orphan labels on the default branch.
+
+inputs:
+  token:
+    description: |
+      GitHub token with `pull-requests: write` and `issues: write` (the latter covers repo-level label management). The workflow's default `GITHUB_TOKEN` is sufficient; on fork PRs it is read-only, so gate the calling job behind a fork check.
+    required: true
+  label-prefix:
+    description: |
+      Override the auto-derived label prefix. When empty (default), the prefix is derived from the root `package.json` `name`'s npm scope (e.g. `@code-assistants` → `code-assistants/`). A trailing `/` is added when missing.
+    required: false
+    default: ""
+  label-color:
+    description: Hex color (no leading `#`) for labels the action creates.
+    required: false
+    default: "5319e7"
+  label-description-template:
+    description: Template for created label descriptions. `{label}` is replaced with the label name.
+    required: false
+    default: "Auto-applied: PR touches {label}"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: 1.x
+
+    - name: Install action dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: bun install --frozen-lockfile --filter @code-assistants/auto-label-action
+
+    - name: Auto label
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        LABEL_PREFIX: ${{ inputs.label-prefix }}
+        LABEL_COLOR: ${{ inputs.label-color }}
+        LABEL_DESCRIPTION_TEMPLATE: ${{ inputs.label-description-template }}
+      run: bun "${{ github.action_path }}/src/autoLabel.ts"
