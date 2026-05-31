@@ -1,6 +1,7 @@
 ---
 name: expert-review
 description: Review an implementation plan as a domain expert. Use when plan skills need isolated expert scoring to prevent context flooding.
+tools: []
 model: inherit
 ---
 

@@ -5,7 +5,6 @@ user-invocable: false
 allowed-tools:
   - TaskList
   - TaskUpdate
-  - TaskCreate
   - Read
   - Grep
   - Glob
