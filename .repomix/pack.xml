@@ -21528,7 +21528,18 @@ jobs:
           git config user.name "${BOT_USERNAME:-github-actions[bot]}"
           git config user.email "${BOT_USERNAME:-github-actions[bot]}@users.noreply.github.com"
           git commit -m "chore(repomix): refresh pack from #${PR_NUMBER}"
-          git push origin HEAD:main
+          # main can advance between checkout and push (concurrent merge, the
+          # preceding pack commit, or a re-run); rebase onto it and retry.
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "Push rejected — main advanced; rebasing onto latest main (attempt ${attempt}/3)."
+            git fetch origin main
+            git rebase origin/main
+          done
+          echo "::error::Failed to push refreshed pack after 3 attempts."
+          exit 1
 </file>
 
 <file path=".github/workflows/upstream.yml">
