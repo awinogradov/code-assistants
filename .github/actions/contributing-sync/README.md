@@ -17,7 +17,8 @@ repository, so consumers do not need a local copy:
 - `contributing.yml` runs [`contributing-check`](../contributing-check/README.md) via
   `awinogradov/code-assistants/.github/actions/contributing-check@main`.
 - `auto-label.yml` runs [`auto-label`](../auto-label/README.md) via
-  `awinogradov/code-assistants/.github/actions/auto-label@main`.
+  `awinogradov/code-assistants/.github/actions/auto-label@main` (sourced from the action's
+  `consumer-workflow.yml` template, since the source repo's own copy uses a local action path).
 
 The action builds the sync list and delegates the diff and PR mechanics to the
 [`files-sync`](../files-sync/README.md) action. It does not require `actions/checkout` and
