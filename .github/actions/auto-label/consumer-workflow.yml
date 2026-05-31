@@ -1,0 +1,37 @@
+# Source: https://github.com/awinogradov/code-assistants/blob/main/.github/actions/auto-label/consumer-workflow.yml
+# Distributed to downstream repositories by contributing-sync as .github/workflows/auto-label.yml.
+# Edits made downstream are overwritten on the next run.
+# To change it, open a pull request against the source file above.
+#
+# This is the consumer-facing template: it references the action at @main because a
+# downstream repo has no local copy. This repo's own dogfood lives at
+# .github/workflows/auto-label.yml and uses a local action path instead.
+
+name: Auto label
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+concurrency:
+  group: auto-label-${{ github.repository }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  auto-label:
+    name: Auto label
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: awinogradov/code-assistants/.github/actions/auto-label@main
+        with:
+          token: ${{ github.token }}

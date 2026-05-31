@@ -1,7 +1,7 @@
-# Source: https://github.com/awinogradov/code-assistants/blob/main/.github/workflows/auto-label.yml
-# This file is distributed to downstream repositories by an automated sync.
-# Edits made downstream are overwritten on the next run.
-# To change it, open a pull request against the source file above.
+# Dogfood workflow: labels this repo's own PRs using the LOCAL auto-label action,
+# so it works on the same PR that introduces the action (before it exists at @main).
+# Downstream consumers receive the @main-referencing template at
+# .github/actions/auto-label/consumer-workflow.yml via contributing-sync.
 
 name: Auto label
 
@@ -31,6 +31,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: awinogradov/code-assistants/.github/actions/auto-label@main
+      # Required so the local `./.github/actions/auto-label` reference resolves.
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/auto-label
         with:
           token: ${{ github.token }}
