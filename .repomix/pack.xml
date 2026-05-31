@@ -22043,6 +22043,7 @@ Only include categories that have files. Omit empty categories from the list.
 ---
 name: expert-review
 description: Review an implementation plan as a domain expert. Use when plan skills need isolated expert scoring to prevent context flooding.
+tools: []
 model: inherit
 ---
 
@@ -25316,7 +25317,6 @@ user-invocable: false
 allowed-tools:
   - TaskList
   - TaskUpdate
-  - TaskCreate
   - Read
   - Grep
   - Glob
@@ -25365,7 +25365,6 @@ user-invocable: false
 allowed-tools:
   - TaskList
   - TaskUpdate
-  - TaskCreate
   - Read
   - Grep
   - Glob
