@@ -19,19 +19,23 @@ Search for both `issues/<NUMBER>` and `#<NUMBER>` across source files using Grep
 
 ## Phase 2: Output
 
-Output ONLY the structured block. No preamble or commentary:
+Output ONLY a single JSON object matching the schema below — no preamble, no surrounding code fence, no commentary. The parent parses it directly, so any extra text breaks consumption.
 
+| Field   | Type     | Constraint                                                                    |
+| ------- | -------- | ----------------------------------------------------------------------------- |
+| `todos` | object[] | `{ "location": string, "text": string }` per match; `location` is `path:line` |
+| `total` | integer  | Count of matches; equals `todos.length`                                       |
+
+Example:
+
+```json
+{
+  "todos": [
+    { "location": "src/path/file.ts:42", "text": "TODO: refactor this" },
+    { "location": "src/path/other.ts:88", "text": "references #42" }
+  ],
+  "total": 2
+}
 ```
-## Related TODOs
 
-- `src/path/file.ts:42` - TODO: [description or matching line content]
-- `src/path/other.ts:88` - [matching line content]
-
-Total: N TODOs found
-```
-
-If no matches found, output:
-
-```
-No related TODOs found
-```
+When no matches are found, emit `{ "todos": [], "total": 0 }`. Emit the raw object, not the fenced form.

@@ -46,23 +46,26 @@ Repeat until the target is met or you determine the gaps are acceptable trade-of
 
 ## Phase 4: Output
 
-Output ONLY the structured report block. No preamble, no explanation outside this format. Key findings MUST be capped at 3–5 entries — depth over breadth. Stack minor objections together rather than listing them separately; if you have more than 5 candidate findings, drop the weakest until you are at 5.
+Output ONLY a single JSON object matching the schema below — no preamble, no surrounding code fence, no commentary. The parent parses it directly, so any extra text breaks consumption.
 
-```
-### [Your Expert Role]
-- Score: [X]/100
-- Verdict: Approved | Needs revision
-- Key findings (3–5):
-  - [Finding 1]
-  - [Finding 2]
-  - [Finding 3]
+| Field        | Type                               | Constraint                                                                                  |
+| ------------ | ---------------------------------- | ------------------------------------------------------------------------------------------- |
+| `expertRole` | string                             | Your expert role, verbatim from the prompt                                                  |
+| `score`      | integer                            | 0–100; the final score after any Phase 3 iteration                                          |
+| `verdict`    | `"approved"` \| `"needs-revision"` | `"approved"` when `score` meets the target, otherwise `"needs-revision"`                    |
+| `findings`   | string[]                           | 3–5 entries, strongest first; stack minor objections together rather than listing each      |
+| `revision`   | object \| null                     | `null` when no Phase 3 iteration ran; otherwise `{ "changed": string, "rescore": integer }` |
+
+Example (illustrative — emit the raw object, not this fenced form):
+
+```json
+{
+  "expertRole": "Principal Bun/NodeJS Engineer",
+  "score": 92,
+  "verdict": "approved",
+  "findings": ["Finding 1", "Finding 2", "Finding 3"],
+  "revision": null
+}
 ```
 
-If auto-iteration occurred, append:
-
-```
-  → Revised: [what changed in the plan assessment]
-  → Rescored: [Y]/100 (Approved)
-```
-
-Do not output intermediate reasoning, analysis steps, or commentary. Only the structured report block.
+Do not output intermediate reasoning, analysis steps, or commentary — only the JSON object.
