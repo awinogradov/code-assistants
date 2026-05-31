@@ -199,7 +199,7 @@ If the skill outputs "Planning cancelled", stop execution immediately — do not
 
 ## Common Instructions
 
-The following apply to ALL stacks before delegating to the stack-specific skill:
+The following apply to ALL stacks throughout planning — both the orchestrator phases below and the shared **Stack Pipeline (Phases 1–6)** the stack skills execute, which points back here rather than restating them:
 
 ### Documentation Lookup Protocol (MANDATORY)
 
@@ -421,13 +421,9 @@ Use these IDs for all TaskUpdate calls in the phases below.
    - **Snapshot (default — broad/whole-repo reads):** the Phase 0 repomix snapshot already covers the whole tree. Search it with `grep_repomix_output`/`read_repomix_output` (step 6) for related implementations, similar features, and test patterns. Do NOT crawl the tree live for what the snapshot can answer.
    - **Live tools (Explore agents / Grep / Glob — only what the snapshot cannot serve):** the snapshot reflects `main` at the last merge, so on a feature branch it lags by the in-flight changes; those are in the Phase 1 branch diff (step 1), not the pack. Reach for live tools only for in-flight working-tree code, or a targeted fresh read the snapshot is too stale or too coarse to answer.
    - Launch Explore agents (parallel) ONLY when the rule above calls for a live read; otherwise skip them. When you do, start from TODO locations found in Phase 0 (if any) and search `*.ts`/`*.tsx` files.
-3. **Documentation Lookup** (MANDATORY) - Look up docs for ALL task-relevant libraries. Identify libraries from: `package.json`, issue/ticket description, and codebase exploration results (e.g. your stack's **example libraries** delta). Use all available documentation sources. If a source is unavailable or returns no results, continue with remaining sources.
-   - **context7** — For each library, call in sequence: (1) `mcp__context7__resolve-library-id` with the library name to get `libraryId`, then (2) `mcp__context7__query-docs` with `libraryId` and a task-relevant topic. Run multiple `resolve-library-id` calls in parallel, then multiple `query-docs` in parallel.
-   - **Ref** — For official documentation: `mcp__Ref__ref_search_documentation` with the technology name and topic, then `mcp__Ref__ref_read_url` to read specific pages from results.
-   - **Exa** — For real-world patterns and examples: `mcp__exa__web_search_exa` for API patterns, migration guides, changelogs. `mcp__exa__get_code_context_exa` for code examples.
-   - **Perplexity** — For general and architectural questions: `mcp__perplexity__search` for factual lookups. `mcp__perplexity__reason` for trade-off analysis.
-4. **Repository Documentation** (MANDATORY) - Read the repo's own docs as the project's source of truth: read the root `README.md` and inspect/read all files under `docs/` and its subfolders. Feed project-specific conventions into the plan.
-5. **CLAUDE.md Compliance** - Map each planned change to project rules
+3. **Documentation Lookup** (MANDATORY) - Follow the **Documentation Lookup Protocol** in `## Common Instructions`. Identify task-relevant libraries from `package.json`, the issue/ticket description, and codebase exploration results (e.g. your stack's **example libraries** delta).
+4. **Repository Documentation** (MANDATORY) - Follow the **Repository Documentation** rule in `## Common Instructions`.
+5. **CLAUDE.md Compliance** - Follow the **CLAUDE.md Compliance** rule in `## Common Instructions`.
 6. **Repomix** - Search codebase via `mcp__repomix__grep_repomix_output` (outputId from Phase 0). Use `mcp__repomix__read_repomix_output` with `startLine`/`endLine` for specific sections only.
 
 After completing all context gathering, call TaskUpdate to set task 2 ("Gather context") to `status: "completed"`.
