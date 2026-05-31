@@ -39,6 +39,19 @@ describe("parseStructuredOutput", () => {
     });
   });
 
+  test("parses optional startLine and suggestion on an inline comment", () => {
+    const out = parseStructuredOutput(
+      '{"verdict":"requestChanges","reviewComment":"x","inlineComments":[{"path":"a.ts","line":42,"body":"b","startLine":40,"suggestion":"  fixed()"}]}'
+    );
+    expect(out?.inlineComments[0]).toEqual({
+      path: "a.ts",
+      line: 42,
+      body: "b",
+      startLine: 40,
+      suggestion: "  fixed()",
+    });
+  });
+
   test("defaults missing fields", () => {
     expect(parseStructuredOutput("{}")).toEqual({
       verdict: "comment",
@@ -118,6 +131,25 @@ describe("isValidComment", () => {
   test("rejects wrong line or path", () => {
     expect(isValidComment({ path: "a.ts", line: 11, body: "x" }, valid)).toBe(false);
     expect(isValidComment({ path: "b.ts", line: 10, body: "x" }, valid)).toBe(false);
+  });
+
+  const range = [
+    { path: "a.ts", line: 10 },
+    { path: "a.ts", line: 11 },
+    { path: "a.ts", line: 12 },
+  ];
+  test("accepts a multi-line range fully in the diff", () => {
+    expect(isValidComment({ path: "a.ts", line: 12, body: "x", startLine: 10 }, range)).toBe(true);
+  });
+  test("rejects a multi-line range straddling a non-diff line", () => {
+    const gapped = [
+      { path: "a.ts", line: 10 },
+      { path: "a.ts", line: 12 },
+    ];
+    expect(isValidComment({ path: "a.ts", line: 12, body: "x", startLine: 10 }, gapped)).toBe(false);
+  });
+  test("rejects an inverted range (startLine > line)", () => {
+    expect(isValidComment({ path: "a.ts", line: 10, body: "x", startLine: 12 }, range)).toBe(false);
   });
 });
 
