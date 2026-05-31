@@ -135,6 +135,7 @@ The content is organized as follows:
         0.1.0.md
         1.0.0.md
         1.0.1.md
+        1.0.2.md
       src/
         migrations/
           migratingAppend.test.ts
@@ -9579,6 +9580,29 @@ Release automation no longer overwrites higher version numbers that have been ma
 ### Tests
 
 * **release-action:** add unit tests for version-file readers ([f65ca5f](https://github.com/awinogradov/code-assistants/commit/f65ca5f7d157f6d9f9e1c18227c101d869d56ff5))
+</file>
+
+<file path=".github/actions/release-action/.release_notes/1.0.2.md">
+## [1.0.2](https://github.com/awinogradov/code-assistants/compare/release-action@v1.0.1...release-action@v1.0.2) (2026-05-31)
+
+## Release Notes
+
+The release-action service no longer shows misleading warnings about missing placeholders when creating release branches in monorepo projects.
+
+## 🐛 Bug Fixes
+
+### Cleaner monorepo release logs
+When creating releases for packages in a monorepo, the action previously displayed a warning about missing `{member}` placeholder in the branch name template, even though the branches were created correctly. This noise has been eliminated — you'll only see warnings now if you explicitly configure a custom branch template that's missing required placeholders.
+
+<details><summary>Related issues</summary>
+
+- [#208: HOTFIX: Remove false release-branch warning on monorepo releases](https://github.com/awinogradov/code-assistants/pull/208)
+</details>
+
+
+### Bug Fixes
+
+* **release-action:** treat release-{version} default as unset ([b55fffb](https://github.com/awinogradov/code-assistants/commit/b55fffb8cf75d95588d320fb8a8c90bca5bb30c0))
 </file>
 
 <file path=".github/actions/release-action/src/migrations/migratingAppend.test.ts">
@@ -19665,6 +19689,26 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.0.2](https://github.com/awinogradov/code-assistants/compare/release-action@v1.0.1...release-action@v1.0.2) (2026-05-31)
+
+## Release Notes
+
+The release-action service no longer shows misleading warnings about missing placeholders when creating release branches in monorepo projects.
+
+## 🐛 Bug Fixes
+
+### Cleaner monorepo release logs
+When creating releases for packages in a monorepo, the action previously displayed a warning about missing `{member}` placeholder in the branch name template, even though the branches were created correctly. This noise has been eliminated — you'll only see warnings now if you explicitly configure a custom branch template that's missing required placeholders.
+
+<details><summary>Related issues</summary>
+
+- [#208: HOTFIX: Remove false release-branch warning on monorepo releases](https://github.com/awinogradov/code-assistants/pull/208)
+</details>
+
+
+### Bug Fixes
+
+* **release-action:** treat release-{version} default as unset ([b55fffb](https://github.com/awinogradov/code-assistants/commit/b55fffb8cf75d95588d320fb8a8c90bca5bb30c0))
 ## [1.0.1](https://github.com/awinogradov/code-assistants/compare/release-action@v1.0.0...release-action@v1.0.1) (2026-05-29)
 
 ## Release Notes
@@ -19882,7 +19926,7 @@ Add a `release` field to your package.json to configure release behavior. See th
 <file path=".github/actions/release-action/package.json">
 {
   "name": "@code-assistants/release-action",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Composite GitHub Action that automates conventional-commit releases for npm packages, GitHub Actions, and Claude plugins.",
   "private": true,
   "type": "module",
@@ -19921,7 +19965,7 @@ Add a `release` field to your package.json to configure release behavior. See th
 <file path=".github/actions/release-action/README.md">
 # Release action
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.0.1-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.0.2-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that automates the release pipeline for npm packages, GitHub Actions, and Claude plugins.
@@ -20198,7 +20242,7 @@ uses: awinogradov/code-assistants/.github/actions/release-action@v1
 </file>
 
 <file path=".github/actions/release-action/version">
-1.0.1
+1.0.2
 </file>
 
 <file path=".github/actions/release-automerge/.release_notes/0.1.0.md">
