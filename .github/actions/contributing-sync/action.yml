@@ -46,24 +46,18 @@ runs:
           CODE_OF_CONDUCT.md
           LICENSE.md
           .github/workflows/contributing.yml
+          .github/workflows/auto-label.yml
         )
-        emit_entry() {
-          echo "- repo: ${INPUT_SOURCE_REPO}"
-          echo "  source: ${1}"
-          echo "  dest: ${2}"
-          if [ -n "${INPUT_SOURCE_REF}" ]; then
-            echo "  ref: ${INPUT_SOURCE_REF}"
-          fi
-        }
         {
           echo "files<<__EOF__"
           for path in "${paths[@]}"; do
-            emit_entry "${path}" "${path}"
+            echo "- repo: ${INPUT_SOURCE_REPO}"
+            echo "  source: ${path}"
+            echo "  dest: ${path}"
+            if [ -n "${INPUT_SOURCE_REF}" ]; then
+              echo "  ref: ${INPUT_SOURCE_REF}"
+            fi
           done
-          # The consumer auto-label workflow references the action via @main, so it is
-          # sourced from the action directory — not this repo's dogfood workflow, which
-          # uses a local action path — and written to the consumer's workflow path.
-          emit_entry ".github/actions/auto-label/consumer-workflow.yml" ".github/workflows/auto-label.yml"
           echo "__EOF__"
         } >> "${GITHUB_OUTPUT}"
 
