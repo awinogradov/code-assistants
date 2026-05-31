@@ -139,11 +139,7 @@ Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
     - `compress`: true
 ```
 
-After all calls complete:
-
-1. Store the `outputId` from the snapshot acquisition (attach or pack) response for use throughout all phases
-2. Use `grep_repomix_output` with the `outputId` for a shallow, task-relevant lookup — only enough to render the issue context and orient (keywords from issue title/description, related module names). This is NOT codebase analysis: the single broad codebase pass runs later in the pipeline's **Context Gathering** phase, and **Deep Analysis** synthesizes over it. Do not crawl the tree here.
-3. Use `read_repomix_output` with `startLine`/`endLine` only to read the specific sections that lookup surfaces
+After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response — the stack pipeline's Context Gathering phase is the single place that reads the codebase from it. Phase 0 does NOT grep or read code: render the issue context below from the resolved issue JSON and the TODO results alone. Defer every codebase read to Context Gathering.
 
 ### Issue Context Output
 
