@@ -1,0 +1,36 @@
+# Source: https://github.com/awinogradov/code-assistants/blob/main/.github/workflows/auto-label.yml
+# This file is distributed to downstream repositories by an automated sync.
+# Edits made downstream are overwritten on the next run.
+# To change it, open a pull request against the source file above.
+
+name: Auto label
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+# Shared group across both events so a push-triggered prune never runs concurrently
+# with a pull_request-triggered label sync (which would race on the same labels).
+concurrency:
+  group: auto-label-${{ github.repository }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  auto-label:
+    name: Auto label
+    # Fork PRs run with a read-only token and cannot write labels; skip them.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: awinogradov/code-assistants/.github/actions/auto-label@main
+        with:
+          token: ${{ github.token }}
