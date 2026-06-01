@@ -2,6 +2,57 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.1.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.0.0...code-review-action@v1.1.0) (2026-06-01)
+
+## Release Notes
+
+Code review findings now include one-click fix suggestions and AI-agent prompts for easier remediation.
+
+## ✨ What's New
+
+### One-click fix suggestions in code reviews
+The AI code reviewer now generates GitHub suggestion blocks that let you apply proposed fixes with a single click. Whether it's a typo, a missing import, or a logic improvement, you can accept the suggestion directly from the PR interface without manual editing. Both single-line and multi-line suggestions are supported.
+
+<details><summary>Related issues</summary>
+
+- [#217: Add one-click suggestions and AI-agent prompts to code review comments](https://github.com/awinogradov/code-assistants/issues/217)
+</details>
+
+### AI-agent prompts for complex findings
+Each code review finding now includes a collapsible "Prompt for AI agents" section. This gives AI coding assistants like GitHub Copilot or Cursor the full context they need to understand and fix the issue. The prompt includes the specific finding details and surrounding code diff, making it easy to get targeted help for more complex problems that can't be fixed with a simple suggestion.
+
+<details><summary>Related issues</summary>
+
+- [#217: Add one-click suggestions and AI-agent prompts to code review comments](https://github.com/awinogradov/code-assistants/issues/217)
+</details>
+
+## 📚 Documentation & Settings Updates
+
+### Inline suggestions documentation
+The README now includes documentation about the new inline suggestion feature, explaining how the code review action generates one-click fixes and AI-agent prompts within review comments.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #217 | [#218](https://github.com/awinogradov/code-assistants/pull/218) | @awinogradov |
+
+### Features
+
+* **code-review:** add suggestion and agent blocks ([18de884](https://github.com/awinogradov/code-assistants/commit/18de8845ebc8a0b3b9df3590324794b12e807143))
+
+### Documentation
+
+* **code-review:** document inline suggestions ([93273dc](https://github.com/awinogradov/code-assistants/commit/93273dc151abb0a664748453db0a5ec1a201cde1))
+
+### Tests
+
+* **code-review:** cover suggestion rendering and ranges ([f0c3394](https://github.com/awinogradov/code-assistants/commit/f0c339435ecd38d4f6947b8aeadfbcb3e4fd8349))
+
+### CI
+
+* **code-review:** add suggestion fields to schema ([9f35aa9](https://github.com/awinogradov/code-assistants/commit/9f35aa961b2aee7bd369a3cdfd5870b499bbd7bf))
 ## [1.0.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v0.3.0...code-review-action@v1.0.0) (2026-05-31)
 
 ## Release Notes
