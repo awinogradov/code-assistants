@@ -1,0 +1,105 @@
+name: Sync
+description: Aggregate the five upstream maintenance syncs (agent rules, code-review, repomix, release, contributing) behind one action. Every kind runs by default; set a kind to false to opt out.
+
+inputs:
+  bot_token:
+    description: |
+      PAT (classic with `repo`, or fine-grained with `contents: write` + `pull-requests: write` on this repo) or a GitHub App installation token. The workflow's default `GITHUB_TOKEN` is not supported — it cannot create pull requests when the repo/org has "Allow GitHub Actions to create and approve pull requests" disabled, and the resulting 403 is opaque. See README for setup.
+    required: true
+  bot_username:
+    description: |
+      Git author/committer login for the sync commits. Defaults to `github-actions[bot]` when unset. Pass the `vars.BOT_USERNAME` repository variable to attribute commits to a dedicated bot identity.
+    required: false
+  agents-rules:
+    description: Sync the stack-appropriate rules file into `CLAUDE.md`. Default on; set to `false` to opt out.
+    required: false
+    default: "true"
+  code-review:
+    description: Sync the AI code-review workflow. Default on; set to `false` to opt out.
+    required: false
+    default: "true"
+  repomix:
+    description: Sync the repomix-pack workflow and `repomix.config.json`. Default on; set to `false` to opt out.
+    required: false
+    default: "true"
+  release:
+    description: Sync the release pipeline workflows (create, publish, auto-merge). Default on; set to `false` to opt out.
+    required: false
+    default: "true"
+  contributing:
+    description: Sync CONTRIBUTING.md, CODE_OF_CONDUCT.md, LICENSE.md, and the contributing + auto-label workflows. Default on; set to `false` to opt out.
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Sync agent rules
+      id: agents-rules
+      if: inputs['agents-rules'] == 'true'
+      continue-on-error: true
+      uses: awinogradov/code-assistants/.github/actions/agents-rules-sync@main
+      with:
+        bot_token: ${{ inputs.bot_token }}
+        bot_username: ${{ inputs.bot_username }}
+
+    - name: Sync code-review workflow
+      id: code-review
+      if: inputs['code-review'] == 'true'
+      continue-on-error: true
+      uses: awinogradov/code-assistants/.github/actions/code-review-sync@main
+      with:
+        bot_token: ${{ inputs.bot_token }}
+        bot_username: ${{ inputs.bot_username }}
+
+    - name: Sync repomix pack
+      id: repomix
+      if: inputs['repomix'] == 'true'
+      continue-on-error: true
+      uses: awinogradov/code-assistants/.github/actions/repomix-sync@main
+      with:
+        bot_token: ${{ inputs.bot_token }}
+        bot_username: ${{ inputs.bot_username }}
+
+    - name: Sync release workflows
+      id: release
+      if: inputs['release'] == 'true'
+      continue-on-error: true
+      uses: awinogradov/code-assistants/.github/actions/release-sync@main
+      with:
+        bot_token: ${{ inputs.bot_token }}
+        bot_username: ${{ inputs.bot_username }}
+
+    - name: Sync contributing files
+      id: contributing
+      if: inputs['contributing'] == 'true'
+      continue-on-error: true
+      uses: awinogradov/code-assistants/.github/actions/contributing-sync@main
+      with:
+        bot_token: ${{ inputs.bot_token }}
+        bot_username: ${{ inputs.bot_username }}
+
+    - name: Aggregate sync outcomes
+      if: always()
+      shell: bash
+      env:
+        AGENTS_RULES: ${{ steps['agents-rules'].outcome }}
+        CODE_REVIEW: ${{ steps['code-review'].outcome }}
+        REPOMIX: ${{ steps['repomix'].outcome }}
+        RELEASE: ${{ steps['release'].outcome }}
+        CONTRIBUTING: ${{ steps['contributing'].outcome }}
+      run: |
+        set -euo pipefail
+        failed=""
+        for kv in "agents-rules:$AGENTS_RULES" "code-review:$CODE_REVIEW" \
+                  "repomix:$REPOMIX" "release:$RELEASE" "contributing:$CONTRIBUTING"; do
+          outcome="${kv##*:}"
+          if [ "$outcome" = "failure" ] || [ "$outcome" = "cancelled" ]; then
+            failed="$failed ${kv%%:*}"
+          fi
+        done
+        if [ -n "$failed" ]; then
+          echo "::error::sync failed for:$failed"
+          exit 1
+        fi
+        echo "all enabled syncs succeeded or were skipped"

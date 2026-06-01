@@ -1,7 +1,7 @@
 # Requires repo secret `BOT_TOKEN`: a PAT (classic with `repo`, or fine-grained
 # with `contents: write` + `pull-requests: write`) or a GitHub App installation
 # token. The default `GITHUB_TOKEN` is not supported — see the action README
-# in `.github/actions/agents-rules-sync` for the rationale.
+# in `.github/actions/sync` for the rationale.
 # Optional repo variable `BOT_USERNAME`: git author login for sync commits.
 # Defaults to `github-actions[bot]` when unset.
 
@@ -9,9 +9,8 @@ name: Upstream
 
 on:
   schedule:
-    # Every hour at minute 0 (UTC). Picks up upstream agent rules changes
-    # within ~1h and opens (or updates) a maintenance PR on
-    # `maintenance-sync-agents-rules`.
+    # Every hour at minute 0 (UTC). Picks up upstream changes within ~1h and
+    # opens (or updates) one maintenance PR per enabled sync kind.
     - cron: "0 * * * *"
   workflow_dispatch:
 
@@ -25,51 +24,13 @@ permissions:
 
 jobs:
   sync:
-    name: Sync agent rules
+    name: Sync from upstream
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: awinogradov/code-assistants/.github/actions/agents-rules-sync@main
+      - uses: awinogradov/code-assistants/.github/actions/sync@main
         with:
           bot_token: ${{ secrets.BOT_TOKEN }}
           bot_username: ${{ vars.BOT_USERNAME }}
-
-  sync-code-review:
-    name: Sync code-review workflow
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: awinogradov/code-assistants/.github/actions/code-review-sync@main
-        with:
-          bot_token: ${{ secrets.BOT_TOKEN }}
-          bot_username: ${{ vars.BOT_USERNAME }}
-
-  sync-repomix:
-    name: Sync repomix pack
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: awinogradov/code-assistants/.github/actions/repomix-sync@main
-        with:
-          bot_token: ${{ secrets.BOT_TOKEN }}
-          bot_username: ${{ vars.BOT_USERNAME }}
-
-  sync-release:
-    name: Sync release workflows
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: awinogradov/code-assistants/.github/actions/release-sync@main
-        with:
-          bot_token: ${{ secrets.BOT_TOKEN }}
-          bot_username: ${{ vars.BOT_USERNAME }}
-
-  sync-contributing:
-    name: Sync contributing files
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: awinogradov/code-assistants/.github/actions/contributing-sync@main
-        with:
-          bot_token: ${{ secrets.BOT_TOKEN }}
-          bot_username: ${{ vars.BOT_USERNAME }}
+          # Every sync kind runs by default. Opt out by setting a kind to false, e.g.:
+          # release: false
