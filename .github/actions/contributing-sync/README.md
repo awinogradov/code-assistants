@@ -9,8 +9,9 @@ The synced set is:
 - `LICENSE.md`
 - `.github/workflows/contributing.yml`
 - `.github/workflows/auto-label.yml`
+- `.github/workflows/licenses.yml`
 
-The first three are the contributor-facing documentation. The two workflows propagate CI that
+The first three are the contributor-facing documentation. The three workflows propagate CI that
 references upstream actions on every run — the actions themselves stay in the upstream
 repository, so consumers do not need a local copy:
 
@@ -18,6 +19,8 @@ repository, so consumers do not need a local copy:
   `awinogradov/code-assistants/.github/actions/contributing-check@main`.
 - `auto-label.yml` runs [`auto-label`](../auto-label/README.md) via
   `awinogradov/code-assistants/.github/actions/auto-label@main`.
+- `licenses.yml` runs [`licenses-audit`](../licenses-audit/README.md) via
+  `awinogradov/code-assistants/.github/actions/licenses-audit@main`.
 
 The action builds the sync list and delegates the diff and PR mechanics to the
 [`files-sync`](../files-sync/README.md) action. It does not require `actions/checkout` and
@@ -84,8 +87,8 @@ See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/a
 ## Behavior
 
 - Delegates to `files-sync` with a fixed sync list — `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`,
-  `LICENSE.md`, `.github/workflows/contributing.yml`, and `.github/workflows/auto-label.yml` —
-  sourced from `source-repo` at `source-ref`.
+  `LICENSE.md`, `.github/workflows/contributing.yml`, `.github/workflows/auto-label.yml`, and
+  `.github/workflows/licenses.yml` — sourced from `source-repo` at `source-ref`.
 - The PR is opened on the fixed branch `maintenance-sync-contributing` with the title
   `MAINTENANCE: Sync contributing files from upstream` and the commit message
   `chore: sync contributing files from upstream`. These values are not configurable so the
