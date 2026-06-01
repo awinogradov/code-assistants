@@ -94,6 +94,8 @@ The content is organized as follows:
           githubReview.test.ts
           githubReview.ts
         reviewOutput/
+          inlineCommentBody.test.ts
+          inlineCommentBody.ts
           reviewOutput.test.ts
           reviewOutput.ts
         actionsOutput.test.ts
@@ -309,6 +311,7 @@ claude-plugins/
 docs/
   agents-field.md
   code-review-run-summary.md
+  code-review-suggestions.md
   plan-run-skills.md
   plan-skills-audit.md
   release-automerge.md
@@ -3600,6 +3603,254 @@ export async function hasRecentBotReply(
 }
 </file>
 
+<file path=".github/actions/code-review-action/src/reviewOutput/inlineCommentBody.test.ts">
+/**
+ * Tests for inlineCommentBody.ts — hunk lookup, body rendering (suggestion fence
+ * + AI-agent prompt), and the Octokit `comments[]` payload shape.
+ */
+import { describe, expect, test } from "bun:test";
+
+import {
+  buildReviewComments,
+  findHunkForLine,
+  renderInlineCommentBody,
+} from "./inlineCommentBody.ts";
+
+const patch = [
+  "@@ -1,3 +1,4 @@",
+  " context1",
+  "+added2",
+  " context3",
+  "+added4",
+  "@@ -20,2 +21,3 @@",
+  " ctx21",
+  "+add22",
+  " ctx23",
+].join("\n");
+
+describe("findHunkForLine", () => {
+  test("returns the hunk whose new-file range covers the line", () => {
+    const hunk = findHunkForLine(patch, 2);
+    expect(hunk).toContain("@@ -1,3 +1,4 @@");
+    expect(hunk).toContain("+added2");
+    expect(hunk).not.toContain("@@ -20,2 +21,3 @@");
+  });
+
+  test("selects the second hunk for a line in its range", () => {
+    const hunk = findHunkForLine(patch, 22);
+    expect(hunk?.startsWith("@@ -20,2 +21,3 @@")).toBe(true);
+    expect(hunk).toContain("+add22");
+  });
+
+  test("returns undefined when no hunk covers the line", () => {
+    expect(findHunkForLine(patch, 100)).toBeUndefined();
+  });
+});
+
+describe("renderInlineCommentBody", () => {
+  const hunk = "@@ -1,3 +1,4 @@\n context1\n+added2";
+
+  test("embeds the finding and the diff hunk in the AI-agent prompt", () => {
+    const body = renderInlineCommentBody({
+      comment: { path: "src/a.ts", line: 2, body: "🚧 Bug here" },
+      hunk,
+    });
+    expect(body).toContain("🚧 Bug here");
+    expect(body).toContain("<summary>Prompt for AI agents</summary>");
+    expect(body).toContain("<comment>\n🚧 Bug here\n</comment>");
+    expect(body).toContain("<file context>\n@@ -1,3 +1,4 @@");
+    expect(body).toContain("src/a.ts, line 2");
+    expect(body).not.toContain("```suggestion");
+  });
+
+  test("renders a suggestion fence with the replacement verbatim (indentation preserved)", () => {
+    const body = renderInlineCommentBody({
+      comment: { path: "src/a.ts", line: 2, body: "fix", suggestion: "  const fixed = 1;" },
+      hunk,
+    });
+    expect(body).toContain("```suggestion\n  const fixed = 1;\n```");
+  });
+
+  test("describes a multi-line range in the prompt", () => {
+    const body = renderInlineCommentBody({
+      comment: { path: "src/a.ts", line: 4, startLine: 2, body: "fix" },
+      hunk,
+    });
+    expect(body).toContain("src/a.ts, lines 2 to 4");
+  });
+
+  test("omits the file-context block when no hunk is available", () => {
+    const body = renderInlineCommentBody({
+      comment: { path: "src/a.ts", line: 2, body: "fix" },
+      hunk: undefined,
+    });
+    expect(body).not.toContain("<file context>");
+  });
+});
+
+describe("buildReviewComments", () => {
+  const prFiles = [{ filename: "src/a.ts", patch }];
+
+  test("builds a single-line payload with side RIGHT and no start_line", () => {
+    const [comment] = buildReviewComments(
+      [{ path: "src/a.ts", line: 2, body: "b", suggestion: "  fix()" }],
+      prFiles,
+    );
+    expect(comment?.path).toBe("src/a.ts");
+    expect(comment?.line).toBe(2);
+    expect(comment?.side).toBe("RIGHT");
+    expect(comment?.start_line).toBeUndefined();
+    expect(comment?.body).toContain("```suggestion\n  fix()\n```");
+    expect(comment?.body).toContain("<file context>\n@@ -1,3 +1,4 @@");
+  });
+
+  test("adds start_line and start_side for a multi-line range", () => {
+    const [comment] = buildReviewComments(
+      [{ path: "src/a.ts", line: 4, startLine: 2, body: "b" }],
+      prFiles,
+    );
+    expect(comment?.line).toBe(4);
+    expect(comment?.start_line).toBe(2);
+    expect(comment?.start_side).toBe("RIGHT");
+  });
+
+  test("renders without file context when the file has no patch", () => {
+    const [comment] = buildReviewComments(
+      [{ path: "src/a.ts", line: 2, body: "b" }],
+      [{ filename: "src/a.ts" }],
+    );
+    expect(comment?.body).not.toContain("<file context>");
+  });
+});
+</file>
+
+<file path=".github/actions/code-review-action/src/reviewOutput/inlineCommentBody.ts">
+/**
+ * Render an inline review finding into the comment body and Octokit payload the
+ * action posts: the finding prose, an optional one-click GitHub `suggestion`
+ * block (the model's verbatim fix), and a collapsible "Prompt for AI agents"
+ * block carrying the finding plus the surrounding diff hunk as `<file context>`.
+ *
+ * Pure — no Octokit, no env, no I/O. `buildReviewComments` shapes the validated
+ * comments into the exact `comments[]` array for `octokit.rest.pulls.createReview`,
+ * adding `start_line`/`start_side` only for a multi-line range.
+ *
+ * @example
+ *   const comments = buildReviewComments(validComments, prFiles);
+ *   await octokit.rest.pulls.createReview({ owner, repo, pull_number, event, body, comments });
+ */
+import type { RestEndpointMethodTypes } from "@octokit/rest";
+
+import type { InlineComment } from "./reviewOutput.ts";
+
+/** A single entry of the `comments` array accepted by `pulls.createReview`. */
+type ReviewComment = NonNullable<
+  RestEndpointMethodTypes["pulls"]["createReview"]["parameters"]["comments"]
+>[number];
+
+/** Unified-diff hunk header, anchored per line: captures the new-file start and count. */
+const hunkHeaderRegex = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
+
+/**
+ * Return the unified-diff hunk text (header through the lines before the next
+ * header) whose new-file range covers `line`, or `undefined` when no hunk does.
+ */
+export function findHunkForLine(patch: string, line: number): string | undefined {
+  const lines = patch.split("\n");
+  const headerIndexes = lines.flatMap((text, index) => (hunkHeaderRegex.test(text) ? [index] : []));
+
+  for (const [order, headerIndex] of headerIndexes.entries()) {
+    const match = lines[headerIndex]?.match(hunkHeaderRegex);
+    if (!match) {
+      continue;
+    }
+    const start = Number(match[1]);
+    const count = match[2] ? Number(match[2]) : 1;
+    if (line < start || line > start + count - 1) {
+      continue;
+    }
+    const nextHeader = headerIndexes[order + 1] ?? lines.length;
+    return lines.slice(headerIndex, nextHeader).join("\n");
+  }
+  return undefined;
+}
+
+/** Build the collapsible "Prompt for AI agents" block (cubic shape) for one finding. */
+function buildAgentPrompt(comment: InlineComment, hunk: string | undefined): string {
+  const location =
+    comment.startLine !== undefined && comment.startLine < comment.line
+      ? `lines ${comment.startLine} to ${comment.line}`
+      : `line ${comment.line}`;
+
+  const prompt = [
+    `Check if this issue is valid — if so, understand the root cause and fix it. At ${comment.path}, ${location}:`,
+    "",
+    "<comment>",
+    comment.body,
+    "</comment>",
+  ];
+  if (hunk !== undefined) {
+    prompt.push("", "<file context>", hunk, "</file context>");
+  }
+
+  return [
+    "<details>",
+    "<summary>Prompt for AI agents</summary>",
+    "",
+    "```text",
+    ...prompt,
+    "```",
+    "",
+    "</details>",
+  ].join("\n");
+}
+
+/** Inputs for {@link renderInlineCommentBody}. */
+interface RenderInlineCommentInput {
+  comment: InlineComment;
+  /** Diff hunk covering the finding's line, embedded as `<file context>`. */
+  hunk: string | undefined;
+}
+
+/**
+ * Compose the final inline comment body: the finding, the optional `suggestion`
+ * fence, and the AI-agent prompt. The suggestion replaces the anchored line(s)
+ * verbatim, so the model must supply exact replacement text (indentation included).
+ */
+export function renderInlineCommentBody({ comment, hunk }: RenderInlineCommentInput): string {
+  const sections = [comment.body];
+  if (comment.suggestion !== undefined) {
+    sections.push(["```suggestion", comment.suggestion, "```"].join("\n"));
+  }
+  sections.push(buildAgentPrompt(comment, hunk));
+  return sections.join("\n\n");
+}
+
+/**
+ * Shape validated inline comments into the `createReview` `comments[]` payload:
+ * rendered body, `side: "RIGHT"`, plus `start_line`/`start_side` for a multi-line
+ * range. A contiguous in-diff range always sits within one hunk, so the line's
+ * hunk is located once via `findHunkForLine`.
+ */
+export function buildReviewComments(
+  comments: InlineComment[],
+  prFiles: Array<{ filename: string; patch?: string }>,
+): ReviewComment[] {
+  const patchByPath = new Map(prFiles.map((file) => [file.filename, file.patch]));
+
+  return comments.map((comment): ReviewComment => {
+    const patch = patchByPath.get(comment.path);
+    const hunk = patch ? findHunkForLine(patch, comment.line) : undefined;
+    const body = renderInlineCommentBody({ comment, hunk });
+
+    const base = { path: comment.path, line: comment.line, side: "RIGHT" as const, body };
+    return comment.startLine !== undefined && comment.startLine < comment.line
+      ? { ...base, start_line: comment.startLine, start_side: "RIGHT" as const }
+      : base;
+  });
+}
+</file>
+
 <file path=".github/actions/code-review-action/src/reviewOutput/reviewOutput.test.ts">
 /**
  * Tests for reviewOutput.ts — pure parsing and diff-hunk validation.
@@ -3639,6 +3890,19 @@ describe("parseStructuredOutput", () => {
       verdict: "requestChanges",
       reviewComment: "x",
       inlineComments: [{ path: "a.ts", line: 3, body: "b" }],
+    });
+  });
+
+  test("parses optional startLine and suggestion on an inline comment", () => {
+    const out = parseStructuredOutput(
+      '{"verdict":"requestChanges","reviewComment":"x","inlineComments":[{"path":"a.ts","line":42,"body":"b","startLine":40,"suggestion":"  fixed()"}]}'
+    );
+    expect(out?.inlineComments[0]).toEqual({
+      path: "a.ts",
+      line: 42,
+      body: "b",
+      startLine: 40,
+      suggestion: "  fixed()",
     });
   });
 
@@ -3722,6 +3986,25 @@ describe("isValidComment", () => {
     expect(isValidComment({ path: "a.ts", line: 11, body: "x" }, valid)).toBe(false);
     expect(isValidComment({ path: "b.ts", line: 10, body: "x" }, valid)).toBe(false);
   });
+
+  const range = [
+    { path: "a.ts", line: 10 },
+    { path: "a.ts", line: 11 },
+    { path: "a.ts", line: 12 },
+  ];
+  test("accepts a multi-line range fully in the diff", () => {
+    expect(isValidComment({ path: "a.ts", line: 12, body: "x", startLine: 10 }, range)).toBe(true);
+  });
+  test("rejects a multi-line range straddling a non-diff line", () => {
+    const gapped = [
+      { path: "a.ts", line: 10 },
+      { path: "a.ts", line: 12 },
+    ];
+    expect(isValidComment({ path: "a.ts", line: 12, body: "x", startLine: 10 }, gapped)).toBe(false);
+  });
+  test("rejects an inverted range (startLine > line)", () => {
+    expect(isValidComment({ path: "a.ts", line: 10, body: "x", startLine: 12 }, range)).toBe(false);
+  });
 });
 
 describe("isAlreadyMentioned", () => {
@@ -3764,6 +4047,10 @@ export const inlineCommentSchema = z.object({
   path: z.string(),
   line: z.number(),
   body: z.string(),
+  /** First line of a multi-line range; omit for a single-line comment (`line` is then the only line). */
+  startLine: z.number().optional(),
+  /** Verbatim replacement for the anchored line(s), rendered as a GitHub `suggestion` block. */
+  suggestion: z.string().optional(),
 });
 export type InlineComment = z.infer<typeof inlineCommentSchema>;
 
@@ -3850,9 +4137,25 @@ export function extractValidLines(patches: Array<{ filename: string; patch?: str
     );
 }
 
-/** True when a comment targets a line that exists in the diff. */
+/**
+ * True when a comment's target exists in the diff. For a single-line comment that
+ * is just `line`; for a multi-line comment the entire `[startLine, line]` range must
+ * be in-diff. A range that straddles a gap between hunks is rejected — GitHub would
+ * 422 the whole `createReview` call, not just the offending comment.
+ */
 export function isValidComment(comment: InlineComment, validLines: ValidLine[]): boolean {
-  return validLines.some((vl) => vl.path === comment.path && vl.line === comment.line);
+  const inDiff = (line: number): boolean =>
+    validLines.some((vl) => vl.path === comment.path && vl.line === line);
+
+  const { startLine, line } = comment;
+  if (startLine === undefined) {
+    return inDiff(line);
+  }
+  if (startLine > line) {
+    return false;
+  }
+  const range = Array.from({ length: line - startLine + 1 }, (_, i) => startLine + i);
+  return range.every(inDiff);
 }
 
 /**
@@ -6574,6 +6877,7 @@ import {
   parseStructuredOutput,
   type ValidLine,
 } from "./reviewOutput/reviewOutput.ts";
+import { buildReviewComments } from "./reviewOutput/inlineCommentBody.ts";
 import {
   deletePendingReviews,
   fetchReviewThreads,
@@ -6763,7 +7067,7 @@ const { data: submittedReview } = await octokit.rest.pulls.createReview({
   pull_number: pullNumber,
   event,
   body: finalBody,
-  comments: validComments,
+  comments: buildReviewComments(validComments, prFiles),
 });
 
 console.log("✓ Review submitted successfully");
@@ -7430,7 +7734,7 @@ runs:
         CLAUDE_MODEL: ${{ inputs.model }}
         CLAUDE_ALLOWED_TOOLS: "Bash(gh:*),mcp__repomix__*,mcp__context7__*,mcp__Ref__*,mcp__exa__*,mcp__perplexity__*,Read,Glob,Grep"
         CLAUDE_DISALLOWED_TOOLS: "Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh issue comment:*),Bash(gh api:*)"
-        CLAUDE_JSON_SCHEMA: '{"type":"object","properties":{"verdict":{"type":"string","enum":["approve","requestChanges","comment"]},"reviewComment":{"type":"string"},"inlineComments":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"},"body":{"type":"string"}},"required":["path","line","body"]}}},"required":["verdict","reviewComment"]}'
+        CLAUDE_JSON_SCHEMA: '{"type":"object","properties":{"verdict":{"type":"string","enum":["approve","requestChanges","comment"]},"reviewComment":{"type":"string"},"inlineComments":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"},"body":{"type":"string"},"startLine":{"type":"integer"},"suggestion":{"type":"string"}},"required":["path","line","body"]}}},"required":["verdict","reviewComment"]}'
         CLAUDE_PLUGIN_DIR: ${{ steps.plugin.outputs.dir }}
         CLAUDE_MCP_CONFIG: ${{ steps.mcp.outputs.path }}
         CLAUDE_SETTINGS: ${{ inputs.settings }}
@@ -7921,7 +8225,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 
 Composite GitHub Action that runs AI code review on pull requests using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Has two modes:
 
-- **`review`** — runs the `/autopilot:pr-review` skill against the PR diff and submits a structured review (approve / request changes / comment) with optional inline findings.
+- **`review`** — runs the `/autopilot:pr-review` skill against the PR diff and submits a structured review (approve / request changes / comment) with optional inline findings, each carrying a one-click suggestion fix and a "Prompt for AI agents" block where applicable.
 - **`react`** — runs the `/autopilot:pr-answer` skill against a triggering PR comment to draft a reply, resolve threads, and optionally update the existing review.
 
 Auto-detection routes events from `pull_request`, `issue_comment`, and `pull_request_review_comment` triggers to the correct mode. Drafts, release branches, and dependabot PRs are skipped automatically.
@@ -8004,6 +8308,12 @@ The `pr:review` skill carries the full review rubric (all `CHECK-*` rules) inlin
 Every review comment carries a collapsed **"Review run summary 🤖"** footer ("under the cut") with the run's latency, token usage, cache hits, cost, and tool round-trips. The metrics are computed in `runClaude.ts`, passed to `submitReview.ts` via the `run_summary` step output, and appended to the **main review comment only** (never inline, never on `react`-mode replies). The footer is wrapped in HTML-comment markers so it is stripped before duplicate-review detection, keeping run-varying numbers from defeating dedup.
 
 See [Review run-summary footer](../../../docs/code-review-run-summary.md) for the full data flow and diagram.
+
+## Inline suggestions & AI-agent prompts
+
+Each inline finding can carry a one-click GitHub **`suggestion`** block (the author commits the fix in one click) and a collapsible **"Prompt for AI agents"** block (a ready-to-paste prompt with the finding and the surrounding diff hunk). The `pr:review` skill emits an optional `suggestion` (verbatim replacement) and `startLine` (multi-line range) per comment; `submitReview.ts` renders the suggestion fence and the deterministic agent prompt and posts them through the existing `createReview` call — adding `start_line`/`side` for multi-line ranges. The feature is always-on; no inputs configure it.
+
+See [Inline suggestions and AI-agent prompts](../../../docs/code-review-suggestions.md) for the full data flow, a rendered example, and the source map.
 
 ## Labels
 
@@ -29410,10 +29720,13 @@ Map `severity` to its emoji when rendering in Phase 3: `blocker` → 🚧, `sugg
   "reviewComment": "...",
   "inlineComments": [
     {"path": "src/file.py", "line": 42, "body": "🚧 Issue description"},
-    {"path": "src/other.py", "line": 15, "body": "🙋‍♂️ Suggestion here"}
+    {"path": "src/other.py", "line": 15, "body": "🙋‍♂️ Suggestion here"},
+    {"path": "src/calc.py", "line": 8, "startLine": 7, "body": "🚧 Off-by-one in the running sum [CHECK-BUG-003](<RULES_DOC_URL>#CHECK-BUG-003)", "suggestion": "    for i in range(n):\n        total += items[i]"}
   ]
 }
 ```
+
+`startLine` (first line of a multi-line range) and `suggestion` (verbatim replacement for the anchored line(s)) are optional per-comment fields — emit them only for concrete, mechanical fixes (see [Code suggestions](#code-suggestions)).
 
 ### reviewComment Format (~30 lines max)
 
@@ -29517,6 +29830,15 @@ Add inline comments for issues with specific code locations:
 
 Each inline comment: 1-2 sentences, start with severity emoji, end with the rule code rendered as a markdown link per §2.5 (e.g. `🚧 No idempotency check — retries will duplicate charges [CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002)`).
 
+### Code suggestions
+
+Add an optional `suggestion` to an inline comment when the fix is concrete and mechanical — a rename, a guard clause, a corrected operator — and you can write it as exact replacement text. The action renders it as a one-click GitHub suggestion block ("Commit suggestion").
+
+- `suggestion` REPLACES the anchored line(s). Reproduce the original line(s) verbatim except for your change, **including leading indentation** — GitHub applies the text as-is, so a stray space silently reindents the file.
+- Provide raw replacement code only: no ` ```suggestion ` fence, no `+`/`-` diff markers, no prose (the action wraps it).
+- Single-line fix: set `line` only. Multi-line fix: set `startLine` (first line) and `line` (last line) over a **contiguous range fully inside the diff**. If the fix touches lines outside the diff, describe it in prose and omit `suggestion`.
+- Emit `suggestion` only when confident it applies cleanly; otherwise keep the prose finding alone.
+
 ### Deduplication Rules
 
 - NEVER mention the same issue in BOTH reviewComment AND inlineComments
@@ -29532,7 +29854,7 @@ Each inline comment: 1-2 sentences, start with severity emoji, end with the rule
 
 ### Exclude
 
-- Code examples or implementation suggestions
+- Code examples or implementation suggestions in the comment prose — put a concrete, mechanical fix in the structured `suggestion` field instead (see Code suggestions); it renders as a one-click GitHub suggestion block
 - "## Summary", "## Verdict", or any top-level markdown headers in review body
 - "Observations", "Positive Observations", or any praise/compliment sections
 - Multi-sentence greetings or praise after the opening greeting ("Great work", "Clean implementation", "well-structured", etc.)
@@ -32121,6 +32443,117 @@ The pr:review skill returns an empty `reviewComment` for an approval with no fin
 | `src/runSummaryFooter.ts` | `runSummarySchema`, `parseRunSummary`, `renderRunSummaryFooter`, `stripRunSummaryFooter`, `buildReviewBody` |
 | `src/submitReview.ts`     | Builds the review body via `buildReviewBody` (clean-approval line + footer); strips the footer for dedup    |
 | `action.yml`              | Bridges `run_summary` into the Submit Review step as `RUN_SUMMARY`                                          |
+</file>
+
+<file path="docs/code-review-suggestions.md">
+# Inline suggestions and AI-agent prompts
+
+`code-review-action` posts inline PR findings as plain `{path, line, body}` comments. That tells the author _what_ is wrong, but they still hand-apply every fix, and an external coding agent has no structured handle on the finding.
+
+Two affordances make a review directly actionable — both modelled on the third-party cubic reviewer:
+
+- A **GitHub `suggestion` block** the author applies with one click ("Commit suggestion"), for single-line and multi-line fixes.
+- A collapsible **"Prompt for AI agents"** block: a ready-to-paste prompt carrying the instruction, `path:line`, the finding, and the surrounding diff hunk as `<file context>`.
+
+The model decides the fix; the action renders and posts it. Both land through the same `octokit.rest.pulls.createReview` call the action already makes.
+
+## Data flow
+
+The `pr:review` skill emits two new optional per-comment fields — `suggestion` (verbatim replacement for the anchored line(s)) and `startLine` (first line of a multi-line range). `submitReview.ts` renders the body and shapes the Octokit payload; the AI-agent prompt is built action-side from the diff hunk the action already holds, so it costs no model tokens.
+
+```
+┌───────────────────────────┐
+│ pr:review skill (model)    │
+└─────────────┬─────────────┘
+              │ ① inlineComments[] JSON:
+              │   { path, line, body, startLine?, suggestion? }
+              ▼
+┌─────────────┬────────────────────────────┐
+│ submitReview.ts → buildReviewComments()   │
+└─────────────┬────────────────────────────┘
+              │
+              ├──② findHunkForLine(patch, line) ─▶ hunk text
+              │
+              ├──③ renderInlineCommentBody():
+              │      body
+              │      + GitHub suggestion block        (if suggestion set)
+              │      + <details> Prompt for AI agents:
+              │           <comment> finding </comment>
+              │           <file context> hunk </file context>
+              │
+              ├──  Octokit payload per comment:
+              │      { path, line, body, side: RIGHT,
+              │        start_line?, start_side?: RIGHT }   (multi-line)
+              │
+              │ ④ octokit.rest.pulls.createReview({ comments })
+              ▼
+┌─────────────┬──────────────────────────────────┐
+│ GitHub PR review                                │
+│   • one-click "Commit suggestion" button        │
+│   • collapsible "Prompt for AI agents" block    │
+└─────────────────────────────────────────────────┘
+```
+
+**Flow legend:**
+
+- ① The skill emits each finding with optional `startLine` and `suggestion`; it crosses the action boundary as the `structured_output` JSON, validated by `inlineCommentSchema`.
+- ② Per comment, the action looks up the file's patch and extracts the hunk covering the line — used for `<file context>` and (via `isValidComment`) to confirm the whole range is in-diff.
+- ③ The action renders the final body: original finding, then the suggestion fence (when present), then the cubic-shaped "Prompt for AI agents" `<details>`.
+- ④ Posted through the existing `createReview` call with `side`/`start_line`/`start_side` added for multi-line; GitHub renders the suggestion button and the collapsible prompt.
+
+## Rendered comment
+
+A finding with a two-line `suggestion` over `startLine: 7, line: 8` renders like this (the action wraps the model's raw replacement in the ` ```suggestion ` fence and appends the prompt):
+
+````text
+🚧 Off-by-one in the running sum — `items[n]` reads past the array [CHECK-BUG-003](…)
+
+```suggestion
+    for i in range(n):
+        total += items[i]
+```
+
+<details>
+<summary>Prompt for AI agents</summary>
+
+```text
+Check if this issue is valid — if so, understand the root cause and fix it. At src/calc.py, lines 7 to 8:
+
+<comment>
+🚧 Off-by-one in the running sum — `items[n]` reads past the array [CHECK-BUG-003](…)
+</comment>
+
+<file context>
+@@ -5,4 +7,2 @@ def total(items, n):
+-    for i in range(n + 1):
++    for i in range(n):
+         total += items[i]
+</file context>
+```
+
+</details>
+````
+
+The suggestion replaces the anchored line(s) verbatim, so the model must reproduce the original indentation — a stray space would silently reindent the file on apply. The `pr:review` skill enforces this; `inlineCommentBody.test.ts` asserts the rendered fence preserves it.
+
+## Multi-line suggestions
+
+GitHub anchors a review comment to one line (`line`) or a range (`start_line`..`line`), and a `suggestion` replaces exactly those lines:
+
+- **Single-line** — the model sets `line` only. The action posts `{ path, line, body, side: "RIGHT" }`.
+- **Multi-line** — the model sets `startLine` (first line) and `line` (last line). The action adds `start_line` + `start_side: "RIGHT"`. `side`/`start_side` are always `RIGHT` because only added/context lines (the new side of the diff) are commentable.
+
+`isValidComment` requires the **entire** `[startLine, line]` range to be in-diff. A contiguous in-diff range always sits within a single hunk, so a range that straddles a gap between hunks is rejected and the finding falls back to the review body — otherwise GitHub would reject the whole `createReview` call, not just that comment. Out-of-diff findings keep their prose and drop the suggestion (a suggestion is meaningless off the diff).
+
+## Source map
+
+| File                                                 | Responsibility                                                                                                                                      |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/reviewOutput/reviewOutput.ts`                   | `inlineCommentSchema` (adds optional `startLine`/`suggestion`); `isValidComment` validates the multi-line range against the diff                    |
+| `src/reviewOutput/inlineCommentBody.ts`              | `findHunkForLine`, `renderInlineCommentBody`, `buildReviewComments` — renders the suggestion fence + AI-agent prompt and shapes the Octokit payload |
+| `src/submitReview.ts`                                | Calls `buildReviewComments(validComments, prFiles)` for the `createReview` `comments[]` array                                                       |
+| `action.yml`                                         | `CLAUDE_JSON_SCHEMA` permits the optional `startLine`/`suggestion` model output                                                                     |
+| `claude-plugins/autopilot/skills/pr:review/SKILL.md` | Tells the model when and how to emit `suggestion`/`startLine` (the "Code suggestions" section)                                                      |
 </file>
 
 <file path="docs/plan-run-skills.md">
@@ -36721,6 +37154,7 @@ See the [plugin README](./claude-plugins/autopilot/README.md#installation) for s
 - [Release auto-merge flow](./docs/release-automerge.md) — the event-driven action that merges approved, all-green release PRs, and how its workflow is propagated downstream
 - [Committed Repomix pack](./docs/repomix-pack.md) — the `.repomix/pack.xml` snapshot, the merge-triggered workflow that refreshes it, and the snapshot-first contract skills follow
 - [Review run-summary footer](./docs/code-review-run-summary.md) — how `code-review-action` surfaces per-run cost/latency/token metrics in a collapsible footer on the main review comment
+- [Inline suggestions and AI-agent prompts](./docs/code-review-suggestions.md) — how `code-review-action` adds one-click GitHub suggestion blocks and a "Prompt for AI agents" block to each inline finding
 - [Plan and run skills](./docs/plan-run-skills.md) — how the `plan` and `run` skills work end to end: phases, orchestrator↔stack delegation, sub-agent fan-out, and run's automated post-implementation, with ASCII diagrams
 - [Plan skills audit](./docs/plan-skills-audit.md) — a dimension-by-dimension audit of the `plan`, `plan-bun`, and `plan-nodejs-react` skills with a prioritized optimization plan
 - [Stack rule sets](./rules/) — `Bun`, `Bun+React+Tailwind`, `NodeJS+React`, `NodeJS+React+Tailwind`
