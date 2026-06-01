@@ -23,6 +23,7 @@ See the [plugin README](./claude-plugins/autopilot/README.md#installation) for s
 - [`release` field spec](./docs/release-field.md) — how `release-action` picks the right artifacts for npm packages, GitHub Actions, and Claude plugins
 - [Release auto-merge flow](./docs/release-automerge.md) — the event-driven action that merges approved, all-green release PRs, and how its workflow is propagated downstream
 - [Committed Repomix pack](./docs/repomix-pack.md) — the `.repomix/pack.xml` snapshot, the merge-triggered workflow that refreshes it, and the snapshot-first contract skills follow
+- [Upstream sync](./docs/sync.md) — the one-action `sync` aggregator and the thin `upstream.yml` consumers run, with per-kind opt-out
 - [Review run-summary footer](./docs/code-review-run-summary.md) — how `code-review-action` surfaces per-run cost/latency/token metrics in a collapsible footer on the main review comment
 - [Inline suggestions and AI-agent prompts](./docs/code-review-suggestions.md) — how `code-review-action` adds one-click GitHub suggestion blocks and a "Prompt for AI agents" block to each inline finding
 - [Plan and run skills](./docs/plan-run-skills.md) — how the `plan` and `run` skills work end to end: phases, orchestrator↔stack delegation, sub-agent fan-out, and run's automated post-implementation, with ASCII diagrams
@@ -32,6 +33,7 @@ See the [plugin README](./claude-plugins/autopilot/README.md#installation) for s
 ## GitHub Actions
 
 - [`files-sync`](./.github/actions/files-sync/README.md) — sync declared files from upstream repos and open one PR with the differences
+- [`sync`](./.github/actions/sync/README.md) — aggregate the five upstream maintenance syncs behind one action; every kind on by default, opt out per kind
 - [`agents-rules-sync`](./.github/actions/agents-rules-sync/README.md) — sync the stack-appropriate `rules/<stack>.md` into `CLAUDE.md` based on `package.json` `agents.rules`
 - [`contributing-check`](./.github/actions/contributing-check/README.md) — validate branch name, commit messages, and PR title against `CONTRIBUTING.md`
 - [`contributing-sync`](./.github/actions/contributing-sync/README.md) — sync `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, and the contributing workflow from upstream
