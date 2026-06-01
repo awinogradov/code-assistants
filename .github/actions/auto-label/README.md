@@ -1,5 +1,8 @@
 # Auto label
 
+[![GitHub Release](https://img.shields.io/badge/release-v0.2.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
+
 Composite GitHub Action that keeps `<scope>/<workspace-member>` labels in sync with the workspace
 members a pull request touches, and prunes orphan labels on the default branch. It is a TypeScript
 (Bun) action that reads everything through the GitHub Contents API — no `actions/checkout` is
