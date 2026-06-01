@@ -57,7 +57,7 @@ Parse `$ARGUMENTS` for an optional task description and optional `--model` / `--
 ## Following Up
 
 - After every `codex` command, use `AskUserQuestion` to confirm next steps, collect clarifications, or decide whether to resume.
-- When resuming, pipe the new prompt via stdin: `echo "new prompt" | codex exec resume --last 2>/dev/null`. The resumed session reuses the original model, effort, and sandbox.
+- When resuming, pipe the new prompt via stdin: `echo "new prompt" | codex exec --skip-git-repo-check resume --last 2>/dev/null`. The resumed session reuses the original model, effort, and sandbox.
 - Restate the chosen model, reasoning effort, and sandbox mode when proposing follow-up actions.
 
 ## Critical Evaluation of Codex Output
