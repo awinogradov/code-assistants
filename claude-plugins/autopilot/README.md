@@ -270,6 +270,16 @@ Delegate a code-analysis, refactoring, or automated-editing task to the OpenAI C
 /autopilot:ask-codex "refactor parser" --model gpt-5.5 --effort high
 ```
 
+### `/autopilot:ask-gemini`
+
+Delegate a code-analysis, refactoring, or automated-editing task to the Google Gemini CLI, then critically evaluate its output as a peer AI. Prompts for model and approval mode, runs `gemini -p` non-interactively (clean output handling, stdin-hang guard), and supports native session resume (`--resume`). Requires the `gemini` CLI installed and on `PATH`.
+
+```bash
+/autopilot:ask-gemini                                    # Prompt for model + approval mode, run a Gemini task
+/autopilot:ask-gemini "audit auth flow for races"        # Seed the task description
+/autopilot:ask-gemini "refactor parser" --model pro --approval-mode auto_edit
+```
+
 ## Agents
 
 ### `pr:review:*` (11 agents)
