@@ -1,5 +1,5 @@
 {
-  "name": "@code-assistants",
+  "name": "@code-assistants/monorepo",
   "version": "0.1.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "private": true,
