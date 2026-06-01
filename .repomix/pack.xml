@@ -157,6 +157,9 @@ The content is organized as follows:
       README.md
       tsconfig.json
       version
+    licenses-audit/
+      action.yml
+      README.md
     release-action/
       .release_notes/
         0.1.0.md
@@ -245,6 +248,7 @@ The content is organized as follows:
     auto-label.yml
     code-review.yml
     contributing.yml
+    licenses.yml
     release-automerge.yml
     release-create.yml
     release-publish.yml
@@ -8897,7 +8901,7 @@ The synced `contributing.yml` workflow references the action via `@main` so cons
 
 <file path=".github/actions/contributing-sync/action.yml">
 name: Contributing sync
-description: Sync CONTRIBUTING.md, CODE_OF_CONDUCT.md, LICENSE.md, the contributing workflow, and the auto-label workflow from an upstream repository into the current repository.
+description: Sync CONTRIBUTING.md, CODE_OF_CONDUCT.md, LICENSE.md, the contributing workflow, the auto-label workflow, and the licenses workflow from an upstream repository into the current repository.
 
 inputs:
   bot_token:
@@ -8945,6 +8949,7 @@ runs:
           LICENSE.md
           .github/workflows/contributing.yml
           .github/workflows/auto-label.yml
+          .github/workflows/licenses.yml
         )
         {
           echo "files<<__EOF__"
@@ -8984,8 +8989,9 @@ The synced set is:
 - `LICENSE.md`
 - `.github/workflows/contributing.yml`
 - `.github/workflows/auto-label.yml`
+- `.github/workflows/licenses.yml`
 
-The first three are the contributor-facing documentation. The two workflows propagate CI that
+The first three are the contributor-facing documentation. The three workflows propagate CI that
 references upstream actions on every run — the actions themselves stay in the upstream
 repository, so consumers do not need a local copy:
 
@@ -8993,6 +8999,8 @@ repository, so consumers do not need a local copy:
   `awinogradov/code-assistants/.github/actions/contributing-check@main`.
 - `auto-label.yml` runs [`auto-label`](../auto-label/README.md) via
   `awinogradov/code-assistants/.github/actions/auto-label@main`.
+- `licenses.yml` runs [`licenses-audit`](../licenses-audit/README.md) via
+  `awinogradov/code-assistants/.github/actions/licenses-audit@main`.
 
 The action builds the sync list and delegates the diff and PR mechanics to the
 [`files-sync`](../files-sync/README.md) action. It does not require `actions/checkout` and
@@ -9059,8 +9067,8 @@ See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/a
 ## Behavior
 
 - Delegates to `files-sync` with a fixed sync list — `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`,
-  `LICENSE.md`, `.github/workflows/contributing.yml`, and `.github/workflows/auto-label.yml` —
-  sourced from `source-repo` at `source-ref`.
+  `LICENSE.md`, `.github/workflows/contributing.yml`, `.github/workflows/auto-label.yml`, and
+  `.github/workflows/licenses.yml` — sourced from `source-repo` at `source-ref`.
 - The PR is opened on the fixed branch `maintenance-sync-contributing` with the title
   `MAINTENANCE: Sync contributing files from upstream` and the commit message
   `chore: sync contributing files from upstream`. These values are not configurable so the
@@ -11104,6 +11112,286 @@ uses: awinogradov/code-assistants/.github/actions/files-sync@v1
 
 <file path=".github/actions/files-sync/version">
 2.0.0
+</file>
+
+<file path=".github/actions/licenses-audit/action.yml">
+name: Licenses audit
+description: Regenerate the license report on dependency-changing pull requests, auto-commit drift on same-repo PRs, and fail fork PRs that ship stale license data. Skips gracefully when the consumer has no license-audit script or report file.
+
+inputs:
+  bot_token:
+    description: |
+      Token used to check out the PR branch with persisted credentials and push the regenerated license report. The workflow's default `GITHUB_TOKEN` is sufficient — this action only pushes to the pull request's own branch and never opens a PR — so the calling workflow may pass `${{ github.token }}`. When empty, the action falls back to `${{ github.token }}`. Supply a PAT or GitHub App token only if branch protection blocks `GITHUB_TOKEN` pushes.
+    required: false
+    default: ""
+  bot_username:
+    description: |
+      Git author/committer login for the auto-commit. Defaults to `github-actions[bot]` when unset. Pass the `vars.BOT_USERNAME` repository variable to attribute the commit to a dedicated bot identity.
+    required: false
+    default: ""
+  script:
+    description: Name of the `package.json` script that regenerates the license report.
+    required: false
+    default: "licenses:audit"
+  licenses-file:
+    description: Path to the generated license report checked for drift.
+    required: false
+    default: LICENSES.md
+  node-version-file:
+    description: File `actions/setup-node` reads the Node version from.
+    required: false
+    default: .nvmrc
+  bun-version-file:
+    description: File `oven-sh/setup-bun` reads the Bun version from.
+    required: false
+    default: package.json
+
+outputs:
+  skipped:
+    description: "`true` when the consumer exposes no license-audit script or report file and the audit was skipped."
+    value: ${{ steps.capability.outputs.skip }}
+  drifted:
+    description: "`true` when the regenerated license report differed from the committed one."
+    value: ${{ steps.drift.outputs.drifted }}
+
+runs:
+  using: composite
+  steps:
+    - name: Detect PR origin
+      id: src
+      shell: bash
+      run: |
+        if [ "${{ github.event.pull_request.head.repo.full_name }}" = "${{ github.repository }}" ]; then
+          echo "same_repo=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "same_repo=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Checkout PR branch (same-repo; writable)
+      if: steps.src.outputs.same_repo == 'true'
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.head_ref }}
+        fetch-depth: 0
+        persist-credentials: true
+        token: ${{ inputs.bot_token || github.token }}
+
+    - name: Checkout (fork PR; read-only)
+      if: steps.src.outputs.same_repo == 'false'
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+        persist-credentials: false
+
+    - name: Detect audit capability
+      id: capability
+      shell: bash
+      env:
+        SCRIPT_NAME: ${{ inputs.script }}
+        LICENSES_FILE: ${{ inputs.licenses-file }}
+      run: |
+        set -euo pipefail
+        if [ ! -f package.json ] || ! jq -e --arg s "$SCRIPT_NAME" '(.scripts // {}) | has($s)' package.json >/dev/null 2>&1; then
+          echo "::notice::No \"$SCRIPT_NAME\" script in package.json — skipping license audit."
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        if [ ! -f "$LICENSES_FILE" ]; then
+          echo "::notice::$LICENSES_FILE not found — skipping license audit."
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        echo "skip=false" >> "$GITHUB_OUTPUT"
+
+    - name: Setup Node
+      if: steps.capability.outputs.skip == 'false'
+      uses: actions/setup-node@v4
+      with:
+        node-version-file: ${{ inputs.node-version-file }}
+
+    - name: Setup Bun
+      if: steps.capability.outputs.skip == 'false'
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version-file: ${{ inputs.bun-version-file }}
+
+    - name: Install dependencies
+      if: steps.capability.outputs.skip == 'false'
+      shell: bash
+      run: bun install --frozen-lockfile
+
+    - name: Regenerate license report
+      if: steps.capability.outputs.skip == 'false'
+      shell: bash
+      env:
+        SCRIPT_NAME: ${{ inputs.script }}
+      run: bun run "$SCRIPT_NAME"
+
+    - name: Detect drift
+      id: drift
+      if: steps.capability.outputs.skip == 'false'
+      shell: bash
+      env:
+        LICENSES_FILE: ${{ inputs.licenses-file }}
+      run: |
+        if git diff --quiet -- "$LICENSES_FILE"; then
+          echo "drifted=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "drifted=true" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Auto-commit regenerated report (same-repo)
+      if: steps.drift.outputs.drifted == 'true' && steps.src.outputs.same_repo == 'true'
+      shell: bash
+      env:
+        LICENSES_FILE: ${{ inputs.licenses-file }}
+        BOT_USERNAME: ${{ inputs.bot_username }}
+        HEAD_REF: ${{ github.head_ref }}
+      run: |
+        set -euo pipefail
+        if [ -n "$BOT_USERNAME" ]; then
+          name="$BOT_USERNAME"
+          email="${BOT_USERNAME}@users.noreply.github.com"
+        else
+          name="github-actions[bot]"
+          email="41898282+github-actions[bot]@users.noreply.github.com"
+        fi
+        git config user.name "$name"
+        git config user.email "$email"
+        git add "$LICENSES_FILE"
+        git diff --staged --quiet || git commit -m "chore(licenses): regenerate license report"
+        git push origin "HEAD:$HEAD_REF"
+
+    - name: Fail (fork PR with drift)
+      if: steps.drift.outputs.drifted == 'true' && steps.src.outputs.same_repo == 'false'
+      shell: bash
+      env:
+        LICENSES_FILE: ${{ inputs.licenses-file }}
+        SCRIPT_NAME: ${{ inputs.script }}
+      run: |
+        echo "::error::$LICENSES_FILE is out of date. Run 'bun run $SCRIPT_NAME' locally and commit the result."
+        git diff -- "$LICENSES_FILE"
+        exit 1
+</file>
+
+<file path=".github/actions/licenses-audit/README.md">
+# Licenses audit
+
+Composite GitHub Action that keeps a repository's license report in sync with its dependency
+tree. On a pull request that changes dependencies, it regenerates the report, auto-commits the
+result on same-repo PRs, and fails fork PRs that ship a stale report. When the consumer has no
+license-audit script or report file, the action skips gracefully so it is safe to run anywhere.
+
+It is the logic behind the synced [`licenses.yml`](../../workflows/licenses.yml) workflow,
+distributed to consumers by [`contributing-sync`](../contributing-sync/README.md). The action
+itself stays in the upstream repository — consumers reference it via `@main` and do not vendor a
+local copy.
+
+## Requirements
+
+The consumer must expose, in its own repository:
+
+- a `package.json` script (default name `licenses:audit`) that regenerates the report, and
+- a committed report file (default `LICENSES.md`).
+
+When either is missing, the action emits a `::notice::` and exits successfully without auditing.
+Porting a report generator into a consumer is out of scope for this action.
+
+## Usage
+
+```yaml
+name: Licenses
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "package.json"
+      - "**/package.json"
+      - "bun.lock"
+      - "scripts/licenses-report.ts"
+      - "LICENSES.md"
+
+concurrency:
+  group: licenses-${{ github.workflow }}-${{ github.head_ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    name: Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: awinogradov/code-assistants/.github/actions/licenses-audit@main
+        with:
+          bot_token: ${{ github.token }}
+          bot_username: ${{ vars.BOT_USERNAME }}
+```
+
+## Inputs
+
+| Input               | Required | Default               | Description                                                                                                                                |
+| ------------------- | -------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `bot_token`         | No       | `${{ github.token }}` | Token used to check out the PR branch with persisted credentials and push the regenerated report. Falls back to `github.token` when empty. |
+| `bot_username`      | No       | `github-actions[bot]` | Git author/committer login for the auto-commit. Pass `vars.BOT_USERNAME` for a dedicated bot identity.                                     |
+| `script`            | No       | `licenses:audit`      | Name of the `package.json` script that regenerates the report.                                                                             |
+| `licenses-file`     | No       | `LICENSES.md`         | Path to the generated report checked for drift.                                                                                            |
+| `node-version-file` | No       | `.nvmrc`              | File `actions/setup-node` reads the Node version from.                                                                                     |
+| `bun-version-file`  | No       | `package.json`        | File `oven-sh/setup-bun` reads the Bun version from.                                                                                       |
+
+## Outputs
+
+| Output    | Description                                                                         |
+| --------- | ----------------------------------------------------------------------------------- |
+| `skipped` | `true` when no license-audit script or report file was found and the audit skipped. |
+| `drifted` | `true` when the regenerated report differed from the committed one.                 |
+
+## Permissions
+
+The workflow's default `GITHUB_TOKEN` is sufficient — no PAT or App token is required. The action
+only pushes to the pull request's own branch and never opens a PR:
+
+- `contents: write` — needed so the same-repo auto-commit can push the regenerated report back to
+  the PR branch.
+
+Supply a PAT or GitHub App token via `bot_token` only if branch protection blocks `GITHUB_TOKEN`
+pushes. Because the auto-commit is pushed with `GITHUB_TOKEN`, it does not re-trigger workflows;
+since the regenerated report then matches, a subsequent run reports no drift.
+
+## Behavior
+
+1. **Detect PR origin** — compares `head.repo.full_name` with the repository to set a same-repo vs
+   fork flag.
+2. **Checkout** — same-repo PRs check out the head branch writable (`persist-credentials: true`)
+   so the report can be pushed; fork PRs check out the head SHA read-only
+   (`persist-credentials: false`) so the base token is never written into a fork-controlled tree.
+3. **Detect capability** — skips the rest with a `::notice::` (and `skipped=true`) when the
+   `script` is absent from `package.json` or the `licenses-file` is missing.
+4. **Setup and regenerate** — sets up Node and Bun from the version files, runs
+   `bun install --frozen-lockfile`, then `bun run <script>`.
+5. **Detect drift** — `git diff --quiet` on the report file.
+6. **Resolve drift** — on a same-repo PR, commits and pushes the regenerated report to the head
+   branch; on a fork PR, prints the diff and fails with an actionable `::error::` so the
+   contributor regenerates it locally.
+
+The `script` name and `head_ref` are passed via environment variables (never shell-interpolated)
+to avoid command injection from a hostile script name or branch name. Third-party action
+references (`actions/checkout`, `actions/setup-node`, `oven-sh/setup-bun`) are pinned to major
+versions.
+
+## Versioning
+
+Reference the action by tag of the autopilot repo, e.g.:
+
+```yaml
+uses: awinogradov/code-assistants/.github/actions/licenses-audit@v1
+```
+
+The synced `licenses.yml` workflow references the action via `@main` so consumer repos always pick
+up the latest audit logic. Pin to a tag if you want explicit control.
 </file>
 
 <file path=".github/actions/release-action/.release_notes/0.1.0.md">
@@ -23674,6 +23962,43 @@ jobs:
       - uses: awinogradov/code-assistants/.github/actions/contributing-check@main
 </file>
 
+<file path=".github/workflows/licenses.yml">
+# Source: https://github.com/awinogradov/code-assistants/blob/main/.github/workflows/licenses.yml
+# This file is distributed to downstream repositories by an automated sync.
+# Edits made downstream are overwritten on the next run.
+# To change it, open a pull request against the source file above.
+
+name: Licenses
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "package.json"
+      - "**/package.json"
+      - "bun.lock"
+      - "scripts/licenses-report.ts"
+      - "LICENSES.md"
+
+concurrency:
+  group: licenses-${{ github.workflow }}-${{ github.head_ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    name: Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: awinogradov/code-assistants/.github/actions/licenses-audit@main
+        with:
+          bot_token: ${{ github.token }}
+          bot_username: ${{ vars.BOT_USERNAME }}
+</file>
+
 <file path=".github/workflows/release-automerge.yml">
 # Source: https://github.com/awinogradov/code-assistants/blob/main/.github/workflows/release-automerge.yml
 # This file is distributed to downstream repositories by an automated sync.
@@ -34116,13 +34441,13 @@ every consumer automatically, with no consumer workflow edit.
 
 ## Sync kinds
 
-| Kind           | Files synced into the consumer                                                                                                  | Maintenance branch              | Action                                                                |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------- |
-| `agents-rules` | `rules/<stack>.md` → `CLAUDE.md`                                                                                                | `maintenance-sync-agents-rules` | [`agents-rules-sync`](../.github/actions/agents-rules-sync/README.md) |
-| `code-review`  | `.github/workflows/code-review.yml`                                                                                             | `maintenance-sync-code-review`  | [`code-review-sync`](../.github/actions/code-review-sync/README.md)   |
-| `repomix`      | `.github/workflows/repomix-pack.yml`, `repomix.config.json`                                                                     | `maintenance-sync-repomix`      | [`repomix-sync`](../.github/actions/repomix-sync/README.md)           |
-| `release`      | `.github/workflows/release-create.yml`, `release-publish.yml`, `release-automerge.yml`                                          | `maintenance-sync-release`      | [`release-sync`](../.github/actions/release-sync/README.md)           |
-| `contributing` | `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, `.github/workflows/contributing.yml`, `.github/workflows/auto-label.yml` | `maintenance-sync-contributing` | [`contributing-sync`](../.github/actions/contributing-sync/README.md) |
+| Kind           | Files synced into the consumer                                                                                                                                    | Maintenance branch              | Action                                                                |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------- |
+| `agents-rules` | `rules/<stack>.md` → `CLAUDE.md`                                                                                                                                  | `maintenance-sync-agents-rules` | [`agents-rules-sync`](../.github/actions/agents-rules-sync/README.md) |
+| `code-review`  | `.github/workflows/code-review.yml`                                                                                                                               | `maintenance-sync-code-review`  | [`code-review-sync`](../.github/actions/code-review-sync/README.md)   |
+| `repomix`      | `.github/workflows/repomix-pack.yml`, `repomix.config.json`                                                                                                       | `maintenance-sync-repomix`      | [`repomix-sync`](../.github/actions/repomix-sync/README.md)           |
+| `release`      | `.github/workflows/release-create.yml`, `release-publish.yml`, `release-automerge.yml`                                                                            | `maintenance-sync-release`      | [`release-sync`](../.github/actions/release-sync/README.md)           |
+| `contributing` | `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, `.github/workflows/contributing.yml`, `.github/workflows/auto-label.yml`, `.github/workflows/licenses.yml` | `maintenance-sync-contributing` | [`contributing-sync`](../.github/actions/contributing-sync/README.md) |
 
 Each kind delegates to its `*-sync` action, which delegates the diff and PR mechanics to
 [`files-sync`](../.github/actions/files-sync/README.md). The action directories these synced
@@ -38026,6 +38351,7 @@ See the [plugin README](./claude-plugins/autopilot/README.md#installation) for s
 - [`agents-rules-sync`](./.github/actions/agents-rules-sync/README.md) — sync the stack-appropriate `rules/<stack>.md` into `CLAUDE.md` based on `package.json` `agents.rules`
 - [`contributing-check`](./.github/actions/contributing-check/README.md) — validate branch name, commit messages, and PR title against `CONTRIBUTING.md`
 - [`contributing-sync`](./.github/actions/contributing-sync/README.md) — sync `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, and the contributing workflow from upstream
+- [`licenses-audit`](./.github/actions/licenses-audit/README.md) — regenerate the license report on dependency-changing PRs, auto-commit drift on same-repo PRs, and fail fork PRs that ship stale license data
 - [`release-action`](./.github/actions/release-action/README.md) — conventional-commit-driven release pipeline for npm packages, GitHub Actions, and Claude plugins
 - [`release-automerge`](./.github/actions/release-automerge/README.md) — merge an approved, all-green release PR (`^release-`), driven by an event-based workflow so `release-publish.yml` runs without a manual click
 - [`code-review-action`](./.github/actions/code-review-action/README.md) — AI code review for pull requests via Claude Code, with a react mode for replying to bot mentions
