@@ -34,7 +34,6 @@ on:
       - "bun.lock"
       - "scripts/licenses-report.ts"
       - "LICENSES.md"
-      - ".github/workflows/licenses.yml"
 
 concurrency:
   group: licenses-${{ github.workflow }}-${{ github.head_ref }}
