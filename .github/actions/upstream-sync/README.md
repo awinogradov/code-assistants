@@ -1,4 +1,4 @@
-# Sync
+# Upstream sync
 
 Composite GitHub Action that aggregates the five upstream maintenance syncs behind a single
 action. Every consumer runs one job instead of one job per kind. Each kind is opt-out: it runs
@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: awinogradov/code-assistants/.github/actions/sync@main
+      - uses: awinogradov/code-assistants/.github/actions/upstream-sync@main
         with:
           bot_token: ${{ secrets.BOT_TOKEN }}
           bot_username: ${{ vars.BOT_USERNAME }}
@@ -95,7 +95,7 @@ The `repomix` kind additionally requires the `bot_token` identity to be a **bypa
 Reference the action by tag of the autopilot repo once a release is cut, e.g.:
 
 ```yaml
-uses: awinogradov/code-assistants/.github/actions/sync@v1
+uses: awinogradov/code-assistants/.github/actions/upstream-sync@v1
 ```
 
 The canonical `upstream.yml` template references it via `@main` so consumers always run the latest aggregator.

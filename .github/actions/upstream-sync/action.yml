@@ -1,4 +1,4 @@
-name: Sync
+name: Upstream sync
 description: Aggregate the five upstream maintenance syncs (agent rules, code-review, repomix, release, contributing) behind one action. Every kind runs by default; set a kind to false to opt out.
 
 inputs:
