@@ -89,6 +89,7 @@ The content is organized as follows:
         0.2.0.md
         0.3.0.md
         1.0.0.md
+        1.1.0.md
       src/
         github/
           githubReview.test.ts
@@ -3057,6 +3058,60 @@ The `parallel_fanout` and `review_model_overrides` action inputs have been remov
 ### CI
 
 * **code-review:** pass run_summary output to submit review step ([7f6b3e7](https://github.com/awinogradov/code-assistants/commit/7f6b3e73cb4c9bae64471616e2cd493845df2c3c))
+</file>
+
+<file path=".github/actions/code-review-action/.release_notes/1.1.0.md">
+## [1.1.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.0.0...code-review-action@v1.1.0) (2026-06-01)
+
+## Release Notes
+
+Code review findings now include one-click fix suggestions and AI-agent prompts for easier remediation.
+
+## ✨ What's New
+
+### One-click fix suggestions in code reviews
+The AI code reviewer now generates GitHub suggestion blocks that let you apply proposed fixes with a single click. Whether it's a typo, a missing import, or a logic improvement, you can accept the suggestion directly from the PR interface without manual editing. Both single-line and multi-line suggestions are supported.
+
+<details><summary>Related issues</summary>
+
+- [#217: Add one-click suggestions and AI-agent prompts to code review comments](https://github.com/awinogradov/code-assistants/issues/217)
+</details>
+
+### AI-agent prompts for complex findings
+Each code review finding now includes a collapsible "Prompt for AI agents" section. This gives AI coding assistants like GitHub Copilot or Cursor the full context they need to understand and fix the issue. The prompt includes the specific finding details and surrounding code diff, making it easy to get targeted help for more complex problems that can't be fixed with a simple suggestion.
+
+<details><summary>Related issues</summary>
+
+- [#217: Add one-click suggestions and AI-agent prompts to code review comments](https://github.com/awinogradov/code-assistants/issues/217)
+</details>
+
+## 📚 Documentation & Settings Updates
+
+### Inline suggestions documentation
+The README now includes documentation about the new inline suggestion feature, explaining how the code review action generates one-click fixes and AI-agent prompts within review comments.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #217 | [#218](https://github.com/awinogradov/code-assistants/pull/218) | @awinogradov |
+
+### Features
+
+* **code-review:** add suggestion and agent blocks ([18de884](https://github.com/awinogradov/code-assistants/commit/18de8845ebc8a0b3b9df3590324794b12e807143))
+
+### Documentation
+
+* **code-review:** document inline suggestions ([93273dc](https://github.com/awinogradov/code-assistants/commit/93273dc151abb0a664748453db0a5ec1a201cde1))
+
+### Tests
+
+* **code-review:** cover suggestion rendering and ranges ([f0c3394](https://github.com/awinogradov/code-assistants/commit/f0c339435ecd38d4f6947b8aeadfbcb3e4fd8349))
+
+### CI
+
+* **code-review:** add suggestion fields to schema ([9f35aa9](https://github.com/awinogradov/code-assistants/commit/9f35aa961b2aee7bd369a3cdfd5870b499bbd7bf))
 </file>
 
 <file path=".github/actions/code-review-action/src/github/githubReview.test.ts">
@@ -7846,6 +7901,57 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.1.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.0.0...code-review-action@v1.1.0) (2026-06-01)
+
+## Release Notes
+
+Code review findings now include one-click fix suggestions and AI-agent prompts for easier remediation.
+
+## ✨ What's New
+
+### One-click fix suggestions in code reviews
+The AI code reviewer now generates GitHub suggestion blocks that let you apply proposed fixes with a single click. Whether it's a typo, a missing import, or a logic improvement, you can accept the suggestion directly from the PR interface without manual editing. Both single-line and multi-line suggestions are supported.
+
+<details><summary>Related issues</summary>
+
+- [#217: Add one-click suggestions and AI-agent prompts to code review comments](https://github.com/awinogradov/code-assistants/issues/217)
+</details>
+
+### AI-agent prompts for complex findings
+Each code review finding now includes a collapsible "Prompt for AI agents" section. This gives AI coding assistants like GitHub Copilot or Cursor the full context they need to understand and fix the issue. The prompt includes the specific finding details and surrounding code diff, making it easy to get targeted help for more complex problems that can't be fixed with a simple suggestion.
+
+<details><summary>Related issues</summary>
+
+- [#217: Add one-click suggestions and AI-agent prompts to code review comments](https://github.com/awinogradov/code-assistants/issues/217)
+</details>
+
+## 📚 Documentation & Settings Updates
+
+### Inline suggestions documentation
+The README now includes documentation about the new inline suggestion feature, explaining how the code review action generates one-click fixes and AI-agent prompts within review comments.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #217 | [#218](https://github.com/awinogradov/code-assistants/pull/218) | @awinogradov |
+
+### Features
+
+* **code-review:** add suggestion and agent blocks ([18de884](https://github.com/awinogradov/code-assistants/commit/18de8845ebc8a0b3b9df3590324794b12e807143))
+
+### Documentation
+
+* **code-review:** document inline suggestions ([93273dc](https://github.com/awinogradov/code-assistants/commit/93273dc151abb0a664748453db0a5ec1a201cde1))
+
+### Tests
+
+* **code-review:** cover suggestion rendering and ranges ([f0c3394](https://github.com/awinogradov/code-assistants/commit/f0c339435ecd38d4f6947b8aeadfbcb3e4fd8349))
+
+### CI
+
+* **code-review:** add suggestion fields to schema ([9f35aa9](https://github.com/awinogradov/code-assistants/commit/9f35aa961b2aee7bd369a3cdfd5870b499bbd7bf))
 ## [1.0.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v0.3.0...code-review-action@v1.0.0) (2026-05-31)
 
 ## Release Notes
@@ -8190,7 +8296,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/package.json">
 {
   "name": "@code-assistants/code-review-action",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Composite GitHub Action that runs AI code review on pull requests via Claude Code.",
   "private": true,
   "type": "module",
@@ -8224,7 +8330,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/README.md">
 # Code review action
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.1.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that runs AI code review on pull requests using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Has two modes:
@@ -8358,7 +8464,7 @@ uses: awinogradov/code-assistants/.github/actions/code-review-action@v1
 </file>
 
 <file path=".github/actions/code-review-action/version">
-1.0.0
+1.1.0
 </file>
 
 <file path=".github/actions/code-review-sync/action.yml">
