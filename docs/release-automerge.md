@@ -151,8 +151,9 @@ merge), and `release-automerge.yml` (merges the approved, green PR) — to a
 `maintenance-sync-release` branch and open (or reuse) a single PR. The action
 directories these workflows invoke (`release-action`, `release-automerge`) are
 **not** synced — downstream repos reference them via `@main`, the same way
-`code-review.yml` references `code-review-action`. A `sync-release` job in
-[`upstream.yml`](../.github/workflows/upstream.yml) runs it on the existing hourly
+`code-review.yml` references `code-review-action`. The `release` step of the
+[`sync`](../.github/actions/sync/README.md) action — invoked by
+[`upstream.yml`](../.github/workflows/upstream.yml) — runs it on the existing hourly
 schedule.
 
 The merge this action performs is what feeds the publish step; see the
