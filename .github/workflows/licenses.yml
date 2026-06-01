@@ -1,0 +1,35 @@
+# Source: https://github.com/awinogradov/code-assistants/blob/main/.github/workflows/licenses.yml
+# This file is distributed to downstream repositories by an automated sync.
+# Edits made downstream are overwritten on the next run.
+# To change it, open a pull request against the source file above.
+
+name: Licenses
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "package.json"
+      - "**/package.json"
+      - "bun.lock"
+      - "scripts/licenses-report.ts"
+      - "LICENSES.md"
+      - ".github/workflows/licenses.yml"
+
+concurrency:
+  group: licenses-${{ github.workflow }}-${{ github.head_ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    name: Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: awinogradov/code-assistants/.github/actions/licenses-audit@main
+        with:
+          bot_token: ${{ github.token }}
+          bot_username: ${{ vars.BOT_USERNAME }}
