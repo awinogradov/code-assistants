@@ -1,0 +1,157 @@
+name: Licenses audit
+description: Regenerate the license report on dependency-changing pull requests, auto-commit drift on same-repo PRs, and fail fork PRs that ship stale license data. Skips gracefully when the consumer has no license-audit script or report file.
+
+inputs:
+  bot_token:
+    description: |
+      Token used to check out the PR branch with persisted credentials and push the regenerated license report. The workflow's default `GITHUB_TOKEN` is sufficient — this action only pushes to the pull request's own branch and never opens a PR — so the calling workflow may pass `${{ github.token }}`. When empty, the action falls back to `${{ github.token }}`. Supply a PAT or GitHub App token only if branch protection blocks `GITHUB_TOKEN` pushes.
+    required: false
+    default: ""
+  bot_username:
+    description: |
+      Git author/committer login for the auto-commit. Defaults to `github-actions[bot]` when unset. Pass the `vars.BOT_USERNAME` repository variable to attribute the commit to a dedicated bot identity.
+    required: false
+    default: ""
+  script:
+    description: Name of the `package.json` script that regenerates the license report.
+    required: false
+    default: "licenses:audit"
+  licenses-file:
+    description: Path to the generated license report checked for drift.
+    required: false
+    default: LICENSES.md
+  node-version-file:
+    description: File `actions/setup-node` reads the Node version from.
+    required: false
+    default: .nvmrc
+  bun-version-file:
+    description: File `oven-sh/setup-bun` reads the Bun version from.
+    required: false
+    default: package.json
+
+outputs:
+  skipped:
+    description: "`true` when the consumer exposes no license-audit script or report file and the audit was skipped."
+    value: ${{ steps.capability.outputs.skip }}
+  drifted:
+    description: "`true` when the regenerated license report differed from the committed one."
+    value: ${{ steps.drift.outputs.drifted }}
+
+runs:
+  using: composite
+  steps:
+    - name: Detect PR origin
+      id: src
+      shell: bash
+      run: |
+        if [ "${{ github.event.pull_request.head.repo.full_name }}" = "${{ github.repository }}" ]; then
+          echo "same_repo=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "same_repo=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Checkout PR branch (same-repo; writable)
+      if: steps.src.outputs.same_repo == 'true'
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.head_ref }}
+        fetch-depth: 0
+        persist-credentials: true
+        token: ${{ inputs.bot_token || github.token }}
+
+    - name: Checkout (fork PR; read-only)
+      if: steps.src.outputs.same_repo == 'false'
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+        persist-credentials: false
+
+    - name: Detect audit capability
+      id: capability
+      shell: bash
+      env:
+        SCRIPT_NAME: ${{ inputs.script }}
+        LICENSES_FILE: ${{ inputs.licenses-file }}
+      run: |
+        set -euo pipefail
+        if [ ! -f package.json ] || ! jq -e --arg s "$SCRIPT_NAME" '(.scripts // {}) | has($s)' package.json >/dev/null 2>&1; then
+          echo "::notice::No \"$SCRIPT_NAME\" script in package.json — skipping license audit."
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        if [ ! -f "$LICENSES_FILE" ]; then
+          echo "::notice::$LICENSES_FILE not found — skipping license audit."
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        echo "skip=false" >> "$GITHUB_OUTPUT"
+
+    - name: Setup Node
+      if: steps.capability.outputs.skip == 'false'
+      uses: actions/setup-node@v4
+      with:
+        node-version-file: ${{ inputs.node-version-file }}
+
+    - name: Setup Bun
+      if: steps.capability.outputs.skip == 'false'
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version-file: ${{ inputs.bun-version-file }}
+
+    - name: Install dependencies
+      if: steps.capability.outputs.skip == 'false'
+      shell: bash
+      run: bun install --frozen-lockfile
+
+    - name: Regenerate license report
+      if: steps.capability.outputs.skip == 'false'
+      shell: bash
+      env:
+        SCRIPT_NAME: ${{ inputs.script }}
+      run: bun run "$SCRIPT_NAME"
+
+    - name: Detect drift
+      id: drift
+      if: steps.capability.outputs.skip == 'false'
+      shell: bash
+      env:
+        LICENSES_FILE: ${{ inputs.licenses-file }}
+      run: |
+        if git diff --quiet -- "$LICENSES_FILE"; then
+          echo "drifted=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "drifted=true" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Auto-commit regenerated report (same-repo)
+      if: steps.drift.outputs.drifted == 'true' && steps.src.outputs.same_repo == 'true'
+      shell: bash
+      env:
+        LICENSES_FILE: ${{ inputs.licenses-file }}
+        BOT_USERNAME: ${{ inputs.bot_username }}
+        HEAD_REF: ${{ github.head_ref }}
+      run: |
+        set -euo pipefail
+        if [ -n "$BOT_USERNAME" ]; then
+          name="$BOT_USERNAME"
+          email="${BOT_USERNAME}@users.noreply.github.com"
+        else
+          name="github-actions[bot]"
+          email="41898282+github-actions[bot]@users.noreply.github.com"
+        fi
+        git config user.name "$name"
+        git config user.email "$email"
+        git add "$LICENSES_FILE"
+        git diff --staged --quiet || git commit -m "chore(licenses): regenerate license report"
+        git push origin "HEAD:$HEAD_REF"
+
+    - name: Fail (fork PR with drift)
+      if: steps.drift.outputs.drifted == 'true' && steps.src.outputs.same_repo == 'false'
+      shell: bash
+      env:
+        LICENSES_FILE: ${{ inputs.licenses-file }}
+        SCRIPT_NAME: ${{ inputs.script }}
+      run: |
+        echo "::error::$LICENSES_FILE is out of date. Run 'bun run $SCRIPT_NAME' locally and commit the result."
+        git diff -- "$LICENSES_FILE"
+        exit 1
