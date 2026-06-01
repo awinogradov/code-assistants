@@ -1,7 +1,7 @@
 # Requires repo secret `BOT_TOKEN`: a PAT (classic with `repo`, or fine-grained
 # with `contents: write` + `pull-requests: write`) or a GitHub App installation
 # token. The default `GITHUB_TOKEN` is not supported — see the action README
-# in `.github/actions/sync` for the rationale.
+# in `.github/actions/upstream-sync` for the rationale.
 # Optional repo variable `BOT_USERNAME`: git author login for sync commits.
 # Defaults to `github-actions[bot]` when unset.
 
@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: awinogradov/code-assistants/.github/actions/sync@main
+      - uses: awinogradov/code-assistants/.github/actions/upstream-sync@main
         with:
           bot_token: ${{ secrets.BOT_TOKEN }}
           bot_username: ${{ vars.BOT_USERNAME }}

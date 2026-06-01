@@ -3,9 +3,9 @@
 `awinogradov/code-assistants` is an upstream hub: consumer repositories pull shared standards
 and workflows from it on a schedule and receive one maintenance pull request per change. A
 consumer wires this up with a single workflow, `.github/workflows/upstream.yml`, that runs the
-[`sync`](../.github/actions/sync/README.md) composite action.
+[`upstream-sync`](../.github/actions/upstream-sync/README.md) composite action.
 
-The `sync` action aggregates five independent sync kinds behind one step. Every kind runs by
+The `upstream-sync` action aggregates five independent sync kinds behind one step. Every kind runs by
 default and is opt-out: it is disabled by setting its input to `false`. Because the kinds live
 inside the action — not in the consumer's workflow — adding a sync kind upstream propagates to
 every consumer automatically, with no consumer workflow edit.
@@ -32,7 +32,7 @@ A consumer needs:
 - A repository secret **`BOT_TOKEN`** — a PAT (classic with `repo`, or fine-grained with
   `contents: write` + `pull-requests: write`) or a GitHub App installation token. The default
   `GITHUB_TOKEN` is not supported; see the action's
-  [Permissions](../.github/actions/sync/README.md#permissions) for the rationale.
+  [Permissions](../.github/actions/upstream-sync/README.md#permissions) for the rationale.
 - An optional repository variable **`BOT_USERNAME`** — the git author login for sync commits.
   Defaults to `github-actions[bot]`.
 - For the `repomix` kind, the `BOT_TOKEN` identity must be a **bypass actor** on the
@@ -40,8 +40,8 @@ A consumer needs:
   branch).
 
 The workflow itself is the recipe in the action's
-[Usage](../.github/actions/sync/README.md#usage) section — schedule + `workflow_dispatch`, one
-job, one `sync@main` step.
+[Usage](../.github/actions/upstream-sync/README.md#usage) section — schedule + `workflow_dispatch`, one
+job, one `upstream-sync@main` step.
 
 ## Behavior
 
@@ -65,10 +65,10 @@ BEFORE: upstream.yml = 5 hand-maintained parallel jobs
         (adding a 6th kind = every consumer edits this file)
 
 AFTER: upstream.yml = 1 thin job (same name, same cron)
-  job: uses sync@main  with { bot_token, bot_username, release: false }
+  job: uses upstream-sync@main  with { bot_token, bot_username, release: false }
         │
         ▼
-  sync@main (composite)   gate: if inputs['<kind>'] == 'true'  (all default "true")
+  upstream-sync@main (composite)   gate: if inputs['<kind>'] == 'true'  (all default "true")
     ├─ agents-rules-sync  ┐
     ├─ code-review-sync   │ each step: continue-on-error
     ├─ repomix-sync       ├─→ files-sync → 1 maintenance PR / kind
@@ -80,7 +80,7 @@ AFTER: upstream.yml = 1 thin job (same name, same cron)
 ## Migration
 
 Replace the body of an existing five-job `.github/workflows/upstream.yml` with the one-job recipe
-from the action's [Usage](../.github/actions/sync/README.md#usage) section. Keep the file name,
+from the action's [Usage](../.github/actions/upstream-sync/README.md#usage) section. Keep the file name,
 triggers, concurrency, and permissions — only the `jobs:` section changes, so existing links to
 `upstream.yml` stay valid and there is no second workflow racing on the `maintenance-sync-<kind>`
 branches.
