@@ -260,6 +260,16 @@ Generate ASCII schemas, diagrams, and UI wireframes using Unicode box-drawing ch
 /autopilot:ascii-schemas
 ```
 
+### `/autopilot:ask-codex`
+
+Delegate a code-analysis, refactoring, or automated-editing task to the OpenAI Codex CLI, then critically evaluate its output as a peer AI. Prompts for model and reasoning effort, picks a sandbox mode, runs `codex exec` safely (stderr suppression, stdin-hang fix), and supports session resume. Requires the `codex` CLI installed and on `PATH`.
+
+```bash
+/autopilot:ask-codex                                   # Prompt for model + effort, run a Codex task
+/autopilot:ask-codex "audit auth flow for races"       # Seed the task description
+/autopilot:ask-codex "refactor parser" --model gpt-5.5 --effort high
+```
+
 ## Agents
 
 ### `pr:review:*` (11 agents)
