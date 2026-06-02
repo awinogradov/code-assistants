@@ -11121,9 +11121,8 @@ description: Regenerate the license report on dependency-changing pull requests,
 inputs:
   bot_token:
     description: |
-      Token used to check out the PR branch with persisted credentials and push the regenerated license report. The workflow's default `GITHUB_TOKEN` is sufficient — this action only pushes to the pull request's own branch and never opens a PR — so the calling workflow may pass `${{ github.token }}`. When empty, the action falls back to `${{ github.token }}`. Supply a PAT or GitHub App token only if branch protection blocks `GITHUB_TOKEN` pushes.
-    required: false
-    default: ""
+      PAT (classic with `repo`, or fine-grained with `contents: write`) or GitHub App installation token used to check out the PR branch with persisted credentials and push the regenerated license report. The default `GITHUB_TOKEN` is not used: the auto-commit must be authored by and pushed as the bot identity so it carries correct attribution and re-triggers the PR's checks (commits pushed with `GITHUB_TOKEN` do not). Pass `${{ secrets.BOT_TOKEN }}`. Required: an empty value fails the push with no fallback.
+    required: true
   bot_username:
     description: |
       Git author/committer login for the auto-commit. Defaults to `github-actions[bot]` when unset. Pass the `vars.BOT_USERNAME` repository variable to attribute the commit to a dedicated bot identity.
@@ -11174,7 +11173,7 @@ runs:
         ref: ${{ github.head_ref }}
         fetch-depth: 0
         persist-credentials: true
-        token: ${{ inputs.bot_token || github.token }}
+        token: ${{ inputs.bot_token }}
 
     - name: Checkout (fork PR; read-only)
       if: steps.src.outputs.same_repo == 'false'
@@ -11249,15 +11248,8 @@ runs:
         HEAD_REF: ${{ github.head_ref }}
       run: |
         set -euo pipefail
-        if [ -n "$BOT_USERNAME" ]; then
-          name="$BOT_USERNAME"
-          email="${BOT_USERNAME}@users.noreply.github.com"
-        else
-          name="github-actions[bot]"
-          email="41898282+github-actions[bot]@users.noreply.github.com"
-        fi
-        git config user.name "$name"
-        git config user.email "$email"
+        git config user.name "${BOT_USERNAME:-github-actions[bot]}"
+        git config user.email "${BOT_USERNAME:-41898282+github-actions[bot]}@users.noreply.github.com"
         git add "$LICENSES_FILE"
         git diff --staged --quiet || git commit -m "chore(licenses): regenerate license report"
         git push origin "HEAD:$HEAD_REF"
@@ -11327,20 +11319,20 @@ jobs:
     steps:
       - uses: awinogradov/code-assistants/.github/actions/licenses-audit@main
         with:
-          bot_token: ${{ github.token }}
+          bot_token: ${{ secrets.BOT_TOKEN }}
           bot_username: ${{ vars.BOT_USERNAME }}
 ```
 
 ## Inputs
 
-| Input               | Required | Default               | Description                                                                                                                                |
-| ------------------- | -------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `bot_token`         | No       | `${{ github.token }}` | Token used to check out the PR branch with persisted credentials and push the regenerated report. Falls back to `github.token` when empty. |
-| `bot_username`      | No       | `github-actions[bot]` | Git author/committer login for the auto-commit. Pass `vars.BOT_USERNAME` for a dedicated bot identity.                                     |
-| `script`            | No       | `licenses:audit`      | Name of the `package.json` script that regenerates the report.                                                                             |
-| `licenses-file`     | No       | `LICENSES.md`         | Path to the generated report checked for drift.                                                                                            |
-| `node-version-file` | No       | `.nvmrc`              | File `actions/setup-node` reads the Node version from.                                                                                     |
-| `bun-version-file`  | No       | `package.json`        | File `oven-sh/setup-bun` reads the Bun version from.                                                                                       |
+| Input               | Required | Default               | Description                                                                                                                                                                                                             |
+| ------------------- | -------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bot_token`         | Yes      | —                     | PAT or GitHub App token used to check out the PR branch and push the regenerated report. Pass `${{ secrets.BOT_TOKEN }}`; `GITHUB_TOKEN` is not used (see Permissions). An empty value fails the push with no fallback. |
+| `bot_username`      | No       | `github-actions[bot]` | Git author/committer login for the auto-commit. Pass `${{ vars.BOT_USERNAME }}` for a dedicated bot identity.                                                                                                           |
+| `script`            | No       | `licenses:audit`      | Name of the `package.json` script that regenerates the report.                                                                                                                                                          |
+| `licenses-file`     | No       | `LICENSES.md`         | Path to the generated report checked for drift.                                                                                                                                                                         |
+| `node-version-file` | No       | `.nvmrc`              | File `actions/setup-node` reads the Node version from.                                                                                                                                                                  |
+| `bun-version-file`  | No       | `package.json`        | File `oven-sh/setup-bun` reads the Bun version from.                                                                                                                                                                    |
 
 ## Outputs
 
@@ -11351,15 +11343,17 @@ jobs:
 
 ## Permissions
 
-The workflow's default `GITHUB_TOKEN` is sufficient — no PAT or App token is required. The action
-only pushes to the pull request's own branch and never opens a PR:
+The auto-commit is authored by and pushed as the dedicated bot via `bot_token` (a PAT or GitHub
+App token, e.g. `${{ secrets.BOT_TOKEN }}`) with `bot_username` as the commit author — not
+`github-actions[bot]`/`GITHUB_TOKEN`:
 
 - `contents: write` — needed so the same-repo auto-commit can push the regenerated report back to
   the PR branch.
 
-Supply a PAT or GitHub App token via `bot_token` only if branch protection blocks `GITHUB_TOKEN`
-pushes. Because the auto-commit is pushed with `GITHUB_TOKEN`, it does not re-trigger workflows;
-since the regenerated report then matches, a subsequent run reports no drift.
+`GITHUB_TOKEN` is deliberately not used: it would attribute the commit to `github-actions[bot]`,
+and commits pushed with `GITHUB_TOKEN` do not re-trigger the PR's checks, so the regenerated report
+would never be re-validated. `bot_token` fixes both. Consumers of the sync system already provision
+`BOT_TOKEN`, so no extra setup is required.
 
 ## Behavior
 
@@ -23995,7 +23989,7 @@ jobs:
     steps:
       - uses: awinogradov/code-assistants/.github/actions/licenses-audit@main
         with:
-          bot_token: ${{ github.token }}
+          bot_token: ${{ secrets.BOT_TOKEN }}
           bot_username: ${{ vars.BOT_USERNAME }}
 </file>
 
