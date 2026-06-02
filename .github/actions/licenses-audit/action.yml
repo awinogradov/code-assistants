@@ -4,7 +4,7 @@ description: Regenerate the license report on dependency-changing pull requests,
 inputs:
   bot_token:
     description: |
-      Token used to check out the PR branch with persisted credentials and push the regenerated license report. The workflow's default `GITHUB_TOKEN` is sufficient — this action only pushes to the pull request's own branch and never opens a PR — so the calling workflow may pass `${{ github.token }}`. When empty, the action falls back to `${{ github.token }}`. Supply a PAT or GitHub App token only if branch protection blocks `GITHUB_TOKEN` pushes.
+      PAT (classic with `repo`, or fine-grained with `contents: write`) or GitHub App installation token used to check out the PR branch with persisted credentials and push the regenerated license report. The default `GITHUB_TOKEN` is not used: the auto-commit must be authored by and pushed as the bot identity so it carries correct attribution and re-triggers the PR's checks (commits pushed with `GITHUB_TOKEN` do not). Pass `${{ secrets.BOT_TOKEN }}`.
     required: false
     default: ""
   bot_username:
@@ -57,7 +57,7 @@ runs:
         ref: ${{ github.head_ref }}
         fetch-depth: 0
         persist-credentials: true
-        token: ${{ inputs.bot_token || github.token }}
+        token: ${{ inputs.bot_token }}
 
     - name: Checkout (fork PR; read-only)
       if: steps.src.outputs.same_repo == 'false'
@@ -132,15 +132,8 @@ runs:
         HEAD_REF: ${{ github.head_ref }}
       run: |
         set -euo pipefail
-        if [ -n "$BOT_USERNAME" ]; then
-          name="$BOT_USERNAME"
-          email="${BOT_USERNAME}@users.noreply.github.com"
-        else
-          name="github-actions[bot]"
-          email="41898282+github-actions[bot]@users.noreply.github.com"
-        fi
-        git config user.name "$name"
-        git config user.email "$email"
+        git config user.name "${BOT_USERNAME:-github-actions[bot]}"
+        git config user.email "${BOT_USERNAME:-github-actions[bot]}@users.noreply.github.com"
         git add "$LICENSES_FILE"
         git diff --staged --quiet || git commit -m "chore(licenses): regenerate license report"
         git push origin "HEAD:$HEAD_REF"
