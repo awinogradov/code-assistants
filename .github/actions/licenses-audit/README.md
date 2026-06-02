@@ -56,14 +56,14 @@ jobs:
 
 ## Inputs
 
-| Input               | Required | Default               | Description                                                                                                                                                             |
-| ------------------- | -------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bot_token`         | No       | —                     | PAT or GitHub App token used to check out the PR branch and push the regenerated report. Pass `${{ secrets.BOT_TOKEN }}`; `GITHUB_TOKEN` is not used (see Permissions). |
-| `bot_username`      | No       | `github-actions[bot]` | Git author/committer login for the auto-commit. Pass `${{ vars.BOT_USERNAME }}` for a dedicated bot identity.                                                           |
-| `script`            | No       | `licenses:audit`      | Name of the `package.json` script that regenerates the report.                                                                                                          |
-| `licenses-file`     | No       | `LICENSES.md`         | Path to the generated report checked for drift.                                                                                                                         |
-| `node-version-file` | No       | `.nvmrc`              | File `actions/setup-node` reads the Node version from.                                                                                                                  |
-| `bun-version-file`  | No       | `package.json`        | File `oven-sh/setup-bun` reads the Bun version from.                                                                                                                    |
+| Input               | Required | Default               | Description                                                                                                                                                                                                             |
+| ------------------- | -------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bot_token`         | Yes      | —                     | PAT or GitHub App token used to check out the PR branch and push the regenerated report. Pass `${{ secrets.BOT_TOKEN }}`; `GITHUB_TOKEN` is not used (see Permissions). An empty value fails the push with no fallback. |
+| `bot_username`      | No       | `github-actions[bot]` | Git author/committer login for the auto-commit. Pass `${{ vars.BOT_USERNAME }}` for a dedicated bot identity.                                                                                                           |
+| `script`            | No       | `licenses:audit`      | Name of the `package.json` script that regenerates the report.                                                                                                                                                          |
+| `licenses-file`     | No       | `LICENSES.md`         | Path to the generated report checked for drift.                                                                                                                                                                         |
+| `node-version-file` | No       | `.nvmrc`              | File `actions/setup-node` reads the Node version from.                                                                                                                                                                  |
+| `bun-version-file`  | No       | `package.json`        | File `oven-sh/setup-bun` reads the Bun version from.                                                                                                                                                                    |
 
 ## Outputs
 

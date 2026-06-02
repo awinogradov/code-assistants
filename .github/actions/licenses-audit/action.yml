@@ -4,9 +4,8 @@ description: Regenerate the license report on dependency-changing pull requests,
 inputs:
   bot_token:
     description: |
-      PAT (classic with `repo`, or fine-grained with `contents: write`) or GitHub App installation token used to check out the PR branch with persisted credentials and push the regenerated license report. The default `GITHUB_TOKEN` is not used: the auto-commit must be authored by and pushed as the bot identity so it carries correct attribution and re-triggers the PR's checks (commits pushed with `GITHUB_TOKEN` do not). Pass `${{ secrets.BOT_TOKEN }}`.
-    required: false
-    default: ""
+      PAT (classic with `repo`, or fine-grained with `contents: write`) or GitHub App installation token used to check out the PR branch with persisted credentials and push the regenerated license report. The default `GITHUB_TOKEN` is not used: the auto-commit must be authored by and pushed as the bot identity so it carries correct attribution and re-triggers the PR's checks (commits pushed with `GITHUB_TOKEN` do not). Pass `${{ secrets.BOT_TOKEN }}`. Required: an empty value fails the push with no fallback.
+    required: true
   bot_username:
     description: |
       Git author/committer login for the auto-commit. Defaults to `github-actions[bot]` when unset. Pass the `vars.BOT_USERNAME` repository variable to attribute the commit to a dedicated bot identity.
@@ -133,7 +132,7 @@ runs:
       run: |
         set -euo pipefail
         git config user.name "${BOT_USERNAME:-github-actions[bot]}"
-        git config user.email "${BOT_USERNAME:-github-actions[bot]}@users.noreply.github.com"
+        git config user.email "${BOT_USERNAME:-41898282+github-actions[bot]}@users.noreply.github.com"
         git add "$LICENSES_FILE"
         git diff --staged --quiet || git commit -m "chore(licenses): regenerate license report"
         git push origin "HEAD:$HEAD_REF"
