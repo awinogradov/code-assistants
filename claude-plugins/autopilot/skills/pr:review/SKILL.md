@@ -687,6 +687,96 @@ Breaking changes (API changes, config format changes, removed features) must be 
 
 Feature/fix PRs affecting users should include a `**Release notes:**` section in the PR description.
 
+#### Logging
+
+Applies when the diff adds or changes log calls or error/exception messages in service/backend code. Skip browser `console.*` in frontend code. Sensitive data in logs is CHECK-SEC-006 — do not double-report it here.
+
+<a id="CHECK-LOG-001"></a>
+**CHECK-LOG-001: Dynamic value interpolated into a log message** — Severity: suggestion
+
+The log message must be a static string so aggregators group it across occurrences. IDs, counts, durations, hosts, and user input belong in structured context fields, not in the message via interpolation or concatenation.
+
+- Example: `logger.info("Request " + id + " took " + ms + "ms")` → `logger.info({ request_id: id, duration_ms: ms }, "Request processed.")`.
+
+<a id="CHECK-LOG-002"></a>
+**CHECK-LOG-002: Log level mismatched to the message pattern** — Severity: suggestion
+
+Progressive ("-ing", about-to-act) messages must be `debug`; completed business events are `info` in past tense; recoverable failures are `warning`; unrecoverable failures are `error` with a reason. A progressive message at `info`, or a bare `error` with no reason, is a mismatch.
+
+- Example: `logger.info("Processing payment.")` → `logger.info("Payment processed.")`, or keep the wording and drop to `debug`.
+
+<a id="CHECK-LOG-003"></a>
+**CHECK-LOG-003: Non-static error or exception message** — Severity: suggestion
+
+The string passed to an error constructor or `throw` must be static; put dynamic context as error properties (or structured fields) so error trackers group it as one issue instead of thousands.
+
+- Example: `throw new Error("Couldn't connect to " + host)` → a static message with `host` carried as an error property.
+
+<a id="CHECK-LOG-004"></a>
+**CHECK-LOG-004: Asynchronous or fire-and-forget logging** — Severity: suggestion
+
+Log calls must be synchronous. Wrapping them in `setImmediate`, `process.nextTick`, a `Promise` callback, or `await`-ing them solely to defer risks dropping records on shutdown and makes ordering non-deterministic.
+
+- Example: `setImmediate(() => logger.info("Request processed."))` → call `logger.info(...)` directly.
+
+<a id="CHECK-LOG-005"></a>
+**CHECK-LOG-005: Logging an error at the throw site** — Severity: suggestion
+
+A function that throws should not also log the same failure — the error carries the context and the handler logs it once. Logging at both the raise and the catch sites double-reports the same incident.
+
+<a id="CHECK-LOG-006"></a>
+**CHECK-LOG-006: Large or binary payload logged in full** — Severity: suggestion
+
+Binary or oversized data (audio, images, encoded blobs, whole buffers) logged in full. Log its byte length (and an optional bounded preview), not the content. Useful text such as model prompts/completions may be logged in context fields when the pipeline can handle the volume.
+
+#### Documentation
+
+Applies to repositories carrying a `docs/` folder and `README.md`. Skip when the diff changes neither documented behavior nor documentation.
+
+<a id="CHECK-DOC-001"></a>
+**CHECK-DOC-001: Docs not updated in the same PR as the code** — Severity: suggestion
+
+Documentation ships with the code that changes it. A diff that adds or alters a documented behavior, endpoint, or area without updating the corresponding `docs/*.md` (or `README.md`) in the same PR is incomplete.
+
+<a id="CHECK-DOC-002"></a>
+**CHECK-DOC-002: New or renamed doc missing from the README index** — Severity: suggestion
+
+The root `README.md` Documentation section is the single index — every `.md` under `docs/` (at any depth) must be listed there. A new or renamed `docs/*.md` not added to the index is a finding.
+
+<a id="CHECK-DOC-003"></a>
+**CHECK-DOC-003: Doc filename not kebab-case or not self-descriptive** — Severity: nitpick
+
+`docs/*.md` files must be `kebab-case`, self-descriptive, and share a domain prefix with their siblings (e.g. `tts-google.md`, `tts-elevenlabs.md`, not `elevenlabs.md`). A subfolder must not carry its own `readme.md`; the root README is the only index.
+
+<a id="CHECK-DOC-004"></a>
+**CHECK-DOC-004: Doc file too large or covering multiple areas** — Severity: nitpick
+
+A `docs/*.md` file exceeds ~5000 characters or documents more than one area. Split it; keep code examples minimal (link to source, explain the "why" in prose).
+
+#### Service Standards
+
+Applies when the diff adds or changes a backend service's API, entrypoint, or runtime config. Skip libraries, frontend-only changes, and diffs that touch none of these. Secrets in code are CHECK-SEC-001 and missing tests are CHECK-TEST-008 — do not double-report them here.
+
+<a id="CHECK-SVC-001"></a>
+**CHECK-SVC-001: New or changed HTTP API without an OpenAPI schema** — Severity: suggestion
+
+A new or changed public HTTP endpoint must have a matching OpenAPI/JSON schema, and a breaking change must be versioned with backward compatibility rather than altering an existing version in place.
+
+<a id="CHECK-SVC-002"></a>
+**CHECK-SVC-002: Service entrypoint without health checks** — Severity: suggestion
+
+A new long-running service must expose liveness, readiness, and startup health checks for orchestration. Flag a service entrypoint that wires none.
+
+<a id="CHECK-SVC-003"></a>
+**CHECK-SVC-003: Unstructured service logging** — Severity: suggestion
+
+Service logs must be structured JSON carrying a correlation/trace ID for cross-service tracing (the Logging checks then govern their quality). Plain `console.log` or free-form string logs in a service are a finding.
+
+<a id="CHECK-SVC-004"></a>
+**CHECK-SVC-004: Runtime or language version below the supported floor** — Severity: nitpick
+
+A new service must target the supported runtimes (e.g. Node.js 22+ LTS with TypeScript 5.8+, or Bun 1.2.19+ with TypeScript 5.8+). A manifest pinning an older floor is a finding.
+
 ### 2.4 Aggregate Findings
 
 1. Collect every finding from Phase 2.3 as `{ severity, file, line, rule, title, detail }`.
