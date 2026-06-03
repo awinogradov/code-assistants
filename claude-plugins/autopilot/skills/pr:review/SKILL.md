@@ -31,7 +31,7 @@ Expected form (typically supplied by `awinogradov/code-review-action`):
 - **`PR_NUMBER`** — `$ARGUMENTS` → `gh pr view --json number --jq .number` for the current branch.
 - **`REVIEWER`** — `$ARGUMENTS` → `gh api user --jq .login` (authenticated user).
 - **`PR_AUTHOR`** — `$ARGUMENTS` → `gh pr view --json author --jq .author.login`.
-- **`RULES_DOC_URL`** — `$ARGUMENTS` → fall back to `https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/pr%3Areview/SKILL.md` when absent (e.g. a manual local run). This is the base URL for the `CHECK-` rule links in §2.5.
+- **`RULES_DOC_URL`** — `$ARGUMENTS` only. The action always supplies it (its `rules_doc_url` input default is the one canonical copy). When absent (e.g. a manual local run), do NOT fabricate a URL — render every `CHECK-` rule code as plain text (the bare code, no link) per [§2.5](#25-rule-codes).
 
 Do NOT prompt the user. Return structured output with an explicit error if inputs cannot be resolved.
 
@@ -56,9 +56,9 @@ gh pr diff <PR_NUMBER> -R <REPO>
 
 Fetch the diff exactly once and review it in-model. Never embed the diff more than once.
 
-This `gh pr view` output is the authoritative source for prior-review state: `reviews`/`latestReviews` carry each prior review's verdict and summary body (the body lists that round's findings). Do NOT use `gh api` to fetch review data: `gh api` is blocked in the review action, and a denied fetch must never be silently treated as "no prior findings" (that path produces an empty, content-free approval).
+This `gh pr view` output is the authoritative source for the PR title/body/diff and prior-review verdicts: `reviews`/`latestReviews` carry each prior review's verdict and summary body (the body lists that round's findings). Per-line inline annotations are NOT in any `gh pr view` field — load them via the read-only `gh api` call the `fetch-pr-reviews` agent makes in [§1.2](#12-load-context-via-sub-agents) (the review action now permits `gh api` GETs; only write forms are blocked). A denied or empty fetch must never be silently treated as "no prior findings" (that path produces an empty, content-free approval).
 
-Per-line inline annotations are not available through any allowed `gh pr view` field — they live only behind the blocked `gh api .../reviews/{id}/comments` (and the GraphQL `reviewThreads`, also `gh api`). Treat the prior review **bodies** as the record of past findings: the review skill writes a self-contained summary body for every non-empty review (see §"reviewComment Format"), so a finding worth tracking across rounds is in the body even when its inline twin is not fetchable. Do not block or bail when inline history is unavailable — it is a known, accepted limitation, not a fetch failure.
+Treat the prior review **bodies** (§1.1) plus the inline threads loaded by `fetch-pr-reviews` (§1.2) as the record of past findings: the review skill writes a self-contained summary body for every non-empty review (see [reviewComment Format](#reviewcomment-format-30-lines-max)), and the inline threads carry the per-line detail. With both loaded, a follow-up review sees exactly what each prior round flagged and where — do not bail when one source is empty; cross-check the other.
 
 ### 1.2 Load Context via Sub-Agents
 
@@ -67,7 +67,7 @@ Extract the linked issue ID from PR metadata. Check in order, stop at first matc
 1. **PR body `Issues:` section** — lines starting with `Closes` or `Related to` followed by a ticket ID
 2. **Branch name** — leading `[a-z]+-[0-9]+` segment, convert to UPPERCASE
 
-Prior-review state (previous reviews, verdicts, inline comments) already comes from the §1.1 `gh pr view` output — do NOT launch a separate review-fetch agent here (that path used `gh api`, which the review action blocks). Load only the remaining context in parallel: the codebase snapshot, and the linked-issue context when an issue was found.
+Load the remaining context in parallel — the codebase snapshot, the prior inline review threads, and the linked-issue context when an issue was found. Prior-review verdicts and summary bodies already come from the [§1.1](#11-pr-context) `gh pr view` output; the `fetch-pr-reviews` agent adds the per-line inline annotations via read-only `gh api`, returning a categorized summary (raw API output stays out of this context).
 
 ```
 Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
@@ -79,6 +79,12 @@ Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
     - `compress`: true
     - `includePatterns`: ".claude/**, **.md, **.yml, .github/**"
 
+Agent (fetch-pr-reviews):
+  Use the Agent tool with:
+  - `subagent_type`: "autopilot:fetch-pr-reviews"
+  - `prompt`: "Fetch reviews for PR #[PR_NUMBER]. Repo: <REPO>. Author: <PR_AUTHOR>."
+  - `description`: "Fetch PR review threads"
+
 Agent (resolve-issue-context) — only if linked issue found:
   Use the Agent tool with:
   - `subagent_type`: "autopilot:resolve-issue-context"
@@ -88,9 +94,9 @@ Agent (resolve-issue-context) — only if linked issue found:
 
 If no issue number found, output: "No linked issue — skipping issue comparison" and skip the issue-context agent.
 
-If the `gh` call fails (auth/network error) inside `resolve-issue-context`, skip issue context entirely.
+If a `gh` call fails (auth/network error) inside an agent, continue with whatever context loaded — never treat a failed `fetch-pr-reviews` as "no prior findings", and skip issue comparison only when `resolve-issue-context` itself found no issue.
 
-After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response and the issue context from the agent. Use the prior-review data already loaded in §1.1 for the round handling below.
+After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response, the categorized review threads from `fetch-pr-reviews`, and the issue context from `resolve-issue-context`. Use these plus the prior-review verdicts from [§1.1](#11-pr-context) for the round handling below.
 
 **Read the pack, don't dump it.** The snapshot exists so you can pull _targeted_ context on demand — use `grep_repomix_output` (regex + `contextLines`) and `read_repomix_output` with a specific `startLine`/`endLine` slice. NEVER `read_repomix_output` over the whole range (that loads the entire codebase into context). When the diff is self-contained and needs no cross-file lookup (the common case), don't read the pack at all — pull cross-file context only for checks that need it (e.g. architecture reuse, duplicated logic).
 
@@ -108,7 +114,7 @@ After all calls complete, store the `outputId` from the snapshot acquisition (at
 
 **Follow-up review (previous review by REVIEWER exists):**
 
-1. Read all previous review findings from the `reviews`/`latestReviews` bodies loaded in §1.1 (inline-comment history is not fetchable under the action's allowed tools — see §1.1)
+1. Read all previous review findings from the `reviews`/`latestReviews` bodies ([§1.1](#11-pr-context)) and the per-line inline threads from `fetch-pr-reviews` ([§1.2](#12-load-context-via-sub-agents))
 2. Check if issues were addressed by re-examining the current diff for each finding named in those bodies
 3. Compare current findings against previous review
 4. **SKIP (no structured JSON)** if: all findings are identical to previous review, OR no new findings and no unresolved issues
@@ -126,17 +132,31 @@ Do NOT produce the structured JSON output.
 - If new commits exist but no new issues → approve with empty `reviewComment` (no body text)
 - Only submit a full review body if new commits introduce genuinely NEW findings
 
-### 1.4 Extended Context
+### 1.4 Project Context (read before reviewing)
 
-- **CLAUDE.md** - Apply project rules to each change
-- **context7/Ref/Exa** - Look up docs for unfamiliar APIs
-- **Perplexity** - Web search for general info
+Read the project's own conventions before judging the diff — you enforce them, so you must load them first (mirrors the plan skill's Phase 1):
+
+- **CLAUDE.md (stack rules)** — read the repository-root `CLAUDE.md`; map each changed line to the rule it must satisfy.
+- **README + `docs/*` (project conventions)** — read the root `README.md` and the docs it links; treat `docs/` as the source of truth for project-specific conventions.
+- **context7 / Ref / Exa** — MANDATORY for any unfamiliar library or API the diff touches; never guess an API's behavior.
+- **Perplexity** — web search for general or architectural questions.
+
+### 1.5 Context Map
+
+Phase 1 is the single context-gathering pass. Record a compact map; Phase 2 reasons over it without re-fetching the diff or re-reading the pack:
+
+- **PR diff** — changed files and the one-line role of each change (§1.1).
+- **Linked-issue requirements** — acceptance criteria from `resolve-issue-context` (§1.2), or "no linked issue".
+- **Prior-review findings** — unresolved findings from prior review bodies (§1.1) and inline threads from `fetch-pr-reviews` (§1.2); empty on first review.
+- **Project conventions** — the CLAUDE.md / README / `docs/*` points that bear on the diff (§1.4).
+- **Codebase pointers** — only the targeted pack-`grep` hits pulled for cross-file checks; "none" when the diff is self-contained.
+- **Stack** — `agents.rules` value (drives [§2](#phase-2-review-the-diff) thresholds), or `unknown`.
 
 ---
 
 ## Phase 2: Review the Diff
 
-Review the diff against **all** checks below in a single pass and collect findings. Each finding is `{ severity, file, line, rule, title, detail }`: `severity` is `blocker | suggestion | nitpick`; `line` is `null` for out-of-diff findings; `rule` is the `CHECK-` code from the matched check (or `null` when a finding maps to no defined check — do NOT substitute `UNSPECIFIED`).
+Review the diff against **all** checks below in a single pass and collect findings, reasoning over the [§1.5](#15-context-map) Context Map rather than re-fetching the diff or re-reading the pack to reconstruct what it already holds. Each finding is `{ severity, file, line, rule, title, detail }`: `severity` is `blocker | suggestion | nitpick`; `line` is `null` for out-of-diff findings; `rule` is the `CHECK-` code from the matched check (or `null` when a finding maps to no defined check — do NOT substitute `UNSPECIFIED`).
 
 ### 2.1 Detect Stack
 
@@ -158,7 +178,7 @@ These rules are mandatory. Apply them exactly as written. Exceptions are only th
 
 ### 2.3 Review Checks
 
-Each check below carries an HTML anchor so this skill can link its `CHECK-` code back to this file (see §2.5). Keep each `<a id="...">` immediately above its rule.
+Each check below carries an HTML anchor so this skill can link its `CHECK-` code back to this file (see [§2.5](#25-rule-codes)). Keep each `<a id="...">` immediately above its rule.
 
 #### Correctness & Bugs
 
@@ -167,19 +187,19 @@ Each check below carries an HTML anchor so this skill can link its `CHECK-` code
 
 A variable from an outer scope, a similarly-named variable, or a copy-paste leftover is used instead of the intended one.
 
-- Example: function receives `requestConfig` but body uses `self.config`; loop variable shadowing an outer `item`.
+- Example: function receives `requestConfig` but the body reads a `config` from an outer scope; a loop variable shadowing an outer `item`.
 
 <a id="CHECK-BUG-002"></a>
 **CHECK-BUG-002: Shared mutable state across async tasks** — Severity: blocker
 
-Multiple async tasks reading/writing the same mutable object (dict, list, instance attribute) without synchronization; interleaved awaits can cause inconsistent state even in single-threaded async runtimes.
+Multiple async tasks reading/writing the same mutable object (array, object, or instance field) without synchronization; interleaved awaits can cause inconsistent state even in single-threaded async runtimes.
 
-- Example: two coroutines appending to the same list with awaits between read and write.
+- Example: two async tasks pushing to the same array with awaits between read and write.
 
 <a id="CHECK-BUG-004"></a>
 **CHECK-BUG-004: Incorrect serialization/deserialization** — Severity: blocker
 
-Data lost or corrupted during JSON/protobuf/HOCON serialization — missing fields, wrong types, enum value mismatch between producer and consumer.
+Data lost or corrupted during JSON serialization — missing fields, wrong types, enum value mismatch between sender and receiver.
 
 - Example: `JSON.stringify` drops `undefined` fields the consumer expects as `null`.
 
@@ -243,6 +263,14 @@ Tokens, passwords, full request bodies with credentials, or personal data logged
 
 - Example: `console.log("auth", req.headers.authorization)`; an error handler returning a stack trace with a connection string to the client.
 
+<a id="CHECK-SEC-007"></a>
+**CHECK-SEC-007: External input crosses a trust boundary without validation** — Severity: suggestion
+
+Data from outside the program — a request body/params, an external API response, a webhook payload, env vars, or file contents — consumed without validating its shape at the boundary before use. Distinct from CHECK-SEC-002 (injection sinks) and CHECK-PLAT-003 (which validation library): this fires when external input is trusted with no validation at all.
+
+- Example: `const { amount } = await res.json()` used directly in a calculation without parsing the response against a schema.
+- Skip if the diff does not read external input, or the value is already validated at the boundary before this use.
+
 #### Testing
 
 <a id="CHECK-TEST-001"></a>
@@ -250,21 +278,21 @@ Tokens, passwords, full request bodies with credentials, or personal data logged
 
 Test configures a mock to return X, then asserts the code got X. This tests the mock, not the code.
 
-- Example: `mock_service.get.return_value = 42; result = handler(); assert result == 42`.
+- Example: `mockService.get.mockReturnValue(42); expect(handler()).toBe(42)`.
 
 <a id="CHECK-TEST-002"></a>
 **CHECK-TEST-002: Business logic duplicated in test** — Severity: blocker
 
 Test reimplements the same calculation/logic as production to compute the expected value instead of using known input/output pairs. If production is wrong, the test is wrong the same way.
 
-- Example: `expected = sum(items) * tax_rate + shipping; assert calculate_total(items) == expected`.
+- Example: `const expected = sum(items) * taxRate + shipping; expect(calculateTotal(items)).toBe(expected)`.
 
 <a id="CHECK-TEST-003"></a>
 **CHECK-TEST-003: Mock without verifying call arguments** — Severity: suggestion
 
 Test creates a mock but never checks what arguments it was called with, only that the return value flowed through.
 
-- Example: `mock_db.save.return_value = True` but no `assert_called_with(expected_record)`.
+- Example: `mockDb.save.mockReturnValue(true)` but no `expect(mockDb.save).toHaveBeenCalledWith(expectedRecord)`.
 
 <a id="CHECK-TEST-004"></a>
 **CHECK-TEST-004: Error path untested** — Severity: suggestion
@@ -292,7 +320,7 @@ Same test data or setup copy-pasted in multiple test files instead of shared fix
 
 Large JSON blobs, XML payloads, or byte strings hardcoded in test files instead of loaded from `tests/assets/` or `tests/fixtures/`.
 
-- Example: 200-line JSON dict defined at top of test file.
+- Example: 200-line JSON object defined at top of test file.
 
 <a id="CHECK-TEST-008"></a>
 **CHECK-TEST-008: New public function without test** — Severity: suggestion
@@ -304,7 +332,7 @@ A new public function, method, or endpoint added with zero test coverage. Every 
 <a id="CHECK-TEST-009"></a>
 **CHECK-TEST-009: Flaky test indicator — sleep or retry in test** — Severity: suggestion
 
-Tests using `time.sleep()`, `asyncio.sleep()`, `setTimeout`, or retry loops to wait for conditions — indicates a timing-dependent test.
+Tests using `setTimeout`, fixed delays, or retry loops to wait for conditions — indicates a timing-dependent test.
 
 - Example: `await new Promise(r => setTimeout(r, 500)); expect(queue).toBeEmpty()`.
 
@@ -376,9 +404,9 @@ GitHub issue references (`#123`, `Closes #123`) must NOT appear in commit messag
 - Platform ref: `commitlint.config.mjs` custom rule `no-issue-id`.
 
 <a id="CHECK-PLAT-002"></a>
-**CHECK-PLAT-002: noqa / type: ignore / @ts-ignore / eslint-disable** — Severity: blocker
+**CHECK-PLAT-002: Lint or type suppression comment (@ts-ignore / @ts-expect-error / eslint-disable)** — Severity: blocker
 
-Zero tolerance for lint/type suppression comments. Any `# noqa`, `# type: ignore`, `@ts-ignore`, `@ts-expect-error`, `eslint-disable`, `eslint-disable-next-line` is a blocker.
+Zero tolerance for lint/type suppression comments. Any `@ts-ignore`, `@ts-expect-error`, `@ts-nocheck`, `eslint-disable`, `eslint-disable-next-line` is a blocker.
 
 - Example: `// @ts-ignore — TODO fix later`.
 
@@ -483,9 +511,17 @@ Type annotations on every local variable, including trivially obvious ones, addi
 <a id="CHECK-AI-006"></a>
 **CHECK-AI-006: Placeholder implementation left in production code** — Severity: blocker
 
-`pass`, `...`, `NotImplementedError`, or `TODO` placeholder in code that should be fully implemented.
+An empty stub body, a `throw new Error("Not implemented")`, or a `// TODO` placeholder in code that should be fully implemented.
 
 - Example: `function handleError(error: Error) { throw new Error("Not implemented"); }` in production.
+
+<a id="CHECK-DEAD-001"></a>
+**CHECK-DEAD-001: Dead code introduced by the diff** — Severity: suggestion
+
+Commented-out code blocks, or unused imports / variables / private functions / exports, added or left behind by this change. Ship live code only — recover history from version control instead of parking it in comments.
+
+- Example: a commented-out former implementation kept "just in case"; an `import` added but never referenced.
+- Skip: pre-existing dead code your change did not introduce (mention it in prose, do not block on it).
 
 #### Common Sense
 
@@ -501,21 +537,21 @@ A constant whose value doesn't match what it represents — too large, too small
 
 Timeout values dangerously short (false failures) or too long (blocking resources). Compare against the expected operation duration.
 
-- Example: `GRPC_TIMEOUT = 0.5` for a call involving ML inference; `SESSION_TIMEOUT = 86400 * 30`.
+- Example: `const requestTimeout = 0.5` for a call involving ML inference; `const sessionTimeout = 86400 * 30`.
 
 <a id="CHECK-CS-003"></a>
 **CHECK-CS-003: Unbounded growth — no limits on collections** — Severity: suggestion
 
 A data structure that grows without bound (cache, in-memory queue, log buffer) without eviction policy or size limit.
 
-- Example: `self.history = []` that appends every request but never trims.
+- Example: `this.history = []` that pushes every request but never trims.
 
 <a id="CHECK-CS-004"></a>
 **CHECK-CS-004: Error message doesn't help debugging** — Severity: suggestion
 
 An error message lacking enough context to diagnose — missing which value failed, what was expected, or what operation was attempted.
 
-- Example: `raise ValueError("invalid input")` instead of including the offending value.
+- Example: `throw new Error("invalid input")` instead of including the offending value.
 
 <a id="CHECK-CS-005"></a>
 **CHECK-CS-005: Log message at wrong level** — Severity: suggestion
@@ -584,12 +620,25 @@ File placed in a directory that doesn't match its purpose per the project's dire
 
 Stack is not relevant for PR hygiene — these apply universally.
 
-**Issue alignment** (Severity: suggestion, `rule`: `null`) — if issue context is provided, every requirement in the linked issue must be addressed; flag unexplained scope creep. Skip if the issue description is vague or empty.
+<a id="CHECK-PR-010"></a>
+**CHECK-PR-010: Task ↔ solution ↔ result alignment** — Severity: suggestion
+
+Compare three artifacts and flag divergence in each leg. Skip a leg only when its source is absent or vague (no linked issue, or empty PR body).
+
+- **declared task** = the linked issue (requirements / acceptance criteria from the [§1.5](#15-context-map) Context Map)
+- **declared solution** = the PR title + body
+- **exact result** = the diff
+
+Legs:
+
+- **task ↔ solution** — the PR's stated approach omits, contradicts, or silently re-scopes an issue requirement.
+- **solution ↔ result** — a claim in the PR description is not backed by any hunk in the diff (asserted but absent). Undescribed changes present in the diff are the blocker CHECK-PR-001 below — do not double-report them here.
+- **task ↔ result** — an issue requirement has no corresponding change in the diff (unaddressed), or the diff addresses something the issue never asked for (scope creep) without explanation.
 
 <a id="CHECK-PR-001"></a>
 **CHECK-PR-001: Diff matches PR title/description** — Severity: blocker
 
-The actual changes must match what the PR title and description claim. No hidden changes, no scope creep, no "while I was here" additions.
+The actual changes must match what the PR title and description claim. No hidden changes, no scope creep, no "while I was here" additions. (Scope-creep _claims_ and unaddressed requirements are CHECK-PR-010; this is the blocker for undescribed changes present in the diff.)
 
 <a id="CHECK-PR-002"></a>
 **CHECK-PR-002: PR is atomic — single concern** — Severity: suggestion
@@ -640,13 +689,21 @@ Feature/fix PRs affecting users should include a `**Release notes:**` section in
 
 ### 2.5 Rule Codes
 
-Emit each rule code as a markdown link to its anchor in this file, using `RULES_DOC_URL` (from Input resolution) as the base:
+Render each rule code based on whether `RULES_DOC_URL` (from Input resolution) was supplied:
+
+**When `RULES_DOC_URL` is set** — emit a markdown link to the code's anchor in this file:
 
 - Single code → `[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002)`.
 - Shared location (multiple codes) → `[[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002), [CHECK-AI-002](<RULES_DOC_URL>#CHECK-AI-002)]`.
-- Append nothing when a finding has no rule code (do not emit `[UNSPECIFIED]`).
 
 Substitute the resolved `RULES_DOC_URL` value verbatim — do not invent a different host or path. The `#CHECK-...` fragment must match the code exactly so it lands on the right anchor.
+
+**When `RULES_DOC_URL` is absent** (e.g. a manual local run) — emit the bare code as plain text, no link and no brackets:
+
+- Single code → `CHECK-BUG-002`.
+- Shared location → `CHECK-BUG-002, CHECK-AI-002`.
+
+In both modes, append nothing when a finding has no rule code (do not emit `[UNSPECIFIED]`).
 
 Map `severity` to its emoji when rendering in Phase 3: `blocker` → 🚧, `suggestion` → 🙋‍♂️, `nitpick` → 💡. The emoji stays first so downstream severity filters keep working.
 
@@ -689,9 +746,9 @@ Map `severity` to its emoji when rendering in Phase 3: `blocker` → 🚧, `sugg
   "verdict": "approve" | "requestChanges" | "comment",
   "reviewComment": "...",
   "inlineComments": [
-    {"path": "src/file.py", "line": 42, "body": "🚧 Issue description"},
-    {"path": "src/other.py", "line": 15, "body": "🙋‍♂️ Suggestion here"},
-    {"path": "src/calc.py", "line": 8, "startLine": 7, "body": "🚧 Off-by-one in the running sum [CHECK-BUG-003](<RULES_DOC_URL>#CHECK-BUG-003)", "suggestion": "    for i in range(n):\n        total += items[i]"}
+    {"path": "src/file.ts", "line": 42, "body": "🚧 Issue description"},
+    {"path": "src/other.ts", "line": 15, "body": "🙋‍♂️ Suggestion here"},
+    {"path": "src/calc.ts", "line": 8, "startLine": 7, "body": "🚧 Off-by-one in the running sum [CHECK-BUG-003](<RULES_DOC_URL>#CHECK-BUG-003)", "suggestion": "    for (let i = 0; i < n; i++)\n        total += items[i];"}
   ]
 }
 ```
@@ -768,22 +825,22 @@ The `verdict` field drives the GitHub review event. An empty `reviewComment` mea
 
 **reviewComment body template (ONLY when there are findings):**
 
-Every blocker, suggestion, and nitpick line ends with the rule code rendered as a markdown link per §2.5 (e.g. `[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002)`). If two checks flagged the same `(path, line)`, render the merged form `[[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002), [CHECK-AI-002](<RULES_DOC_URL>#CHECK-AI-002)]`. Build the links yourself from `RULES_DOC_URL`. When a finding has no rule code, omit the suffix entirely.
+Every blocker, suggestion, and nitpick line ends with the rule code rendered per [§2.5](#25-rule-codes) (e.g. `[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002)`). If two checks flagged the same `(path, line)`, render the merged form `[[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002), [CHECK-AI-002](<RULES_DOC_URL>#CHECK-AI-002)]`. Build the links yourself from `RULES_DOC_URL`. When a finding has no rule code, omit the suffix entirely.
 
 ```markdown
 [1 factual sentence: what this PR changes — no quality judgment]
 
 ### 🚧 Blockers
 
-1. **[Title]** - `src/path/to/file.py:NN` - [Problem in 1 line] [CHECK-BUG-XXX](<RULES_DOC_URL>#CHECK-BUG-XXX)
+1. **[Title]** - `src/path/to/file.ts:NN` - [Problem in 1 line] [CHECK-BUG-XXX](<RULES_DOC_URL>#CHECK-BUG-XXX)
 
 ### 🙋‍♂️ Suggestions
 
-- `src/path/to/file.py:NN` - [Recommendation in 1 line] [CHECK-AI-XXX](<RULES_DOC_URL>#CHECK-AI-XXX)
+- `src/path/to/file.ts:NN` - [Recommendation in 1 line] [CHECK-AI-XXX](<RULES_DOC_URL>#CHECK-AI-XXX)
 
 ### 💡 Nitpicks
 
-- `src/path/to/file.py:NN` - [Optional fix in 1 line] [CHECK-CPLX-XXX](<RULES_DOC_URL>#CHECK-CPLX-XXX)
+- `src/path/to/file.ts:NN` - [Optional fix in 1 line] [CHECK-CPLX-XXX](<RULES_DOC_URL>#CHECK-CPLX-XXX)
 
 ### ⛔ Request Changes / ### 👍 Approve
 
@@ -798,7 +855,7 @@ Add inline comments for issues with specific code locations:
 - **🙋‍♂️ Suggestion** - Add if location is specific
 - **💡 Nitpicks** - Optional, can be in summary only
 
-Each inline comment: 1-2 sentences, start with severity emoji, end with the rule code rendered as a markdown link per §2.5 (e.g. `🚧 No idempotency check — retries will duplicate charges [CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002)`).
+Each inline comment: 1-2 sentences, start with severity emoji, end with the rule code rendered per [§2.5](#25-rule-codes) (e.g. `🚧 No idempotency check — retries will duplicate charges [CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002)`).
 
 ### Code suggestions
 
@@ -817,10 +874,10 @@ Add an optional `suggestion` to an inline comment when the fix is concrete and m
 
 ### Include
 
-- ALWAYS full paths for all file references (e.g., `src/history/kafka/consumer.py:66`, NOT `consumer.py:66`)
+- ALWAYS full paths for all file references (e.g., `src/services/payment/processor.ts:66`, NOT `processor.ts:66`)
 - Direct, confident language
 - Clear verdict (rationale only when requesting changes)
-- Rule code rendered as a markdown link per §2.5 (`[<CODE>](<RULES_DOC_URL>#<CODE>)`, or merged `[[<CODE1>](<RULES_DOC_URL>#<CODE1>), [<CODE2>](<RULES_DOC_URL>#<CODE2>)]` for a shared location) on every finding line (blocker, suggestion, nitpick) and every `inlineComments.body`; omit the suffix entirely when no rule code is available
+- Rule code rendered per [§2.5](#25-rule-codes) (`[<CODE>](<RULES_DOC_URL>#<CODE>)`, or merged `[[<CODE1>](<RULES_DOC_URL>#<CODE1>), [<CODE2>](<RULES_DOC_URL>#<CODE2>)]` for a shared location) on every finding line (blocker, suggestion, nitpick) and every `inlineComments.body`; omit the suffix entirely when no rule code is available
 
 ### Exclude
 

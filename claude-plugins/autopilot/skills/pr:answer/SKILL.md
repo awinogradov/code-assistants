@@ -29,7 +29,7 @@ Expected form (typically supplied by `awinogradov/code-review-action`):
 - **`REVIEWER`** — `$ARGUMENTS` → `gh api user --jq .login` (the authenticated user) as fallback.
 - **`COMMENT_BODY` / `COMMENT_PATH` / `COMMENT_LINE`** — `$ARGUMENTS` only. If missing when invoked interactively, abort with a clear error (these must come from the CI context).
 - **`NEEDS_REVERDICT`** — `$ARGUMENTS` only (`true`/`false`); the orchestrator pre-computes this from the comment text. Defaults to `false` when absent. Gates Phase 4's Verdict Update (see below).
-- **`RULES_DOC_URL`** — `$ARGUMENTS` → fall back to `https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/pr%3Areview/SKILL.md` when absent. Base URL for any `CHECK-` rule links in `updatedReviewComment`.
+- **`RULES_DOC_URL`** — `$ARGUMENTS` only. The action always supplies it (its `rules_doc_url` input default is the one canonical copy). When absent (e.g. a manual local run), do NOT fabricate a URL — render any `CHECK-` rule code in `updatedReviewComment` as plain text (the bare code, no link).
 
 Do NOT prompt the user. Return an error JSON structure if required inputs cannot be resolved.
 
@@ -149,7 +149,7 @@ When `NEEDS_REVERDICT` is `true`, check ALL remaining unresolved bot threads (no
 
 ### Review Body Update
 
-Only provide `updatedReviewComment` if `updatedVerdict` is non-null. Follow the same format as the original review body (see the pr:review skill for format rules) — including `CHECK-` rule codes rendered as markdown links built from `RULES_DOC_URL`, exactly as in the pr:review skill's §2.5 (single: `[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002)`; shared: `[[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002), [CHECK-AI-002](<RULES_DOC_URL>#CHECK-AI-002)]`). Do not read agent files.
+Only provide `updatedReviewComment` if `updatedVerdict` is non-null. Follow the same format as the original review body (see the pr:review skill for format rules) — including `CHECK-` rule codes rendered exactly as in the pr:review skill's §2.5: when `RULES_DOC_URL` is set, as markdown links (single: `[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002)`; shared: `[[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002), [CHECK-AI-002](<RULES_DOC_URL>#CHECK-AI-002)]`); when it is absent, as the bare code in plain text (single: `CHECK-BUG-002`; shared: `CHECK-BUG-002, CHECK-AI-002`). Do not read agent files.
 
 ---
 
