@@ -67,7 +67,7 @@ Extract the linked issue ID from PR metadata. Check in order, stop at first matc
 1. **PR body `Issues:` section** — lines starting with `Closes` or `Related to` followed by a ticket ID
 2. **Branch name** — leading `[a-z]+-[0-9]+` segment, convert to UPPERCASE
 
-Load the remaining context in parallel — the codebase snapshot, the prior inline review threads, and the linked-issue context when an issue was found. Prior-review verdicts and summary bodies already come from the [§1.1](#11-pr-context) `gh pr view` output; the `fetch-pr-reviews` agent adds the per-line inline annotations via read-only `gh api`, returning a categorized summary (raw API output stays out of this context).
+Load the remaining context in parallel — the codebase snapshot, the prior inline review threads, and (when an issue is linked) the linked-issue context plus the related TODOs / issue references in the codebase. Prior-review verdicts and summary bodies already come from the [§1.1](#11-pr-context) `gh pr view` output; the `fetch-pr-reviews` agent adds the per-line inline annotations via read-only `gh api`, returning a categorized summary (raw API output stays out of this context).
 
 ```
 Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
@@ -90,13 +90,19 @@ Agent (resolve-issue-context) — only if linked issue found:
   - `subagent_type`: "autopilot:resolve-issue-context"
   - `prompt`: "Fetch issue context. Issue number: [N]. Repository: <REPO>."
   - `description`: "Resolve issue context"
+
+Agent (search-codebase-todos) — only if linked issue found:
+  Use the Agent tool with:
+  - `subagent_type`: "autopilot:search-codebase-todos"
+  - `prompt`: "Search for TODOs. Issue number: [N]."
+  - `description`: "Search codebase TODOs and issue references"
 ```
 
 If no issue number found, output: "No linked issue — skipping issue comparison" and skip the issue-context agent.
 
 If a `gh` call fails (auth/network error) inside an agent, continue with whatever context loaded — never treat a failed `fetch-pr-reviews` as "no prior findings", and skip issue comparison only when `resolve-issue-context` itself found no issue.
 
-After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response, the categorized review threads from `fetch-pr-reviews`, and the issue context from `resolve-issue-context`. Use these plus the prior-review verdicts from [§1.1](#11-pr-context) for the round handling below.
+After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response, the categorized review threads from `fetch-pr-reviews`, the issue context from `resolve-issue-context`, and the TODOs / issue references from `search-codebase-todos`. Use these plus the prior-review verdicts from [§1.1](#11-pr-context) for the round handling below.
 
 **Read the pack, don't dump it.** The snapshot exists so you can pull _targeted_ context on demand — use `grep_repomix_output` (regex + `contextLines`) and `read_repomix_output` with a specific `startLine`/`endLine` slice. NEVER `read_repomix_output` over the whole range (that loads the entire codebase into context). When the diff is self-contained and needs no cross-file lookup (the common case), don't read the pack at all — pull cross-file context only for checks that need it (e.g. architecture reuse, duplicated logic).
 
@@ -147,6 +153,7 @@ Phase 1 is the single context-gathering pass. Record a compact map; Phase 2 reas
 
 - **PR diff** — changed files and the one-line role of each change (§1.1).
 - **Linked-issue requirements** — acceptance criteria from `resolve-issue-context` (§1.2), or "no linked issue".
+- **Related work** — TODOs and `#<issue>` references in the codebase from `search-codebase-todos` (§1.2): flag whether the diff resolves or conflicts with a related TODO, leaves a referenced issue half-addressed, or duplicates work tracked elsewhere; "none" when no issue is linked or none found.
 - **Prior-review findings** — unresolved findings from prior review bodies (§1.1) and inline threads from `fetch-pr-reviews` (§1.2); empty on first review.
 - **Project conventions** — the CLAUDE.md / README / `docs/*` points that bear on the diff (§1.4).
 - **Codebase pointers** — only the targeted pack-`grep` hits pulled for cross-file checks; "none" when the diff is self-contained.
@@ -633,7 +640,7 @@ Legs:
 
 - **task ↔ solution** — the PR's stated approach omits, contradicts, or silently re-scopes an issue requirement.
 - **solution ↔ result** — a claim in the PR description is not backed by any hunk in the diff (asserted but absent). Undescribed changes present in the diff are the blocker CHECK-PR-001 below — do not double-report them here.
-- **task ↔ result** — an issue requirement has no corresponding change in the diff (unaddressed), or the diff addresses something the issue never asked for (scope creep) without explanation.
+- **task ↔ result** — an issue requirement, or a codebase TODO referencing the issue (§1.5 Related work), has no corresponding change in the diff (unaddressed); or the diff addresses something the issue never asked for (scope creep) without explanation.
 
 <a id="CHECK-PR-001"></a>
 **CHECK-PR-001: Diff matches PR title/description** — Severity: blocker
