@@ -315,6 +315,7 @@ Choose ONE backend based on the project's needs. Do not mix.
 - 👤 Validate all external input before processing
 - 👤 Never trust user data in object operations
 - 👤 Use crypto.timingSafeEqual() for secret comparison
+- 👤 Never log or expose secrets, tokens, or PII (logs, error messages, API responses)
 - 👤 Use exact versions in package.json (no ^ or ~)
 - 👤 Never enable debug inspector in production
 - 👤 Never pass untrusted data to Object.assign()
@@ -334,6 +335,8 @@ Choose ONE backend based on the project's needs. Do not mix.
 - 👤 No CSS Modules/CSS-in-JS - use Tailwind CSS
 - 👤 No barrel files (index.ts re-exports)
 - 👤 No unused exports - delete immediately
+- 👤 No commented-out code - delete it (recover from version control if needed)
+- 👤 No empty catch blocks - never swallow errors; rethrow or handle with context
 - 👤 No wrapper functions without added logic
 - 👤 No Array.find() for lookups - use Map/Object
 - 👤 No useEffect for state sync
