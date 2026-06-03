@@ -470,7 +470,7 @@ runs:
           /autopilot:pr-review REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} PR_AUTHOR: ${{ steps.pr.outputs.author }} RULES_DOC_URL: ${{ inputs.rules_doc_url }}
         CLAUDE_MODEL: ${{ inputs.model }}
         CLAUDE_ALLOWED_TOOLS: "Bash(gh:*),mcp__repomix__*,mcp__context7__*,mcp__Ref__*,mcp__exa__*,mcp__perplexity__*,Read,Glob,Grep"
-        CLAUDE_DISALLOWED_TOOLS: "Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh issue comment:*),Bash(gh api:*)"
+        CLAUDE_DISALLOWED_TOOLS: "Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh issue comment:*),Bash(gh api * -X *:*),Bash(gh api * --method *:*),Bash(gh api * -f *:*),Bash(gh api * -F *:*),Bash(gh api * --field *:*),Bash(gh api * --raw-field *:*),Bash(gh api * --input *:*),Bash(gh api graphql:*)"
         CLAUDE_JSON_SCHEMA: '{"type":"object","properties":{"verdict":{"type":"string","enum":["approve","requestChanges","comment"]},"reviewComment":{"type":"string"},"inlineComments":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"},"body":{"type":"string"},"startLine":{"type":"integer"},"suggestion":{"type":"string"}},"required":["path","line","body"]}}},"required":["verdict","reviewComment"]}'
         CLAUDE_PLUGIN_DIR: ${{ steps.plugin.outputs.dir }}
         CLAUDE_MCP_CONFIG: ${{ steps.mcp.outputs.path }}
@@ -534,7 +534,7 @@ runs:
           /autopilot:pr-answer REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} COMMENT_BODY: ${{ steps.ctx.outputs.comment_body }} COMMENT_PATH: ${{ steps.ctx.outputs.comment_path }} COMMENT_LINE: ${{ steps.ctx.outputs.comment_line }} NEEDS_REVERDICT: ${{ steps.classify.outputs.needs_reverdict }} RULES_DOC_URL: ${{ inputs.rules_doc_url }}
         CLAUDE_MODEL: ${{ inputs.model }}
         CLAUDE_ALLOWED_TOOLS: "Bash(gh:*),mcp__repomix__*,mcp__context7__*,mcp__Ref__*,mcp__exa__*,mcp__perplexity__*,Read,Glob,Grep"
-        CLAUDE_DISALLOWED_TOOLS: "Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh issue comment:*),Bash(gh api:*)"
+        CLAUDE_DISALLOWED_TOOLS: "Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh issue comment:*),Bash(gh api * -X *:*),Bash(gh api * --method *:*),Bash(gh api * -f *:*),Bash(gh api * -F *:*),Bash(gh api * --field *:*),Bash(gh api * --raw-field *:*),Bash(gh api * --input *:*),Bash(gh api graphql:*)"
         CLAUDE_JSON_SCHEMA: '{"type":"object","properties":{"reply":{"type":"string"},"resolveComments":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"}},"required":["path","line"]}},"updatedVerdict":{"type":["string","null"],"enum":["approve","requestChanges","comment",null]},"updatedReviewComment":{"type":["string","null"]}},"required":["reply"]}'
         CLAUDE_PLUGIN_DIR: ${{ steps.plugin.outputs.dir }}
         CLAUDE_MCP_CONFIG: ${{ steps.mcp.outputs.path }}
