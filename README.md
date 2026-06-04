@@ -45,6 +45,7 @@ See the [plugin README](./claude-plugins/autopilot/README.md#installation) for s
 - [`auto-label`](./.github/actions/auto-label/README.md) — label PRs with `<scope>/<workspace-member>` labels for the workspace members a diff touches, and prune orphan labels on merge
 - [`repomix-sync`](./.github/actions/repomix-sync/README.md) — sync the `repomix-pack` workflow and `repomix.config.json` from upstream so each consumer commits its own codebase snapshot
 - [`release-sync`](./.github/actions/release-sync/README.md) — sync the release pipeline workflows (`release`, `publish`, `release-automerge`) from upstream so each consumer runs the same release flow
+- [`validate-actions`](./.github/actions/validate-actions/README.md) — lint changed workflow files and composite action inline shell on pull requests
 
 ## Contributing
 
