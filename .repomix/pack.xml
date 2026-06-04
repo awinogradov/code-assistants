@@ -289,6 +289,7 @@ claude-plugins/
       0.3.0.md
       1.0.0.md
       1.1.0.md
+      1.2.0.md
     agents/
       analyze-pr-commits.md
       analyze-staged-changes.md
@@ -25638,7 +25639,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -26104,6 +26105,74 @@ Complete documentation has been added for both the ask:codex and ask:gemini skil
 ### Chores
 
 * update resume example ([e570936](https://github.com/awinogradov/code-assistants/commit/e570936fb39fe34f4186f434966e25bdb3190dd4))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/1.2.0.md">
+## [1.2.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.1.0...autopilot@v1.2.0) (2026-06-04)
+
+## Release Notes
+
+Autopilot plugin now picks recent issues to run, supports GitHub security alerts, and delivers smarter code reviews with full project context.
+
+## ✨ What's New
+
+### Quick issue execution
+The new issue:run skill lets your team browse recent open issues and instantly start autopilot on any of them. Simply pick from the list or type any issue number to get started — no more manual copying of issue URLs.
+
+<details><summary>Related issues</summary>
+
+- [#248: Add an issue:run skill to pick a recent issue and run autopilot on it](https://github.com/awinogradov/code-assistants/issues/248)
+</details>
+
+### Security alert integration
+Autopilot now understands GitHub code-scanning alerts as inputs. Your team can run `plan` or `run` with an alert URL or shorthand like `alert#123` to automatically resolve security issues. Security fixes create appropriately named branches (`security-*`) and PRs tagged with `SECURITY:` for easy tracking.
+
+<details><summary>Related issues</summary>
+
+- [#251: Support GitHub code-scanning alerts as an input type for plan and run skills](https://github.com/awinogradov/code-assistants/issues/251)
+</details>
+
+### Context-aware code reviews
+Code reviews now see the full picture before evaluating changes. Reviews load the same project context that developers use (CLAUDE.md, README, docs, related TODOs) and check prior inline comments to provide accurate follow-ups. The system validates 14 new aspects including task alignment, dead code detection, and platform standards compliance.
+
+<details><summary>Related issues</summary>
+
+- [#233: Improve the code review skill: context parity, inline history, and rule checks](https://github.com/awinogradov/code-assistants/issues/233)
+</details>
+
+### Stable reference formatting
+All generated output now follows a versioned formatting standard ([RFC-0001](https://github.com/awinogradov/code-assistants/blob/main/rfc/0001-reference-formatting.md)) that ensures references render as clickable links instead of plain text. File names appear in backticks, commits link to their SHA, and documentation references include inline summaries rather than fragile section links.
+
+<details><summary>Related issues</summary>
+
+- [#246: Version the reference-formatting standard as a stable RFC](https://github.com/awinogradov/code-assistants/issues/246)
+- [#236: Standardize reference formatting and readability in generated output](https://github.com/awinogradov/code-assistants/issues/236)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #248 | [#255](https://github.com/awinogradov/code-assistants/pull/255) | @awinogradov |
+| #251 | [#256](https://github.com/awinogradov/code-assistants/pull/256) | @awinogradov |
+| #246 | [#249](https://github.com/awinogradov/code-assistants/pull/249) | @awinogradov |
+| #236 | [#237](https://github.com/awinogradov/code-assistants/pull/237) | @awinogradov |
+| #233 | [#234](https://github.com/awinogradov/code-assistants/pull/234) | @awinogradov |
+
+### Features
+
+* **autopilot:** add issue:run skill ([2dcdda1](https://github.com/awinogradov/code-assistants/commit/2dcdda1a634c208f60ead3a19a891b5347227ebe))
+* **autopilot:** inline format rules into skills ([ebc8a89](https://github.com/awinogradov/code-assistants/commit/ebc8a89cc06d62b355e23821b38887fc57094963))
+* **pr-review:** add logging, docs, service checks ([faf2b41](https://github.com/awinogradov/code-assistants/commit/faf2b41036f1b134c6f805e1cb1da0e223dfff5e))
+* **pr-review:** load inline history, add checks ([79daac4](https://github.com/awinogradov/code-assistants/commit/79daac485a20ea33d8ada4355204fc00a1ec49ee))
+* **pr-review:** load related todos for context ([68015b8](https://github.com/awinogradov/code-assistants/commit/68015b8cda6becd3395a43ebcc89c0607daea460))
+* **rfc:** version the reference-formatting standard ([cdd6c04](https://github.com/awinogradov/code-assistants/commit/cdd6c042605c3f28cd4b3299fa61bcec6a4f8c64))
+* support code-scanning-alert input type ([8262a80](https://github.com/awinogradov/code-assistants/commit/8262a80987d4a274b733c31ed387ccb9f97cfaa6))
+
+### Documentation
+
+* correct alert url source and skip list ([3312d8b](https://github.com/awinogradov/code-assistants/commit/3312d8bb550b886d93f5b1a4cb6f00fe4b674f15))
 </file>
 
 <file path="claude-plugins/autopilot/agents/analyze-pr-commits.md">
@@ -34576,6 +34645,71 @@ Write the most helpful, readable output you can: plain, direct prose; every refe
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.2.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.1.0...autopilot@v1.2.0) (2026-06-04)
+
+## Release Notes
+
+Autopilot plugin now picks recent issues to run, supports GitHub security alerts, and delivers smarter code reviews with full project context.
+
+## ✨ What's New
+
+### Quick issue execution
+The new issue:run skill lets your team browse recent open issues and instantly start autopilot on any of them. Simply pick from the list or type any issue number to get started — no more manual copying of issue URLs.
+
+<details><summary>Related issues</summary>
+
+- [#248: Add an issue:run skill to pick a recent issue and run autopilot on it](https://github.com/awinogradov/code-assistants/issues/248)
+</details>
+
+### Security alert integration
+Autopilot now understands GitHub code-scanning alerts as inputs. Your team can run `plan` or `run` with an alert URL or shorthand like `alert#123` to automatically resolve security issues. Security fixes create appropriately named branches (`security-*`) and PRs tagged with `SECURITY:` for easy tracking.
+
+<details><summary>Related issues</summary>
+
+- [#251: Support GitHub code-scanning alerts as an input type for plan and run skills](https://github.com/awinogradov/code-assistants/issues/251)
+</details>
+
+### Context-aware code reviews
+Code reviews now see the full picture before evaluating changes. Reviews load the same project context that developers use (CLAUDE.md, README, docs, related TODOs) and check prior inline comments to provide accurate follow-ups. The system validates 14 new aspects including task alignment, dead code detection, and platform standards compliance.
+
+<details><summary>Related issues</summary>
+
+- [#233: Improve the code review skill: context parity, inline history, and rule checks](https://github.com/awinogradov/code-assistants/issues/233)
+</details>
+
+### Stable reference formatting
+All generated output now follows a versioned formatting standard ([RFC-0001](https://github.com/awinogradov/code-assistants/blob/main/rfc/0001-reference-formatting.md)) that ensures references render as clickable links instead of plain text. File names appear in backticks, commits link to their SHA, and documentation references include inline summaries rather than fragile section links.
+
+<details><summary>Related issues</summary>
+
+- [#246: Version the reference-formatting standard as a stable RFC](https://github.com/awinogradov/code-assistants/issues/246)
+- [#236: Standardize reference formatting and readability in generated output](https://github.com/awinogradov/code-assistants/issues/236)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #248 | [#255](https://github.com/awinogradov/code-assistants/pull/255) | @awinogradov |
+| #251 | [#256](https://github.com/awinogradov/code-assistants/pull/256) | @awinogradov |
+| #246 | [#249](https://github.com/awinogradov/code-assistants/pull/249) | @awinogradov |
+| #236 | [#237](https://github.com/awinogradov/code-assistants/pull/237) | @awinogradov |
+| #233 | [#234](https://github.com/awinogradov/code-assistants/pull/234) | @awinogradov |
+
+### Features
+
+* **autopilot:** add issue:run skill ([2dcdda1](https://github.com/awinogradov/code-assistants/commit/2dcdda1a634c208f60ead3a19a891b5347227ebe))
+* **autopilot:** inline format rules into skills ([ebc8a89](https://github.com/awinogradov/code-assistants/commit/ebc8a89cc06d62b355e23821b38887fc57094963))
+* **pr-review:** add logging, docs, service checks ([faf2b41](https://github.com/awinogradov/code-assistants/commit/faf2b41036f1b134c6f805e1cb1da0e223dfff5e))
+* **pr-review:** load inline history, add checks ([79daac4](https://github.com/awinogradov/code-assistants/commit/79daac485a20ea33d8ada4355204fc00a1ec49ee))
+* **pr-review:** load related todos for context ([68015b8](https://github.com/awinogradov/code-assistants/commit/68015b8cda6becd3395a43ebcc89c0607daea460))
+* **rfc:** version the reference-formatting standard ([cdd6c04](https://github.com/awinogradov/code-assistants/commit/cdd6c042605c3f28cd4b3299fa61bcec6a4f8c64))
+* support code-scanning-alert input type ([8262a80](https://github.com/awinogradov/code-assistants/commit/8262a80987d4a274b733c31ed387ccb9f97cfaa6))
+
+### Documentation
+
+* correct alert url source and skip list ([3312d8b](https://github.com/awinogradov/code-assistants/commit/3312d8bb550b886d93f5b1a4cb6f00fe4b674f15))
 ## [1.1.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.0.0...autopilot@v1.1.0) (2026-06-01)
 
 ## Release Notes
@@ -35056,14 +35190,14 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
   "release": {
     "type": "claude-plugin"
   },
-  "version": "1.1.0"
+  "version": "1.2.0"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.1.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.2.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -35460,7 +35594,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-1.1.0
+1.2.0
 </file>
 
 <file path="docs/agents-field.md">
