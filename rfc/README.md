@@ -10,18 +10,20 @@ A plain doc under `docs/` changes silently and can be restructured at any time, 
 
 Every RFC starts with a YAML frontmatter block:
 
-| Field     | Description                                       |
-| --------- | ------------------------------------------------- |
-| `number`  | RFC number — unique and incrementing (1, 2, 3, …) |
-| `title`   | Short human-readable title                        |
-| `status`  | One of `Draft`, `Accepted`, `Superseded`          |
-| `author`  | GitHub handle of the author                       |
-| `created` | ISO date the RFC was created (`YYYY-MM-DD`)       |
+| Field     | Description                                           |
+| --------- | ----------------------------------------------------- |
+| `number`  | RFC number — unique and incrementing (1, 2, 3, …)     |
+| `version` | Content version — incremented on each in-place change |
+| `title`   | Short human-readable title                            |
+| `status`  | One of `Draft`, `Accepted`, `Superseded`              |
+| `author`  | GitHub handle of the author                           |
+| `created` | ISO date the RFC was created (`YYYY-MM-DD`)           |
+| `updated` | ISO date of the last version bump (`YYYY-MM-DD`)      |
 
 ## Statuses
 
 - **Draft** — proposed and open for discussion; may still change.
-- **Accepted** — ratified and stable. An Accepted RFC is immutable: change it only by issuing a new RFC that supersedes it.
+- **Accepted** — ratified and stable. Change its content only through an explicit `version` bump recorded in the RFC's Changelog; supersede it with a new RFC only when replacing the standard wholesale.
 - **Superseded** — replaced by a later RFC; kept for history. Note the successor in the body.
 
 ## Filenames and IDs
