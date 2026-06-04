@@ -33,17 +33,25 @@ concurrency:
 
 jobs:
   ai-review:
-    # Skip events sent by the bot itself — its own review/inline comments would
-    # otherwise spawn a no-op react-mode run each (the in-action guard skips them
-    # only after the runner spins up). Filtering here keeps the run from starting.
-    # The trailing clause re-runs review when a PR title/body is edited, so a
+    # The bot's own NON-edited events (its review and inline comments) are skipped
+    # here so they don't spawn a no-op react run — the in-action guard would skip
+    # them only after a runner spins up, so filtering at the job `if:` is cheaper.
+    #
+    # The bot's own `edited` events are deliberately NOT skipped: the action writes
+    # a help footer to the PR body (updatePrFooter), which fires `pull_request:
+    # edited` as the bot. Skipping that here produced a *skipped* ai-review check
+    # that overshadowed the real review's verdict. Letting it through lets the
+    # action's ctx step detect the bot sender and no-op every step, so the run
+    # reports success instead of "skipping".
+    #
+    # The last clause re-runs review when a user edits a PR title/body, so a
     # description fix clears a stale CHANGES_REQUESTED verdict without the prior
     # close/reopen workaround (introduced de-facto by #233's alignment checks).
     # Base retargets (changes.base) are skipped — a later push re-covers them.
     if: >-
       (github.event_name != 'issue_comment' || github.event.issue.pull_request)
       && vars.BOT_USERNAME != ''
-      && github.event.sender.login != vars.BOT_USERNAME
+      && (github.event.sender.login != vars.BOT_USERNAME || github.event.action == 'edited')
       && (github.event.action != 'edited' || github.event.changes.title || github.event.changes.body)
     runs-on: ubuntu-latest
     permissions:
