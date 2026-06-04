@@ -25,6 +25,7 @@
     ".github/actions/release-automerge",
     ".github/actions/code-review-action",
     ".github/actions/auto-label",
+    ".github/actions/validate-actions",
     "claude-plugins/*",
     "packages/*"
   ],
