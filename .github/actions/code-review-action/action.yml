@@ -332,10 +332,30 @@ runs:
         echo "bot_in_thread=${BOT_IN_THREAD}" >> "$GITHUB_OUTPUT"
 
         if [[ -n "$EVENT_ISSUE_NUMBER" ]]; then
-          echo "pr_number=${EVENT_ISSUE_NUMBER}" >> "$GITHUB_OUTPUT"
+          REACT_PR_NUMBER="$EVENT_ISSUE_NUMBER"
         else
-          echo "pr_number=${EVENT_PR_NUMBER}" >> "$GITHUB_OUTPUT"
+          REACT_PR_NUMBER="$EVENT_PR_NUMBER"
         fi
+        echo "pr_number=${REACT_PR_NUMBER}" >> "$GITHUB_OUTPUT"
+
+        # Whether the bot is currently blocking this PR (issue #275): reviewDecision
+        # is CHANGES_REQUESTED. The bot is the sole approver and the author cannot
+        # self-approve, so reviewDecision is a faithful, pagination-free proxy for the
+        # bot's own verdict. classifyReaction uses it to arm a verdict re-evaluation
+        # when the author says a blocker is addressed. A failed query degrades to
+        # "not blocking" (today's behaviour); only a genuine gh failure warns, so a
+        # null decision (no reviews yet) stays quiet.
+        if REACT_REVIEW_DECISION=$(gh pr view "$REACT_PR_NUMBER" --json reviewDecision --jq '.reviewDecision // ""' 2>/dev/null); then
+          :
+        else
+          REACT_REVIEW_DECISION=""
+          echo "::warning::gh pr view reviewDecision failed for PR #${REACT_PR_NUMBER}; treating bot as not blocking (issue #275 re-verdict will not arm)"
+        fi
+        BOT_BLOCKING="false"
+        if [[ "$REACT_REVIEW_DECISION" == "CHANGES_REQUESTED" ]]; then
+          BOT_BLOCKING="true"
+        fi
+        echo "bot_blocking=${BOT_BLOCKING}" >> "$GITHUB_OUTPUT"
 
         echo "comment_id=${EFFECTIVE_ID}" >> "$GITHUB_OUTPUT"
         echo "comment_path=${EVENT_COMMENT_PATH}" >> "$GITHUB_OUTPUT"
@@ -501,6 +521,7 @@ runs:
       shell: bash
       env:
         BOT_IN_THREAD: ${{ steps.ctx.outputs.bot_in_thread }}
+        BOT_BLOCKING: ${{ steps.ctx.outputs.bot_blocking }}
         PR_AUTHOR: ${{ github.event.pull_request.user.login || github.event.issue.user.login }}
         COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
         COMMENT_BODY: ${{ steps.ctx.outputs.comment_body }}
