@@ -101,7 +101,7 @@ Some changes don't require an issue (see [Special PR Prefixes](#special-pr-prefi
 <prefix>-<short-description>
 ```
 
-- `prefix` must be lowercase: `hotfix`, `trivial`, `maintenance`, or `proposal`
+- `prefix` must be lowercase: `hotfix`, `trivial`, `maintenance`, `proposal`, or `security`
 - Same rules apply: lowercase, hyphens only, aim for under 60 characters (hard limit: 100)
 
 **Examples:**
@@ -110,6 +110,7 @@ Some changes don't require an issue (see [Special PR Prefixes](#special-pr-prefi
 - ✅ `trivial-fix-typo-readme`
 - ✅ `maintenance-upgrade-node-22`
 - ✅ `proposal-add-vim-keybindings`
+- ✅ `security-tainted-format-string`
 
 ⚠️ Enforced locally by the `pre-push` git hook and in CI by [`deepakputhraya/action-branch-name`](https://github.com/deepakputhraya/action-branch-name). Invalid branch names block PR merge.
 
@@ -339,12 +340,13 @@ docs(auth): add jwt validation documentation
 
 Some changes don't fit the standard business-description format — they are either urgent, too small for an issue, purely infrastructural, or an out-of-the-blue suggestion. Special prefixes bypass PR title and description validation while keeping the history readable.
 
-| Prefix         | When to use                                                                  | Example                               |
-| -------------- | ---------------------------------------------------------------------------- | ------------------------------------- |
-| `HOTFIX:`      | Emergency production fixes                                                   | `HOTFIX: Memory leak in editor`       |
-| `TRIVIAL:`     | Changes not affecting production or CI/CD: typos, docs, comments, formatting | `TRIVIAL: Fix typo in README`         |
-| `MAINTENANCE:` | Infrastructure updates: deps, CI, configs                                    | `MAINTENANCE: Upgrade Node to 22 LTS` |
-| `PROPOSAL:`    | Suggest a change without filing an issue first; discussion happens on the PR | `PROPOSAL: Add Vim keybindings`       |
+| Prefix         | When to use                                                                  | Example                                    |
+| -------------- | ---------------------------------------------------------------------------- | ------------------------------------------ |
+| `HOTFIX:`      | Emergency production fixes                                                   | `HOTFIX: Memory leak in editor`            |
+| `TRIVIAL:`     | Changes not affecting production or CI/CD: typos, docs, comments, formatting | `TRIVIAL: Fix typo in README`              |
+| `MAINTENANCE:` | Infrastructure updates: deps, CI, configs                                    | `MAINTENANCE: Upgrade Node to 22 LTS`      |
+| `PROPOSAL:`    | Suggest a change without filing an issue first; discussion happens on the PR | `PROPOSAL: Add Vim keybindings`            |
+| `SECURITY:`    | Fixes for GitHub code-scanning alerts (close on re-scan, not via `Closes #`) | `SECURITY: Sanitize tainted format string` |
 
 **Rules:**
 
@@ -477,7 +479,7 @@ Only one strategy is used per repository. Reasons:
 
 **Before submitting:**
 
-- [ ] Branch name starts with `issue-<number>-` or one of the special prefixes (`hotfix-`, `trivial-`, `maintenance-`, `proposal-`)
+- [ ] Branch name starts with `issue-<number>-` or one of the special prefixes (`hotfix-`, `trivial-`, `maintenance-`, `proposal-`, `security-`)
 - [ ] PR title is a business-valuable description (no `#<n>:` prefix) or uses a recognized special prefix
 - [ ] PR description links the issue via `Closes #<n>` / `Fixes #<n>` / `Resolves #<n>` (when applicable)
 - [ ] All commits follow Conventional Commits format
