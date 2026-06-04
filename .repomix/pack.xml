@@ -3962,9 +3962,11 @@ export async function hasRecentBotReply(
 import { describe, expect, test } from "bun:test";
 
 import {
+  boundHunkToLine,
   buildReviewComments,
   findHunkForLine,
   renderInlineCommentBody,
+  stripReviewChrome,
 } from "./inlineCommentBody.ts";
 
 const patch = [
@@ -4008,10 +4010,25 @@ describe("renderInlineCommentBody", () => {
     });
     expect(body).toContain("🚧 Bug here");
     expect(body).toContain("<summary>Prompt for AI agents</summary>");
-    expect(body).toContain("<comment>\n🚧 Bug here\n</comment>");
+    expect(body).toContain("<comment>\nBug here\n</comment>");
     expect(body).toContain("<file context>\n@@ -1,3 +1,4 @@");
     expect(body).toContain("src/a.ts, line 2");
     expect(body).not.toContain("```suggestion");
+  });
+
+  test("strips severity emoji and rule link from the embedded prompt copy only", () => {
+    const body = renderInlineCommentBody({
+      comment: {
+        path: "src/a.ts",
+        line: 2,
+        body: "🚧 Off-by-one [CHECK-BUG-003](https://x#CHECK-BUG-003)",
+      },
+      hunk,
+    });
+    // Human-facing finding stays verbatim...
+    expect(body).toContain("🚧 Off-by-one [CHECK-BUG-003](https://x#CHECK-BUG-003)");
+    // ...while the embedded prompt copy is chrome-free.
+    expect(body).toContain("<comment>\nOff-by-one\n</comment>");
   });
 
   test("renders a suggestion fence with the replacement verbatim (indentation preserved)", () => {
@@ -4073,6 +4090,79 @@ describe("buildReviewComments", () => {
     expect(comment?.body).not.toContain("<file context>");
   });
 });
+
+describe("boundHunkToLine", () => {
+  // A 30-new-line hunk (lines 1..30), all added, plus the header.
+  const bigHunk = [
+    "@@ -0,0 +1,30 @@",
+    ...Array.from({ length: 30 }, (_, i) => `+line${i + 1}`),
+  ].join("\n");
+
+  test("narrows a large hunk to a window centered on the finding", () => {
+    const bounded = boundHunkToLine(bigHunk, 15);
+    const bodyLines = bounded.split("\n").slice(1); // drop the kept @@ header
+    // radius 6 each side → at most 2*6+1 = 13 body lines.
+    expect(bodyLines.length).toBeLessThanOrEqual(13);
+    expect(bounded).toContain("+line15");
+    expect(bounded).toContain("@@ -0,0 +1,30 @@"); // header kept verbatim
+    expect(bounded).not.toContain("+line1\n"); // far line dropped
+    expect(bounded).not.toContain("+line30");
+  });
+
+  test("includes a line exactly at the radius bound and excludes one past it", () => {
+    const bounded = boundHunkToLine(bigHunk, 15);
+    expect(bounded).toContain("+line9"); // 15 - 6, inclusive
+    expect(bounded).toContain("+line21"); // 15 + 6, inclusive
+    expect(bounded).not.toContain("+line8"); // 15 - 7, excluded
+    expect(bounded).not.toContain("+line22"); // 15 + 7, excluded
+  });
+
+  test("keeps removed lines that fall inside the window", () => {
+    const hunk = ["@@ -1,3 +1,3 @@", " ctx1", "-old2", "+new2", " ctx3"].join("\n");
+    expect(boundHunkToLine(hunk, 2)).toContain("-old2");
+  });
+
+  test("passes a hunk smaller than the window through unchanged", () => {
+    const small = "@@ -1,3 +1,4 @@\n context1\n+added2";
+    expect(boundHunkToLine(small, 2)).toBe(small);
+  });
+
+  test("passes a hunk with an unparseable header through unchanged", () => {
+    const malformed = "no header here\n+added";
+    expect(boundHunkToLine(malformed, 2)).toBe(malformed);
+  });
+});
+
+describe("stripReviewChrome", () => {
+  test("strips a leading severity emoji and a trailing single rule link", () => {
+    expect(stripReviewChrome("🚧 Off-by-one [CHECK-BUG-003](https://x#CHECK-BUG-003)")).toBe(
+      "Off-by-one",
+    );
+  });
+
+  test("strips a trailing merged rule link", () => {
+    expect(stripReviewChrome("🙋‍♂️ foo [[CHECK-A-1](u), [CHECK-B-2](u)]")).toBe("foo");
+  });
+
+  test("leaves a body with no chrome unchanged", () => {
+    expect(stripReviewChrome("plain finding text")).toBe("plain finding text");
+  });
+
+  test("preserves a mid-sentence rule reference and inline emoji", () => {
+    expect(stripReviewChrome("mirror the guard in [CHECK-PR-001](u) before the 💡 branch")).toBe(
+      "mirror the guard in [CHECK-PR-001](u) before the 💡 branch",
+    );
+  });
+
+  test("fully removes the 🙋‍♂️ ZWJ sequence", () => {
+    // 🙋 + ZWJ (U+200D) + ♂ (U+2642) + VS16 (U+FE0F)
+    const suggestion = "\u{1F64B}\u{200D}\u{2642}\u{FE0F} tidy this up";
+    const stripped = stripReviewChrome(suggestion);
+    expect(stripped).toBe("tidy this up");
+    expect(stripped).not.toContain("‍");
+    expect(stripped).not.toContain("️");
+  });
+});
 </file>
 
 <file path=".github/actions/code-review-action/src/reviewOutput/inlineCommentBody.ts">
@@ -4080,7 +4170,8 @@ describe("buildReviewComments", () => {
  * Render an inline review finding into the comment body and Octokit payload the
  * action posts: the finding prose, an optional one-click GitHub `suggestion`
  * block (the model's verbatim fix), and a collapsible "Prompt for AI agents"
- * block carrying the finding plus the surrounding diff hunk as `<file context>`.
+ * block carrying a chrome-free copy of the finding plus a bounded window of the
+ * surrounding diff as `<file context>` (the human-facing finding stays verbatim).
  *
  * Pure — no Octokit, no env, no I/O. `buildReviewComments` shapes the validated
  * comments into the exact `comments[]` array for `octokit.rest.pulls.createReview`,
@@ -4101,6 +4192,20 @@ type ReviewComment = NonNullable<
 
 /** Unified-diff hunk header, anchored per line: captures the new-file start and count. */
 const hunkHeaderRegex = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
+
+/** New-file context lines kept on each side of the finding in the embedded prompt hunk. */
+const agentPromptContextRadius = 6;
+
+/** Leading severity glyph the model prefixes to a finding: blocker / suggestion / nitpick. */
+const leadingSeverityEmoji = /^(?:🚧|🙋‍♂️|💡)\s*/;
+
+/**
+ * Trailing rule reference the model appends to a finding — a single
+ * `[CHECK-…](url)` link or the merged `[[CHECK-…](url), …]` form. Anchored to the
+ * end so a mid-sentence `[CHECK-…]` mention is left untouched.
+ */
+const trailingRuleLink =
+  /\s*(?:\[(?:\[CHECK-[A-Z]+-\d+\]\([^)]*\)(?:,\s*)?)+\]|\[CHECK-[A-Z]+-\d+\]\([^)]*\))$/;
 
 /**
  * Return the unified-diff hunk text (header through the lines before the next
@@ -4126,6 +4231,45 @@ export function findHunkForLine(patch: string, line: number): string | undefined
   return undefined;
 }
 
+/**
+ * Narrow a unified-diff hunk to a window of {@link agentPromptContextRadius}
+ * new-file lines on each side of `line`, so the embedded prompt context stays
+ * focused instead of dumping a whole new/large file's hunk. The `@@` header is
+ * kept verbatim (orientation only — its counts are not recomputed). A hunk smaller
+ * than the window, or one whose header lacks a parseable new-file start, passes
+ * through unchanged.
+ */
+export function boundHunkToLine(hunk: string, line: number): string {
+  const [header, ...body] = hunk.split("\n");
+  const start = Number(header?.match(/\+(\d+)/)?.[1]);
+  if (Number.isNaN(start)) {
+    return hunk;
+  }
+
+  let newLine = start;
+  const kept: string[] = [];
+  for (const text of body) {
+    if (Math.abs(newLine - line) <= agentPromptContextRadius) {
+      kept.push(text);
+    }
+    if (!text.startsWith("-")) {
+      newLine += 1;
+    }
+  }
+
+  return kept.length === 0 ? hunk : [header, ...kept].join("\n");
+}
+
+/**
+ * Strip the human-facing review chrome from a finding so the embedded prompt copy
+ * reads as clean instruction text: drop the leading severity emoji and the trailing
+ * `[CHECK-…](url)` rule link (single or merged). Only these anchored ends are
+ * removed — inline code and a mid-sentence `[CHECK-…]` mention are preserved.
+ */
+export function stripReviewChrome(body: string): string {
+  return body.replace(leadingSeverityEmoji, "").replace(trailingRuleLink, "").trim();
+}
+
 /** Build the collapsible "Prompt for AI agents" block (cubic shape) for one finding. */
 function buildAgentPrompt(comment: InlineComment, hunk: string | undefined): string {
   const location =
@@ -4137,11 +4281,11 @@ function buildAgentPrompt(comment: InlineComment, hunk: string | undefined): str
     `Check if this issue is valid — if so, understand the root cause and fix it. At ${comment.path}, ${location}:`,
     "",
     "<comment>",
-    comment.body,
+    stripReviewChrome(comment.body),
     "</comment>",
   ];
   if (hunk !== undefined) {
-    prompt.push("", "<file context>", hunk, "</file context>");
+    prompt.push("", "<file context>", boundHunkToLine(hunk, comment.line), "</file context>");
   }
 
   return [
@@ -35890,7 +36034,7 @@ The pr:review skill returns an empty `reviewComment` for an approval with no fin
 Two affordances make a review directly actionable — both modelled on the third-party cubic reviewer:
 
 - A **GitHub `suggestion` block** the author applies with one click ("Commit suggestion"), for single-line and multi-line fixes.
-- A collapsible **"Prompt for AI agents"** block: a ready-to-paste prompt carrying the instruction, `path:line`, the finding, and the surrounding diff hunk as `<file context>`.
+- A collapsible **"Prompt for AI agents"** block: a ready-to-paste prompt carrying the instruction, `path:line`, a chrome-free copy of the finding, and a bounded window of the surrounding diff as `<file context>`.
 
 The model decides the fix; the action renders and posts it. Both land through the same `octokit.rest.pulls.createReview` call the action already makes.
 
@@ -35915,8 +36059,8 @@ The `pr:review` skill emits two new optional per-comment fields — `suggestion`
               │      body
               │      + GitHub suggestion block        (if suggestion set)
               │      + <details> Prompt for AI agents:
-              │           <comment> finding </comment>
-              │           <file context> hunk </file context>
+              │           <comment> cleaned finding </comment>
+              │           <file context> bounded hunk </file context>
               │
               ├──  Octokit payload per comment:
               │      { path, line, body, side: RIGHT,
@@ -35935,43 +36079,58 @@ The `pr:review` skill emits two new optional per-comment fields — `suggestion`
 
 - ① The skill emits each finding with optional `startLine` and `suggestion`; it crosses the action boundary as the `structured_output` JSON, validated by `inlineCommentSchema`.
 - ② Per comment, the action looks up the file's patch and extracts the hunk covering the line — used for `<file context>` and (via `isValidComment`) to confirm the whole range is in-diff.
-- ③ The action renders the final body: original finding, then the suggestion fence (when present), then the cubic-shaped "Prompt for AI agents" `<details>`.
+- ③ The action renders the final body: original finding, then the suggestion fence (when present), then the cubic-shaped "Prompt for AI agents" `<details>`. The embedded prompt copy is cleaned (leading severity emoji and trailing rule link removed) and its `<file context>` is bounded to a window around the finding line — only this copy is transformed; the original finding above stays verbatim.
 - ④ Posted through the existing `createReview` call with `side`/`start_line`/`start_side` added for multi-line; GitHub renders the suggestion button and the collapsible prompt.
 
 ## Rendered comment
 
-A finding with a two-line `suggestion` over `startLine: 7, line: 8` renders like this (the action wraps the model's raw replacement in the ` ```suggestion ` fence and appends the prompt):
+A finding with a two-line `suggestion` over `startLine: 7, line: 8`, inside a freshly added 20-line file, renders like this (the action wraps the model's raw replacement in the ` ```suggestion ` fence and appends the prompt):
 
 ````text
 🚧 Off-by-one in the running sum — `items[n]` reads past the array [CHECK-BUG-003](…)
 
 ```suggestion
     for i in range(n):
-        total += items[i]
+        running += items[i]
 ```
 
 <details>
 <summary>Prompt for AI agents</summary>
 
 ```text
-Check if this issue is valid — if so, understand the root cause and fix it. At src/calc.py, lines 7 to 8:
+Check if this issue is valid — if so, understand the root cause and fix it. At src/totals.py, lines 7 to 8:
 
 <comment>
-🚧 Off-by-one in the running sum — `items[n]` reads past the array [CHECK-BUG-003](…)
+Off-by-one in the running sum — `items[n]` reads past the array
 </comment>
 
 <file context>
-@@ -5,4 +7,2 @@ def total(items, n):
--    for i in range(n + 1):
-+    for i in range(n):
-         total += items[i]
+@@ -0,0 +1,20 @@ def total(items, n):
++    """Sum the first n items."""
++    running = 0
++    if n < 0:
++        raise ValueError("bad n")
++    n = min(n, len(items))
++    for i in range(n + 1):
++        running += items[i]
++    return running
++
++def mean(items, n):
++    if n == 0:
++        return 0
++    return total(items, n) / n
 </file context>
 ```
 
 </details>
 ````
 
-The suggestion replaces the anchored line(s) verbatim, so the model must reproduce the original indentation — a stray space would silently reindent the file on apply. The `pr:review` skill enforces this; `inlineCommentBody.test.ts` asserts the rendered fence preserves it.
+Two transforms keep the embedded prompt prompt-shaped rather than a verbose data dump (a new or large file previously dumped in full — the problem from PR #253):
+
+- **Bounded context** — `<file context>` is trimmed to `agentPromptContextRadius` (6) new-file lines on each side of the finding line, a ~13-line window (fewer near a file edge). The full hunk here is the whole 20-line file; the window drops line 1 and lines 15–20. The `@@` header is kept verbatim, so its `+1,20` still describes the full hunk, not the window. A hunk already smaller than the window is left untouched.
+- **Chrome stripped** — the embedded `<comment>` drops the leading severity emoji and the trailing `[CHECK-BUG-003](…)` rule link, leaving clean instruction text; inline-code backticks (`` `items[n]` ``) are preserved. Only this embedded copy is cleaned — the human-facing finding above the suggestion keeps its emoji and rule link verbatim.
+
+The suggestion replaces the anchored line(s) verbatim, so the model must reproduce the original indentation — a stray space would silently reindent the file on apply. The `pr:review` skill enforces this; `inlineCommentBody.test.ts` asserts the rendered fence preserves it, the bounded window, and the chrome-free embedded finding.
 
 ## Multi-line suggestions
 
