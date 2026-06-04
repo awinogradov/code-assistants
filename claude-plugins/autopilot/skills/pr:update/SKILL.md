@@ -114,8 +114,8 @@ AskUserQuestion({
 1. Get current branch name with `git branch --show-current`
 2. Validate branch name follows convention:
    - Standard: `issue-<number>-<short-description>` (e.g., `issue-123-add-feature`)
-   - Special prefix: `<hotfix|trivial|maintenance|proposal>-<short-description>` (e.g., `hotfix-memory-leak-editor`)
-3. Extract the issue number from `^issue-([0-9]+)-` for use in the `**Issues:**` section as `Closes #<n>`. For special prefix branches there is no issue number — the PR title uses the uppercased prefix (e.g., `HOTFIX:`).
+   - Special prefix: `<hotfix|trivial|maintenance|proposal|security>-<short-description>` (e.g., `hotfix-memory-leak-editor`, `security-tainted-format-string`)
+3. Extract the issue number from `^issue-([0-9]+)-` for use in the `**Issues:**` section as `Closes #<n>`. For special prefix branches there is no issue number — the PR title uses the uppercased prefix (e.g., `HOTFIX:`, `SECURITY:`). For a `security-` branch, emit NO `Closes #` — keep the code-scanning alert reference (see the `**Alert:**` rule below).
 
 Invoke the `analyze-pr-commits` sub-agent to gather commit history, diff summary, issue context, and change significance:
 
@@ -155,7 +155,7 @@ Tool parameters:
 ### PR Title
 
 **Standard format:** `<Business-valuable description>`
-**Special prefix format:** `<PREFIX>: <Business-valuable description>` where `<PREFIX>` is one of `HOTFIX`, `TRIVIAL`, `MAINTENANCE`, `PROPOSAL`
+**Special prefix format:** `<PREFIX>: <Business-valuable description>` where `<PREFIX>` is one of `HOTFIX`, `TRIVIAL`, `MAINTENANCE`, `PROPOSAL`, `SECURITY`
 
 **Rules:**
 
@@ -231,7 +231,8 @@ Content rules:
 - The section MUST be present when any issue-linking magic words exist
 - DO NOT place magic words (e.g., `Closes #N`, `Related to #N`) as bare text in the description — they MUST be inside the `**Issues:**` section
 - Issue links MUST use magic words — NEVER use markdown links like `[#N](url)`
-- The section is omitted ONLY for special prefix branches (HOTFIX / TRIVIAL / MAINTENANCE / PROPOSAL) when no issue numbers are provided
+- The section is omitted ONLY for special prefix branches (HOTFIX / TRIVIAL / MAINTENANCE / PROPOSAL / SECURITY) when no issue numbers are provided
+- For a `security-` branch (code-scanning alert fix), the `**Issues:**` section is replaced by an `**Alert:**` section recording the alert URL (a `---` separator, then `**Alert:**` on its own line, then the alert URL). Emit NO `Closes #`: code-scanning alerts close on the next scan, not via PR magic words. The `**Alert:**` section occupies the last slot, where `**Issues:**` would go.
 
 **Preserving existing links:** Parse the old PR body's `**Issues:**` section to preserve existing magic-word links (`Closes`, `Fixes`, `Resolves`, `Part of`, `Related to`) that were set during PR creation or previous updates.
 

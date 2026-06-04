@@ -95,16 +95,39 @@ $ARGUMENTS
 
 ### Codebase Context and Issue Resolution (MANDATORY - DO FIRST)
 
-Detect the input type from the arguments:
+Detect the input type from the arguments. Match **top-to-bottom and stop at the first hit** — the order is load-bearing: a code-scanning alert URL contains `github.com`, so the alert row MUST be checked before the `github.com` issue-URL row or the alert misroutes to `gh issue view` and fetches an unrelated issue #{n}.
 
-| Pattern               | Type              |
-| --------------------- | ----------------- |
-| Number only (`123`)   | GitHub issue      |
-| `#` + number (`#123`) | GitHub issue      |
-| Contains `github.com` | GitHub issue URL  |
-| Anything else         | Plain description |
+| Pattern                                                                | Type                |
+| ---------------------------------------------------------------------- | ------------------- |
+| `…/security/code-scanning/{n}` URL, or `alert#{n}` / `alert {n}` token | Code-scanning alert |
+| Number only (`123`)                                                    | GitHub issue        |
+| `#` + number (`#123`)                                                  | GitHub issue        |
+| Contains `github.com`                                                  | GitHub issue URL    |
+| Anything else                                                          | Plain description   |
+
+A **bare number stays a GitHub issue** — alerts require the alert URL or the explicit `alert#{n}` / `alert {n}` token, so there is zero collision with the issue-number rows.
 
 Launch context-gathering calls **in parallel**. The number of parallel calls depends on input type:
+
+**If input type is `code-scanning-alert`** — launch 2 calls in parallel:
+
+```
+Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
+  Check whether `.repomix/pack.xml` exists at the repository root.
+  - If it exists, call `mcp__repomix__attach_packed_output` with:
+    - `path`: [repository root absolute path]/.repomix/pack.xml
+  - If it is absent (or the attach fails), fall back to `mcp__repomix__pack_codebase` with:
+    - `directory`: [repository root absolute path]
+    - `compress`: true
+
+Agent (resolve-alert-context):
+  Use the Agent tool with:
+  - `subagent_type`: "autopilot:resolve-alert-context"
+  - `prompt`: "Fetch alert context. Alert number: [n]. Repository: [owner/repo]."
+  - `description`: "Resolve alert context"
+```
+
+If `resolve-alert-context` returns `state: "unresolved"` with a non-null `resolveError`, surface the error and STOP — do not fall through to the issue path or proceed against a misfetched target.
 
 **If input type is `github-issue`** — launch 3 calls in parallel:
 
@@ -142,7 +165,11 @@ Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
     - `compress`: true
 ```
 
-After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response — the stack pipeline's Context Gathering phase is the single place that reads the codebase from it. Phase 0 does NOT grep or read code: render the issue context below from the resolved issue JSON and the TODO results alone. Defer every codebase read to Context Gathering.
+After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response — the stack pipeline's Context Gathering phase is the single place that reads the codebase from it. Phase 0 does NOT grep or read code: render the issue/alert context below from the resolved JSON (and, for issues, the TODO results) alone. Defer every codebase read to Context Gathering.
+
+### Alert Context Output (code-scanning-alert input)
+
+For a `code-scanning-alert` input, render the context from the `resolve-alert-context` JSON instead of the issue block — `source`, `ruleId`, `severity`, `state`, `file:line`, and `message`. There is no TODO search and no assignee. The Steelmanned Intent derives from the alert rule and message. Everything downstream keys off the `code-scanning-alert` type: the branch is `security-<slug>` (NOT `issue-<n>-…`), the PR uses a `SECURITY:` title that records the alert reference (`htmlUrl`) and emits **no** `Closes #`, and the verify step polls alert state via `gh api repos/{owner}/{repo}/code-scanning/alerts/{n} --jq .state` (expecting `fixed` after merge + the next scan).
 
 ### Issue Context Output
 
@@ -268,6 +295,16 @@ Use this body for the `## Pre-Implementation` section:
 Invoke `Skill(autopilot:branch-create)` with arguments `<issue-number> --autopilot` (e.g., `42 --autopilot` for `#42`). The branch-create skill fetches the issue, generates an `issue-<number>-<slug>` branch name, and creates the branch directly without a confirmation prompt (the `--autopilot` flag suppresses Phase 5). Do NOT present a Hotfix/Trivial/Maintenance prefix prompt — issue inputs always use the `issue-<number>-<slug>` convention so the PR can link back via `Closes #<number>`. Conflict resolution still surfaces if the branch already exists.
 ```
 
+##### Input type is `code-scanning-alert`
+
+Use this body for the `## Pre-Implementation` section:
+
+```
+## Pre-Implementation
+
+Invoke `Skill(autopilot:branch-create)` with arguments `--security "<slug>" --autopilot`, where `<slug>` paraphrases the resolved alert's rule/file (e.g., `tainted-format-string`). The branch-create skill creates a `security-<slug>` branch directly (the `--autopilot` flag suppresses Phase 5). The alert is NOT a GitHub issue, so the `issue-<number>-<slug>` form does not apply and the PR emits no `Closes #` — it records the alert reference instead. Conflict resolution still surfaces if the branch already exists.
+```
+
 ##### Input type is `plain description`
 
 Use this body for the `## Pre-Implementation` section:
@@ -326,7 +363,7 @@ Output the PR URL after creation.
 
 3. **Format check** — After creating or updating the PR, validate its format:
    - Run `gh pr view --json title,body`
-   - Verify the body contains `**Issues:**` as a section heading (skip for special prefix branches: hotfix/trivial/maintenance)
+   - Verify the body contains `**Issues:**` as a section heading (skip for special prefix branches: hotfix/trivial/maintenance/security). For a `security-*` branch, instead verify the body contains an `**Alert:**` reference (the code-scanning alert URL) and NO `Closes #` — alerts close on re-scan, not via PR magic words.
    - Verify the body contains at least one `---` separator on its own line
    - Verify section ordering: `**Issues:**` MUST appear AFTER the last `---` separator (it must be the final section, not the first)
    - If `**Release notes:**` is present, verify it appears BEFORE `**Issues:**` and AFTER the description text

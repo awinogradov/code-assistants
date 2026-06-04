@@ -90,16 +90,39 @@ $ARGUMENTS
 
 ### Codebase Context and Issue Resolution (MANDATORY - DO FIRST)
 
-Detect the input type from the arguments:
+Detect the input type from the arguments. Match **top-to-bottom and stop at the first hit** — the order is load-bearing: a code-scanning alert URL contains `github.com`, so the alert row MUST be checked before the `github.com` issue-URL row or the alert misroutes to `gh issue view` and fetches an unrelated issue #{n}.
 
-| Pattern               | Type              |
-| --------------------- | ----------------- |
-| Number only (`123`)   | GitHub issue      |
-| `#` + number (`#123`) | GitHub issue      |
-| Contains `github.com` | GitHub issue URL  |
-| Anything else         | Plain description |
+| Pattern                                                                | Type                |
+| ---------------------------------------------------------------------- | ------------------- |
+| `…/security/code-scanning/{n}` URL, or `alert#{n}` / `alert {n}` token | Code-scanning alert |
+| Number only (`123`)                                                    | GitHub issue        |
+| `#` + number (`#123`)                                                  | GitHub issue        |
+| Contains `github.com`                                                  | GitHub issue URL    |
+| Anything else                                                          | Plain description   |
+
+A **bare number stays a GitHub issue** — alerts require the alert URL or the explicit `alert#{n}` / `alert {n}` token, so there is zero collision with the issue-number rows.
 
 Launch context-gathering calls **in parallel**. The number of parallel calls depends on input type:
+
+**If input type is `code-scanning-alert`** — launch 2 calls in parallel:
+
+```
+Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
+  Check whether `.repomix/pack.xml` exists at the repository root.
+  - If it exists, call `mcp__repomix__attach_packed_output` with:
+    - `path`: [repository root absolute path]/.repomix/pack.xml
+  - If it is absent (or the attach fails), fall back to `mcp__repomix__pack_codebase` with:
+    - `directory`: [repository root absolute path]
+    - `compress`: true
+
+Agent (resolve-alert-context):
+  Use the Agent tool with:
+  - `subagent_type`: "autopilot:resolve-alert-context"
+  - `prompt`: "Fetch alert context. Alert number: [n]. Repository: [owner/repo]."
+  - `description`: "Resolve alert context"
+```
+
+If `resolve-alert-context` returns `state: "unresolved"` with a non-null `resolveError`, surface the error and STOP — do not fall through to the issue path or proceed against a misfetched target.
 
 **If input type is `github-issue`** — launch 3 calls in parallel:
 
@@ -137,7 +160,15 @@ Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
     - `compress`: true
 ```
 
-After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response — Phase 1 (Context Gathering) is the single phase that reads the codebase from it. Phase 0 does NOT grep or read code: build the issue context, Steelmanned Intent, and Assumptions below from the resolved issue JSON (title, body, comments) and the TODO results alone. Defer every codebase read to Phase 1.
+After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response — Phase 1 (Context Gathering) is the single phase that reads the codebase from it. Phase 0 does NOT grep or read code: build the issue/alert context, Steelmanned Intent, and Assumptions below from the resolved JSON (issue title/body/comments, or alert rule/message) alone. Defer every codebase read to Phase 1.
+
+### Alert Context Output (code-scanning-alert input)
+
+For a `code-scanning-alert` input, render the context from the `resolve-alert-context` JSON instead of the issue block — `source`, `ruleId`, `severity`, `state`, `file:line`, and `message`. There is no TODO search and no assignee. Derive the **Steelmanned Intent** from the alert rule and message (what fixing this alert means), and key everything downstream off the `code-scanning-alert` type:
+
+- **Branch (Phase 2)** — a `security-<slug>` branch (NOT `issue-<n>-…`); the slug paraphrases the rule/file (e.g. `security-tainted-format-string`).
+- **PR** — a `SECURITY:` title; the body records the alert reference (`htmlUrl`) and emits **no** `Closes #` (alerts are not closed by PR magic words).
+- **Verify** — the plan's Post-Implementation verify step polls alert state with `gh api repos/{owner}/{repo}/code-scanning/alerts/{n} --jq .state`, expecting `fixed` after merge + the next CodeQL scan.
 
 ### Issue Context Output
 
@@ -159,7 +190,7 @@ Format:
 [one-sentence restatement of what success looks like, in the user's strongest framing]
 ```
 
-Derive from: the resolved issue title + body (for `github-issue` input), or the task description (for `plain description` input). Do not invent scope the user did not request.
+Derive from: the resolved issue title + body (for `github-issue` input), the alert rule + message (for `code-scanning-alert` input), or the task description (for `plain description` input). Do not invent scope the user did not request.
 
 ### Assumptions & Open Questions
 
@@ -352,6 +383,16 @@ Use this body for the `## Pre-Implementation` section:
 ## Pre-Implementation
 
 Invoke `Skill(autopilot:branch-create)` with the resolved issue number (e.g., `42` for `#42`). The branch-create skill fetches the issue, generates an `issue-<number>-<slug>` branch name, and prompts the user to confirm before creation. Do NOT present a Hotfix/Trivial/Maintenance prefix prompt — issue inputs always use the `issue-<number>-<slug>` convention so the PR can link back via `Closes #<number>`.
+```
+
+#### Input type is `code-scanning-alert`
+
+Use this body for the `## Pre-Implementation` section:
+
+```
+## Pre-Implementation
+
+Invoke `Skill(autopilot:branch-create)` with `--security "<slug>"`, where `<slug>` paraphrases the resolved alert's rule/file (e.g., `tainted-format-string`). The branch-create skill creates a `security-<slug>` branch (the alert is NOT a GitHub issue, so the `issue-<number>-<slug>` form does not apply and no `Closes #` is emitted). The branch name MUST be approved by the user via AskUserQuestion before creation — do not create the branch directly with git commands.
 ```
 
 #### Input type is `plain description`

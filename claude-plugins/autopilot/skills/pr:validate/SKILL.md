@@ -55,6 +55,7 @@ These prefixes are valid alternatives to a plain business description:
 - `TRIVIAL:` — Changes not affecting production: typos, docs, comments, formatting
 - `MAINTENANCE:` — Infrastructure updates: deps, CI, configs
 - `PROPOSAL:` — Suggest a change without filing an issue first; discussion happens on the PR
+- `SECURITY:` — Fixes for GitHub code-scanning alerts (alerts close on re-scan, not via PR magic words; no `Closes #`)
 
 Special prefix rules:
 
@@ -97,7 +98,7 @@ issue-<number>-<short-description>
 <prefix>-<short-description>
 ```
 
-- `prefix` must be one of: `hotfix`, `trivial`, `maintenance`, `proposal` (all lowercase)
+- `prefix` must be one of: `hotfix`, `trivial`, `maintenance`, `proposal`, `security` (all lowercase)
 - `short-description` is required, lowercase, hyphens only (no underscores)
 - Aim for under 60 characters; must be under 100
 
@@ -121,6 +122,7 @@ release-<version>
 - `trivial-fix-typo-readme`
 - `maintenance-upgrade-node-22`
 - `proposal-add-vim-keybindings`
+- `security-tainted-format-string`
 - `release-1.2.0`
 
 **Invalid branch examples:**
@@ -151,6 +153,7 @@ If BRANCH_NAME is empty, skip branch name validation entirely (Dependabot and si
 - `TRIVIAL: Fix typo in README`
 - `MAINTENANCE: Upgrade Node to 22 LTS`
 - `PROPOSAL: Add Vim keybindings`
+- `SECURITY: Sanitize tainted format string in runClaude`
 - `Release 1.2.0`
 - `Release Symbiot Editor 1.2.0`
 
@@ -169,7 +172,7 @@ If BRANCH_NAME is empty, skip branch name validation entirely (Dependabot and si
 
 ## GitHub Issue Verification
 
-For standard branch names (skip for HOTFIX/TRIVIAL/MAINTENANCE/PROPOSAL prefixes and Release branches), perform these additional checks:
+For standard branch names (skip for HOTFIX/TRIVIAL/MAINTENANCE/PROPOSAL/SECURITY prefixes and Release branches), perform these additional checks:
 
 1. **Extract the issue number** from the branch name (e.g., `123` from `issue-123-add-password-reset`).
 

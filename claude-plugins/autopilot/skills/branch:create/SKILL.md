@@ -1,7 +1,7 @@
 ---
 name: branch:create
 description: Create and checkout a git branch following repository naming conventions with GitHub issue integration. Use when creating branches, or when invoked from other skills.
-argument-hint: <ISSUE-NUMBER> [description] [--trivial | --hotfix | --maintenance | --proposal] [--autopilot]
+argument-hint: <ISSUE-NUMBER> [description] [--trivial | --hotfix | --maintenance | --proposal | --security] [--autopilot]
 allowed-tools:
   - Bash(git *)
   - Read
@@ -12,12 +12,12 @@ allowed-tools:
 
 # Create Branch
 
-Create a git branch following the repository's naming conventions with GitHub issue integration. Supports standard issue branches (`issue-<number>-<slug>`) and special prefix branches (hotfix, trivial, maintenance, proposal).
+Create a git branch following the repository's naming conventions with GitHub issue integration. Supports standard issue branches (`issue-<number>-<slug>`) and special prefix branches (hotfix, trivial, maintenance, proposal, security).
 
 ## When to Use
 
 - When creating a new branch from a GitHub issue
-- When creating hotfix, trivial, maintenance, or proposal branches
+- When creating hotfix, trivial, maintenance, proposal, or security branches
 - When invoked from `/autopilot:plan` for automatic branch creation
 - When invoked from other skills
 
@@ -29,7 +29,7 @@ Expected forms:
 
 - `<ISSUE-NUMBER>` — GitHub issue number (e.g., `123` or `#123`). Used to fetch the issue and to build the branch name `issue-<number>-<slug>`.
 - `<ISSUE-NUMBER> "<description>"` — issue number plus custom branch slug description
-- `--hotfix "<description>"` / `--trivial "<description>"` / `--maintenance "<description>"` / `--proposal "<description>"` — special prefix branches without a GitHub issue
+- `--hotfix "<description>"` / `--trivial "<description>"` / `--maintenance "<description>"` / `--proposal "<description>"` / `--security "<description>"` — special prefix branches without a GitHub issue (use `--security` for code-scanning alert fixes → `security-<slug>`)
 - `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips the Phase 5 confirmation prompt and creates the branch directly with the auto-generated name. Conflict resolution (Phase 4) and validation errors still surface.
 
 ## Input resolution
@@ -38,7 +38,7 @@ Arguments are optional. When `$ARGUMENTS` is empty OR a field is missing, resolv
 
 - **Issue number** — `$ARGUMENTS` → parse current branch name for `^issue-([0-9]+)` → prompt user only if none found and no special prefix flag is present.
 - **Description** — `$ARGUMENTS` → generate from GitHub issue title via Phase 3 rules → no user prompt (auto-generate always succeeds).
-- **Special prefix flags** (`--hotfix` / `--trivial` / `--maintenance` / `--proposal`) — `$ARGUMENTS` only. Never inferred. Default: none.
+- **Special prefix flags** (`--hotfix` / `--trivial` / `--maintenance` / `--proposal` / `--security`) — `$ARGUMENTS` only. Never inferred. Default: none.
 - **`--autopilot`** — `$ARGUMENTS` only. Never inferred. Default: `false` (interactive mode).
 - **Repository conventions** — read `CONTRIBUTING.md` directly from the repository root.
 
@@ -50,7 +50,7 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
 
 1. **Parse `$ARGUMENTS`** (shell-quoted positional tokens):
    - Check for `--autopilot`: if present, strip it from the arguments and set `autopilotMode = true`. Otherwise `autopilotMode = false`.
-   - Check for special prefix flags: `--trivial`, `--hotfix`, `--maintenance`, `--proposal`
+   - Check for special prefix flags: `--trivial`, `--hotfix`, `--maintenance`, `--proposal`, `--security`
    - If flag found: extract description from remaining arguments
    - If no flag: extract first argument as issue number, optional description
    - If `$ARGUMENTS` is empty, fall back to Input resolution (see above).
@@ -63,11 +63,11 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
 
 3. **If no flag, validate as issue number:**
    - Accept patterns: `^#?[0-9]+$` (strip a leading `#` if present)
-   - If invalid: `Invalid issue number. Expected: a positive integer (e.g., 123 or #123) or use --trivial, --hotfix, --maintenance, --proposal`
+   - If invalid: `Invalid issue number. Expected: a positive integer (e.g., 123 or #123) or use --trivial, --hotfix, --maintenance, --proposal, --security`
 
 ## Phase 2: Fetch GitHub Issue
 
-**Skip this phase entirely for special prefix flag branches (--hotfix, --trivial, --maintenance, --proposal).**
+**Skip this phase entirely for special prefix flag branches (--hotfix, --trivial, --maintenance, --proposal, --security).**
 
 1. **Determine the repository** and bind it to `REPO` so every `gh` call in this phase targets the same repo (important in worktrees and multi-remote checkouts):
 
@@ -148,7 +148,7 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
 1. Normalize description to lowercase kebab-case
 2. Remove special characters (keep only `a-z0-9-`)
 3. Construct branch name: `<prefix>-<slug>` (prefix lowercased)
-4. Example: `--hotfix` + `"memory leak in editor"` → `hotfix-memory-leak-editor`
+4. Example: `--hotfix` + `"memory leak in editor"` → `hotfix-memory-leak-editor`; `--security` + `"tainted format string"` → `security-tainted-format-string`
 5. Validate total length ≤ 100 characters — if over 60, suggest shorter description; if over 100, require it
 
 **If custom description provided:**
@@ -368,6 +368,28 @@ User selects "Create branch".
 
 ```
 ✓ Branch created: proposal-add-vim-keybindings
+✓ Pushed to origin with tracking
+```
+
+### Special prefix (--security)
+
+```
+/autopilot:branch-create --security "tainted format string"
+```
+
+AskUserQuestion with:
+
+- `question`: "Review the branch name and choose an action."
+- `header`: "Create branch"
+- `options`: [
+  { label: "Create branch", description: "Create and push to origin with tracking", preview: "security-tainted-format-string\n\nType: SECURITY\nFrom: origin/main" },
+  { label: "Edit slug", description: "Modify the branch name slug", preview: "security-tainted-format-string\n\nType: SECURITY\nFrom: origin/main" }
+  ]
+
+User selects "Create branch".
+
+```
+✓ Branch created: security-tainted-format-string
 ✓ Pushed to origin with tracking
 ```
 

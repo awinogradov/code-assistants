@@ -136,7 +136,7 @@ Tool parameters:
 Parse the branch name to extract an issue number:
 
 - Pattern: `^issue-([0-9]+)-` for standard issue branches
-- If the branch name starts with a special prefix (`hotfix-`, `trivial-`, `maintenance-`, `proposal-`), there is no issue number to extract
+- If the branch name starts with a special prefix (`hotfix-`, `trivial-`, `maintenance-`, `proposal-`, `security-`), there is no issue number to extract
 
 #### Compare with plan-mode issue ID
 
