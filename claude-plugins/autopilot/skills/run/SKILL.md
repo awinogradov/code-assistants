@@ -363,7 +363,7 @@ Output the PR URL after creation.
 
 3. **Format check** — After creating or updating the PR, validate its format:
    - Run `gh pr view --json title,body`
-   - Verify the body contains `**Issues:**` as a section heading (skip for special prefix branches: hotfix/trivial/maintenance/security). For a `security-*` branch, instead verify the body contains an `**Alert:**` reference (the code-scanning alert URL) and NO `Closes #` — alerts close on re-scan, not via PR magic words.
+   - Verify the body contains `**Issues:**` as a section heading (skip for special prefix branches: hotfix/trivial/maintenance/proposal/security). For a `security-*` branch, instead verify the body contains an `**Alert:**` reference (the code-scanning alert URL) and NO `Closes #` — alerts close on re-scan, not via PR magic words.
    - Verify the body contains at least one `---` separator on its own line
    - Verify section ordering: `**Issues:**` MUST appear AFTER the last `---` separator (it must be the final section, not the first)
    - If `**Release notes:**` is present, verify it appears BEFORE `**Issues:**` and AFTER the description text
