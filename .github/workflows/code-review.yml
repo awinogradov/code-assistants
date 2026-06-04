@@ -25,24 +25,15 @@ concurrency:
   # comment.id gives each comment its own group so bursty replies aren't cancelled;
   # it's empty for pull_request events, which stay grouped per-PR (event_name + number).
   group: code-review-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event.comment.id }}
-  # Don't cancel on `edited`: a review run posts a run-summary footer to the PR body,
-  # which itself fires `pull_request: edited`. Cancelling there would let that bot edit
-  # abort the in-flight review (the new run then skips on the sender guard), leaving the
-  # PR with no review. Non-edited events still cancel so only the latest push is reviewed.
-  cancel-in-progress: ${{ github.event.action != 'edited' }}
+  # Cancel superseded runs so only the latest push/comment is reviewed. The action
+  # no longer edits the PR body, so no bot self-edit can abort an in-flight review.
+  cancel-in-progress: true
 
 jobs:
   ai-review:
-    # The bot's own NON-edited events (its review and inline comments) are skipped
-    # here so they don't spawn a no-op react run — the in-action guard would skip
-    # them only after a runner spins up, so filtering at the job `if:` is cheaper.
-    #
-    # The bot's own `edited` events are deliberately NOT skipped: the action writes
-    # a help footer to the PR body (updatePrFooter), which fires `pull_request:
-    # edited` as the bot. Skipping that here produced a *skipped* ai-review check
-    # that overshadowed the real review's verdict. Letting it through lets the
-    # action's ctx step detect the bot sender and no-op every step, so the run
-    # reports success instead of "skipping".
+    # The bot's own events (its review and inline comments) are skipped here so they
+    # don't spawn a no-op react run — the in-action guard would skip them only after a
+    # runner spins up, so filtering at the job `if:` is cheaper.
     #
     # The last clause re-runs review when a user edits a PR title/body, so a
     # description fix clears a stale CHANGES_REQUESTED verdict without the prior
@@ -51,7 +42,7 @@ jobs:
     if: >-
       (github.event_name != 'issue_comment' || github.event.issue.pull_request)
       && vars.BOT_USERNAME != ''
-      && (github.event.sender.login != vars.BOT_USERNAME || github.event.action == 'edited')
+      && github.event.sender.login != vars.BOT_USERNAME
       && (github.event.action != 'edited' || github.event.changes.title || github.event.changes.body)
     runs-on: ubuntu-latest
     permissions:
