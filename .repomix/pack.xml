@@ -24239,9 +24239,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # Check out the default branch (github.sha), never the PR-controlled
+      # merge_commit_sha. This job is gated on `merged == true`, so the release
+      # commit (version + .release_notes) is already on the default branch.
+      # Checking out a PR-derived ref would run untrusted code in this privileged
+      # pull_request_target context (CodeQL actions/untrusted-checkout, CWE-829).
       - uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.pull_request.merge_commit_sha }}
 
       - uses: awinogradov/code-assistants/.github/actions/release-action@main
         with:
