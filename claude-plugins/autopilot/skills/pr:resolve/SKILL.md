@@ -194,7 +194,7 @@ For each comment requiring a code change:
 For comments that do not require code changes (questions, misunderstandings):
 
 1. **Evaluate the comment** against the actual codebase — read the code, check if the reviewer's concern is valid
-2. **Draft a reply** — concise, direct, 1-5 sentences:
+2. **Draft a reply** — concise, direct, 1-5 sentences; format references per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) (the **Reference formatting & readability** rules inlined at the end of this skill; see [Phase 6](#phase-6-reply-to-review-threads)):
    - If reviewer is wrong: "You're right that [X looks concerning], but [reason it's correct]. [Evidence from code]."
    - If needs discussion: "[Acknowledge point], however [concern or alternative]."
    - If question: "[Direct answer with reference to code]."
@@ -245,6 +245,8 @@ Compose replies for all processed comments. **Always mention the reviewer** with
 - **Not applicable / misunderstood**: "@\<reviewer\> [Explanation of why the current code is correct or why the change isn't needed]."
 - **Partially addressed**: "@\<reviewer\> [What was changed and why, plus what was intentionally kept]."
 - **Declined by user**: "@\<reviewer\> Considered — [explanation of why this suggestion was not applied]."
+
+Format every reply per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) — the **Reference formatting & readability** rules inlined at the end of this skill. The reference kind that recurs here is the commit SHA: when a reply cites the commit that resolved a thread (the HEAD commit after [Phase 5](#phase-5-commit-and-push)'s push, post-rebase/squash), render the SHA as a markdown link `[<sha>](<repo-commit-url>/<sha>)` built from the repo owner/name resolved in [Phase 1](#phase-1-detect-pr-and-load-context) — never a bare or backticked SHA. Replies that cite no commit (e.g. questions, declines) skip the SHA rule; all other reference kinds still follow the inlined rules.
 
 Build a summary of all drafted replies:
 

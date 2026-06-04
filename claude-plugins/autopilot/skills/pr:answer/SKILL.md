@@ -124,6 +124,8 @@ Always provide a reply. Keep it concise (1-5 sentences). Be direct.
 - If needs discussion: "[Acknowledge point], however [concern]."
 - If question: "[Direct answer]."
 
+Format the reply per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) — the **Reference formatting & readability** rules inlined at the end of this skill; they apply to the text inside the `reply` string value, not the JSON envelope. The reference kind that recurs here is the commit SHA: when the reply cites the commit that fixes the thread, render the SHA as a markdown link `[<sha>](<repo-commit-url>/<sha>)` built from `REPO` — never a bare or backticked SHA.
+
 ### Thread Resolution
 
 Add to `resolveComments` when:
