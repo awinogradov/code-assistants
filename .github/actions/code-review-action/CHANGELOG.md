@@ -2,6 +2,52 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.1.1](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.1.0...code-review-action@v1.1.1) (2026-06-04)
+
+## Release Notes
+
+The AI code review action now properly tracks review completion status instead of showing "skipped" after posting a review.
+
+## 🐛 Bug Fixes
+
+### Review status display fix
+The action could misleadingly show as "skipped" in GitHub's checks UI even after successfully posting a review. This happened when the reviewer bot added its help footer to the PR description, triggering a secondary workflow run that would get filtered out. Now the bot's own edits are handled gracefully — they complete with a success status rather than being skipped, ensuring your PR status accurately reflects that a review was performed.
+
+<details><summary>Related issues</summary>
+
+- [#233: Improve the code review skill: context parity, inline history, and rule checks](https://github.com/awinogradov/code-assistants/issues/233)
+</details>
+
+## 📚 Documentation & Settings Updates
+
+### Consistent reference formatting
+All AI-generated output — from code reviews to release notes — now formats references to files, documentation sections, commits, and issues as proper clickable links. Previously, these references could appear as plain text in backticks, making them harder to navigate. This standardization ensures every reference in your AI assistant's output is immediately resolvable.
+
+<details><summary>Related issues</summary>
+
+- [#236: Standardize reference formatting and readability in generated output](https://github.com/awinogradov/code-assistants/issues/236)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #236 | [#237](https://github.com/awinogradov/code-assistants/pull/237) | @awinogradov |
+| #233 | [#234](https://github.com/awinogradov/code-assistants/pull/234) | @awinogradov |
+
+### Bug Fixes
+
+* **code-review:** stop bot self-edit from skipping ai-review ([17666fc](https://github.com/awinogradov/code-assistants/commit/17666fc51904d234f7016f16409ad573fd1dde87))
+
+### Tests
+
+* **code-review:** add ref-format drift guard ([a846a41](https://github.com/awinogradov/code-assistants/commit/a846a411601aec37d2a2a834f96239002564f9c8))
+* **code-review:** rescope rules_doc_url check ([4f3b7e0](https://github.com/awinogradov/code-assistants/commit/4f3b7e0a48444a1cbdf36e9999b59b3d01bec947))
+
+### CI
+
+* **code-review:** allow read-only gh api gets ([3259a63](https://github.com/awinogradov/code-assistants/commit/3259a630c47bec7323d581cbb34168914856b2d6))
 ## [1.1.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.0.0...code-review-action@v1.1.0) (2026-06-01)
 
 ## Release Notes
