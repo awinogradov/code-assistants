@@ -481,6 +481,14 @@ describe("tickets", () => {
       expect(result).toContain('  title: "Fix \\"broken\\" thing"');
     });
 
+    test("escapes backslashes before quotes in titles", () => {
+      const result = serializePrDescriptionsToYaml([
+        { prNumber: 1, title: 'C:\\path "x"', content: "Fixed it", author: "dev" },
+      ]);
+
+      expect(result).toContain('  title: "C:\\\\path \\"x\\""');
+    });
+
     test("serializes multiple descriptions", () => {
       const result = serializePrDescriptionsToYaml([
         { prNumber: 1, title: "First", content: "Content 1", author: "dev1" },
