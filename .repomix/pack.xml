@@ -244,6 +244,20 @@ The content is organized as follows:
     upstream-sync/
       action.yml
       README.md
+    validate-actions/
+      src/
+        classifyTargets.test.ts
+        classifyTargets.ts
+        extractRunBlocks.test.ts
+        extractRunBlocks.ts
+        linterReport.test.ts
+        linterReport.ts
+        validateActions.test.ts
+        validateActions.ts
+      action.yml
+      package.json
+      README.md
+      tsconfig.json
   workflows/
     auto-label.yml
     code-review.yml
@@ -23754,6 +23768,958 @@ uses: awinogradov/code-assistants/.github/actions/upstream-sync@v1
 The canonical `upstream.yml` template references it via `@main` so consumers always run the latest aggregator.
 </file>
 
+<file path=".github/actions/validate-actions/src/classifyTargets.test.ts">
+import { describe, expect, test } from "bun:test";
+import { classifyTarget, classifyTargets } from "./classifyTargets.ts";
+
+describe("classifyTarget", () => {
+  test("classifies workflow files", () => {
+    expect(classifyTarget(".github/workflows/ci.yml")).toEqual({
+      kind: "workflow",
+      path: ".github/workflows/ci.yml",
+    });
+    expect(classifyTarget(".github/workflows/release-create.yaml")).toEqual({
+      kind: "workflow",
+      path: ".github/workflows/release-create.yaml",
+    });
+  });
+
+  test("classifies composite action manifests", () => {
+    expect(classifyTarget(".github/actions/validate-actions/action.yml")).toEqual({
+      kind: "action",
+      path: ".github/actions/validate-actions/action.yml",
+    });
+  });
+
+  test("strips a leading ./ so git diff output works verbatim", () => {
+    expect(classifyTarget("./.github/workflows/ci.yml")?.kind).toBe("workflow");
+  });
+
+  test("ignores unrelated paths", () => {
+    expect(classifyTarget("src/index.ts")).toBeNull();
+    expect(classifyTarget(".github/actions/foo/README.md")).toBeNull();
+    expect(classifyTarget(".github/workflows/nested/ci.yml")).toBeNull();
+    expect(classifyTarget(".github/actions/foo/bar/action.yml")).toBeNull();
+    expect(classifyTarget("package.json")).toBeNull();
+  });
+});
+
+describe("classifyTargets", () => {
+  test("keeps only recognized targets", () => {
+    const result = classifyTargets([
+      ".github/workflows/ci.yml",
+      "README.md",
+      ".github/actions/foo/action.yml",
+      "src/foo.ts",
+    ]);
+    expect(result).toEqual([
+      { kind: "workflow", path: ".github/workflows/ci.yml" },
+      { kind: "action", path: ".github/actions/foo/action.yml" },
+    ]);
+  });
+
+  test("returns an empty array when nothing matches", () => {
+    expect(classifyTargets(["README.md", "src/foo.ts"])).toEqual([]);
+  });
+});
+</file>
+
+<file path=".github/actions/validate-actions/src/classifyTargets.ts">
+/**
+ * Map repository-relative paths to the kind of file the validate-actions linter
+ * knows how to check.
+ *
+ * Two kinds are recognized:
+ * - `workflow` — a GitHub Actions workflow under `.github/workflows/` (`.yml`/`.yaml`),
+ *   linted by actionlint (which also shellchecks the bash embedded in `run:` steps).
+ * - `action` — a composite action manifest `.github/actions/<name>/action.yml|yaml`,
+ *   whose inline `run:` blocks are shellchecked directly because actionlint does not
+ *   parse action manifests.
+ *
+ * Anything else is irrelevant and dropped, so callers can pass `git diff` output verbatim.
+ *
+ * @example
+ * classifyTarget(".github/workflows/ci.yml");       // { kind: "workflow", path: "..." }
+ * classifyTarget(".github/actions/foo/action.yml"); // { kind: "action", path: "..." }
+ * classifyTarget("src/index.ts");                   // null
+ */
+
+/** The category of a linting target. */
+export type TargetKind = "workflow" | "action";
+
+/** A path the linter recognizes, tagged with how it should be checked. */
+export interface Target {
+  readonly kind: TargetKind;
+  readonly path: string;
+}
+
+const workflowPattern = /^\.github\/workflows\/[^/]+\.ya?ml$/;
+const actionPattern = /^\.github\/actions\/[^/]+\/action\.ya?ml$/;
+
+/**
+ * Classify a single path, returning its {@link Target} or `null` when it is neither
+ * a workflow nor a composite action manifest. A leading `./` is stripped first.
+ */
+export function classifyTarget(rawPath: string): Target | null {
+  const path = rawPath.startsWith("./") ? rawPath.slice(2) : rawPath;
+  if (workflowPattern.test(path)) return { kind: "workflow", path };
+  if (actionPattern.test(path)) return { kind: "action", path };
+  return null;
+}
+
+/** Classify many paths at once, keeping only the recognized targets. */
+export function classifyTargets(paths: readonly string[]): Target[] {
+  return paths.map(classifyTarget).filter((target): target is Target => target !== null);
+}
+</file>
+
+<file path=".github/actions/validate-actions/src/extractRunBlocks.test.ts">
+import { describe, expect, test } from "bun:test";
+import { extractRunBlocks } from "./extractRunBlocks.ts";
+
+// Line numbers are asserted explicitly so a change in how the YAML parser reports
+// block-scalar positions is caught here rather than silently mis-mapping findings.
+const manifest = `name: Test
+runs:
+  using: composite
+  steps:
+    - name: bash step
+      shell: bash
+      run: |
+        echo "hello"
+        ls -la
+    - name: uses step
+      uses: actions/checkout@v4
+    - name: sh step
+      shell: sh
+      run: echo single
+    - name: python step
+      shell: python
+      run: print("hi")
+`;
+
+describe("extractRunBlocks", () => {
+  test("returns only bash/sh run steps with body start lines", () => {
+    const result = extractRunBlocks(manifest);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.blocks).toHaveLength(2);
+
+    const [bashBlock, shBlock] = result.blocks;
+    expect(bashBlock.shell).toBe("bash");
+    expect(bashBlock.script.trim()).toBe('echo "hello"\nls -la');
+    expect(bashBlock.line).toBe(8);
+
+    expect(shBlock.shell).toBe("sh");
+    expect(shBlock.script.trim()).toBe("echo single");
+    expect(shBlock.line).toBe(14);
+  });
+
+  test("skips uses: steps and non-shellcheckable shells", () => {
+    const result = extractRunBlocks(manifest);
+    if (!result.ok) throw new Error("expected ok");
+    const shells = result.blocks.map((block) => block.shell);
+    expect(shells).toEqual(["bash", "sh"]);
+  });
+
+  test("returns ok with no blocks when the manifest has no run steps", () => {
+    const result = extractRunBlocks(`name: x\nruns:\n  using: composite\n  steps:\n    - uses: actions/checkout@v4\n`);
+    expect(result).toEqual({ ok: true, blocks: [] });
+  });
+
+  test("returns ok with no blocks when there is no runs.steps", () => {
+    expect(extractRunBlocks(`name: x\ndescription: y\n`)).toEqual({ ok: true, blocks: [] });
+  });
+
+  test("reports a YAML parse error as a failure with a line", () => {
+    const result = extractRunBlocks(`name: x\nruns: : :\n`);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.line).toBeGreaterThan(0);
+    expect(result.error.length).toBeGreaterThan(0);
+  });
+});
+</file>
+
+<file path=".github/actions/validate-actions/src/extractRunBlocks.ts">
+import { isMap, isScalar, isSeq, parseDocument, Scalar } from "yaml";
+
+/**
+ * Extract the shell scripts from a composite action manifest so they can be
+ * shellchecked — actionlint never parses `action.yml`, so this is the only place
+ * inline composite-action bash gets linted.
+ *
+ * Only steps whose effective shell is `bash` or `sh` are returned; `uses:` steps
+ * and steps running other interpreters (e.g. `python`) are skipped, matching how
+ * actionlint decides whether to shellcheck a workflow `run:` step.
+ */
+
+/** The shells shellcheck can lint. */
+export type LintableShell = "bash" | "sh";
+
+/** One runnable shell script lifted from `runs.steps[].run`. */
+export interface RunBlock {
+  /** The raw script body (dedented by the YAML parser). */
+  readonly script: string;
+  /** The interpreter shellcheck should assume. */
+  readonly shell: LintableShell;
+  /** 1-based line in the source manifest where the script body starts. */
+  readonly line: number;
+}
+
+/** Outcome of scanning one manifest: its run blocks, or a YAML parse failure. */
+export type ExtractResult =
+  | { readonly ok: true; readonly blocks: RunBlock[] }
+  | { readonly ok: false; readonly error: string; readonly line: number };
+
+/** 1-based line number of a character offset within `source`. */
+function offsetToLine(source: string, offset: number): number {
+  return source.slice(0, Math.max(0, offset)).split("\n").length;
+}
+
+/** Resolve a step's `shell:` to a shellcheck-supported shell, or `null` to skip it. */
+function resolveShell(shell: unknown): LintableShell | null {
+  if (shell === "bash" || (typeof shell === "string" && shell.startsWith("bash "))) return "bash";
+  if (shell === "sh" || (typeof shell === "string" && shell.startsWith("sh "))) return "sh";
+  return null;
+}
+
+/**
+ * Parse a composite `action.yml` and return every shellcheckable `run:` block with
+ * the line where its body begins. A YAML parse error is returned as a failure so the
+ * caller can surface it as a finding (a malformed manifest must fail the check).
+ */
+export function extractRunBlocks(source: string): ExtractResult {
+  const doc = parseDocument(source);
+  const [firstError] = doc.errors;
+  if (firstError) {
+    const line = firstError.linePos?.[0]?.line ?? offsetToLine(source, firstError.pos?.[0] ?? 0);
+    return { ok: false, error: firstError.message, line };
+  }
+
+  const steps = doc.getIn(["runs", "steps"], true);
+  if (!isSeq(steps)) return { ok: true, blocks: [] };
+
+  const blocks = steps.items.flatMap((step): RunBlock[] => {
+    if (!isMap(step)) return [];
+    const runNode = step.get("run", true);
+    if (!isScalar(runNode) || typeof runNode.value !== "string") return [];
+    const shell = resolveShell(step.get("shell"));
+    if (!shell) return [];
+    // Block scalars (`|`/`>`) report range[0] at the header line, but the script body
+    // starts on the next line; flow scalars report the body line directly.
+    const isBlock = runNode.type === Scalar.BLOCK_LITERAL || runNode.type === Scalar.BLOCK_FOLDED;
+    const bodyLine = offsetToLine(source, runNode.range?.[0] ?? 0) + (isBlock ? 1 : 0);
+    return [{ script: runNode.value, shell, line: bodyLine }];
+  });
+
+  return { ok: true, blocks };
+}
+</file>
+
+<file path=".github/actions/validate-actions/src/linterReport.test.ts">
+import { describe, expect, test } from "bun:test";
+import {
+  computeExitCode,
+  excludedShellcheckCodes,
+  formatAnnotation,
+  mapShellcheckFinding,
+  sanitizeExpressions,
+  shellcheckArgs,
+  shellcheckOutputSchema,
+  shellcheckSetup,
+  type Annotation,
+} from "./linterReport.ts";
+
+describe("sanitizeExpressions", () => {
+  test("replaces ${{ }} with equal-length underscores", () => {
+    const input = 'echo "${{ inputs.name }}"';
+    const output = sanitizeExpressions(input);
+    expect(output).toBe(`echo "${"_".repeat("${{ inputs.name }}".length)}"`);
+    expect(output).toHaveLength(input.length);
+    expect(output).not.toContain("${{");
+  });
+
+  test("handles multiple and multiline expressions", () => {
+    const out = sanitizeExpressions("a ${{ x }} b ${{\n y }} c");
+    expect(out).not.toContain("${{");
+    expect(out).toHaveLength("a ${{ x }} b ${{\n y }} c".length);
+  });
+});
+
+describe("shellcheckArgs / setup", () => {
+  test("includes shell and the exclusion set, reads from stdin", () => {
+    const args = shellcheckArgs("bash");
+    expect(args).toContain("--shell");
+    expect(args).toContain("bash");
+    expect(args).toContain("--exclude");
+    expect(args).toContain(excludedShellcheckCodes.join(","));
+    expect(args.at(-1)).toBe("-");
+  });
+
+  test("does not set --severity so info-level findings (e.g. SC2086) are kept", () => {
+    expect(shellcheckArgs("bash").some((arg) => arg.startsWith("--severity"))).toBe(false);
+  });
+
+  test("uses pipefail for bash and plain set -e for sh", () => {
+    expect(shellcheckSetup("bash")).toBe("set -eo pipefail");
+    expect(shellcheckSetup("sh")).toBe("set -e");
+  });
+});
+
+describe("shellcheckOutputSchema", () => {
+  test("parses real shellcheck json and ignores extra fields", () => {
+    const raw = [
+      { file: "-", line: 2, endLine: 2, column: 6, endColumn: 9, level: "warning", code: 2086, message: "Double quote", fix: null },
+    ];
+    const parsed = shellcheckOutputSchema.parse(raw);
+    expect(parsed[0].code).toBe(2086);
+    expect(parsed[0].level).toBe("warning");
+  });
+
+  test("rejects malformed payloads", () => {
+    expect(shellcheckOutputSchema.safeParse("not json").success).toBe(false);
+    expect(shellcheckOutputSchema.safeParse([{ line: "x" }]).success).toBe(false);
+  });
+});
+
+describe("mapShellcheckFinding", () => {
+  test("rebases the line onto the block start, accounting for the setup prefix", () => {
+    // Script body starts at action.yml line 8; the piped script has 1 setup line,
+    // so shellcheck line 2 (first real line) maps back to line 8.
+    const first = mapShellcheckFinding({ line: 2, level: "warning", code: 2086, message: "m" }, "a.yml", 8);
+    expect(first.line).toBe(8);
+    const third = mapShellcheckFinding({ line: 4, level: "error", code: 2046, message: "m" }, "a.yml", 8);
+    expect(third.line).toBe(10);
+  });
+
+  test("maps shellcheck level to annotation level; every finding blocks like actionlint", () => {
+    expect(mapShellcheckFinding({ line: 2, level: "error", code: 1, message: "m" }, "a.yml", 1)).toMatchObject({
+      level: "error",
+      blocking: true,
+    });
+    // info maps to a notice annotation for color, but still fails the check.
+    expect(mapShellcheckFinding({ line: 2, level: "info", code: 1, message: "m" }, "a.yml", 1)).toMatchObject({
+      level: "notice",
+      blocking: true,
+    });
+  });
+});
+
+describe("formatAnnotation", () => {
+  test("renders a GitHub workflow command", () => {
+    const annotation: Annotation = { level: "error", file: "a.yml", line: 9, message: "SC2086: quote", blocking: true };
+    expect(formatAnnotation(annotation)).toBe("::error file=a.yml,line=9::SC2086: quote");
+  });
+});
+
+describe("computeExitCode", () => {
+  const blocking: Annotation = { level: "error", file: "a", line: 1, message: "m", blocking: true };
+  const notice: Annotation = { level: "notice", file: "a", line: 1, message: "m", blocking: false };
+
+  test("fails on a blocking finding", () => {
+    expect(computeExitCode([blocking], false)).toBe(1);
+  });
+
+  test("passes when only non-blocking findings exist", () => {
+    expect(computeExitCode([notice], false)).toBe(0);
+  });
+
+  test("passes on a clean run and fails on an operational error", () => {
+    expect(computeExitCode([], false)).toBe(0);
+    expect(computeExitCode([], true)).toBe(1);
+  });
+});
+</file>
+
+<file path=".github/actions/validate-actions/src/linterReport.ts">
+import { z } from "zod";
+
+/**
+ * Pure helpers for turning shellcheck output into GitHub Actions annotations and a
+ * process exit code. Kept free of any I/O so the line-mapping, severity, and
+ * exit-code logic is unit-testable without spawning shellcheck.
+ *
+ * actionlint output is intentionally not modelled here: the orchestrator forwards
+ * actionlint's native output to the job log and keys off its exit code, because
+ * actionlint already understands workflow `run:` bash. This module exists for the
+ * `action.yml` inline `run:` blocks that actionlint never parses.
+ */
+
+/** GitHub Actions annotation levels the linter emits. */
+export type AnnotationLevel = "error" | "warning" | "notice";
+
+/** A single finding rendered as a GitHub Actions annotation. */
+export interface Annotation {
+  readonly level: AnnotationLevel;
+  readonly file: string;
+  readonly line: number;
+  readonly message: string;
+  /** Errors and warnings fail the check; notices are informational only. */
+  readonly blocking: boolean;
+}
+
+/**
+ * Replace `${{ … }}` GitHub expressions with equal-length underscores so shellcheck
+ * does not parse them as shell syntax, mirroring how actionlint sanitizes embedded
+ * `run:` scripts. Equal length keeps line and column offsets stable.
+ */
+export function sanitizeExpressions(script: string): string {
+  return script.replace(/\$\{\{[\s\S]*?\}\}/g, (match) => "_".repeat(match.length));
+}
+
+/**
+ * shellcheck codes actionlint suppresses for `run:` scripts, replicated so a
+ * composite action's inline bash is linted consistently with workflow `run:` bash.
+ * Derived from actionlint v1.7.x (rule_shellcheck.go); each is unsafe specifically
+ * because GitHub expressions and `env:` injection differ from a standalone script:
+ * SC1091 (sourced file not found), SC2194/SC2050/SC2157 (constant-expression noise
+ * from the `${{ }}` → underscores substitution), SC2153/SC2154 (vars assigned via
+ * `env:`, invisible to shellcheck), SC2043 (one-iteration loop over a `${{ }}`).
+ */
+export const excludedShellcheckCodes = [
+  "SC1091",
+  "SC2194",
+  "SC2050",
+  "SC2153",
+  "SC2154",
+  "SC2157",
+  "SC2043",
+] as const;
+
+/** Lines prepended to a script before it is piped to shellcheck (see {@link shellcheckSetup}). */
+const setupLineCount = 1;
+
+/** The shell-setup line prepended before a script is checked, mirroring actionlint. */
+export function shellcheckSetup(shell: "bash" | "sh"): string {
+  return shell === "bash" ? "set -eo pipefail" : "set -e";
+}
+
+/**
+ * Arguments for `shellcheck` reading one script from stdin in the given shell.
+ * No `--severity` is set, so the default (style and up) is used — identical to how
+ * actionlint invokes shellcheck for workflow `run:` blocks, which keeps info-level
+ * findings such as SC2086 (unquoted variable) and consistency between the two paths.
+ */
+export function shellcheckArgs(shell: "bash" | "sh"): string[] {
+  return [
+    "--norc",
+    "--external-sources",
+    "--format=json",
+    "--shell",
+    shell,
+    "--exclude",
+    excludedShellcheckCodes.join(","),
+    "-",
+  ];
+}
+
+/** A single diagnostic from `shellcheck --format=json`; unmodelled fields are ignored. */
+export const shellcheckFindingSchema = z.object({
+  line: z.number(),
+  level: z.string(),
+  code: z.number(),
+  message: z.string(),
+});
+
+/** The full `shellcheck --format=json` payload: an array of findings. */
+export const shellcheckOutputSchema = z.array(shellcheckFindingSchema);
+
+export type ShellcheckFinding = z.infer<typeof shellcheckFindingSchema>;
+
+function toAnnotationLevel(shellcheckLevel: string): AnnotationLevel {
+  if (shellcheckLevel === "error") return "error";
+  if (shellcheckLevel === "warning") return "warning";
+  return "notice";
+}
+
+/**
+ * Map a shellcheck finding back onto the source `action.yml`. The piped script is
+ * prefixed with one setup line, so the finding line is shifted by that prefix and
+ * rebased onto `blockStartLine` (the manifest line where the script body begins).
+ * Every finding is blocking — actionlint fails a workflow on any shellcheck result,
+ * so action manifests are held to the same bar; the level only sets the annotation color.
+ */
+export function mapShellcheckFinding(
+  finding: ShellcheckFinding,
+  file: string,
+  blockStartLine: number,
+): Annotation {
+  return {
+    level: toAnnotationLevel(finding.level),
+    file,
+    line: blockStartLine + finding.line - 1 - setupLineCount,
+    message: `SC${finding.code}: ${finding.message}`,
+    blocking: true,
+  };
+}
+
+/** Render an annotation as a GitHub Actions workflow command line. */
+export function formatAnnotation(annotation: Annotation): string {
+  return `::${annotation.level} file=${annotation.file},line=${annotation.line}::${annotation.message}`;
+}
+
+/**
+ * The process exit code: non-zero when any annotation is blocking or an operational
+ * error occurred (a tool crashed or produced output that could not be parsed).
+ */
+export function computeExitCode(annotations: readonly Annotation[], operationalError: boolean): number {
+  if (operationalError) return 1;
+  return annotations.some((annotation) => annotation.blocking) ? 1 : 0;
+}
+</file>
+
+<file path=".github/actions/validate-actions/src/validateActions.test.ts">
+import { afterAll, describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { lintActionManifest, runValidate } from "./validateActions.ts";
+
+// These tests spawn the real `shellcheck` binary, so they only run where it is
+// installed (CI ubuntu runners and the live action have it; skipped otherwise).
+const hasShellcheck = Bun.which("shellcheck") !== null;
+const dirs: string[] = [];
+
+async function writeManifest(body: string): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), "validate-actions-"));
+  dirs.push(dir);
+  const path = join(dir, "action.yml");
+  await Bun.write(path, body);
+  return path;
+}
+
+afterAll(async () => {
+  await Promise.all(dirs.map((dir) => rm(dir, { recursive: true, force: true })));
+});
+
+describe.skipIf(!hasShellcheck)("lintActionManifest (integration, requires shellcheck)", () => {
+  test("flags an unquoted variable and maps it to the manifest line", async () => {
+    const path = await writeManifest(
+      ["name: t", "runs:", "  using: composite", "  steps:", "    - shell: bash", "      run: |", "        rm $FILE", ""].join("\n"),
+    );
+    const { annotations, operationalError } = await lintActionManifest(path);
+    expect(operationalError).toBe(false);
+    const blocking = annotations.filter((annotation) => annotation.blocking);
+    expect(blocking.length).toBeGreaterThan(0);
+    expect(blocking.some((annotation) => annotation.message.includes("SC2086"))).toBe(true);
+    // `rm $FILE` is the first script line, on manifest line 7.
+    expect(blocking.every((annotation) => annotation.line === 7)).toBe(true);
+  });
+
+  test("passes a clean composite run block", async () => {
+    const path = await writeManifest(
+      ['name: t', 'runs:', '  using: composite', '  steps:', '    - shell: bash', '      run: echo "ok"', ''].join("\n"),
+    );
+    const { annotations, operationalError } = await lintActionManifest(path);
+    expect(operationalError).toBe(false);
+    expect(annotations).toEqual([]);
+  });
+
+  test("does not shellcheck ${{ }} expressions as shell syntax", async () => {
+    const path = await writeManifest(
+      ['name: t', 'runs:', '  using: composite', '  steps:', '    - shell: bash', '      run: echo "${{ inputs.name }}"', ''].join("\n"),
+    );
+    const { annotations, operationalError } = await lintActionManifest(path);
+    expect(operationalError).toBe(false);
+    expect(annotations).toEqual([]);
+  });
+});
+
+describe("lintActionManifest YAML errors", () => {
+  test("reports a malformed action.yml as a blocking error (no shellcheck needed)", async () => {
+    const path = await writeManifest("name: x\nruns: : :\n");
+    const { annotations, operationalError } = await lintActionManifest(path);
+    expect(operationalError).toBe(false);
+    expect(annotations).toHaveLength(1);
+    expect(annotations[0]).toMatchObject({ level: "error", blocking: true });
+    expect(annotations[0].message).toContain("invalid YAML");
+  });
+});
+
+describe("runValidate", () => {
+  test("exits 0 when no changed file is a workflow or action manifest", async () => {
+    expect(await runValidate(["--files", "README.md", "src/foo.ts"])).toBe(0);
+  });
+
+  test("exits 1 on a malformed composite action manifest in the changed set", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "validate-actions-tree-"));
+    dirs.push(dir);
+    await Bun.write(join(dir, ".github/actions/sample/action.yml"), "name: x\nruns: : :\n");
+    const original = process.cwd();
+    process.chdir(dir);
+    try {
+      expect(await runValidate(["--files", ".github/actions/sample/action.yml"])).toBe(1);
+    } finally {
+      process.chdir(original);
+    }
+  });
+});
+</file>
+
+<file path=".github/actions/validate-actions/src/validateActions.ts">
+#!/usr/bin/env bun
+/**
+ * Entry point for the validate-actions composite action.
+ *
+ * Lints the files passed via `--files <paths…>` (the action computes the changed
+ * set), or, with no flag, discovers every workflow and composite action manifest.
+ * Workflow files go to actionlint (which also shellchecks their embedded `run:`
+ * bash); composite `action.yml` files have their inline `run:` blocks shellchecked
+ * directly, because actionlint never parses action manifests.
+ *
+ * @example
+ *   bun run validateActions.ts --files .github/workflows/ci.yml .github/actions/x/action.yml
+ *   bun run validateActions.ts            # discover and lint everything
+ */
+import { Glob } from "bun";
+import { classifyTargets } from "./classifyTargets.ts";
+import { extractRunBlocks } from "./extractRunBlocks.ts";
+import {
+  type Annotation,
+  computeExitCode,
+  formatAnnotation,
+  mapShellcheckFinding,
+  sanitizeExpressions,
+  shellcheckArgs,
+  shellcheckOutputSchema,
+  shellcheckSetup,
+} from "./linterReport.ts";
+
+interface ProcessResult {
+  readonly exitCode: number;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+
+/** The outcome of shellchecking one composite action manifest. */
+export interface ManifestResult {
+  readonly annotations: Annotation[];
+  /** A tool crashed or returned output that could not be parsed (must fail the run). */
+  readonly operationalError: boolean;
+}
+
+/** Run a child process, draining stdout/stderr concurrently to avoid pipe deadlock. */
+async function runProcess(command: string[], stdin?: Uint8Array): Promise<ProcessResult> {
+  try {
+    const proc = Bun.spawn(command, { stdin: stdin ?? "ignore", stdout: "pipe", stderr: "pipe" });
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+    return { exitCode, stdout, stderr };
+  } catch (error) {
+    // Preserve the error class (e.g. a spawn ENOENT vs a TypeError) so operational
+    // failures stay diagnosable instead of being flattened to a bare message.
+    const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+    return { exitCode: -1, stdout: "", stderr: detail };
+  }
+}
+
+function tryParseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Read the `--files <paths…>` argument, or `null` to discover everything. */
+function parseFilesArg(argv: readonly string[]): string[] | null {
+  const index = argv.indexOf("--files");
+  if (index === -1) return null;
+  return argv.slice(index + 1).filter((arg) => !arg.startsWith("--"));
+}
+
+/** Discover every workflow file and composite action manifest in the repository. */
+async function discoverTargetPaths(): Promise<string[]> {
+  const patterns = [
+    ".github/workflows/*.yml",
+    ".github/workflows/*.yaml",
+    ".github/actions/*/action.yml",
+    ".github/actions/*/action.yaml",
+  ];
+  const found = await Promise.all(
+    patterns.map((pattern) => Array.fromAsync(new Glob(pattern).scan("."))),
+  );
+  return found.flat();
+}
+
+/** Lint workflow files with actionlint; returns whether it found problems or crashed. */
+async function runActionlint(paths: readonly string[]): Promise<{ operationalError: boolean; hasFindings: boolean }> {
+  if (paths.length === 0) return { operationalError: false, hasFindings: false };
+  const result = await runProcess(["actionlint", "-no-color", ...paths]);
+  if (result.stdout) console.log(result.stdout);
+  if (result.exitCode === 0) return { operationalError: false, hasFindings: false };
+  if (result.exitCode === 1) return { operationalError: false, hasFindings: true };
+  console.log(`::error::actionlint could not run (exit ${result.exitCode}): ${result.stderr || "see log"}`);
+  return { operationalError: true, hasFindings: false };
+}
+
+/**
+ * Shellcheck the inline `run:` blocks of one composite action manifest, mapping each
+ * finding back to a line in the manifest. A YAML parse error becomes a blocking finding.
+ */
+export async function lintActionManifest(path: string): Promise<ManifestResult> {
+  const source = await Bun.file(path).text();
+  const extracted = extractRunBlocks(source);
+  if (!extracted.ok) {
+    const annotation: Annotation = {
+      level: "error",
+      file: path,
+      line: extracted.line,
+      message: `invalid YAML: ${extracted.error}`,
+      blocking: true,
+    };
+    return { annotations: [annotation], operationalError: false };
+  }
+
+  const annotations: Annotation[] = [];
+  let operationalError = false;
+  for (const block of extracted.blocks) {
+    const script = `${shellcheckSetup(block.shell)}\n${sanitizeExpressions(block.script)}`;
+    const result = await runProcess(["shellcheck", ...shellcheckArgs(block.shell)], new TextEncoder().encode(script));
+    const parsed = shellcheckOutputSchema.safeParse(tryParseJson(result.stdout));
+    if (!parsed.success) {
+      operationalError = true;
+      console.log(`::error file=${path}::shellcheck failed: ${result.stderr || result.stdout || `exit ${result.exitCode}`}`);
+      continue;
+    }
+    annotations.push(...parsed.data.map((finding) => mapShellcheckFinding(finding, path, block.line)));
+  }
+  return { annotations, operationalError };
+}
+
+/** Lint the resolved targets and return the process exit code (0 clean, 1 problems). */
+export async function runValidate(argv: readonly string[]): Promise<number> {
+  const filesArg = parseFilesArg(argv);
+  const paths = filesArg ?? (await discoverTargetPaths());
+  const targets = classifyTargets(paths);
+
+  if (targets.length === 0) {
+    console.log("validate-actions: no workflow or action files to check");
+    return 0;
+  }
+
+  const workflowPaths = targets.filter((target) => target.kind === "workflow").map((target) => target.path);
+  const actionPaths = targets.filter((target) => target.kind === "action").map((target) => target.path);
+
+  const [actionlintResult, manifestResults] = await Promise.all([
+    runActionlint(workflowPaths),
+    Promise.all(actionPaths.map(lintActionManifest)),
+  ]);
+
+  const annotations = manifestResults.flatMap((result) => result.annotations);
+  for (const annotation of annotations) {
+    console.log(formatAnnotation(annotation));
+  }
+
+  const operationalError = actionlintResult.operationalError || manifestResults.some((result) => result.operationalError);
+  const failed = actionlintResult.hasFindings || computeExitCode(annotations, operationalError) === 1;
+  console.log(failed ? "validate-actions: problems found" : `validate-actions: ${targets.length} file(s) OK`);
+  return failed ? 1 : 0;
+}
+
+if (import.meta.main) {
+  process.exit(await runValidate(Bun.argv.slice(2)));
+}
+</file>
+
+<file path=".github/actions/validate-actions/action.yml">
+name: Validate Actions
+description: Lint changed workflow files with actionlint (including the bash embedded in their run steps) and the inline run blocks of changed composite action.yml files with shellcheck.
+author: Code Assistants
+
+inputs:
+  actionlint-version:
+    description: actionlint release version to install, without the leading "v". Pinned and checksum-verified.
+    required: false
+    default: "1.7.11"
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        # Full history so the merge-base with the PR's base branch can be resolved.
+        fetch-depth: 0
+
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: 1.x
+
+    - name: Install action dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: bun install --frozen-lockfile --filter @code-assistants/validate-actions-action
+
+    - name: Install actionlint
+      shell: bash
+      env:
+        ACTIONLINT_VERSION: ${{ inputs.actionlint-version }}
+      run: |
+        set -euo pipefail
+        tmp="$(mktemp -d)"
+        base_url="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}"
+        archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+        curl --fail --silent --show-error --location --output "${tmp}/${archive}" "${base_url}/${archive}"
+        curl --fail --silent --show-error --location --output "${tmp}/checksums.txt" "${base_url}/actionlint_${ACTIONLINT_VERSION}_checksums.txt"
+        ( cd "${tmp}" && grep " ${archive}\$" checksums.txt | sha256sum --check --strict - )
+        tar --extract --gzip --file "${tmp}/${archive}" --directory "${tmp}" actionlint
+        printf '%s\n' "${tmp}" >> "${GITHUB_PATH}"
+
+    - name: Lint changed workflows and actions
+      shell: bash
+      env:
+        BASE_REF: ${{ github.base_ref }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+        git fetch --no-tags --quiet origin "${BASE_REF}"
+        base_sha="$(git merge-base FETCH_HEAD HEAD)"
+        printf 'validate-actions: diffing changed files since %s\n' "${base_sha}"
+        mapfile -t files < <(git diff --name-only --diff-filter=ACMR "${base_sha}" HEAD -- .github/workflows .github/actions)
+        if [ "${#files[@]}" -eq 0 ]; then
+          echo "validate-actions: no workflow or action changes"
+          exit 0
+        fi
+        printf 'validate-actions: candidate changed files:\n'
+        printf '  %s\n' "${files[@]}"
+        bun run "${ACTION_PATH}/src/validateActions.ts" --files "${files[@]}"
+</file>
+
+<file path=".github/actions/validate-actions/package.json">
+{
+  "name": "@code-assistants/validate-actions-action",
+  "version": "0.1.0",
+  "description": "Composite GitHub Action that lints changed workflow files with actionlint and the inline run blocks of composite action.yml files with shellcheck.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "release": {
+    "type": "github-action"
+  },
+  "agents": {
+    "rules": "Bun",
+    "language": "typescript"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "clean": "rm -rf node_modules .turbo"
+  },
+  "dependencies": {
+    "yaml": "2.9.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "typescript": "6.0.3"
+  }
+}
+</file>
+
+<file path=".github/actions/validate-actions/README.md">
+# Validate Actions
+
+Composite GitHub Action that lints a pull request's **changed** GitHub Actions files:
+
+- **Workflow files** (`.github/workflows/**`) with [`actionlint`](https://github.com/rhysd/actionlint), which also runs `shellcheck` over the bash embedded in workflow `run:` steps.
+- **Composite action manifests** (`.github/actions/*/action.yml`) by extracting their inline `run:` blocks and running `shellcheck` over them — `actionlint` does not parse action manifests, so this is the only place that inline bash gets linted.
+
+It is **fail-only**: it never edits or commits, it just fails the check when it finds a problem. Only the files changed in the pull request are linted, so pre-existing findings elsewhere never fail an unrelated PR.
+
+## Requirements
+
+- A Linux x64 runner (`ubuntu-latest`). `shellcheck` is preinstalled on GitHub-hosted Ubuntu runners; `actionlint` is downloaded (pinned and checksum-verified) at run time.
+- A `pull_request` trigger, so the changed-file set can be diffed against the PR base.
+
+## Usage
+
+Add a thin workflow that delegates to this action via `@main`:
+
+```yaml
+name: Validate Actions
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+
+concurrency:
+  group: validate-actions-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: awinogradov/code-assistants/.github/actions/validate-actions@main
+```
+
+## Inputs
+
+| Input                | Required | Default  | Description                                                                                                        |
+| -------------------- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
+| `actionlint-version` | No       | `1.7.11` | actionlint release to install (without the leading `v`). Verified against the release's published `checksums.txt`. |
+
+## Outputs
+
+None.
+
+## Permissions
+
+`contents: read` — the action only checks out the pull request and reads files; it never writes, so no `bot_token` is required.
+
+## Behavior
+
+1. **Checkout** the pull request with full history (needed to resolve the merge-base with the base branch).
+2. **Install** the action's Bun dependencies and a pinned, checksum-verified `actionlint`.
+3. **Detect changes** — diff the merge-base of the PR base and head, limited to `.github/workflows/**` and `.github/actions/**`.
+4. **Lint** — run `actionlint` over changed workflow files (it shellchecks their embedded `run:` bash) and `shellcheck` over the inline `run:` blocks of changed `action.yml` files. `${{ }}` expressions are blanked before shellcheck, and the same shellcheck codes actionlint suppresses for `run:` scripts are excluded, so workflow and action bash are linted consistently.
+5. **Report** — every finding is emitted as a GitHub annotation and **fails the check** (matching how `actionlint` already gates workflows). A malformed `action.yml` is reported as a YAML error.
+
+## Limitations
+
+- **Changed files only.** Pre-existing findings in untouched files are not reported until those files change; fixing the existing backlog is tracked separately.
+- **`action.yml` is shell- and YAML-checked, not schema-validated.** Inline bash is shellchecked and the manifest must parse as YAML, but the action schema itself (`runs.using`, `inputs`/`outputs` correctness) is not validated.
+- Linux x64 runners only.
+
+## Versioning
+
+Reference the action by tag, e.g. `…/validate-actions@v1`, for explicit control, or `@main` to always pick up the latest logic.
+
+> This action and its workflow are not yet distributed to downstream repositories. When the action is wired into the upstream sync, add the standard "distributed downstream" source header to the synced workflow.
+</file>
+
+<file path=".github/actions/validate-actions/tsconfig.json">
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["ESNext"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["bun"]
+  },
+  "include": ["src/**/*.ts"]
+}
+</file>
+
 <file path=".github/workflows/auto-label.yml">
 # Source: https://github.com/awinogradov/code-assistants/blob/main/.github/workflows/auto-label.yml
 # This file is distributed to downstream repositories by an automated sync.
@@ -39172,6 +40138,7 @@ export default config;
     ".github/actions/release-automerge",
     ".github/actions/code-review-action",
     ".github/actions/auto-label",
+    ".github/actions/validate-actions",
     "claude-plugins/*",
     "packages/*"
   ],
@@ -39260,6 +40227,7 @@ See the [plugin README](./claude-plugins/autopilot/README.md#installation) for s
 - [`auto-label`](./.github/actions/auto-label/README.md) — label PRs with `<scope>/<workspace-member>` labels for the workspace members a diff touches, and prune orphan labels on merge
 - [`repomix-sync`](./.github/actions/repomix-sync/README.md) — sync the `repomix-pack` workflow and `repomix.config.json` from upstream so each consumer commits its own codebase snapshot
 - [`release-sync`](./.github/actions/release-sync/README.md) — sync the release pipeline workflows (`release`, `publish`, `release-automerge`) from upstream so each consumer runs the same release flow
+- [`validate-actions`](./.github/actions/validate-actions/README.md) — lint changed workflow files and composite action inline shell on pull requests
 
 ## Contributing
 
