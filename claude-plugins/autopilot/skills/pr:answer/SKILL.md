@@ -141,13 +141,17 @@ Do NOT resolve when:
 
 ### Verdict Update
 
-**Gate:** Only perform this pass when `NEEDS_REVERDICT` is `true` (the comment asked for a re-review). When it is `false`, set `updatedVerdict: null` and `updatedReviewComment: null` and skip straight to producing the reply — do NOT scan threads or re-review. This keeps a plain reply from triggering a full re-evaluation; a genuine verdict change still lands on the next review run (a push) or when the author explicitly asks for a re-review.
+**PR-level resolution language** is prose asserting the PR's blocking verdict is lifted or the PR is now approvable — e.g. "resolved", "this is addressed", "looks resolved", "good to go", "approved". It is distinct from thread-level resolution (`resolveComments`), which only marks one specific finding handled. PR-level resolution language is allowed ONLY when this pass emits `updatedVerdict: "approve"`.
 
-When `NEEDS_REVERDICT` is `true`, check ALL remaining unresolved bot threads (not just the one being discussed) to determine:
+**Invariant:** the reply and the verdict must never diverge — the bot must not use PR-level resolution language while leaving a blocking verdict in place (issue #275).
 
-- If ALL 🚧 blockers are now resolved/retracted → `updatedVerdict: "approve"`
+**Gate:** Only perform the verdict pass when `NEEDS_REVERDICT` is `true`. When it is `false`, set `updatedVerdict: null` and `updatedReviewComment: null` and do NOT scan threads or re-review. The reply may still acknowledge the specific fix, and you may add the discussed finding to `resolveComments`, but it MUST NOT use PR-level resolution language — phrase it as state, not a promise: "Noted — the blocking verdict stands until a re-review confirms the fix." A genuine verdict change still lands on the next review run (a push) or when the author explicitly asks for a re-review.
+
+When `NEEDS_REVERDICT` is `true`, decide from the LIVE unresolved bot-thread state — not the author's claim — by checking ALL remaining unresolved bot threads (not just the one being discussed):
+
+- If ALL 🚧 blockers are now resolved/retracted → `updatedVerdict: "approve"` (PR-level resolution language is now permitted in the reply)
 - If this creates a NEW blocker → `updatedVerdict: "requestChanges"`
-- Otherwise → `updatedVerdict: null` (no change)
+- Otherwise → `updatedVerdict: null` (no change); the reply MUST NOT claim PR-level resolution
 
 ### Review Body Update
 
