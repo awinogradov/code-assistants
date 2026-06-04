@@ -832,7 +832,7 @@ describe('resolvePackageAgentsRules', () => {
     expect(() => resolvePackageAgentsRules('not json')).toThrow(/not valid JSON/);
     expect(() => resolvePackageAgentsRules('not json')).toThrow(agentsFieldDocsUrl);
     for (const value of agentsRulesValues) {
-      expect(() => resolvePackageAgentsRules('not json')).toThrow(new RegExp(`"${value.replace(/\+/g, '\\+')}"`));
+      expect(() => resolvePackageAgentsRules('not json')).toThrow(`"${value}"`);
     }
   });
 
@@ -852,7 +852,7 @@ describe('resolvePackageAgentsRules', () => {
     const raw = JSON.stringify({ agents: { rules: 'Deno' } });
     expect(() => resolvePackageAgentsRules(raw)).toThrow(/Invalid `agents.rules`/);
     for (const value of agentsRulesValues) {
-      expect(() => resolvePackageAgentsRules(raw)).toThrow(new RegExp(`"${value.replace(/\+/g, '\\+')}"`));
+      expect(() => resolvePackageAgentsRules(raw)).toThrow(`"${value}"`);
     }
   });
 
@@ -15833,6 +15833,22 @@ describe("tickets", () => {
       expect(result).toContain('  title: "Fix \\"broken\\" thing"');
     });
 
+    test("escapes backslashes before quotes in titles", () => {
+      const result = serializePrDescriptionsToYaml([
+        { prNumber: 1, title: 'C:\\path "x"', content: "Fixed it", author: "dev" },
+      ]);
+
+      expect(result).toContain('  title: "C:\\\\path \\"x\\""');
+    });
+
+    test("escapes backslashes in titles without quotes", () => {
+      const result = serializePrDescriptionsToYaml([
+        { prNumber: 1, title: 'C:\\path', content: "Fixed it", author: "dev" },
+      ]);
+
+      expect(result).toContain('  title: "C:\\\\path"');
+    });
+
     test("serializes multiple descriptions", () => {
       const result = serializePrDescriptionsToYaml([
         { prNumber: 1, title: "First", content: "Content 1", author: "dev1" },
@@ -16250,7 +16266,7 @@ export function extractPrDescriptions(
 export function serializePrDescriptionsToYaml(descriptions: PrDescription[]): string {
   return descriptions
     .map((d) => {
-      const escapedTitle = d.title.replace(/"/g, '\\"');
+      const escapedTitle = d.title.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       const indentedContent = d.content
         .split("\n")
         .map((line) => `    ${line}`)
@@ -20500,16 +20516,7 @@ async function runMonorepoPublish(cwd: string): Promise<void> {
     throw new Error("Publish invoked without monorepo discovery — check action.yml gating");
   }
 
-  // The PR file list is supplied via gh pr view in the workflow shell; the
-  // resolver supports either a `changedFiles` override (passed via env) or
-  // GITHUB_EVENT_PATH discovery. Read the env override here.
-  const overrideFiles = process.env.PR_CHANGED_FILES;
-  const changedFiles = overrideFiles
-    ? overrideFiles
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean)
-    : await readChangedFiles({ cwd });
+  const changedFiles = await readChangedFiles({ cwd });
 
   const plan = await resolvePublishPlan({ cwd, changedFiles });
 
@@ -22313,11 +22320,9 @@ jobs:
           bot_username: ${{ vars.BOT_USERNAME }}
           npm_token: ${{ secrets.NPM_TOKEN }}
           slack_token: ${{ secrets.SLACK_TOKEN }}
-        env:
-          PR_CHANGED_FILES: ${{ steps.changed.outputs.files }}
 ```
 
-`PR_CHANGED_FILES` is a newline-separated list of paths supplied by an upstream step (e.g., `gh pr view <N> --json files --jq '.files[].path'`). When the env variable is unset, the action falls back to `GITHUB_EVENT_PATH` and accepts a single-member PR shape.
+The action reads the merged PR's changed files itself — via `GITHUB_EVENT_PATH` (the GitHub event payload) and the GitHub API using `bot_token` — so no upstream step or extra environment configuration is required.
 
 ## Versioning
 
@@ -24237,18 +24242,6 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.merge_commit_sha }}
-
-      - name: Resolve changed files
-        env:
-          GH_TOKEN: ${{ secrets.BOT_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          delimiter="$(openssl rand -hex 16)"
-          {
-            echo "PR_CHANGED_FILES<<${delimiter}"
-            gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER/files" --paginate --jq '.[].filename'
-            echo "${delimiter}"
-          } >> "$GITHUB_ENV"
 
       - uses: awinogradov/code-assistants/.github/actions/release-action@main
         with:
