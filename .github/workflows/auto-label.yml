@@ -29,11 +29,14 @@ permissions:
 jobs:
   auto-label:
     name: Auto label
-    # Fork PRs run with a read-only token and cannot write labels; skip them.
+    # Fork PRs cannot access secrets.BOT_TOKEN (and run with a read-only token); skip them.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: awinogradov/code-assistants/.github/actions/auto-label@main
         with:
-          token: ${{ github.token }}
+          # Pass the bot token so label events are attributed to the project bot
+          # identity, not github-actions[bot]. BOT_TOKEN is required: an empty
+          # value fails the label API calls with HTTP 401 (no fallback).
+          token: ${{ secrets.BOT_TOKEN }}

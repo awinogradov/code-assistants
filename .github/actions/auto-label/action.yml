@@ -4,7 +4,7 @@ description: Label pull requests with `<scope>/<workspace-member>` labels based 
 inputs:
   token:
     description: |
-      GitHub token with `pull-requests: write` and `issues: write` (the latter covers repo-level label management). The workflow's default `GITHUB_TOKEN` is sufficient; on fork PRs it is read-only, so gate the calling job behind a fork check.
+      GitHub token with `pull-requests: write` and `issues: write` (the latter covers repo-level label management). Pass `${{ secrets.BOT_TOKEN }}` (a PAT or GitHub App token) so the label add/remove/create/delete events are attributed to the bot identity that owns the token — attribution is derived from the token's owner, so no separate `BOT_USERNAME` is needed. The default `GITHUB_TOKEN` would attribute every label event to `github-actions[bot]` instead. Required: an empty value fails the label API calls with HTTP 401 and no fallback. Secrets are unavailable on fork PRs, so gate the calling job behind a fork check.
     required: true
   label-prefix:
     description: |
