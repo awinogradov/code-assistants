@@ -1,6 +1,6 @@
 /**
  * Guards that the canonical "Reference formatting & readability" block defined in
- * docs/output-formatting.md stays byte-identical everywhere it is inlined: every
+ * rfc/0001-reference-formatting.md stays byte-identical everywhere it is inlined: every
  * autopilot skill (claude-plugins/autopilot/skills/*\/SKILL.md) and the
  * release-action release-notes systemPrompt. The skills run standalone, so each
  * carries its own copy of the block; silent drift between the copies would let one
@@ -15,7 +15,7 @@ import { describe, expect, test } from "bun:test";
 
 const actionDir = join(import.meta.dirname, "..");
 const repoRoot = join(actionDir, "..", "..", "..");
-const docPath = join(repoRoot, "docs/output-formatting.md");
+const rfcPath = join(repoRoot, "rfc/0001-reference-formatting.md");
 const skillsDir = join(repoRoot, "claude-plugins/autopilot/skills");
 const releasePrompt = join(repoRoot, ".github/actions/release-action/src/releaseNotesPrompt.ts");
 
@@ -26,7 +26,7 @@ function extractBlock(content: string): string | null {
   return blockPattern.exec(content)?.[1].trim() ?? null;
 }
 
-const canonical = extractBlock(await readFile(docPath, "utf8"));
+const canonical = extractBlock(await readFile(rfcPath, "utf8"));
 
 const skillEntries = await readdir(skillsDir, { withFileTypes: true });
 const skillFiles = skillEntries
@@ -34,7 +34,7 @@ const skillFiles = skillEntries
   .map((entry) => join(skillsDir, entry.name, "SKILL.md"));
 
 describe("reference-formatting block sync", () => {
-  test("docs/output-formatting.md defines the canonical block", () => {
+  test("rfc/0001-reference-formatting.md defines the canonical block", () => {
     expect(canonical).not.toBeNull();
     expect(canonical).toContain("### Reference formatting & readability");
   });
