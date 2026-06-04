@@ -95,6 +95,7 @@ The content is organized as follows:
         0.3.0.md
         1.0.0.md
         1.1.0.md
+        1.2.0.md
       src/
         github/
           githubReview.test.ts
@@ -3333,6 +3334,71 @@ The README now includes documentation about the new inline suggestion feature, e
 ### CI
 
 * **code-review:** add suggestion fields to schema ([9f35aa9](https://github.com/awinogradov/code-assistants/commit/9f35aa961b2aee7bd369a3cdfd5870b499bbd7bf))
+</file>
+
+<file path=".github/actions/code-review-action/.release_notes/1.2.0.md">
+## [1.2.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.1.0...code-review-action@v1.2.0) (2026-06-04)
+
+## Release Notes
+
+The AI code reviewer no longer edits PR descriptions, providing cleaner workflows and more accurate review status tracking.
+
+## ✨ What's New
+
+### Reference formatting standard
+All generated output — from code reviews to release notes — now follows a documented standard for formatting references. File names appear in backticks (`example.ts`), commits and RFCs link to stable URLs that won't break when files move, and issue references use full descriptive links. This ensures your team can always resolve references to their sources.
+
+<details><summary>Related issues</summary>
+
+- [#246: Version the reference-formatting standard as a stable RFC](https://github.com/awinogradov/code-assistants/issues/246)
+- [#236: Standardize reference formatting and readability in generated output](https://github.com/awinogradov/code-assistants/issues/236)
+</details>
+
+### Enhanced code review context
+The AI reviewer now gathers comprehensive project context before analyzing pull requests, including project documentation (`CLAUDE.md`, `README`), related TODOs, and domain-specific standards. Reviews also load prior inline comments to provide accurate follow-up feedback. The reviewer performs 14 distinct checks covering task alignment, dead code detection, input validation, and platform-specific standards for logging, documentation, and service integration.
+
+<details><summary>Related issues</summary>
+
+- [#233: Improve the code review skill: context parity, inline history, and rule checks](https://github.com/awinogradov/code-assistants/issues/233)
+</details>
+
+## 🐛 Bug Fixes
+
+### Cleaner PR workflows without description edits
+The AI reviewer no longer adds "Available commands" footers to pull request descriptions. Instead, usage instructions appear directly in the review comment where they're more discoverable. This eliminates duplicate review runs and ensures the review status accurately reflects whether a review was posted — no more "skipped" status when a review actually ran.
+
+<details><summary>Related issues</summary>
+
+- [#245: Drop the code-review-action PR-body footer that self-triggers reviews](https://github.com/awinogradov/code-assistants/issues/245)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #245 | [#252](https://github.com/awinogradov/code-assistants/pull/252) | @awinogradov |
+| #246 | [#249](https://github.com/awinogradov/code-assistants/pull/249) | @awinogradov |
+| #236 | [#237](https://github.com/awinogradov/code-assistants/pull/237) | @awinogradov |
+| #233 | [#234](https://github.com/awinogradov/code-assistants/pull/234) | @awinogradov |
+
+### Features
+
+* **rfc:** version the reference-formatting standard ([cdd6c04](https://github.com/awinogradov/code-assistants/commit/cdd6c042605c3f28cd4b3299fa61bcec6a4f8c64))
+
+### Bug Fixes
+
+* **code-review:** remove pr-body help footer ([bab0546](https://github.com/awinogradov/code-assistants/commit/bab0546152c8040ef1b3febfec39a4b78d36b625))
+* **code-review:** stop bot self-edit from skipping ai-review ([17666fc](https://github.com/awinogradov/code-assistants/commit/17666fc51904d234f7016f16409ad573fd1dde87))
+
+### Tests
+
+* **code-review:** add ref-format drift guard ([a846a41](https://github.com/awinogradov/code-assistants/commit/a846a411601aec37d2a2a834f96239002564f9c8))
+* **code-review:** rescope rules_doc_url check ([4f3b7e0](https://github.com/awinogradov/code-assistants/commit/4f3b7e0a48444a1cbdf36e9999b59b3d01bec947))
+
+### CI
+
+* **code-review:** allow read-only gh api gets ([3259a63](https://github.com/awinogradov/code-assistants/commit/3259a630c47bec7323d581cbb34168914856b2d6))
 </file>
 
 <file path=".github/actions/code-review-action/src/github/githubReview.test.ts">
@@ -8012,6 +8078,68 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.2.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.1.0...code-review-action@v1.2.0) (2026-06-04)
+
+## Release Notes
+
+The AI code reviewer no longer edits PR descriptions, providing cleaner workflows and more accurate review status tracking.
+
+## ✨ What's New
+
+### Reference formatting standard
+All generated output — from code reviews to release notes — now follows a documented standard for formatting references. File names appear in backticks (`example.ts`), commits and RFCs link to stable URLs that won't break when files move, and issue references use full descriptive links. This ensures your team can always resolve references to their sources.
+
+<details><summary>Related issues</summary>
+
+- [#246: Version the reference-formatting standard as a stable RFC](https://github.com/awinogradov/code-assistants/issues/246)
+- [#236: Standardize reference formatting and readability in generated output](https://github.com/awinogradov/code-assistants/issues/236)
+</details>
+
+### Enhanced code review context
+The AI reviewer now gathers comprehensive project context before analyzing pull requests, including project documentation (`CLAUDE.md`, `README`), related TODOs, and domain-specific standards. Reviews also load prior inline comments to provide accurate follow-up feedback. The reviewer performs 14 distinct checks covering task alignment, dead code detection, input validation, and platform-specific standards for logging, documentation, and service integration.
+
+<details><summary>Related issues</summary>
+
+- [#233: Improve the code review skill: context parity, inline history, and rule checks](https://github.com/awinogradov/code-assistants/issues/233)
+</details>
+
+## 🐛 Bug Fixes
+
+### Cleaner PR workflows without description edits
+The AI reviewer no longer adds "Available commands" footers to pull request descriptions. Instead, usage instructions appear directly in the review comment where they're more discoverable. This eliminates duplicate review runs and ensures the review status accurately reflects whether a review was posted — no more "skipped" status when a review actually ran.
+
+<details><summary>Related issues</summary>
+
+- [#245: Drop the code-review-action PR-body footer that self-triggers reviews](https://github.com/awinogradov/code-assistants/issues/245)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #245 | [#252](https://github.com/awinogradov/code-assistants/pull/252) | @awinogradov |
+| #246 | [#249](https://github.com/awinogradov/code-assistants/pull/249) | @awinogradov |
+| #236 | [#237](https://github.com/awinogradov/code-assistants/pull/237) | @awinogradov |
+| #233 | [#234](https://github.com/awinogradov/code-assistants/pull/234) | @awinogradov |
+
+### Features
+
+* **rfc:** version the reference-formatting standard ([cdd6c04](https://github.com/awinogradov/code-assistants/commit/cdd6c042605c3f28cd4b3299fa61bcec6a4f8c64))
+
+### Bug Fixes
+
+* **code-review:** remove pr-body help footer ([bab0546](https://github.com/awinogradov/code-assistants/commit/bab0546152c8040ef1b3febfec39a4b78d36b625))
+* **code-review:** stop bot self-edit from skipping ai-review ([17666fc](https://github.com/awinogradov/code-assistants/commit/17666fc51904d234f7016f16409ad573fd1dde87))
+
+### Tests
+
+* **code-review:** add ref-format drift guard ([a846a41](https://github.com/awinogradov/code-assistants/commit/a846a411601aec37d2a2a834f96239002564f9c8))
+* **code-review:** rescope rules_doc_url check ([4f3b7e0](https://github.com/awinogradov/code-assistants/commit/4f3b7e0a48444a1cbdf36e9999b59b3d01bec947))
+
+### CI
+
+* **code-review:** allow read-only gh api gets ([3259a63](https://github.com/awinogradov/code-assistants/commit/3259a630c47bec7323d581cbb34168914856b2d6))
 ## [1.1.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.0.0...code-review-action@v1.1.0) (2026-06-01)
 
 ## Release Notes
@@ -8407,7 +8535,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/package.json">
 {
   "name": "@code-assistants/code-review-action",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Composite GitHub Action that runs AI code review on pull requests via Claude Code.",
   "private": true,
   "type": "module",
@@ -8441,7 +8569,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/README.md">
 # Code review action
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.1.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.2.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that runs AI code review on pull requests using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Has two modes:
@@ -8575,7 +8703,7 @@ uses: awinogradov/code-assistants/.github/actions/code-review-action@v1
 </file>
 
 <file path=".github/actions/code-review-action/version">
-1.1.0
+1.2.0
 </file>
 
 <file path=".github/actions/code-review-sync/action.yml">
