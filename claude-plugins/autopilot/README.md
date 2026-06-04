@@ -83,6 +83,7 @@ code-assistants/
             ├── commits:restructure/
             ├── dependabot:resolve/
             ├── issue:create/
+            ├── issue:run/
             ├── plan/
             ├── plan-bun/
             ├── plan-nodejs-react/
@@ -127,6 +128,15 @@ Create a GitHub issue with a structured body (Context / What / Why / Scope / Sol
 /autopilot:issue-create                                                # Prompt for hint, generate everything
 /autopilot:issue-create "users cannot reset password via email"        # Use hint to seed title and body
 /autopilot:issue-create "refactor token streaming pipeline"            # Solution may include ASCII diagram
+```
+
+### `/autopilot:issue-run`
+
+Pick one of the repository's recent open issues and start autopilot on it. Lists the most-recently-updated open issues via `gh issue list`, lets you select one (or type any number), then hands it to `/autopilot:run`.
+
+```bash
+/autopilot:issue-run                # List recent open issues, pick one, run autopilot
+/autopilot:issue-run 142            # Skip the picker, run autopilot on issue #142
 ```
 
 ### `/autopilot:commits-create`
