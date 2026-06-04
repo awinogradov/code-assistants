@@ -29669,7 +29669,7 @@ Write the most helpful, readable output you can: plain, direct prose; every refe
 ---
 name: issue:run
 description: List recent open GitHub issues, pick one, and start autopilot on it via the run skill. Use to go from browsing issues to a running autopilot session in one step.
-argument-hint: "[issue number — optional; skips the picker]"
+argument-hint: "[issue number — optional; skips the picker] [--all — include assigned issues]"
 allowed-tools:
   - Bash(gh *)
   - AskUserQuestion
@@ -29719,7 +29719,7 @@ Pick one of the repository's recent open issues and hand it to `autopilot:run`, 
 **Flow legend:**
 
 - ① User invokes `/issue:run`; an optional issue number skips straight to ④.
-- ② Skill lists recent open issues, most-recently-updated first.
+- ② Skill lists recent unassigned open issues, most-recently-updated first; `--all` includes assigned issues too.
 - ③ AskUserQuestion shows up to four issues; the auto-provided "Other" accepts any number.
 - ④ Skill hands the chosen number to `autopilot:run`.
 - ⑤ `autopilot:run` owns the rest of the pipeline.
@@ -29731,10 +29731,12 @@ Arguments: `$ARGUMENTS`
 Expected form:
 
 - `[issue number]` — optional. A bare number (`42`) or `#`-prefixed (`#42`). When present, the picker is skipped and autopilot runs on that issue directly. When empty, the skill lists recent open issues to choose from.
+- `[--all]` — optional. Lists every open issue, including assigned ones. Without it, the picker lists only unassigned open issues — work that is free to pick up.
 
 ## Input resolution
 
 - **Issue number** — if `$ARGUMENTS` contains an issue number, skip Phases 1-2 and hand it straight to Phase 3. Otherwise list and prompt.
+- **`--all` flag** — parse `$ARGUMENTS` for `--all` independently of the issue number (order does not matter). The skill consumes the flag itself: it only toggles the Phase 1 search string and is never forwarded to a `gh` call. Because a bare issue number skips Phases 1-2, `--all` is a no-op when an issue number is also supplied.
 - **Repository** — `gh repo view --json nameWithOwner -q .nameWithOwner`. No prompt. Pass `--repo <owner/repo>` to every `gh` call so the skill is correct inside git worktrees.
 
 ## Phase 0: Resolve Repository
@@ -29749,15 +29751,28 @@ If `$ARGUMENTS` already supplies an issue number, skip directly to Phase 3.
 
 ## Phase 1: Fetch Recent Open Issues
 
-List the four most-recently-updated open issues:
+Build the search string from the `--all` flag, then list the four most-recently-updated matching open issues:
+
+- Default (no `--all`) — `"sort:updated-desc no:assignee"`, so the picker shows only unassigned work.
+- With `--all` — `"sort:updated-desc"`, the same string with the `no:assignee` qualifier removed, so every open issue is listed.
 
 ```bash
-gh issue list --repo <repo> --state open --limit 4 --search "sort:updated-desc" --json number,title,labels
+gh issue list --repo <repo> --state open --limit 4 --search "sort:updated-desc no:assignee" --json number,title,labels
 ```
 
 - Non-empty result — keep it for Phase 2.
-- Empty result (`[]`) — there are no open issues to pick from. Tell the user and stop; if they have a number in mind they can re-invoke as `/issue:run <number>`.
-- Non-zero exit (auth or network failure) — report the `gh` error verbatim and stop. Never invent issues.
+- Clean exit with an empty result (`[]`):
+  - With `--all` — there are genuinely no open issues to pick from. Tell the user and stop; if they have a number in mind they can re-invoke as `/issue:run <number>`.
+  - Without `--all` — every open issue may already be assigned. Probe once for any open issue, using the default search string with `no:assignee` removed:
+
+    ```bash
+    gh issue list --repo <repo> --state open --limit 1 --search "sort:updated-desc" --json number
+    ```
+
+    - Clean-exit non-empty probe — open issues exist but all are assigned. Tell the user "All open issues are currently assigned. Re-run `/issue:run --all` to include them, or pass an issue number directly." and stop.
+    - Clean-exit empty (`[]`) probe — there are no open issues at all (same as the `--all` case). Tell the user and stop.
+
+- Non-zero exit (auth or network failure) on either the list or the probe — report the `gh` error verbatim and stop. Only a clean exit with `[]` triggers an empty-state branch; never invent issues.
 
 ## Phase 2: Select an Issue
 
@@ -29806,6 +29821,14 @@ Lists the four most-recently-updated open issues; the user selects `#142 Fix log
 ```
 
 The target issue is not among the four shown; the user chooses "Other" and types `131`; the skill invokes `Skill(autopilot:run)` with `131`.
+
+### Example 4: Include assigned issues
+
+```
+/issue:run --all
+```
+
+`--all` drops the default `no:assignee` filter, so the picker lists every open issue including assigned ones; the user selects `#138 Flaky CI run`; the skill invokes `Skill(autopilot:run)` with `138`.
 
 <!-- ref-format:start -->
 
