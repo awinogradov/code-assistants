@@ -15,7 +15,7 @@ name: AI Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
   issue_comment:
     types: [created]
   pull_request_review_comment:
@@ -25,17 +25,26 @@ concurrency:
   # comment.id gives each comment its own group so bursty replies aren't cancelled;
   # it's empty for pull_request events, which stay grouped per-PR (event_name + number).
   group: code-review-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event.comment.id }}
-  cancel-in-progress: true
+  # Don't cancel on `edited`: a review run posts a run-summary footer to the PR body,
+  # which itself fires `pull_request: edited`. Cancelling there would let that bot edit
+  # abort the in-flight review (the new run then skips on the sender guard), leaving the
+  # PR with no review. Non-edited events still cancel so only the latest push is reviewed.
+  cancel-in-progress: ${{ github.event.action != 'edited' }}
 
 jobs:
   ai-review:
     # Skip events sent by the bot itself — its own review/inline comments would
     # otherwise spawn a no-op react-mode run each (the in-action guard skips them
     # only after the runner spins up). Filtering here keeps the run from starting.
+    # The trailing clause re-runs review when a PR title/body is edited, so a
+    # description fix clears a stale CHANGES_REQUESTED verdict without the prior
+    # close/reopen workaround (introduced de-facto by #233's alignment checks).
+    # Base retargets (changes.base) are skipped — a later push re-covers them.
     if: >-
       (github.event_name != 'issue_comment' || github.event.issue.pull_request)
       && vars.BOT_USERNAME != ''
       && github.event.sender.login != vars.BOT_USERNAME
+      && (github.event.action != 'edited' || github.event.changes.title || github.event.changes.body)
     runs-on: ubuntu-latest
     permissions:
       contents: read
