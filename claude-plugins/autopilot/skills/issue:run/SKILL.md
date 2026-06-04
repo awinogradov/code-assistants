@@ -63,7 +63,7 @@ Arguments: `$ARGUMENTS`
 Expected form:
 
 - `[issue number]` — optional. A bare number (`42`) or `#`-prefixed (`#42`). When present, the picker is skipped and autopilot runs on that issue directly. When empty, the skill lists recent open issues to choose from.
-- `[--all]` — optional. Lists every open issue, including assigned ones (today's behavior). Without it, the picker lists only unassigned open issues — work that is free to pick up.
+- `[--all]` — optional. Lists every open issue, including assigned ones. Without it, the picker lists only unassigned open issues — work that is free to pick up.
 
 ## Input resolution
 
@@ -86,7 +86,7 @@ If `$ARGUMENTS` already supplies an issue number, skip directly to Phase 3.
 Build the search string from the `--all` flag, then list the four most-recently-updated matching open issues:
 
 - Default (no `--all`) — `"sort:updated-desc no:assignee"`, so the picker shows only unassigned work.
-- With `--all` — `"sort:updated-desc"`, the same string with the `no:assignee` qualifier removed, so every open issue is listed (today's behavior).
+- With `--all` — `"sort:updated-desc"`, the same string with the `no:assignee` qualifier removed, so every open issue is listed.
 
 ```bash
 gh issue list --repo <repo> --state open --limit 4 --search "sort:updated-desc no:assignee" --json number,title,labels
