@@ -2,6 +2,52 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.1.0](https://github.com/awinogradov/code-assistants/compare/release-action@v1.0.2...release-action@v1.1.0) (2026-06-04)
+
+## Release Notes
+
+Release notes now follow consistent formatting rules that make file names, commit SHAs, and issue references clickable and easier to follow.
+
+## ✨ What's New
+
+### Standardized reference formatting
+Generated release notes, code reviews, and other automated outputs now format references consistently — file names appear in backticks, commit SHAs and issues become clickable links, and RFC standards link to their stable versioned documents. This makes it much easier to trace references and navigate between related items.
+
+<details><summary>Related issues</summary>
+
+- [#236: Standardize reference formatting and readability in generated output](https://github.com/awinogradov/code-assistants/issues/236)
+- [#246: Version the reference-formatting standard as a stable RFC](https://github.com/awinogradov/code-assistants/issues/246)
+</details>
+
+## 🐛 Bug Fixes
+
+### Escaped backslashes in PR titles
+Release notes no longer break when PR titles contain backslashes. Previously, a backslash in a title could corrupt the YAML formatting and cause parsing errors.
+
+### Removed environment variable security vulnerability
+The release publish workflow no longer writes untrusted PR filenames to environment variables, resolving a critical security alert. The action already had a safer method to detect changed files, making the vulnerable approach unnecessary.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #246 | [#249](https://github.com/awinogradov/code-assistants/pull/249) | @awinogradov |
+| #236 | [#237](https://github.com/awinogradov/code-assistants/pull/237) | @awinogradov |
+
+### Features
+
+* **release-action:** format release-notes refs ([f081b76](https://github.com/awinogradov/code-assistants/commit/f081b7610160bcf34cf2e00d8afff4a367167ae5))
+* **rfc:** version the reference-formatting standard ([cdd6c04](https://github.com/awinogradov/code-assistants/commit/cdd6c042605c3f28cd4b3299fa61bcec6a4f8c64))
+
+### Bug Fixes
+
+* **release-action:** escape backslash in titles ([85fcf34](https://github.com/awinogradov/code-assistants/commit/85fcf344a0216adbfa6c02766ef4271f0ebab455))
+* **release-publish:** drop changed-files env step ([7185543](https://github.com/awinogradov/code-assistants/commit/7185543f5155702c043b7a083b89eda6e902f2c3))
+
+### Tests
+
+* **release-action:** add backslash-only title ([0904d5b](https://github.com/awinogradov/code-assistants/commit/0904d5bbcd260d19481734f96b6bc7d8c694f29e))
 ## [1.0.2](https://github.com/awinogradov/code-assistants/compare/release-action@v1.0.1...release-action@v1.0.2) (2026-05-31)
 
 ## Release Notes
