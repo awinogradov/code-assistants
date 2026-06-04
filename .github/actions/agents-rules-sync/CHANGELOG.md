@@ -2,6 +2,44 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [2.0.1](https://github.com/awinogradov/code-assistants/compare/agents-rules-sync-action@v2.0.0...agents-rules-sync-action@v2.0.1) (2026-06-04)
+
+## Release Notes
+
+# Release Notes v2.0.1
+
+Critical security updates protect against environment variable injection and fix YAML serialization issues that could corrupt release data.
+
+## 🐛 Bug Fixes
+
+### Fixed critical environment variable injection vulnerability
+The release-publish workflow was vulnerable to attacks through PR filenames that could inject malicious environment variables. The workflow now uses the built-in file resolution mechanism instead of writing PR filenames to `$GITHUB_ENV`, completely eliminating this attack vector.
+
+<details><summary>Related issues</summary>
+
+- [#244: MAINTENANCE: Resolve open code-scanning security alerts](https://github.com/awinogradov/code-assistants/pull/244)
+</details>
+
+### Fixed YAML serialization for backslashes in PR titles
+PR titles containing backslashes could corrupt the YAML output in release notes, potentially breaking downstream automation. The release action now properly escapes backslashes before quotes when serializing PR titles to YAML.
+
+<details><summary>Related issues</summary>
+
+- [#244: MAINTENANCE: Resolve open code-scanning security alerts](https://github.com/awinogradov/code-assistants/pull/244)
+</details>
+
+### Fixed incomplete string escaping in error messages
+Error messages in the agents-rules-sync action could fail when special characters appeared in validation errors. The action now uses plain substring matching instead of constructed RegExp patterns, avoiding escaping issues entirely.
+
+<details><summary>Related issues</summary>
+
+- [#244: MAINTENANCE: Resolve open code-scanning security alerts](https://github.com/awinogradov/code-assistants/pull/244)
+</details>
+
+
+### Tests
+
+* **agents-rules-sync:** match error by substring ([9e28609](https://github.com/awinogradov/code-assistants/commit/9e28609fd1b65b58bed3c9982617c1e74e6d07d2))
 ## [2.0.0](https://github.com/awinogradov/code-assistants/compare/agents-rules-sync-action@v1.0.0...agents-rules-sync-action@v2.0.0) (2026-05-29)
 
 ## Release Notes
