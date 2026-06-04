@@ -15,7 +15,7 @@ describe('resolvePackageAgentsRules', () => {
     expect(() => resolvePackageAgentsRules('not json')).toThrow(/not valid JSON/);
     expect(() => resolvePackageAgentsRules('not json')).toThrow(agentsFieldDocsUrl);
     for (const value of agentsRulesValues) {
-      expect(() => resolvePackageAgentsRules('not json')).toThrow(new RegExp(`"${value.replace(/\+/g, '\\+')}"`));
+      expect(() => resolvePackageAgentsRules('not json')).toThrow(`"${value}"`);
     }
   });
 
@@ -35,7 +35,7 @@ describe('resolvePackageAgentsRules', () => {
     const raw = JSON.stringify({ agents: { rules: 'Deno' } });
     expect(() => resolvePackageAgentsRules(raw)).toThrow(/Invalid `agents.rules`/);
     for (const value of agentsRulesValues) {
-      expect(() => resolvePackageAgentsRules(raw)).toThrow(new RegExp(`"${value.replace(/\+/g, '\\+')}"`));
+      expect(() => resolvePackageAgentsRules(raw)).toThrow(`"${value}"`);
     }
   });
 
