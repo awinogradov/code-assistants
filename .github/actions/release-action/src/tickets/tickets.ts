@@ -401,7 +401,7 @@ export function extractPrDescriptions(
 export function serializePrDescriptionsToYaml(descriptions: PrDescription[]): string {
   return descriptions
     .map((d) => {
-      const escapedTitle = d.title.replace(/"/g, '\\"');
+      const escapedTitle = d.title.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       const indentedContent = d.content
         .split("\n")
         .map((line) => `    ${line}`)
