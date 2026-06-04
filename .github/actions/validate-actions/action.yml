@@ -1,0 +1,62 @@
+name: Validate Actions
+description: Lint changed workflow files with actionlint (including the bash embedded in their run steps) and the inline run blocks of changed composite action.yml files with shellcheck.
+author: Code Assistants
+
+inputs:
+  actionlint-version:
+    description: actionlint release version to install, without the leading "v". Pinned and checksum-verified.
+    required: false
+    default: "1.7.11"
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        # Full history so the merge-base with the PR's base branch can be resolved.
+        fetch-depth: 0
+
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: 1.x
+
+    - name: Install action dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: bun install --frozen-lockfile --filter @code-assistants/validate-actions-action
+
+    - name: Install actionlint
+      shell: bash
+      env:
+        ACTIONLINT_VERSION: ${{ inputs.actionlint-version }}
+      run: |
+        set -euo pipefail
+        tmp="$(mktemp -d)"
+        base_url="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}"
+        archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+        curl --fail --silent --show-error --location --output "${tmp}/${archive}" "${base_url}/${archive}"
+        curl --fail --silent --show-error --location --output "${tmp}/checksums.txt" "${base_url}/actionlint_${ACTIONLINT_VERSION}_checksums.txt"
+        ( cd "${tmp}" && grep " ${archive}\$" checksums.txt | sha256sum --check --strict - )
+        tar --extract --gzip --file "${tmp}/${archive}" --directory "${tmp}" actionlint
+        printf '%s\n' "${tmp}" >> "${GITHUB_PATH}"
+
+    - name: Lint changed workflows and actions
+      shell: bash
+      env:
+        BASE_REF: ${{ github.base_ref }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+        git fetch --no-tags --quiet origin "${BASE_REF}"
+        base_sha="$(git merge-base FETCH_HEAD HEAD)"
+        printf 'validate-actions: diffing changed files since %s\n' "${base_sha}"
+        mapfile -t files < <(git diff --name-only --diff-filter=ACMR "${base_sha}" HEAD -- .github/workflows .github/actions)
+        if [ "${#files[@]}" -eq 0 ]; then
+          echo "validate-actions: no workflow or action changes"
+          exit 0
+        fi
+        printf 'validate-actions: candidate changed files:\n'
+        printf '  %s\n' "${files[@]}"
+        bun run "${ACTION_PATH}/src/validateActions.ts" --files "${files[@]}"

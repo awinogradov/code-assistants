@@ -36,7 +36,7 @@
     },
     ".github/actions/auto-label": {
       "name": "@code-assistants/auto-label-action",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@actions/core": "3.0.1",
         "@code-assistants/actions-core": "workspace:*",
@@ -51,7 +51,7 @@
     },
     ".github/actions/code-review-action": {
       "name": "@code-assistants/code-review-action",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "0.2.126",
         "@code-assistants/actions-core": "workspace:*",
@@ -112,9 +112,21 @@
         "typescript": "6.0.3",
       },
     },
+    ".github/actions/validate-actions": {
+      "name": "@code-assistants/validate-actions-action",
+      "version": "0.1.0",
+      "dependencies": {
+        "yaml": "2.9.0",
+        "zod": "4.4.3",
+      },
+      "devDependencies": {
+        "@types/bun": "1.3.14",
+        "typescript": "6.0.3",
+      },
+    },
     "claude-plugins/autopilot": {
       "name": "autopilot",
-      "version": "1.0.0",
+      "version": "1.1.0",
     },
     "packages/actions-core": {
       "name": "@code-assistants/actions-core",
@@ -177,6 +189,8 @@
     "@code-assistants/release-action": ["@code-assistants/release-action@workspace:.github/actions/release-action"],
 
     "@code-assistants/release-automerge": ["@code-assistants/release-automerge@workspace:.github/actions/release-automerge"],
+
+    "@code-assistants/validate-actions-action": ["@code-assistants/validate-actions-action@workspace:.github/actions/validate-actions"],
 
     "@commitlint/cli": ["@commitlint/cli@21.0.1", "", { "dependencies": { "@commitlint/format": "^21.0.1", "@commitlint/lint": "^21.0.1", "@commitlint/load": "^21.0.1", "@commitlint/read": "^21.0.1", "@commitlint/types": "^21.0.1", "tinyexec": "^1.0.0", "yargs": "^18.0.0" }, "bin": { "commitlint": "cli.js" } }, "sha512-8vq10krmbJwBkvzXKhbs4o4JQEVscd3pqOlWuDUaDBwbeL694/P33UC29tZQFTAgPU9fVJ2+f2m3zw16yKWxHg=="],
 
@@ -753,6 +767,8 @@
     "@code-assistants/code-review-action/zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
 
     "@code-assistants/files-sync-action/zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
+
+    "@code-assistants/validate-actions-action/zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
 
     "@commitlint/is-ignored/semver": ["semver@7.8.0", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-AcM7dV/5ul4EekoQ29Agm5vri8JNqRyj39o0qpX6vDF2GZrtutZl5RwgD1XnZjiTAfncsJhMI48QQH3sN87YNA=="],
 
