@@ -28,6 +28,7 @@ See the [plugin README](./claude-plugins/autopilot/README.md#installation) for s
 - [Inline suggestions and AI-agent prompts](./docs/code-review-suggestions.md) — how `code-review-action` adds one-click GitHub suggestion blocks and a "Prompt for AI agents" block to each inline finding
 - [Plan and run skills](./docs/plan-run-skills.md) — how the `plan` and `run` skills work end to end: phases, orchestrator↔stack delegation, sub-agent fan-out, and run's automated post-implementation, with ASCII diagrams
 - [Plan skills audit](./docs/plan-skills-audit.md) — a dimension-by-dimension audit of the `plan`, `plan-bun`, and `plan-nodejs-react` skills with a prioritized optimization plan
+- [Output formatting](./docs/output-formatting.md) — the single reference-formatting + readability standard inlined into every skill and the release-notes prompt, kept in sync by the `referenceFormattingSync` test
 - [Stack rule sets](./rules/) — `Bun`, `Bun+React+Tailwind`, `NodeJS+React`, `NodeJS+React+Tailwind`
 
 ## GitHub Actions
