@@ -975,6 +975,7 @@ Add an optional `suggestion` to an inline comment when the fix is concrete and m
 - Direct, confident language
 - Clear verdict (rationale only when requesting changes)
 - Rule code rendered per [§2.5](#25-rule-codes) (`[<CODE>](<RULES_DOC_URL>#<CODE>)`, or merged `[[<CODE1>](<RULES_DOC_URL>#<CODE1>), [<CODE2>](<RULES_DOC_URL>#<CODE2>)]` for a shared location) on every finding line (blocker, suggestion, nitpick) and every `inlineComments.body`; omit the suffix entirely when no rule code is available
+- File, section, doc, commit, and issue references follow the Reference formatting & readability rules at the end of this skill. Exception: an inline comment is already anchored to its file and line by GitHub, so keep its location as a backticked full path (e.g. `src/services/payment/processor.ts:66`); apply the linking rules to the review-body prose and any out-of-diff reference
 
 ### Exclude
 
@@ -989,3 +990,22 @@ Add an optional `suggestion` to an inline comment when the fix is concrete and m
 - Hedging words: "should", "could", "might", "consider"
 - Duplicate content between reviewComment and inlineComments
 - Empty sections with "None", "N/A", or similar placeholders
+
+<!-- ref-format:start -->
+
+### Reference formatting & readability
+
+These rules govern references — when you point the reader at a real file, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Render the same kind of reference the same way everywhere:
+
+- File names / paths — link to the file when a URL or repo-relative path is derivable, e.g. `[pr:review/SKILL.md](<repo-blob-url>/claude-plugins/autopilot/skills/pr:review/SKILL.md)`; when no target is derivable, a backticked specimen like `reviewOutput.ts` is fine.
+- Section references — ALWAYS a link to the doc anchor, e.g. `[§1.5](<doc-url>#15-context-map)`; never leave a section reference bare.
+- Doc names — link the doc you reference, e.g. `[CLAUDE.md](<repo-blob-url>/CLAUDE.md)`, `[README.md](<repo-blob-url>/README.md)`.
+- Code identifiers that are not file names (functions, types, vars) — backticks, e.g. `buildReviewComments`.
+- Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; if you cannot build the URL, leave the bare SHA un-backticked.
+- Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
+
+Backticks suppress GitHub autolinking: a commit SHA or issue/PR number inside a code span renders as dead text — that is why a backticked SHA was un-clickable in a prior review. Never wrap a SHA or issue/PR number in backticks; link it, or leave it bare so GitHub auto-links it.
+
+Write the most helpful, readable output you can: plain, direct prose; every reference resolvable; explain the "why", not the obvious "what".
+
+<!-- ref-format:end -->
