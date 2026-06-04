@@ -5,7 +5,7 @@
 Two affordances make a review directly actionable — both modelled on the third-party cubic reviewer:
 
 - A **GitHub `suggestion` block** the author applies with one click ("Commit suggestion"), for single-line and multi-line fixes.
-- A collapsible **"Prompt for AI agents"** block: a ready-to-paste prompt carrying the instruction, `path:line`, the finding, and the surrounding diff hunk as `<file context>`.
+- A collapsible **"Prompt for AI agents"** block: a ready-to-paste prompt carrying the instruction, `path:line`, a chrome-free copy of the finding, and a bounded window of the surrounding diff as `<file context>`.
 
 The model decides the fix; the action renders and posts it. Both land through the same `octokit.rest.pulls.createReview` call the action already makes.
 
@@ -30,8 +30,8 @@ The `pr:review` skill emits two new optional per-comment fields — `suggestion`
               │      body
               │      + GitHub suggestion block        (if suggestion set)
               │      + <details> Prompt for AI agents:
-              │           <comment> finding </comment>
-              │           <file context> hunk </file context>
+              │           <comment> cleaned finding </comment>
+              │           <file context> bounded hunk </file context>
               │
               ├──  Octokit payload per comment:
               │      { path, line, body, side: RIGHT,
@@ -50,43 +50,58 @@ The `pr:review` skill emits two new optional per-comment fields — `suggestion`
 
 - ① The skill emits each finding with optional `startLine` and `suggestion`; it crosses the action boundary as the `structured_output` JSON, validated by `inlineCommentSchema`.
 - ② Per comment, the action looks up the file's patch and extracts the hunk covering the line — used for `<file context>` and (via `isValidComment`) to confirm the whole range is in-diff.
-- ③ The action renders the final body: original finding, then the suggestion fence (when present), then the cubic-shaped "Prompt for AI agents" `<details>`.
+- ③ The action renders the final body: original finding, then the suggestion fence (when present), then the cubic-shaped "Prompt for AI agents" `<details>`. The embedded prompt copy is cleaned (leading severity emoji and trailing rule link removed) and its `<file context>` is bounded to a window around the finding line — only this copy is transformed; the original finding above stays verbatim.
 - ④ Posted through the existing `createReview` call with `side`/`start_line`/`start_side` added for multi-line; GitHub renders the suggestion button and the collapsible prompt.
 
 ## Rendered comment
 
-A finding with a two-line `suggestion` over `startLine: 7, line: 8` renders like this (the action wraps the model's raw replacement in the ` ```suggestion ` fence and appends the prompt):
+A finding with a two-line `suggestion` over `startLine: 7, line: 8`, inside a freshly added 20-line file, renders like this (the action wraps the model's raw replacement in the ` ```suggestion ` fence and appends the prompt):
 
 ````text
 🚧 Off-by-one in the running sum — `items[n]` reads past the array [CHECK-BUG-003](…)
 
 ```suggestion
     for i in range(n):
-        total += items[i]
+        running += items[i]
 ```
 
 <details>
 <summary>Prompt for AI agents</summary>
 
 ```text
-Check if this issue is valid — if so, understand the root cause and fix it. At src/calc.py, lines 7 to 8:
+Check if this issue is valid — if so, understand the root cause and fix it. At src/totals.py, lines 7 to 8:
 
 <comment>
-🚧 Off-by-one in the running sum — `items[n]` reads past the array [CHECK-BUG-003](…)
+Off-by-one in the running sum — `items[n]` reads past the array
 </comment>
 
 <file context>
-@@ -5,4 +7,2 @@ def total(items, n):
--    for i in range(n + 1):
-+    for i in range(n):
-         total += items[i]
+@@ -0,0 +1,20 @@ def total(items, n):
++    """Sum the first n items."""
++    running = 0
++    if n < 0:
++        raise ValueError("bad n")
++    n = min(n, len(items))
++    for i in range(n + 1):
++        running += items[i]
++    return running
++
++def mean(items, n):
++    if n == 0:
++        return 0
++    return total(items, n) / n
 </file context>
 ```
 
 </details>
 ````
 
-The suggestion replaces the anchored line(s) verbatim, so the model must reproduce the original indentation — a stray space would silently reindent the file on apply. The `pr:review` skill enforces this; `inlineCommentBody.test.ts` asserts the rendered fence preserves it.
+Two transforms keep the embedded prompt prompt-shaped rather than a verbose data dump (a new or large file previously dumped in full — the problem from PR #253):
+
+- **Bounded context** — `<file context>` is trimmed to `agentPromptContextRadius` (6) new-file lines on each side of the finding line, a ~13-line window (fewer near a file edge). The full hunk here is the whole 20-line file; the window drops line 1 and lines 15–20. The `@@` header is kept verbatim, so its `+1,20` still describes the full hunk, not the window. A hunk already smaller than the window is left untouched.
+- **Chrome stripped** — the embedded `<comment>` drops the leading severity emoji and the trailing `[CHECK-BUG-003](…)` rule link, leaving clean instruction text; inline-code backticks (`` `items[n]` ``) are preserved. Only this embedded copy is cleaned — the human-facing finding above the suggestion keeps its emoji and rule link verbatim.
+
+The suggestion replaces the anchored line(s) verbatim, so the model must reproduce the original indentation — a stray space would silently reindent the file on apply. The `pr:review` skill enforces this; `inlineCommentBody.test.ts` asserts the rendered fence preserves it, the bounded window, and the chrome-free embedded finding.
 
 ## Multi-line suggestions
 
