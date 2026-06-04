@@ -94,15 +94,19 @@ The two skills share the same front half. `plan` produces the plan and stops, as
 
 The skill detects the input type from its arguments and gathers context **in parallel**:
 
-| Argument pattern      | Type              |
-| --------------------- | ----------------- |
-| `123`                 | GitHub issue      |
-| `#123`                | GitHub issue      |
-| contains `github.com` | GitHub issue URL  |
-| anything else         | Plain description |
+| Argument pattern                                                | Type                |
+| --------------------------------------------------------------- | ------------------- |
+| `…/security/code-scanning/{n}` URL, `alert#{n}`, or `alert {n}` | Code-scanning alert |
+| `123`                                                           | GitHub issue        |
+| `#123`                                                          | GitHub issue        |
+| contains `github.com`                                           | GitHub issue URL    |
+| anything else                                                   | Plain description   |
+
+The classifier matches **top-to-bottom**: the code-scanning-alert row is checked first because an alert URL contains `github.com` and would otherwise misroute to `gh issue view`. A bare number stays a GitHub issue — alerts need the URL or the explicit `alert#{n}` / `alert {n}` token.
 
 - **Codebase snapshot (always).** Prefer the committed `.repomix/pack.xml` via `attach_packed_output`; fall back to a live `pack_codebase` when it is absent. Phase 0 only _attaches_ the pack — it does not read code from it; the returned `outputId` is handed to Phase 1, the single phase that reads the codebase. See [Committed Repomix pack](./repomix-pack.md).
 - **For GitHub issues (parallel sub-agents).** `resolve-issue-context` fetches the issue (and, when the caller opts in, idempotently self-assigns the current user); `search-codebase-todos` finds TODOs referencing the issue. Both return JSON (see [Sub-agents](#sub-agents-and-their-json-contracts)).
+- **For code-scanning alerts (one sub-agent).** `resolve-alert-context` resolves the alert through `gh api repos/{owner}/{repo}/code-scanning/alerts/{n}` (rule, severity, `file:line`, state, message, `html_url`) — never `gh issue view`. There is no TODO search and no self-assign. If it returns `state: "unresolved"` (gh unauthenticated, missing `security_events` scope, or alert not found), the skill surfaces the error and stops rather than misrouting. The alert drives the plan title/summary and a `security-<slug>` branch / `SECURITY:` PR; the PR records the alert reference and emits no `Closes #` (alerts close on the next scan), and the plan's verify step polls alert state via the code-scanning API.
 
 The skill then emits, for the user's review (all derived from the resolved issue JSON and TODOs, not a codebase scan): the rendered **issue context**, a one-line **steelmanned intent** (the request restated in its strongest form — the stable target for expert reviewers, copied verbatim into the plan's `## Summary`), and **Assumptions & Open Questions**. Any load-bearing open question is raised via `AskUserQuestion` before delegating.
 
@@ -136,6 +140,7 @@ If the stack cannot be detected, the skill asks the user via `AskUserQuestion`. 
 Before handing the plan to the user, the skill embeds the branch step so it runs first after approval. The exact block depends on the input type and current branch/worktree state:
 
 - **GitHub issue** → invoke `Skill(autopilot:branch-create)` with the issue number; it produces an `issue-<number>-<slug>` branch so the PR can `Closes #<number>`.
+- **Code-scanning alert** → invoke `Skill(autopilot:branch-create)` with `--security "<slug>"`; it produces a `security-<slug>` branch (no issue number, no `Closes #`).
 - **Plain description** → prompt for a branch type (Hotfix / Trivial / Maintenance) and branch via `branch-create` with that prefix.
 - **Already on a feature branch with active work** → no branch block is added.
 
@@ -195,6 +200,7 @@ Three sub-agents isolate work from the parent's context. Each returns a single s
 **Flow Legend:**
 
 - `resolve-issue-context` → `{ source, issueId, title, status, labels[], assignee|null, description, comments[] }`
+- `resolve-alert-context` → `{ source, alertNumber, ruleId, severity, state, file, line, message, htmlUrl, resolveError|null }` (code-scanning-alert input only; `state: "unresolved"` + `resolveError` on failure)
 - `search-codebase-todos` → `{ todos[{location, text}], total }`
 - `expert-review` → `{ expertRole, score, verdict: "approved"|"needs-revision", findings[3–5], revision|null }`
 
@@ -232,4 +238,5 @@ Three sub-agents isolate work from the parent's context. Each returns a single s
 | `claude-plugins/autopilot/skills/run/SKILL.md`               | `plan` plus the automated post-implementation chain                                     |
 | `claude-plugins/autopilot/agents/expert-review.md`           | Domain-expert plan reviewer (JSON verdict)                                              |
 | `claude-plugins/autopilot/agents/resolve-issue-context.md`   | GitHub issue context resolver (JSON)                                                    |
+| `claude-plugins/autopilot/agents/resolve-alert-context.md`   | Code-scanning alert context resolver via `gh api …/code-scanning/alerts/{n}` (JSON)     |
 | `claude-plugins/autopilot/agents/search-codebase-todos.md`   | TODO/issue-reference search (JSON)                                                      |
