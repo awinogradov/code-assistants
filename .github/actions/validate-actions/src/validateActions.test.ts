@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { lintActionManifest } from "./validateActions.ts";
+import { lintActionManifest, runValidate } from "./validateActions.ts";
 
 // These tests spawn the real `shellcheck` binary, so they only run where it is
 // installed (CI ubuntu runners and the live action have it; skipped otherwise).
@@ -51,5 +51,35 @@ describe.skipIf(!hasShellcheck)("lintActionManifest (integration, requires shell
     const { annotations, operationalError } = await lintActionManifest(path);
     expect(operationalError).toBe(false);
     expect(annotations).toEqual([]);
+  });
+});
+
+describe("lintActionManifest YAML errors", () => {
+  test("reports a malformed action.yml as a blocking error (no shellcheck needed)", async () => {
+    const path = await writeManifest("name: x\nruns: : :\n");
+    const { annotations, operationalError } = await lintActionManifest(path);
+    expect(operationalError).toBe(false);
+    expect(annotations).toHaveLength(1);
+    expect(annotations[0]).toMatchObject({ level: "error", blocking: true });
+    expect(annotations[0].message).toContain("invalid YAML");
+  });
+});
+
+describe("runValidate", () => {
+  test("exits 0 when no changed file is a workflow or action manifest", async () => {
+    expect(await runValidate(["--files", "README.md", "src/foo.ts"])).toBe(0);
+  });
+
+  test("exits 1 on a malformed composite action manifest in the changed set", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "validate-actions-tree-"));
+    dirs.push(dir);
+    await Bun.write(join(dir, ".github/actions/sample/action.yml"), "name: x\nruns: : :\n");
+    const original = process.cwd();
+    process.chdir(dir);
+    try {
+      expect(await runValidate(["--files", ".github/actions/sample/action.yml"])).toBe(1);
+    } finally {
+      process.chdir(original);
+    }
   });
 });
