@@ -9171,7 +9171,7 @@ The synced `contributing.yml` workflow references the action via `@main` so cons
 
 <file path=".github/actions/contributing-sync/action.yml">
 name: Contributing sync
-description: Sync CONTRIBUTING.md, CODE_OF_CONDUCT.md, LICENSE.md, the contributing workflow, the auto-label workflow, and the licenses workflow from an upstream repository into the current repository.
+description: Sync CONTRIBUTING.md, CODE_OF_CONDUCT.md, LICENSE.md, the contributing workflow, the auto-label workflow, the licenses workflow, and the validate-actions workflow from an upstream repository into the current repository.
 
 inputs:
   bot_token:
@@ -9220,6 +9220,7 @@ runs:
           .github/workflows/contributing.yml
           .github/workflows/auto-label.yml
           .github/workflows/licenses.yml
+          .github/workflows/validate-actions.yml
         )
         {
           echo "files<<__EOF__"
@@ -9260,8 +9261,9 @@ The synced set is:
 - `.github/workflows/contributing.yml`
 - `.github/workflows/auto-label.yml`
 - `.github/workflows/licenses.yml`
+- `.github/workflows/validate-actions.yml`
 
-The first three are the contributor-facing documentation. The three workflows propagate CI that
+The first three are the contributor-facing documentation. The four workflows propagate CI that
 references upstream actions on every run — the actions themselves stay in the upstream
 repository, so consumers do not need a local copy:
 
@@ -9271,6 +9273,8 @@ repository, so consumers do not need a local copy:
   `awinogradov/code-assistants/.github/actions/auto-label@main`.
 - `licenses.yml` runs [`licenses-audit`](../licenses-audit/README.md) via
   `awinogradov/code-assistants/.github/actions/licenses-audit@main`.
+- `validate-actions.yml` runs [`validate-actions`](../validate-actions/README.md) via
+  `awinogradov/code-assistants/.github/actions/validate-actions@main`.
 
 The action builds the sync list and delegates the diff and PR mechanics to the
 [`files-sync`](../files-sync/README.md) action. It does not require `actions/checkout` and
@@ -9337,8 +9341,9 @@ See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/a
 ## Behavior
 
 - Delegates to `files-sync` with a fixed sync list — `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`,
-  `LICENSE.md`, `.github/workflows/contributing.yml`, `.github/workflows/auto-label.yml`, and
-  `.github/workflows/licenses.yml` — sourced from `source-repo` at `source-ref`.
+  `LICENSE.md`, `.github/workflows/contributing.yml`, `.github/workflows/auto-label.yml`,
+  `.github/workflows/licenses.yml`, and `.github/workflows/validate-actions.yml` — sourced from
+  `source-repo` at `source-ref`.
 - The PR is opened on the fixed branch `maintenance-sync-contributing` with the title
   `MAINTENANCE: Sync contributing files from upstream` and the commit message
   `chore: sync contributing files from upstream`. These values are not configurable so the
@@ -25275,7 +25280,7 @@ None.
 
 Reference the action by tag, e.g. `…/validate-actions@v1`, for explicit control, or `@main` to always pick up the latest logic.
 
-> This action and its workflow are not yet distributed to downstream repositories. When the action is wired into the upstream sync, add the standard "distributed downstream" source header to the synced workflow.
+> This action's workflow is distributed to downstream repositories via the [`contributing-sync`](../contributing-sync/README.md) action; the synced `validate-actions.yml` carries the standard "distributed downstream" source header and references this action via `@main`.
 </file>
 
 <file path=".github/actions/validate-actions/tsconfig.json">
@@ -25732,6 +25737,11 @@ jobs:
 </file>
 
 <file path=".github/workflows/validate-actions.yml">
+# Source: https://github.com/awinogradov/code-assistants/blob/main/.github/workflows/validate-actions.yml
+# This file is distributed to downstream repositories by an automated sync.
+# Edits made downstream are overwritten on the next run.
+# To change it, open a pull request against the source file above.
+
 name: Validate Actions
 
 on:
@@ -36983,7 +36993,7 @@ every consumer automatically, with no consumer workflow edit.
 | `code-review`  | `.github/workflows/code-review.yml`                                                                                                                               | `maintenance-sync-code-review`  | [`code-review-sync`](../.github/actions/code-review-sync/README.md)   |
 | `repomix`      | `.github/workflows/repomix-pack.yml`, `repomix.config.json`                                                                                                       | `maintenance-sync-repomix`      | [`repomix-sync`](../.github/actions/repomix-sync/README.md)           |
 | `release`      | `.github/workflows/release-create.yml`, `release-publish.yml`, `release-automerge.yml`                                                                            | `maintenance-sync-release`      | [`release-sync`](../.github/actions/release-sync/README.md)           |
-| `contributing` | `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, `.github/workflows/contributing.yml`, `.github/workflows/auto-label.yml`, `.github/workflows/licenses.yml` | `maintenance-sync-contributing` | [`contributing-sync`](../.github/actions/contributing-sync/README.md) |
+| `contributing` | `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, `.github/workflows/contributing.yml`, `.github/workflows/auto-label.yml`, `.github/workflows/licenses.yml`, `.github/workflows/validate-actions.yml` | `maintenance-sync-contributing` | [`contributing-sync`](../.github/actions/contributing-sync/README.md) |
 
 Each kind delegates to its `*-sync` action, which delegates the diff and PR mechanics to
 [`files-sync`](../.github/actions/files-sync/README.md). The action directories these synced
