@@ -113,17 +113,17 @@ jobs:
     steps:
       - uses: awinogradov/code-assistants/.github/actions/auto-label@v1
         with:
-          token: ${{ github.token }}
+          token: ${{ secrets.BOT_TOKEN }}
 ```
 
 ## Inputs
 
-| Input                        | Required | Default                            | Description                                                                                                                           |
-| ---------------------------- | -------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `token`                      | yes      | —                                  | Token with `pull-requests: write` + `issues: write`. The default `GITHUB_TOKEN` is sufficient (read-only on fork PRs — see Behavior). |
-| `label-prefix`               | no       | _(derived)_                        | Override the auto-derived prefix. Empty → derived from the root `package.json` `name` scope. A trailing `/` is added when missing.    |
-| `label-color`                | no       | `5319e7`                           | Hex color (no leading `#`) for labels the action creates.                                                                             |
-| `label-description-template` | no       | `Auto-applied: PR touches {label}` | Template for created label descriptions. `{label}` is replaced with the label name.                                                   |
+| Input                        | Required | Default                            | Description                                                                                                                                                                                                                                                                                         |
+| ---------------------------- | -------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `token`                      | yes      | —                                  | Token with `pull-requests: write` + `issues: write`. Pass `${{ secrets.BOT_TOKEN }}` (a PAT or App token) so label events are attributed to the bot identity, not `github-actions[bot]`. Required — an empty value fails the label API calls with HTTP 401. Unavailable on fork PRs (see Behavior). |
+| `label-prefix`               | no       | _(derived)_                        | Override the auto-derived prefix. Empty → derived from the root `package.json` `name` scope. A trailing `/` is added when missing.                                                                                                                                                                  |
+| `label-color`                | no       | `5319e7`                           | Hex color (no leading `#`) for labels the action creates.                                                                                                                                                                                                                                           |
+| `label-description-template` | no       | `Auto-applied: PR touches {label}` | Template for created label descriptions. `{label}` is replaced with the label name.                                                                                                                                                                                                                 |
 
 ## Permissions
 
@@ -148,6 +148,11 @@ against a conservative charset/length before use.
 
 ## Notes
 
+- **`BOT_TOKEN` is required.** The synced `auto-label.yml` passes `${{ secrets.BOT_TOKEN }}` so label
+  events are attributed to the project bot rather than `github-actions[bot]`. Consumers MUST configure
+  a `BOT_TOKEN` secret (a PAT or GitHub App token with `pull-requests: write` + `issues: write`);
+  without it the job fails with HTTP 401. Secrets are not exposed to fork PRs, which is also why the
+  job is gated behind the fork check.
 - **Scope the triggers.** The mode is chosen from `github.event_name`, so a `push` to _any_ branch
   would run prune. Consumers MUST filter `push: branches: [<default>]` (and `pull_request:
 branches`) so prune only runs on the default branch.
