@@ -179,16 +179,7 @@ async function runMonorepoPublish(cwd: string): Promise<void> {
     throw new Error("Publish invoked without monorepo discovery — check action.yml gating");
   }
 
-  // The PR file list is supplied via gh pr view in the workflow shell; the
-  // resolver supports either a `changedFiles` override (passed via env) or
-  // GITHUB_EVENT_PATH discovery. Read the env override here.
-  const overrideFiles = process.env.PR_CHANGED_FILES;
-  const changedFiles = overrideFiles
-    ? overrideFiles
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean)
-    : await readChangedFiles({ cwd });
+  const changedFiles = await readChangedFiles({ cwd });
 
   const plan = await resolvePublishPlan({ cwd, changedFiles });
 

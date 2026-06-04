@@ -245,11 +245,9 @@ jobs:
           bot_username: ${{ vars.BOT_USERNAME }}
           npm_token: ${{ secrets.NPM_TOKEN }}
           slack_token: ${{ secrets.SLACK_TOKEN }}
-        env:
-          PR_CHANGED_FILES: ${{ steps.changed.outputs.files }}
 ```
 
-`PR_CHANGED_FILES` is a newline-separated list of paths supplied by an upstream step (e.g., `gh pr view <N> --json files --jq '.files[].path'`). When the env variable is unset, the action falls back to `GITHUB_EVENT_PATH` and accepts a single-member PR shape.
+The action reads the merged PR's changed files itself — via `GITHUB_EVENT_PATH` (the GitHub event payload) and the GitHub API using `bot_token` — so no upstream step or extra environment configuration is required.
 
 ## Versioning
 
