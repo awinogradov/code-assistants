@@ -275,6 +275,7 @@ The content is organized as follows:
     release-publish.yml
     repomix-pack.yml
     upstream.yml
+    validate-actions.yml
 .husky/
   commit-msg
   pre-commit
@@ -25728,6 +25729,32 @@ jobs:
           bot_username: ${{ vars.BOT_USERNAME }}
           # Every sync kind runs by default. Opt out by setting a kind to false, e.g.:
           # release: false
+</file>
+
+<file path=".github/workflows/validate-actions.yml">
+name: Validate Actions
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+
+concurrency:
+  group: validate-actions-${{ github.workflow }}-${{ github.head_ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: awinogradov/code-assistants/.github/actions/validate-actions@main
 </file>
 
 <file path=".husky/commit-msg">
