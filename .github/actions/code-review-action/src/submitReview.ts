@@ -141,7 +141,7 @@ const invalidComments = allComments
 // Fail-open: no footer when RUN_SUMMARY is absent or invalid.
 const reviewBody = output.reviewComment + formatInvalidComments(invalidComments);
 const runSummary = parseRunSummary(process.env.RUN_SUMMARY);
-const footer = runSummary ? renderRunSummaryFooter(runSummary) : "";
+const footer = runSummary ? renderRunSummaryFooter(runSummary, reviewer) : "";
 const finalBody = buildReviewBody(reviewBody, footer, validComments.length > 0);
 
 // The footer carries run-varying numbers (cost, latency); strip it from both

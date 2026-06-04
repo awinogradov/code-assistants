@@ -1,9 +1,9 @@
 /**
- * Build the marker-bounded, collapsible `<details>` block shared by the PR
- * help footer (`updatePrFooter.ts`) and the review run-summary footer
- * (`runSummaryFooter.ts`). The HTML-comment markers bound the block so callers
- * can locate it to rebuild or strip it, and the blank line after `<br />` lets
- * a GitHub-flavored markdown table or list render inside the `<details>`.
+ * Build the marker-bounded, collapsible `<details>` block used by the review
+ * run-summary footer (`runSummaryFooter.ts`). The HTML-comment markers bound the
+ * block so callers can locate it to rebuild or strip it, and the blank line
+ * after `<br />` lets a GitHub-flavored markdown table or list render inside the
+ * `<details>`.
  *
  * @example
  * buildMarkedDetailsBlock({
@@ -18,7 +18,7 @@ export interface MarkedDetailsBlock {
   startMarker: string;
   /** Closing HTML-comment marker placed directly below `</details>`. */
   endMarker: string;
-  /** Text rendered inside `<summary>`, e.g. `"Available commands 🤖"`. */
+  /** Text rendered inside `<summary>`, e.g. `"Review run summary 🤖"`. */
   summary: string;
   /** Markdown lines rendered inside the open `<details>`, after the blank line. */
   bodyLines: string[];
