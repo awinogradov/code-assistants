@@ -59,9 +59,11 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 
 ## Rendered footer
 
-`renderRunSummaryFooter` mirrors the "under the cut" pattern from `updatePrFooter.ts` — the start marker sits directly above the `---` rule, and a blank line after `<br />` lets the GitHub-flavored markdown table render inside `<details>`.
+`renderRunSummaryFooter` emits a visible `@<reviewer>` usage hint followed by the collapsible metrics block. The hint is stable text and sits **outside** the strip markers so it survives dedup stripping and stays in the comment; only the run-varying metrics are marker-bounded. Inside the block, the start marker sits directly above the `---` rule, and a blank line after `<br />` lets the GitHub-flavored markdown table render inside `<details>`.
 
 ```text
+> 💡 `@review-bot <comment>` — Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.
+
 <!-- run-summary-start -->
 ---
 <details>
