@@ -40,10 +40,11 @@ jobs:
           GH_TOKEN: ${{ secrets.BOT_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          delimiter="$(openssl rand -hex 16)"
           {
-            echo 'PR_CHANGED_FILES<<EOF'
+            echo "PR_CHANGED_FILES<<${delimiter}"
             gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER/files" --paginate --jq '.[].filename'
-            echo EOF
+            echo "${delimiter}"
           } >> "$GITHUB_ENV"
 
       - uses: awinogradov/code-assistants/.github/actions/release-action@main
