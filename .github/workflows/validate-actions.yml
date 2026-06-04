@@ -8,7 +8,7 @@ on:
       - ".github/actions/**"
 
 concurrency:
-  group: validate-actions-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: validate-actions-${{ github.workflow }}-${{ github.head_ref }}
   cancel-in-progress: true
 
 permissions:
