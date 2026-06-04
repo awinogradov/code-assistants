@@ -120,7 +120,6 @@ The content is organized as follows:
         runSummaryFooter.test.ts
         runSummaryFooter.ts
         submitReview.ts
-        updatePrFooter.ts
       action.yml
       CHANGELOG.md
       MIGRATING.md
@@ -5315,11 +5314,11 @@ describe("buildMarkedDetailsBlock", () => {
 
 <file path=".github/actions/code-review-action/src/markedDetailsBlock.ts">
 /**
- * Build the marker-bounded, collapsible `<details>` block shared by the PR
- * help footer (`updatePrFooter.ts`) and the review run-summary footer
- * (`runSummaryFooter.ts`). The HTML-comment markers bound the block so callers
- * can locate it to rebuild or strip it, and the blank line after `<br />` lets
- * a GitHub-flavored markdown table or list render inside the `<details>`.
+ * Build the marker-bounded, collapsible `<details>` block used by the review
+ * run-summary footer (`runSummaryFooter.ts`). The HTML-comment markers bound the
+ * block so callers can locate it to rebuild or strip it, and the blank line
+ * after `<br />` lets a GitHub-flavored markdown table or list render inside the
+ * `<details>`.
  *
  * @example
  * buildMarkedDetailsBlock({
@@ -5334,7 +5333,7 @@ export interface MarkedDetailsBlock {
   startMarker: string;
   /** Closing HTML-comment marker placed directly below `</details>`. */
   endMarker: string;
-  /** Text rendered inside `<summary>`, e.g. `"Available commands 🤖"`. */
+  /** Text rendered inside `<summary>`, e.g. `"Review run summary 🤖"`. */
   summary: string;
   /** Markdown lines rendered inside the open `<details>`, after the blank line. */
   bodyLines: string[];
@@ -6833,6 +6832,8 @@ const coreSummary: RunSummary = {
   tool_round_trips: 10,
 };
 
+const reviewer = "review-bot";
+
 describe("parseRunSummary", () => {
   test("returns undefined for empty or undefined input", () => {
     expect(parseRunSummary(undefined)).toBeUndefined();
@@ -6863,19 +6864,27 @@ describe("parseRunSummary", () => {
 
 describe("renderRunSummaryFooter", () => {
   test("wraps the block in the strip markers and a horizontal rule", () => {
-    const footer = renderRunSummaryFooter(coreSummary);
+    const footer = renderRunSummaryFooter(coreSummary, reviewer);
     expect(footer).toContain("<!-- run-summary-start -->");
     expect(footer).toContain("<!-- run-summary-end -->");
     expect(footer).toContain("\n---\n");
     expect(footer).toContain("<summary>Review run summary 🤖</summary>");
   });
 
+  test("includes the @reviewer usage hint as a visible line before the strip markers", () => {
+    const footer = renderRunSummaryFooter(coreSummary, reviewer);
+    expect(footer).toContain(`> 💡 \`@${reviewer} <comment>\``);
+    expect(footer.indexOf(`@${reviewer} <comment>`)).toBeLessThan(
+      footer.indexOf("<!-- run-summary-start -->"),
+    );
+  });
+
   test("keeps the blank line after <br /> so the table renders inside <details>", () => {
-    expect(renderRunSummaryFooter(coreSummary)).toContain("<br />\n\n| Metric | Value |");
+    expect(renderRunSummaryFooter(coreSummary, reviewer)).toContain("<br />\n\n| Metric | Value |");
   });
 
   test("formats durations as seconds and cost as USD", () => {
-    const footer = renderRunSummaryFooter(coreSummary);
+    const footer = renderRunSummaryFooter(coreSummary, reviewer);
     expect(footer).toContain("| Model time | 34.0s |");
     expect(footer).toContain("| Cost (USD) | $0.35 |");
     expect(footer).toContain("| Tokens in / out | 500 / 100 |");
@@ -6883,7 +6892,7 @@ describe("renderRunSummaryFooter", () => {
   });
 
   test("renders no fan-out rows (single-pass review)", () => {
-    const footer = renderRunSummaryFooter(coreSummary);
+    const footer = renderRunSummaryFooter(coreSummary, reviewer);
     expect(footer).not.toContain("Fan-out time");
     expect(footer).not.toContain("Agents");
     expect(footer).not.toContain("Parallel speedup");
@@ -6901,24 +6910,29 @@ describe("stripRunSummaryFooter", () => {
     expect(stripRunSummaryFooter(body)).toBe(body);
   });
 
-  test("round-trips: stripping an appended footer yields the original content", () => {
+  test("strips the marker-bounded metrics but keeps the visible usage hint", () => {
     const reviewComment = "### Review\n\nLGTM";
-    expect(stripRunSummaryFooter(reviewComment + renderRunSummaryFooter(coreSummary))).toBe(
-      reviewComment,
+    const stripped = stripRunSummaryFooter(
+      reviewComment + renderRunSummaryFooter(coreSummary, reviewer),
     );
+    expect(stripped).toContain(reviewComment);
+    expect(stripped).toContain(`@${reviewer} <comment>`);
+    expect(stripped).not.toContain("Review run summary");
+    expect(stripped).not.toContain("<!-- run-summary-start -->");
   });
 
   test("two bodies with different metrics strip to the same content", () => {
     const reviewComment = "### Review\n\nLGTM";
-    const first = reviewComment + renderRunSummaryFooter(coreSummary);
+    const first = reviewComment + renderRunSummaryFooter(coreSummary, reviewer);
     const second =
-      reviewComment + renderRunSummaryFooter({ ...coreSummary, cost_usd: 0.99, model_ms: 1 });
+      reviewComment +
+      renderRunSummaryFooter({ ...coreSummary, cost_usd: 0.99, model_ms: 1 }, reviewer);
     expect(stripRunSummaryFooter(first)).toBe(stripRunSummaryFooter(second));
   });
 });
 
 describe("buildReviewBody", () => {
-  const footer = renderRunSummaryFooter(coreSummary);
+  const footer = renderRunSummaryFooter(coreSummary, reviewer);
 
   test("substitutes the clean-approval line for an empty body with no inline comments", () => {
     expect(buildReviewBody("", footer, false)).toBe(cleanApprovalBody + footer);
@@ -6962,7 +6976,7 @@ describe("buildReviewBody", () => {
  *
  * @example
  * const summary = parseRunSummary(process.env.RUN_SUMMARY);
- * const footer = summary ? renderRunSummaryFooter(summary) : "";
+ * const footer = summary ? renderRunSummaryFooter(summary, reviewer) : "";
  * const body = buildReviewBody(reviewComment, footer, inlineComments.length > 0);
  * // dedup: normalizeBody(stripRunSummaryFooter(body))
  */
@@ -7036,15 +7050,22 @@ function buildRows(summary: RunSummary): string[] {
 }
 
 /**
- * Render the marker-wrapped, collapsible run-summary footer.
+ * Render the run-summary footer: a visible `@<reviewer>` usage hint followed by
+ * the marker-wrapped, collapsible metrics block (built from the shared
+ * {@link buildMarkedDetailsBlock} helper).
  *
- * Built from the shared {@link buildMarkedDetailsBlock} helper (also used by
- * `updatePrFooter.ts`); the two leading blank lines separate the footer from the
- * preceding review body.
+ * The hint is stable text and sits *outside* the strip markers so it survives
+ * {@link stripRunSummaryFooter} and stays in the comment after dedup; only the
+ * run-varying metrics are marker-bounded. The two leading blank lines separate
+ * the footer from the preceding review body.
  */
-export function renderRunSummaryFooter(summary: RunSummary): string {
+export function renderRunSummaryFooter(summary: RunSummary, reviewer: string): string {
+  const usageHint = `> 💡 \`@${reviewer} <comment>\` — Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.`;
+
   return [
     "",
+    "",
+    usageHint,
     "",
     buildMarkedDetailsBlock({
       startMarker: footerStartMarker,
@@ -7236,7 +7257,7 @@ const invalidComments = allComments
 // Fail-open: no footer when RUN_SUMMARY is absent or invalid.
 const reviewBody = output.reviewComment + formatInvalidComments(invalidComments);
 const runSummary = parseRunSummary(process.env.RUN_SUMMARY);
-const footer = runSummary ? renderRunSummaryFooter(runSummary) : "";
+const footer = runSummary ? renderRunSummaryFooter(runSummary, reviewer) : "";
 const finalBody = buildReviewBody(reviewBody, footer, validComments.length > 0);
 
 // The footer carries run-varying numbers (cost, latency); strip it from both
@@ -7323,174 +7344,6 @@ if (event === "APPROVE" && validComments.length > 0) {
   if (autoResolvedThreads.length > 0) {
     console.log(`✓ Unresolved ${autoResolvedThreads.length} auto-resolved thread(s)`);
   }
-}
-</file>
-
-<file path=".github/actions/code-review-action/src/updatePrFooter.ts">
-/**
- * Update PR description with an "Available commands" help section in the footer.
- * Manages HTML-comment-bounded sections for idempotent, multi-action help text.
- * Fails open — errors are logged but do not block the action.
- *
- * @example
- * GH_TOKEN=xxx REPO=owner/repo PR_NUMBER=123 HELP_ID=code-review-action HELP_TEXT='- `@bot review` — re-run review' bun run scripts/updatePrFooter.ts
- */
-import type { Octokit } from "@octokit/rest";
-
-import { parseRepoEnv } from "./github/githubReview.ts";
-import { buildMarkedDetailsBlock } from "./markedDetailsBlock.ts";
-
-/** Configuration for the PR footer update, parsed from environment */
-interface FooterConfig {
-  octokit: Octokit;
-  owner: string;
-  repoName: string;
-  pullNumber: number;
-  helpId: string;
-  helpText: string;
-}
-
-const outerOpenTag = "<!-- code-assistants-actions-help -->";
-const outerCloseTag = "<!-- /code-assistants-actions-help -->";
-const actionOpenPrefix = "<!-- action:";
-const actionClosePrefix = "<!-- /action:";
-const tagSuffix = " -->";
-
-/** Build opening HTML comment marker for an action section */
-function actionOpenTag(id: string): string {
-  return `${actionOpenPrefix}${id}${tagSuffix}`;
-}
-
-/** Build closing HTML comment marker for an action section */
-function actionCloseTag(id: string): string {
-  return `${actionClosePrefix}${id}${tagSuffix}`;
-}
-
-/**
- * Validate that the help ID contains only safe characters.
- * Prevents HTML comment injection via malformed IDs.
- */
-function validateHelpId(id: string): void {
-  if (!/^[a-z0-9-]+$/i.test(id)) {
-    throw new Error(
-      `Invalid help ID: "${id}". Must contain only alphanumeric characters and hyphens.`
-    );
-  }
-}
-
-/** Parse and validate environment variables for the footer update. */
-function parseFooterEnv(): FooterConfig {
-  const { octokit, owner, repoName, pullNumber } = parseRepoEnv();
-  const helpId = process.env.HELP_ID ?? "code-review-action";
-  const helpText = process.env.HELP_TEXT;
-
-  if (!helpText) {
-    throw new Error("Missing required environment variable: HELP_TEXT");
-  }
-
-  validateHelpId(helpId);
-
-  return { octokit, owner, repoName, pullNumber, helpId, helpText: helpText.trim() };
-}
-
-/** Build the HTML-comment-bounded section for one action. */
-function buildActionSection(helpId: string, helpText: string): string {
-  return `${actionOpenTag(helpId)}\n${helpText}\n${actionCloseTag(helpId)}`;
-}
-
-/** Build the complete footer wrapper around all action sections. */
-function buildFullFooter(innerSections: string): string {
-  return buildMarkedDetailsBlock({
-    startMarker: outerOpenTag,
-    endMarker: outerCloseTag,
-    summary: "Available commands 🤖",
-    bodyLines: [innerSections],
-  });
-}
-
-/**
- * Extract all action sections from the footer content.
- * Uses indexOf-based parsing to find action ID → help text pairs.
- */
-function extractActionSections(content: string): Map<string, string> {
-  const sections = new Map<string, string>();
-  let searchStart = 0;
-
-  while (searchStart < content.length) {
-    const openIdx = content.indexOf(actionOpenPrefix, searchStart);
-    if (openIdx === -1) break;
-
-    const suffixIdx = content.indexOf(tagSuffix, openIdx + actionOpenPrefix.length);
-    if (suffixIdx === -1) break;
-
-    const id = content.slice(openIdx + actionOpenPrefix.length, suffixIdx);
-    const closeTag = actionCloseTag(id);
-    const closeIdx = content.indexOf(closeTag, suffixIdx);
-    if (closeIdx === -1) break;
-
-    const sectionContent = content.slice(suffixIdx + tagSuffix.length, closeIdx).trim();
-    sections.set(id, sectionContent);
-    searchStart = closeIdx + closeTag.length;
-  }
-
-  return sections;
-}
-
-/**
- * Compute the updated PR body with the help footer.
- * Uses a "collect and rebuild" strategy for idempotent updates.
- */
-function updateBody(currentBody: string, helpId: string, helpText: string): string {
-  const startIdx = currentBody.indexOf(outerOpenTag);
-  const endIdx = currentBody.indexOf(outerCloseTag);
-
-  let userBody: string;
-  let sections: Map<string, string>;
-
-  if (startIdx !== -1 && endIdx !== -1) {
-    userBody = currentBody.slice(0, startIdx).trimEnd();
-    const footerContent = currentBody.slice(startIdx, endIdx + outerCloseTag.length);
-    sections = extractActionSections(footerContent);
-  } else {
-    userBody = currentBody.trimEnd();
-    sections = new Map();
-  }
-
-  sections.set(helpId, helpText);
-
-  const sectionsStr = [...sections.entries()]
-    .map(([id, text]) => buildActionSection(id, text))
-    .join("\n\n");
-
-  const separator = userBody.length > 0 ? "\n\n" : "";
-  return `${userBody}${separator}${buildFullFooter(sectionsStr)}`;
-}
-
-try {
-  const config = parseFooterEnv();
-
-  const { data: pr } = await config.octokit.rest.pulls.get({
-    owner: config.owner,
-    repo: config.repoName,
-    pull_number: config.pullNumber,
-  });
-
-  const currentBody = pr.body ?? "";
-  const updatedBody = updateBody(currentBody, config.helpId, config.helpText);
-
-  if (updatedBody === currentBody) {
-    console.log("✓ Help footer already up to date, skipping update");
-  } else {
-    await config.octokit.rest.pulls.update({
-      owner: config.owner,
-      repo: config.repoName,
-      pull_number: config.pullNumber,
-      body: updatedBody,
-    });
-    console.log(`✓ Help footer updated for action: ${config.helpId}`);
-  }
-} catch (error) {
-  console.error("PR footer update error (fail-open, proceeding):", error);
 }
 </file>
 
@@ -7718,18 +7571,6 @@ runs:
           exit 0
         fi
 
-        # Skip the bot's own pull_request events. updatePrFooter edits the PR body
-        # to add a help footer, which fires `pull_request: edited` as the reviewer
-        # bot. The workflow lets that event through its job `if:` so the ai-review
-        # check reports success here instead of a skipped run that would overshadow
-        # the real review's verdict — but without this guard the run would re-review
-        # and rewrite the footer. No-op to success rather than reviewing.
-        if [[ "$EVENT_NAME" == "pull_request" && -n "$INPUT_REVIEWER" && "$EVENT_SENDER" == "$INPUT_REVIEWER" ]]; then
-          echo "Skipping: pull_request event triggered by bot ($EVENT_SENDER)"
-          echo "skip=true" >> "$GITHUB_OUTPUT"
-          exit 0
-        fi
-
         # When react_to_comments is disabled, pass through explicit inputs
         if [[ "$INPUT_REACT_TO_COMMENTS" != "true" ]]; then
           echo "mode=${INPUT_MODE}" >> "$GITHUB_OUTPUT"
@@ -7906,21 +7747,6 @@ runs:
       shell: bash
       run: |
         echo "dir=${{ github.action_path }}/../../../claude-plugins/autopilot" >> "$GITHUB_OUTPUT"
-
-    # ── PR help footer ──
-
-    - name: Update PR help footer
-      if: steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.mode == 'review'
-      shell: bash
-      env:
-        GH_TOKEN: ${{ inputs.bot_token }}
-        REPO: ${{ github.repository }}
-        PR_NUMBER: ${{ steps.ctx.outputs.pr_number }}
-        REVIEWER: ${{ inputs.reviewer }}
-        HELP_ID: code-review-action
-        HELP_TEXT: |
-          - `@${{ inputs.reviewer }} <comment>` — Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.
-      run: bun run "${{ github.action_path }}/src/updatePrFooter.ts"
 
     # ── Review mode ──
 
@@ -23994,24 +23820,15 @@ concurrency:
   # comment.id gives each comment its own group so bursty replies aren't cancelled;
   # it's empty for pull_request events, which stay grouped per-PR (event_name + number).
   group: code-review-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event.comment.id }}
-  # Don't cancel on `edited`: a review run posts a run-summary footer to the PR body,
-  # which itself fires `pull_request: edited`. Cancelling there would let that bot edit
-  # abort the in-flight review (the new run then skips on the sender guard), leaving the
-  # PR with no review. Non-edited events still cancel so only the latest push is reviewed.
-  cancel-in-progress: ${{ github.event.action != 'edited' }}
+  # Cancel superseded runs so only the latest push/comment is reviewed. The action
+  # no longer edits the PR body, so no bot self-edit can abort an in-flight review.
+  cancel-in-progress: true
 
 jobs:
   ai-review:
-    # The bot's own NON-edited events (its review and inline comments) are skipped
-    # here so they don't spawn a no-op react run — the in-action guard would skip
-    # them only after a runner spins up, so filtering at the job `if:` is cheaper.
-    #
-    # The bot's own `edited` events are deliberately NOT skipped: the action writes
-    # a help footer to the PR body (updatePrFooter), which fires `pull_request:
-    # edited` as the bot. Skipping that here produced a *skipped* ai-review check
-    # that overshadowed the real review's verdict. Letting it through lets the
-    # action's ctx step detect the bot sender and no-op every step, so the run
-    # reports success instead of "skipping".
+    # The bot's own events (its review and inline comments) are skipped here so they
+    # don't spawn a no-op react run — the in-action guard would skip them only after a
+    # runner spins up, so filtering at the job `if:` is cheaper.
     #
     # The last clause re-runs review when a user edits a PR title/body, so a
     # description fix clears a stale CHANGES_REQUESTED verdict without the prior
@@ -24020,7 +23837,7 @@ jobs:
     if: >-
       (github.event_name != 'issue_comment' || github.event.issue.pull_request)
       && vars.BOT_USERNAME != ''
-      && (github.event.sender.login != vars.BOT_USERNAME || github.event.action == 'edited')
+      && github.event.sender.login != vars.BOT_USERNAME
       && (github.event.action != 'edited' || github.event.changes.title || github.event.changes.body)
     runs-on: ubuntu-latest
     permissions:
@@ -34128,9 +33945,11 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 
 ## Rendered footer
 
-`renderRunSummaryFooter` mirrors the "under the cut" pattern from `updatePrFooter.ts` — the start marker sits directly above the `---` rule, and a blank line after `<br />` lets the GitHub-flavored markdown table render inside `<details>`.
+`renderRunSummaryFooter` emits a visible `@<reviewer>` usage hint followed by the collapsible metrics block. The hint is stable text and sits **outside** the strip markers so it survives dedup stripping and stays in the comment; only the run-varying metrics are marker-bounded. Inside the block, the start marker sits directly above the `---` rule, and a blank line after `<br />` lets the GitHub-flavored markdown table render inside `<details>`.
 
 ```text
+> 💡 `@review-bot <comment>` — Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.
+
 <!-- run-summary-start -->
 ---
 <details>
