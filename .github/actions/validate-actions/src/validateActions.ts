@@ -50,7 +50,10 @@ async function runProcess(command: string[], stdin?: Uint8Array): Promise<Proces
     ]);
     return { exitCode, stdout, stderr };
   } catch (error) {
-    return { exitCode: -1, stdout: "", stderr: error instanceof Error ? error.message : String(error) };
+    // Preserve the error class (e.g. a spawn ENOENT vs a TypeError) so operational
+    // failures stay diagnosable instead of being flattened to a bare message.
+    const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+    return { exitCode: -1, stdout: "", stderr: detail };
   }
 }
 
