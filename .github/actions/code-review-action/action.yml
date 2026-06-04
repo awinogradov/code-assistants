@@ -221,18 +221,6 @@ runs:
           exit 0
         fi
 
-        # Skip the bot's own pull_request events. updatePrFooter edits the PR body
-        # to add a help footer, which fires `pull_request: edited` as the reviewer
-        # bot. The workflow lets that event through its job `if:` so the ai-review
-        # check reports success here instead of a skipped run that would overshadow
-        # the real review's verdict — but without this guard the run would re-review
-        # and rewrite the footer. No-op to success rather than reviewing.
-        if [[ "$EVENT_NAME" == "pull_request" && -n "$INPUT_REVIEWER" && "$EVENT_SENDER" == "$INPUT_REVIEWER" ]]; then
-          echo "Skipping: pull_request event triggered by bot ($EVENT_SENDER)"
-          echo "skip=true" >> "$GITHUB_OUTPUT"
-          exit 0
-        fi
-
         # When react_to_comments is disabled, pass through explicit inputs
         if [[ "$INPUT_REACT_TO_COMMENTS" != "true" ]]; then
           echo "mode=${INPUT_MODE}" >> "$GITHUB_OUTPUT"
@@ -409,21 +397,6 @@ runs:
       shell: bash
       run: |
         echo "dir=${{ github.action_path }}/../../../claude-plugins/autopilot" >> "$GITHUB_OUTPUT"
-
-    # ── PR help footer ──
-
-    - name: Update PR help footer
-      if: steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.mode == 'review'
-      shell: bash
-      env:
-        GH_TOKEN: ${{ inputs.bot_token }}
-        REPO: ${{ github.repository }}
-        PR_NUMBER: ${{ steps.ctx.outputs.pr_number }}
-        REVIEWER: ${{ inputs.reviewer }}
-        HELP_ID: code-review-action
-        HELP_TEXT: |
-          - `@${{ inputs.reviewer }} <comment>` — Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.
-      run: bun run "${{ github.action_path }}/src/updatePrFooter.ts"
 
     # ── Review mode ──
 

@@ -26,6 +26,8 @@ const coreSummary: RunSummary = {
   tool_round_trips: 10,
 };
 
+const reviewer = "review-bot";
+
 describe("parseRunSummary", () => {
   test("returns undefined for empty or undefined input", () => {
     expect(parseRunSummary(undefined)).toBeUndefined();
@@ -56,19 +58,27 @@ describe("parseRunSummary", () => {
 
 describe("renderRunSummaryFooter", () => {
   test("wraps the block in the strip markers and a horizontal rule", () => {
-    const footer = renderRunSummaryFooter(coreSummary);
+    const footer = renderRunSummaryFooter(coreSummary, reviewer);
     expect(footer).toContain("<!-- run-summary-start -->");
     expect(footer).toContain("<!-- run-summary-end -->");
     expect(footer).toContain("\n---\n");
     expect(footer).toContain("<summary>Review run summary 🤖</summary>");
   });
 
+  test("includes the @reviewer usage hint as a visible line before the strip markers", () => {
+    const footer = renderRunSummaryFooter(coreSummary, reviewer);
+    expect(footer).toContain(`> 💡 \`@${reviewer} <comment>\``);
+    expect(footer.indexOf(`@${reviewer} <comment>`)).toBeLessThan(
+      footer.indexOf("<!-- run-summary-start -->"),
+    );
+  });
+
   test("keeps the blank line after <br /> so the table renders inside <details>", () => {
-    expect(renderRunSummaryFooter(coreSummary)).toContain("<br />\n\n| Metric | Value |");
+    expect(renderRunSummaryFooter(coreSummary, reviewer)).toContain("<br />\n\n| Metric | Value |");
   });
 
   test("formats durations as seconds and cost as USD", () => {
-    const footer = renderRunSummaryFooter(coreSummary);
+    const footer = renderRunSummaryFooter(coreSummary, reviewer);
     expect(footer).toContain("| Model time | 34.0s |");
     expect(footer).toContain("| Cost (USD) | $0.35 |");
     expect(footer).toContain("| Tokens in / out | 500 / 100 |");
@@ -76,7 +86,7 @@ describe("renderRunSummaryFooter", () => {
   });
 
   test("renders no fan-out rows (single-pass review)", () => {
-    const footer = renderRunSummaryFooter(coreSummary);
+    const footer = renderRunSummaryFooter(coreSummary, reviewer);
     expect(footer).not.toContain("Fan-out time");
     expect(footer).not.toContain("Agents");
     expect(footer).not.toContain("Parallel speedup");
@@ -94,24 +104,29 @@ describe("stripRunSummaryFooter", () => {
     expect(stripRunSummaryFooter(body)).toBe(body);
   });
 
-  test("round-trips: stripping an appended footer yields the original content", () => {
+  test("strips the marker-bounded metrics but keeps the visible usage hint", () => {
     const reviewComment = "### Review\n\nLGTM";
-    expect(stripRunSummaryFooter(reviewComment + renderRunSummaryFooter(coreSummary))).toBe(
-      reviewComment,
+    const stripped = stripRunSummaryFooter(
+      reviewComment + renderRunSummaryFooter(coreSummary, reviewer),
     );
+    expect(stripped).toContain(reviewComment);
+    expect(stripped).toContain(`@${reviewer} <comment>`);
+    expect(stripped).not.toContain("Review run summary");
+    expect(stripped).not.toContain("<!-- run-summary-start -->");
   });
 
   test("two bodies with different metrics strip to the same content", () => {
     const reviewComment = "### Review\n\nLGTM";
-    const first = reviewComment + renderRunSummaryFooter(coreSummary);
+    const first = reviewComment + renderRunSummaryFooter(coreSummary, reviewer);
     const second =
-      reviewComment + renderRunSummaryFooter({ ...coreSummary, cost_usd: 0.99, model_ms: 1 });
+      reviewComment +
+      renderRunSummaryFooter({ ...coreSummary, cost_usd: 0.99, model_ms: 1 }, reviewer);
     expect(stripRunSummaryFooter(first)).toBe(stripRunSummaryFooter(second));
   });
 });
 
 describe("buildReviewBody", () => {
-  const footer = renderRunSummaryFooter(coreSummary);
+  const footer = renderRunSummaryFooter(coreSummary, reviewer);
 
   test("substitutes the clean-approval line for an empty body with no inline comments", () => {
     expect(buildReviewBody("", footer, false)).toBe(cleanApprovalBody + footer);

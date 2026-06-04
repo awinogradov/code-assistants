@@ -10,7 +10,7 @@
  *
  * @example
  * const summary = parseRunSummary(process.env.RUN_SUMMARY);
- * const footer = summary ? renderRunSummaryFooter(summary) : "";
+ * const footer = summary ? renderRunSummaryFooter(summary, reviewer) : "";
  * const body = buildReviewBody(reviewComment, footer, inlineComments.length > 0);
  * // dedup: normalizeBody(stripRunSummaryFooter(body))
  */
@@ -84,15 +84,22 @@ function buildRows(summary: RunSummary): string[] {
 }
 
 /**
- * Render the marker-wrapped, collapsible run-summary footer.
+ * Render the run-summary footer: a visible `@<reviewer>` usage hint followed by
+ * the marker-wrapped, collapsible metrics block (built from the shared
+ * {@link buildMarkedDetailsBlock} helper).
  *
- * Built from the shared {@link buildMarkedDetailsBlock} helper (also used by
- * `updatePrFooter.ts`); the two leading blank lines separate the footer from the
- * preceding review body.
+ * The hint is stable text and sits *outside* the strip markers so it survives
+ * {@link stripRunSummaryFooter} and stays in the comment after dedup; only the
+ * run-varying metrics are marker-bounded. The two leading blank lines separate
+ * the footer from the preceding review body.
  */
-export function renderRunSummaryFooter(summary: RunSummary): string {
+export function renderRunSummaryFooter(summary: RunSummary, reviewer: string): string {
+  const usageHint = `> 💡 \`@${reviewer} <comment>\` — Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.`;
+
   return [
     "",
+    "",
+    usageHint,
     "",
     buildMarkedDetailsBlock({
       startMarker: footerStartMarker,
