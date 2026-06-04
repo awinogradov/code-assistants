@@ -223,13 +223,15 @@ runs:
 
         # When react_to_comments is disabled, pass through explicit inputs
         if [[ "$INPUT_REACT_TO_COMMENTS" != "true" ]]; then
-          echo "mode=${INPUT_MODE}" >> "$GITHUB_OUTPUT"
-          echo "pr_number=${INPUT_PR_NUMBER:-${EVENT_PR_NUMBER:-$EVENT_ISSUE_NUMBER}}" >> "$GITHUB_OUTPUT"
-          echo "pr_head_sha=${INPUT_PR_HEAD_SHA:-$EVENT_PR_HEAD_SHA}" >> "$GITHUB_OUTPUT"
-          echo "comment_id=${INPUT_COMMENT_ID}" >> "$GITHUB_OUTPUT"
-          echo "comment_path=${INPUT_COMMENT_PATH}" >> "$GITHUB_OUTPUT"
-          echo "comment_line=${INPUT_COMMENT_LINE}" >> "$GITHUB_OUTPUT"
-          echo "skip=false" >> "$GITHUB_OUTPUT"
+          {
+            echo "mode=${INPUT_MODE}"
+            echo "pr_number=${INPUT_PR_NUMBER:-${EVENT_PR_NUMBER:-$EVENT_ISSUE_NUMBER}}"
+            echo "pr_head_sha=${INPUT_PR_HEAD_SHA:-$EVENT_PR_HEAD_SHA}"
+            echo "comment_id=${INPUT_COMMENT_ID}"
+            echo "comment_path=${INPUT_COMMENT_PATH}"
+            echo "comment_line=${INPUT_COMMENT_LINE}"
+            echo "skip=false"
+          } >> "$GITHUB_OUTPUT"
 
           delimiter="$(openssl rand -hex 16)"
           {
@@ -243,10 +245,12 @@ runs:
 
         # Auto-detection: pull_request event → review mode
         if [[ "$EVENT_NAME" == "pull_request" ]]; then
-          echo "mode=review" >> "$GITHUB_OUTPUT"
-          echo "pr_number=${EVENT_PR_NUMBER}" >> "$GITHUB_OUTPUT"
-          echo "pr_head_sha=${EVENT_PR_HEAD_SHA}" >> "$GITHUB_OUTPUT"
-          echo "skip=false" >> "$GITHUB_OUTPUT"
+          {
+            echo "mode=review"
+            echo "pr_number=${EVENT_PR_NUMBER}"
+            echo "pr_head_sha=${EVENT_PR_HEAD_SHA}"
+            echo "skip=false"
+          } >> "$GITHUB_OUTPUT"
           exit 0
         fi
 
@@ -327,9 +331,11 @@ runs:
           exit 0
         fi
 
-        echo "mode=react" >> "$GITHUB_OUTPUT"
-        echo "skip=false" >> "$GITHUB_OUTPUT"
-        echo "bot_in_thread=${BOT_IN_THREAD}" >> "$GITHUB_OUTPUT"
+        {
+          echo "mode=react"
+          echo "skip=false"
+          echo "bot_in_thread=${BOT_IN_THREAD}"
+        } >> "$GITHUB_OUTPUT"
 
         if [[ -n "$EVENT_ISSUE_NUMBER" ]]; then
           REACT_PR_NUMBER="$EVENT_ISSUE_NUMBER"
@@ -357,9 +363,11 @@ runs:
         fi
         echo "bot_blocking=${BOT_BLOCKING}" >> "$GITHUB_OUTPUT"
 
-        echo "comment_id=${EFFECTIVE_ID}" >> "$GITHUB_OUTPUT"
-        echo "comment_path=${EVENT_COMMENT_PATH}" >> "$GITHUB_OUTPUT"
-        echo "comment_line=${EVENT_COMMENT_LINE}" >> "$GITHUB_OUTPUT"
+        {
+          echo "comment_id=${EFFECTIVE_ID}"
+          echo "comment_path=${EVENT_COMMENT_PATH}"
+          echo "comment_line=${EVENT_COMMENT_LINE}"
+        } >> "$GITHUB_OUTPUT"
 
         delimiter="$(openssl rand -hex 16)"
         {
