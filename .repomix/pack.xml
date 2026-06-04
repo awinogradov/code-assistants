@@ -116,6 +116,7 @@ The content is organized as follows:
         preflightChecks.ts
         reactToComment.ts
         referenceFormattingSync.test.ts
+        replyReferenceFormatting.test.ts
         rulesDocUrlSync.test.ts
         runClaude.test.ts
         runClaude.ts
@@ -6152,6 +6153,39 @@ describe("reference-formatting block sync", () => {
     // escaped as \` in source — un-escape before comparing to the canonical.
     const source = (await readFile(releasePrompt, "utf8")).replaceAll("\\`", "`");
     expect(extractBlock(source)).toBe(canonical);
+  });
+});
+</file>
+
+<file path=".github/actions/code-review-action/src/replyReferenceFormatting.test.ts">
+/**
+ * Structural guard for issue #259: asserts the reply-composition steps of the
+ * pr:resolve and pr:answer skills carry the reference-formatting instruction, so
+ * review-thread replies and PR comments render references per the standard — most
+ * visibly, commit SHAs as links rather than bare text. The canonical standard lives
+ * in docs/output-formatting.md and is inlined verbatim into every skill (guarded by
+ * referenceFormattingSync); this test checks only that the actionable instruction is
+ * PRESENT — the distinctive phrase "render the SHA as a markdown link" — not that the
+ * model applies it at runtime, which CI cannot verify.
+ */
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
+import { describe, expect, test } from "bun:test";
+
+const actionDir = join(import.meta.dirname, "..");
+const repoRoot = join(actionDir, "..", "..", "..");
+const skillsDir = join(repoRoot, "claude-plugins/autopilot/skills");
+
+const replySkillFiles = [
+  join(skillsDir, "pr:resolve", "SKILL.md"),
+  join(skillsDir, "pr:answer", "SKILL.md"),
+];
+
+describe("reply reference-formatting wiring", () => {
+  test.each(replySkillFiles)("%s instructs replies to link commit SHAs", async (file) => {
+    const content = await readFile(file, "utf8");
+    expect(content).toContain("render the SHA as a markdown link");
   });
 });
 </file>
@@ -20345,7 +20379,8 @@ These rules govern references — when you point the reader at a real file, stan
 
 - Code identifiers and file names — backticks, e.g. \`buildReviewComments\`, \`reviewOutput.ts\`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. \`[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)\`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Other docs and sections — do NOT link a doc name or a section anchor; those rot the moment the doc is restructured. Inline a short gist of the point you need instead.
+- Sections in the same document — link the heading by its anchor, e.g. \`[Phase 6](#phase-6-reply-to-review-threads)\`; a same-file anchor moves with the file and stays clickable on GitHub.
+- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
 - Commit SHAs — ALWAYS a link, e.g. \`[0328a61](<repo-commit-url>/0328a61)\`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -27586,7 +27621,8 @@ These rules govern references — when you point the reader at a real file, stan
 
 - Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Other docs and sections — do NOT link a doc name or a section anchor; those rot the moment the doc is restructured. Inline a short gist of the point you need instead.
+- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
+- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -27689,7 +27725,8 @@ These rules govern references — when you point the reader at a real file, stan
 
 - Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Other docs and sections — do NOT link a doc name or a section anchor; those rot the moment the doc is restructured. Inline a short gist of the point you need instead.
+- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
+- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -27793,7 +27830,8 @@ These rules govern references — when you point the reader at a real file, stan
 
 - Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Other docs and sections — do NOT link a doc name or a section anchor; those rot the moment the doc is restructured. Inline a short gist of the point you need instead.
+- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
+- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -28228,7 +28266,8 @@ These rules govern references — when you point the reader at a real file, stan
 
 - Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Other docs and sections — do NOT link a doc name or a section anchor; those rot the moment the doc is restructured. Inline a short gist of the point you need instead.
+- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
+- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -28768,7 +28807,8 @@ These rules govern references — when you point the reader at a real file, stan
 
 - Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Other docs and sections — do NOT link a doc name or a section anchor; those rot the moment the doc is restructured. Inline a short gist of the point you need instead.
+- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
+- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -28990,7 +29030,8 @@ These rules govern references — when you point the reader at a real file, stan
 
 - Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Other docs and sections — do NOT link a doc name or a section anchor; those rot the moment the doc is restructured. Inline a short gist of the point you need instead.
+- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
+- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -29172,7 +29213,8 @@ These rules govern references — when you point the reader at a real file, stan
 
 - Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Other docs and sections — do NOT link a doc name or a section anchor; those rot the moment the doc is restructured. Inline a short gist of the point you need instead.
+- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
+- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -29654,7 +29696,8 @@ These rules govern references — when you point the reader at a real file, stan
 
 - Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Other docs and sections — do NOT link a doc name or a section anchor; those rot the moment the doc is restructured. Inline a short gist of the point you need instead.
+- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
+- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -29838,7 +29881,8 @@ These rules govern references — when you point the reader at a real file, stan
 
 - Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Other docs and sections — do NOT link a doc name or a section anchor; those rot the moment the doc is restructured. Inline a short gist of the point you need instead.
+- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
+- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -30454,7 +30498,8 @@ These rules govern references — when you point the reader at a real file, stan
 
 - Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Other docs and sections — do NOT link a doc name or a section anchor; those rot the moment the doc is restructured. Inline a short gist of the point you need instead.
+- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
+- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -30520,7 +30565,8 @@ These rules govern references — when you point the reader at a real file, stan
 
 - Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Other docs and sections — do NOT link a doc name or a section anchor; those rot the moment the doc is restructured. Inline a short gist of the point you need instead.
+- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
+- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -30591,7 +30637,8 @@ These rules govern references — when you point the reader at a real file, stan
 
 - Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Other docs and sections — do NOT link a doc name or a section anchor; those rot the moment the doc is restructured. Inline a short gist of the point you need instead.
+- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
+- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -30729,6 +30776,8 @@ Always provide a reply. Keep it concise (1-5 sentences). Be direct.
 - If needs discussion: "[Acknowledge point], however [concern]."
 - If question: "[Direct answer]."
 
+Format the reply per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) — the **Reference formatting & readability** rules inlined at the end of this skill; they apply to the text inside the `reply` string value, not the JSON envelope. The reference kind that recurs here is the commit SHA: when the reply cites the commit that fixes the thread, render the SHA as a markdown link `[<sha>](<repo-commit-url>/<sha>)` built from `REPO` — never a bare or backticked SHA.
+
 ### Thread Resolution
 
 Add to `resolveComments` when:
@@ -30800,7 +30849,8 @@ These rules govern references — when you point the reader at a real file, stan
 
 - Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Other docs and sections — do NOT link a doc name or a section anchor; those rot the moment the doc is restructured. Inline a short gist of the point you need instead.
+- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
+- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -31383,7 +31433,8 @@ These rules govern references — when you point the reader at a real file, stan
 
 - Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Other docs and sections — do NOT link a doc name or a section anchor; those rot the moment the doc is restructured. Inline a short gist of the point you need instead.
+- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
+- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -31803,7 +31854,8 @@ These rules govern references — when you point the reader at a real file, stan
 
 - Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Other docs and sections — do NOT link a doc name or a section anchor; those rot the moment the doc is restructured. Inline a short gist of the point you need instead.
+- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
+- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -32011,7 +32063,7 @@ For each comment requiring a code change:
 For comments that do not require code changes (questions, misunderstandings):
 
 1. **Evaluate the comment** against the actual codebase — read the code, check if the reviewer's concern is valid
-2. **Draft a reply** — concise, direct, 1-5 sentences:
+2. **Draft a reply** — concise, direct, 1-5 sentences; format references per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) (the **Reference formatting & readability** rules inlined at the end of this skill; see [Phase 6](#phase-6-reply-to-review-threads)):
    - If reviewer is wrong: "You're right that [X looks concerning], but [reason it's correct]. [Evidence from code]."
    - If needs discussion: "[Acknowledge point], however [concern or alternative]."
    - If question: "[Direct answer with reference to code]."
@@ -32062,6 +32114,8 @@ Compose replies for all processed comments. **Always mention the reviewer** with
 - **Not applicable / misunderstood**: "@\<reviewer\> [Explanation of why the current code is correct or why the change isn't needed]."
 - **Partially addressed**: "@\<reviewer\> [What was changed and why, plus what was intentionally kept]."
 - **Declined by user**: "@\<reviewer\> Considered — [explanation of why this suggestion was not applied]."
+
+Format every reply per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) — the **Reference formatting & readability** rules inlined at the end of this skill. The reference kind that recurs here is the commit SHA: when a reply cites the commit that resolved a thread (the HEAD commit after [Phase 5](#phase-5-commit-and-push)'s push, post-rebase/squash), render the SHA as a markdown link `[<sha>](<repo-commit-url>/<sha>)` built from the repo owner/name resolved in [Phase 1](#phase-1-detect-pr-and-load-context) — never a bare or backticked SHA. Replies that cite no commit (e.g. questions, declines) skip the SHA rule; all other reference kinds still follow the inlined rules.
 
 Build a summary of all drafted replies:
 
@@ -32176,7 +32230,8 @@ These rules govern references — when you point the reader at a real file, stan
 
 - Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Other docs and sections — do NOT link a doc name or a section anchor; those rot the moment the doc is restructured. Inline a short gist of the point you need instead.
+- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
+- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -33189,7 +33244,8 @@ These rules govern references — when you point the reader at a real file, stan
 
 - Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Other docs and sections — do NOT link a doc name or a section anchor; those rot the moment the doc is restructured. Inline a short gist of the point you need instead.
+- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
+- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -33662,7 +33718,8 @@ These rules govern references — when you point the reader at a real file, stan
 
 - Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Other docs and sections — do NOT link a doc name or a section anchor; those rot the moment the doc is restructured. Inline a short gist of the point you need instead.
+- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
+- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -33889,7 +33946,8 @@ These rules govern references — when you point the reader at a real file, stan
 
 - Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Other docs and sections — do NOT link a doc name or a section anchor; those rot the moment the doc is restructured. Inline a short gist of the point you need instead.
+- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
+- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -34189,7 +34247,8 @@ These rules govern references — when you point the reader at a real file, stan
 
 - Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Other docs and sections — do NOT link a doc name or a section anchor; those rot the moment the doc is restructured. Inline a short gist of the point you need instead.
+- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
+- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -34617,7 +34676,8 @@ These rules govern references — when you point the reader at a real file, stan
 
 - Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Other docs and sections — do NOT link a doc name or a section anchor; those rot the moment the doc is restructured. Inline a short gist of the point you need instead.
+- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
+- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -34830,7 +34890,8 @@ These rules govern references — when you point the reader at a real file, stan
 
 - Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Other docs and sections — do NOT link a doc name or a section anchor; those rot the moment the doc is restructured. Inline a short gist of the point you need instead.
+- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
+- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -38429,10 +38490,12 @@ export function readRootRelease(packageJson: unknown): RootReleaseConfig {
 <file path="rfc/0001-reference-formatting.md">
 ---
 number: 1
+version: 2
 title: Reference formatting & readability
 status: Accepted
 author: "@awinogradov"
 created: 2026-06-04
+updated: 2026-06-05
 ---
 
 # RFC-0001: Reference formatting & readability
@@ -38447,7 +38510,8 @@ These rules govern references — when you point the reader at a real file, stan
 
 - Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Other docs and sections — do NOT link a doc name or a section anchor; those rot the moment the doc is restructured. Inline a short gist of the point you need instead.
+- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
+- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -38456,6 +38520,11 @@ Backticks suppress GitHub autolinking: a commit SHA or issue/PR number inside a 
 Write the most helpful, readable output you can: plain, direct prose; every reference resolvable; explain the "why", not the obvious "what".
 
 <!-- ref-format:end -->
+
+## Changelog
+
+- **v2** (2026-06-05) — A section in the same document may be linked by its anchor (e.g. `[Phase 6](#phase-6-reply-to-review-threads)`); cross-document sections still use an inline gist.
+- **v1** (2026-06-04) — Initial version.
 </file>
 
 <file path="rfc/README.md">
@@ -38471,18 +38540,20 @@ A plain doc under `docs/` changes silently and can be restructured at any time, 
 
 Every RFC starts with a YAML frontmatter block:
 
-| Field     | Description                                       |
-| --------- | ------------------------------------------------- |
-| `number`  | RFC number — unique and incrementing (1, 2, 3, …) |
-| `title`   | Short human-readable title                        |
-| `status`  | One of `Draft`, `Accepted`, `Superseded`          |
-| `author`  | GitHub handle of the author                       |
-| `created` | ISO date the RFC was created (`YYYY-MM-DD`)       |
+| Field     | Description                                           |
+| --------- | ----------------------------------------------------- |
+| `number`  | RFC number — unique and incrementing (1, 2, 3, …)     |
+| `version` | Content version — incremented on each in-place change |
+| `title`   | Short human-readable title                            |
+| `status`  | One of `Draft`, `Accepted`, `Superseded`              |
+| `author`  | GitHub handle of the author                           |
+| `created` | ISO date the RFC was created (`YYYY-MM-DD`)           |
+| `updated` | ISO date of the last version bump (`YYYY-MM-DD`)      |
 
 ## Statuses
 
 - **Draft** — proposed and open for discussion; may still change.
-- **Accepted** — ratified and stable. An Accepted RFC is immutable: change it only by issuing a new RFC that supersedes it.
+- **Accepted** — ratified and stable. Change its content only through an explicit `version` bump recorded in the RFC's Changelog; supersede it with a new RFC only when replacing the standard wholesale.
 - **Superseded** — replaced by a later RFC; kept for history. Note the successor in the body.
 
 ## Filenames and IDs
