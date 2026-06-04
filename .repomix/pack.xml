@@ -11014,7 +11014,7 @@ description: Regenerate the license report on dependency-changing pull requests,
 inputs:
   bot_token:
     description: |
-      PAT (classic with `repo`, or fine-grained with `contents: write`) or GitHub App installation token used to check out the PR branch with persisted credentials and push the regenerated license report. The default `GITHUB_TOKEN` is not used: the auto-commit must be authored by and pushed as the bot identity so it carries correct attribution and re-triggers the PR's checks (commits pushed with `GITHUB_TOKEN` do not). Pass `${{ secrets.BOT_TOKEN }}`. Required: an empty value fails the push with no fallback.
+      PAT (classic with `repo`, or fine-grained with `contents: write`) or GitHub App installation token used to check out the PR branch with persisted credentials and push the regenerated license report. The default `GITHUB_TOKEN` is not used: the auto-commit must be authored by and pushed as the bot identity so it carries correct attribution and re-triggers the PR's checks (commits pushed with `GITHUB_TOKEN` do not). Pass the `secrets.BOT_TOKEN` secret. Required: an empty value fails the push with no fallback.
     required: true
   bot_username:
     description: |
