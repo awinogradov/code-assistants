@@ -273,6 +273,7 @@ claude-plugins/
       analyze-staged-changes.md
       expert-review.md
       fetch-pr-reviews.md
+      resolve-alert-context.md
       resolve-issue-context.md
       scan-and-analyze-todos.md
       search-codebase-todos.md
@@ -8662,7 +8663,7 @@ runs:
     - name: Validate branch name
       uses: deepakputhraya/action-branch-name@v1.0.0
       with:
-        regex: '^(issue-\d+-[a-z0-9]+(-[a-z0-9]+)*|(hotfix|trivial|maintenance|proposal)-[a-z0-9]+(-[a-z0-9]+)*|release-([a-z0-9]+(-[a-z0-9]+)*-)?\d+\.\d+\.\d+)$'
+        regex: '^(issue-\d+-[a-z0-9]+(-[a-z0-9]+)*|(hotfix|trivial|maintenance|proposal|security)-[a-z0-9]+(-[a-z0-9]+)*|release-([a-z0-9]+(-[a-z0-9]+)*-)?\d+\.\d+\.\d+)$'
         min_length: 5
         max_length: 100
         ignore: main,master
@@ -8688,6 +8689,7 @@ runs:
           TRIVIAL
           MAINTENANCE
           PROPOSAL
+          SECURITY
           Release
           [A-Z]\w*
         headerPattern: '^([A-Z]\S*?):?\s+(.+)$'
@@ -25061,6 +25063,89 @@ All review comments are resolved.
 ```
 </file>
 
+<file path="claude-plugins/autopilot/agents/resolve-alert-context.md">
+---
+name: resolve-alert-context
+description: Fetch GitHub code-scanning alert context via the code-scanning API. Use when plan/run resolve a code-scanning-alert input without polluting parent context.
+tools: Bash
+model: sonnet
+---
+
+You are a GitHub code-scanning alert context resolver. Fetch alert data via the `gh` CLI's code-scanning API and return a structured summary. Do not output intermediate steps — only the final structured block.
+
+A code-scanning alert is NOT a GitHub issue: it is resolved through `repos/{owner}/{repo}/code-scanning/alerts/{n}`, never `gh issue view`. Alerts have no assignee in the issue sense, so there is no self-assign phase. Alerts are closed by the next scan (state transitions to `fixed`), never by PR magic words — so callers must record the alert reference rather than emit `Closes #`.
+
+**Constraints:**
+
+- Use ONLY the `gh` CLI (the GitHub MCP is not wired in CI). The code-scanning API requires a token with the `security_events` scope (or `public_repo` for public repos).
+- All variable interpolations into shell commands MUST be double-quoted (`"$NUMBER"`, `"$REPO"`).
+- Emit ONLY the final JSON object — no preamble, no surrounding code fence, no commentary. The parent parses it directly.
+
+## Input
+
+The invoking skill provides in the prompt:
+
+- **Alert number** (e.g., `6`) — the `{n}` from a `…/security/code-scanning/{n}` URL or an `alert#{n}` / `alert {n}` reference.
+- **Repository name** (e.g., `awinogradov/code-assistants`).
+
+## Phase 1: Fetch Alert
+
+Store the full JSON so Phase 2 can read every field without another API call:
+
+```bash
+ALERT_JSON=$(gh api "repos/$REPO/code-scanning/alerts/$NUMBER" 2>/dev/null)
+```
+
+Extract (with `jq`): `.number`, `.state`, `.rule.id`, `.rule.severity` (fall back to `.rule.security_severity_level` when `severity` is null), `.rule.description`, `.most_recent_instance.location.path`, `.most_recent_instance.location.start_line`, `.most_recent_instance.message.text`, and `.html_url`.
+
+## Phase 2: Degradation
+
+The code-scanning API fails in predictable ways. On ANY failure, do not crash — return the Phase 3 object with `state: "unresolved"` and a `resolveError` string so the parent can surface it and STOP rather than misroute. Emit exactly one of:
+
+- `unresolved — gh not authenticated` — `gh api user` returns empty.
+- `unresolved — security_events scope required` — the alerts call returns 403 (token lacks `security_events`).
+- `unresolved — alert #<n> not found` — the alerts call returns 404 (no such alert, or code scanning not enabled for the repo).
+- `unresolved — gh api error: <first line of stderr>` — any other non-zero exit.
+
+On success, set `resolveError` to `null`.
+
+## Phase 3: Output
+
+Output ONLY a single JSON object matching the schema below.
+
+| Field          | Type            | Constraint                                                         |
+| -------------- | --------------- | ------------------------------------------------------------------ |
+| `source`       | string          | e.g. `"Code-scanning alert #6"`                                    |
+| `alertNumber`  | integer         | The alert number                                                   |
+| `ruleId`       | string \| null  | e.g. `"js/tainted-format-string"`; `null` when unresolved          |
+| `severity`     | string \| null  | e.g. `"error"`, `"high"`; `null` when unresolved                   |
+| `state`        | string          | `"open"`, `"fixed"`, `"dismissed"`, or `"unresolved"` (on failure) |
+| `file`         | string \| null  | `most_recent_instance.location.path`; `null` when unresolved       |
+| `line`         | integer \| null | `most_recent_instance.location.start_line`; `null` when unresolved |
+| `message`      | string \| null  | `most_recent_instance.message.text`; `null` when unresolved        |
+| `htmlUrl`      | string \| null  | The API's canonical `html_url`; `null` when unresolved             |
+| `resolveError` | string \| null  | One of the Phase 2 status strings on failure; `null` on success    |
+
+Example (success):
+
+```json
+{
+  "source": "Code-scanning alert #6",
+  "alertNumber": 6,
+  "ruleId": "js/tainted-format-string",
+  "severity": "error",
+  "state": "open",
+  "file": "src/runClaude.ts",
+  "line": 142,
+  "message": "This format string depends on a user-provided value.",
+  "htmlUrl": "https://github.com/awinogradov/code-assistants/security/code-scanning/6",
+  "resolveError": null
+}
+```
+
+Emit the raw object, not the fenced form. Set `resolveError` to `null` (not the string `"null"`) on success, and the unresolved fields to `null` (not the string `"null"`) on failure.
+</file>
+
 <file path="claude-plugins/autopilot/agents/resolve-issue-context.md">
 ---
 name: resolve-issue-context
@@ -26064,7 +26149,7 @@ Write the most helpful, readable output you can: plain, direct prose; every refe
 ---
 name: branch:create
 description: Create and checkout a git branch following repository naming conventions with GitHub issue integration. Use when creating branches, or when invoked from other skills.
-argument-hint: <ISSUE-NUMBER> [description] [--trivial | --hotfix | --maintenance | --proposal] [--autopilot]
+argument-hint: <ISSUE-NUMBER> [description] [--trivial | --hotfix | --maintenance | --proposal | --security] [--autopilot]
 allowed-tools:
   - Bash(git *)
   - Read
@@ -26075,12 +26160,12 @@ allowed-tools:
 
 # Create Branch
 
-Create a git branch following the repository's naming conventions with GitHub issue integration. Supports standard issue branches (`issue-<number>-<slug>`) and special prefix branches (hotfix, trivial, maintenance, proposal).
+Create a git branch following the repository's naming conventions with GitHub issue integration. Supports standard issue branches (`issue-<number>-<slug>`) and special prefix branches (hotfix, trivial, maintenance, proposal, security).
 
 ## When to Use
 
 - When creating a new branch from a GitHub issue
-- When creating hotfix, trivial, maintenance, or proposal branches
+- When creating hotfix, trivial, maintenance, proposal, or security branches
 - When invoked from `/autopilot:plan` for automatic branch creation
 - When invoked from other skills
 
@@ -26092,7 +26177,7 @@ Expected forms:
 
 - `<ISSUE-NUMBER>` — GitHub issue number (e.g., `123` or `#123`). Used to fetch the issue and to build the branch name `issue-<number>-<slug>`.
 - `<ISSUE-NUMBER> "<description>"` — issue number plus custom branch slug description
-- `--hotfix "<description>"` / `--trivial "<description>"` / `--maintenance "<description>"` / `--proposal "<description>"` — special prefix branches without a GitHub issue
+- `--hotfix "<description>"` / `--trivial "<description>"` / `--maintenance "<description>"` / `--proposal "<description>"` / `--security "<description>"` — special prefix branches without a GitHub issue (use `--security` for code-scanning alert fixes → `security-<slug>`)
 - `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips the Phase 5 confirmation prompt and creates the branch directly with the auto-generated name. Conflict resolution (Phase 4) and validation errors still surface.
 
 ## Input resolution
@@ -26101,7 +26186,7 @@ Arguments are optional. When `$ARGUMENTS` is empty OR a field is missing, resolv
 
 - **Issue number** — `$ARGUMENTS` → parse current branch name for `^issue-([0-9]+)` → prompt user only if none found and no special prefix flag is present.
 - **Description** — `$ARGUMENTS` → generate from GitHub issue title via Phase 3 rules → no user prompt (auto-generate always succeeds).
-- **Special prefix flags** (`--hotfix` / `--trivial` / `--maintenance` / `--proposal`) — `$ARGUMENTS` only. Never inferred. Default: none.
+- **Special prefix flags** (`--hotfix` / `--trivial` / `--maintenance` / `--proposal` / `--security`) — `$ARGUMENTS` only. Never inferred. Default: none.
 - **`--autopilot`** — `$ARGUMENTS` only. Never inferred. Default: `false` (interactive mode).
 - **Repository conventions** — read `CONTRIBUTING.md` directly from the repository root.
 
@@ -26113,7 +26198,7 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
 
 1. **Parse `$ARGUMENTS`** (shell-quoted positional tokens):
    - Check for `--autopilot`: if present, strip it from the arguments and set `autopilotMode = true`. Otherwise `autopilotMode = false`.
-   - Check for special prefix flags: `--trivial`, `--hotfix`, `--maintenance`, `--proposal`
+   - Check for special prefix flags: `--trivial`, `--hotfix`, `--maintenance`, `--proposal`, `--security`
    - If flag found: extract description from remaining arguments
    - If no flag: extract first argument as issue number, optional description
    - If `$ARGUMENTS` is empty, fall back to Input resolution (see above).
@@ -26126,11 +26211,11 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
 
 3. **If no flag, validate as issue number:**
    - Accept patterns: `^#?[0-9]+$` (strip a leading `#` if present)
-   - If invalid: `Invalid issue number. Expected: a positive integer (e.g., 123 or #123) or use --trivial, --hotfix, --maintenance, --proposal`
+   - If invalid: `Invalid issue number. Expected: a positive integer (e.g., 123 or #123) or use --trivial, --hotfix, --maintenance, --proposal, --security`
 
 ## Phase 2: Fetch GitHub Issue
 
-**Skip this phase entirely for special prefix flag branches (--hotfix, --trivial, --maintenance, --proposal).**
+**Skip this phase entirely for special prefix flag branches (--hotfix, --trivial, --maintenance, --proposal, --security).**
 
 1. **Determine the repository** and bind it to `REPO` so every `gh` call in this phase targets the same repo (important in worktrees and multi-remote checkouts):
 
@@ -26211,7 +26296,7 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
 1. Normalize description to lowercase kebab-case
 2. Remove special characters (keep only `a-z0-9-`)
 3. Construct branch name: `<prefix>-<slug>` (prefix lowercased)
-4. Example: `--hotfix` + `"memory leak in editor"` → `hotfix-memory-leak-editor`
+4. Example: `--hotfix` + `"memory leak in editor"` → `hotfix-memory-leak-editor`; `--security` + `"tainted format string"` → `security-tainted-format-string`
 5. Validate total length ≤ 100 characters — if over 60, suggest shorter description; if over 100, require it
 
 **If custom description provided:**
@@ -26431,6 +26516,28 @@ User selects "Create branch".
 
 ```
 ✓ Branch created: proposal-add-vim-keybindings
+✓ Pushed to origin with tracking
+```
+
+### Special prefix (--security)
+
+```
+/autopilot:branch-create --security "tainted format string"
+```
+
+AskUserQuestion with:
+
+- `question`: "Review the branch name and choose an action."
+- `header`: "Create branch"
+- `options`: [
+  { label: "Create branch", description: "Create and push to origin with tracking", preview: "security-tainted-format-string\n\nType: SECURITY\nFrom: origin/main" },
+  { label: "Edit slug", description: "Modify the branch name slug", preview: "security-tainted-format-string\n\nType: SECURITY\nFrom: origin/main" }
+  ]
+
+User selects "Create branch".
+
+```
+✓ Branch created: security-tainted-format-string
 ✓ Pushed to origin with tracking
 ```
 
@@ -27992,16 +28099,39 @@ $ARGUMENTS
 
 ### Codebase Context and Issue Resolution (MANDATORY - DO FIRST)
 
-Detect the input type from the arguments:
+Detect the input type from the arguments. Match **top-to-bottom and stop at the first hit** — the order is load-bearing: a code-scanning alert URL contains `github.com`, so the alert row MUST be checked before the `github.com` issue-URL row or the alert misroutes to `gh issue view` and fetches an unrelated issue #{n}.
 
-| Pattern               | Type              |
-| --------------------- | ----------------- |
-| Number only (`123`)   | GitHub issue      |
-| `#` + number (`#123`) | GitHub issue      |
-| Contains `github.com` | GitHub issue URL  |
-| Anything else         | Plain description |
+| Pattern                                                                | Type                |
+| ---------------------------------------------------------------------- | ------------------- |
+| `…/security/code-scanning/{n}` URL, or `alert#{n}` / `alert {n}` token | Code-scanning alert |
+| Number only (`123`)                                                    | GitHub issue        |
+| `#` + number (`#123`)                                                  | GitHub issue        |
+| Contains `github.com`                                                  | GitHub issue URL    |
+| Anything else                                                          | Plain description   |
+
+A **bare number stays a GitHub issue** — alerts require the alert URL or the explicit `alert#{n}` / `alert {n}` token, so there is zero collision with the issue-number rows.
 
 Launch context-gathering calls **in parallel**. The number of parallel calls depends on input type:
+
+**If input type is `code-scanning-alert`** — launch 2 calls in parallel:
+
+```
+Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
+  Check whether `.repomix/pack.xml` exists at the repository root.
+  - If it exists, call `mcp__repomix__attach_packed_output` with:
+    - `path`: [repository root absolute path]/.repomix/pack.xml
+  - If it is absent (or the attach fails), fall back to `mcp__repomix__pack_codebase` with:
+    - `directory`: [repository root absolute path]
+    - `compress`: true
+
+Agent (resolve-alert-context):
+  Use the Agent tool with:
+  - `subagent_type`: "autopilot:resolve-alert-context"
+  - `prompt`: "Fetch alert context. Alert number: [n]. Repository: [owner/repo]."
+  - `description`: "Resolve alert context"
+```
+
+If `resolve-alert-context` returns `state: "unresolved"` with a non-null `resolveError`, surface the error and STOP — do not fall through to the issue path or proceed against a misfetched target.
 
 **If input type is `github-issue`** — launch 3 calls in parallel:
 
@@ -28039,7 +28169,15 @@ Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
     - `compress`: true
 ```
 
-After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response — Phase 1 (Context Gathering) is the single phase that reads the codebase from it. Phase 0 does NOT grep or read code: build the issue context, Steelmanned Intent, and Assumptions below from the resolved issue JSON (title, body, comments) and the TODO results alone. Defer every codebase read to Phase 1.
+After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response — Phase 1 (Context Gathering) is the single phase that reads the codebase from it. Phase 0 does NOT grep or read code: build the issue/alert context, Steelmanned Intent, and Assumptions below from the resolved JSON (issue title/body/comments, or alert rule/message) alone. Defer every codebase read to Phase 1.
+
+### Alert Context Output (code-scanning-alert input)
+
+For a `code-scanning-alert` input, render the context from the `resolve-alert-context` JSON instead of the issue block — `source`, `ruleId`, `severity`, `state`, `file:line`, and `message`. There is no TODO search and no assignee. Derive the **Steelmanned Intent** from the alert rule and message (what fixing this alert means), and key everything downstream off the `code-scanning-alert` type:
+
+- **Branch (Phase 2)** — a `security-<slug>` branch (NOT `issue-<n>-…`); the slug paraphrases the rule/file (e.g. `security-tainted-format-string`).
+- **PR** — a `SECURITY:` title; the body records the alert reference (`htmlUrl`) and emits **no** `Closes #` (alerts are not closed by PR magic words).
+- **Verify** — the plan's Post-Implementation verify step polls alert state with `gh api repos/{owner}/{repo}/code-scanning/alerts/{n} --jq .state`, expecting `fixed` after merge + the next CodeQL scan.
 
 ### Issue Context Output
 
@@ -28061,7 +28199,7 @@ Format:
 [one-sentence restatement of what success looks like, in the user's strongest framing]
 ```
 
-Derive from: the resolved issue title + body (for `github-issue` input), or the task description (for `plain description` input). Do not invent scope the user did not request.
+Derive from: the resolved issue title + body (for `github-issue` input), the alert rule + message (for `code-scanning-alert` input), or the task description (for `plain description` input). Do not invent scope the user did not request.
 
 ### Assumptions & Open Questions
 
@@ -28254,6 +28392,16 @@ Use this body for the `## Pre-Implementation` section:
 ## Pre-Implementation
 
 Invoke `Skill(autopilot:branch-create)` with the resolved issue number (e.g., `42` for `#42`). The branch-create skill fetches the issue, generates an `issue-<number>-<slug>` branch name, and prompts the user to confirm before creation. Do NOT present a Hotfix/Trivial/Maintenance prefix prompt — issue inputs always use the `issue-<number>-<slug>` convention so the PR can link back via `Closes #<number>`.
+```
+
+#### Input type is `code-scanning-alert`
+
+Use this body for the `## Pre-Implementation` section:
+
+```
+## Pre-Implementation
+
+Invoke `Skill(autopilot:branch-create)` with `--security "<slug>"`, where `<slug>` paraphrases the resolved alert's rule/file (e.g., `tainted-format-string`). The branch-create skill creates a `security-<slug>` branch (the alert is NOT a GitHub issue, so the `issue-<number>-<slug>` form does not apply and no `Closes #` is emitted). The branch name MUST be approved by the user via AskUserQuestion before creation — do not create the branch directly with git commands.
 ```
 
 #### Input type is `plain description`
@@ -28940,8 +29088,8 @@ Uncommitted-change handling is done in Phase 0 by `preflight-check` — do not r
 1. Get current branch name with `git branch --show-current`
 2. Validate branch name follows convention:
    - Standard: `issue-<number>-<short-description>` (e.g., `issue-123-add-feature`)
-   - Special prefix: `<hotfix|trivial|maintenance|proposal>-<short-description>` (e.g., `hotfix-memory-leak-editor`)
-3. Extract the issue number from the branch (e.g., `123` from `issue-123-add-feature`) for use in the `**Issues:**` section as `Closes #123`. OR detect the special prefix (`hotfix`, `trivial`, `maintenance`, `proposal`) and uppercase it for the PR title prefix (e.g., `HOTFIX:`).
+   - Special prefix: `<hotfix|trivial|maintenance|proposal|security>-<short-description>` (e.g., `hotfix-memory-leak-editor`, `security-tainted-format-string`)
+3. Extract the issue number from the branch (e.g., `123` from `issue-123-add-feature`) for use in the `**Issues:**` section as `Closes #123`. OR detect the special prefix (`hotfix`, `trivial`, `maintenance`, `proposal`, `security`) and uppercase it for the PR title prefix (e.g., `HOTFIX:`, `SECURITY:`). For a `security-` branch, emit NO `Closes #` — record the code-scanning alert reference instead (see Phase 4).
 4. If branch name is invalid, warn user and ask how to proceed
 
 ## Phase 2: Gather Context
@@ -28962,7 +29110,7 @@ If the agent reports breaking changes, treat `--release-notes` as mandatory — 
 ## Phase 3: Generate PR Title
 
 **Standard format:** `<Business-valuable description>`
-**Special prefix format:** `<PREFIX>: <Business-valuable description>` where `<PREFIX>` is one of `HOTFIX`, `TRIVIAL`, `MAINTENANCE`, `PROPOSAL`
+**Special prefix format:** `<PREFIX>: <Business-valuable description>` where `<PREFIX>` is one of `HOTFIX`, `TRIVIAL`, `MAINTENANCE`, `PROPOSAL`, `SECURITY`
 
 **Rules:**
 
@@ -29038,7 +29186,8 @@ Content rules:
 - The section MUST be present when any issue-linking magic words exist
 - DO NOT place magic words (e.g., `Closes #N`, `Related to #N`) as bare text in the description — they MUST be inside the `**Issues:**` section
 - Issue links MUST use magic words — NEVER use markdown links like `[#N](url)`
-- The section is omitted ONLY for special prefix branches (HOTFIX / TRIVIAL / MAINTENANCE / PROPOSAL) when no issue numbers are provided
+- The section is omitted ONLY for special prefix branches (HOTFIX / TRIVIAL / MAINTENANCE / PROPOSAL / SECURITY) when no issue numbers are provided
+- For a `security-` branch (code-scanning alert fix), the `**Issues:**` section is omitted and replaced by an `**Alert:**` section recording the alert reference — a `---` separator, then `**Alert:**` on its own line, then the alert URL. The URL is the `htmlUrl` from the run skill's Phase 0 `resolve-alert-context` output, carried in conversation context; when `pr:create` runs standalone (no parent context), resolve it via `gh api repos/{owner}/{repo}/code-scanning/alerts/{n}` if the alert number is known, otherwise ask the user for the alert URL. Emit NO `Closes #`: code-scanning alerts close on the next scan, not via PR magic words. The `**Alert:**` section is last, in the same slot `**Issues:**` would occupy.
 
 **Magic Words:**
 
@@ -31325,8 +31474,8 @@ AskUserQuestion({
 1. Get current branch name with `git branch --show-current`
 2. Validate branch name follows convention:
    - Standard: `issue-<number>-<short-description>` (e.g., `issue-123-add-feature`)
-   - Special prefix: `<hotfix|trivial|maintenance|proposal>-<short-description>` (e.g., `hotfix-memory-leak-editor`)
-3. Extract the issue number from `^issue-([0-9]+)-` for use in the `**Issues:**` section as `Closes #<n>`. For special prefix branches there is no issue number — the PR title uses the uppercased prefix (e.g., `HOTFIX:`).
+   - Special prefix: `<hotfix|trivial|maintenance|proposal|security>-<short-description>` (e.g., `hotfix-memory-leak-editor`, `security-tainted-format-string`)
+3. Extract the issue number from `^issue-([0-9]+)-` for use in the `**Issues:**` section as `Closes #<n>`. For special prefix branches there is no issue number — the PR title uses the uppercased prefix (e.g., `HOTFIX:`, `SECURITY:`). For a `security-` branch, emit NO `Closes #` — keep the code-scanning alert reference (see the `**Alert:**` rule below).
 
 Invoke the `analyze-pr-commits` sub-agent to gather commit history, diff summary, issue context, and change significance:
 
@@ -31366,7 +31515,7 @@ Tool parameters:
 ### PR Title
 
 **Standard format:** `<Business-valuable description>`
-**Special prefix format:** `<PREFIX>: <Business-valuable description>` where `<PREFIX>` is one of `HOTFIX`, `TRIVIAL`, `MAINTENANCE`, `PROPOSAL`
+**Special prefix format:** `<PREFIX>: <Business-valuable description>` where `<PREFIX>` is one of `HOTFIX`, `TRIVIAL`, `MAINTENANCE`, `PROPOSAL`, `SECURITY`
 
 **Rules:**
 
@@ -31442,7 +31591,8 @@ Content rules:
 - The section MUST be present when any issue-linking magic words exist
 - DO NOT place magic words (e.g., `Closes #N`, `Related to #N`) as bare text in the description — they MUST be inside the `**Issues:**` section
 - Issue links MUST use magic words — NEVER use markdown links like `[#N](url)`
-- The section is omitted ONLY for special prefix branches (HOTFIX / TRIVIAL / MAINTENANCE / PROPOSAL) when no issue numbers are provided
+- The section is omitted ONLY for special prefix branches (HOTFIX / TRIVIAL / MAINTENANCE / PROPOSAL / SECURITY) when no issue numbers are provided
+- For a `security-` branch (code-scanning alert fix), the `**Issues:**` section is replaced by an `**Alert:**` section recording the alert URL (a `---` separator, then `**Alert:**` on its own line, then the alert URL). Emit NO `Closes #`: code-scanning alerts close on the next scan, not via PR magic words. The `**Alert:**` section occupies the last slot, where `**Issues:**` would go.
 
 **Preserving existing links:** Parse the old PR body's `**Issues:**` section to preserve existing magic-word links (`Closes`, `Fixes`, `Resolves`, `Part of`, `Related to`) that were set during PR creation or previous updates.
 
@@ -31738,6 +31888,7 @@ These prefixes are valid alternatives to a plain business description:
 - `TRIVIAL:` — Changes not affecting production: typos, docs, comments, formatting
 - `MAINTENANCE:` — Infrastructure updates: deps, CI, configs
 - `PROPOSAL:` — Suggest a change without filing an issue first; discussion happens on the PR
+- `SECURITY:` — Fixes for GitHub code-scanning alerts (alerts close on re-scan, not via PR magic words; no `Closes #`)
 
 Special prefix rules:
 
@@ -31780,7 +31931,7 @@ issue-<number>-<short-description>
 <prefix>-<short-description>
 ```
 
-- `prefix` must be one of: `hotfix`, `trivial`, `maintenance`, `proposal` (all lowercase)
+- `prefix` must be one of: `hotfix`, `trivial`, `maintenance`, `proposal`, `security` (all lowercase)
 - `short-description` is required, lowercase, hyphens only (no underscores)
 - Aim for under 60 characters; must be under 100
 
@@ -31804,6 +31955,7 @@ release-<version>
 - `trivial-fix-typo-readme`
 - `maintenance-upgrade-node-22`
 - `proposal-add-vim-keybindings`
+- `security-tainted-format-string`
 - `release-1.2.0`
 
 **Invalid branch examples:**
@@ -31834,6 +31986,7 @@ If BRANCH_NAME is empty, skip branch name validation entirely (Dependabot and si
 - `TRIVIAL: Fix typo in README`
 - `MAINTENANCE: Upgrade Node to 22 LTS`
 - `PROPOSAL: Add Vim keybindings`
+- `SECURITY: Sanitize tainted format string in runClaude`
 - `Release 1.2.0`
 - `Release Symbiot Editor 1.2.0`
 
@@ -31852,7 +32005,7 @@ If BRANCH_NAME is empty, skip branch name validation entirely (Dependabot and si
 
 ## GitHub Issue Verification
 
-For standard branch names (skip for HOTFIX/TRIVIAL/MAINTENANCE/PROPOSAL prefixes and Release branches), perform these additional checks:
+For standard branch names (skip for HOTFIX/TRIVIAL/MAINTENANCE/PROPOSAL/SECURITY prefixes and Release branches), perform these additional checks:
 
 1. **Extract the issue number** from the branch name (e.g., `123` from `issue-123-add-password-reset`).
 
@@ -32043,7 +32196,7 @@ Tool parameters:
 Parse the branch name to extract an issue number:
 
 - Pattern: `^issue-([0-9]+)-` for standard issue branches
-- If the branch name starts with a special prefix (`hotfix-`, `trivial-`, `maintenance-`, `proposal-`), there is no issue number to extract
+- If the branch name starts with a special prefix (`hotfix-`, `trivial-`, `maintenance-`, `proposal-`, `security-`), there is no issue number to extract
 
 #### Compare with plan-mode issue ID
 
@@ -32302,16 +32455,39 @@ $ARGUMENTS
 
 ### Codebase Context and Issue Resolution (MANDATORY - DO FIRST)
 
-Detect the input type from the arguments:
+Detect the input type from the arguments. Match **top-to-bottom and stop at the first hit** — the order is load-bearing: a code-scanning alert URL contains `github.com`, so the alert row MUST be checked before the `github.com` issue-URL row or the alert misroutes to `gh issue view` and fetches an unrelated issue #{n}.
 
-| Pattern               | Type              |
-| --------------------- | ----------------- |
-| Number only (`123`)   | GitHub issue      |
-| `#` + number (`#123`) | GitHub issue      |
-| Contains `github.com` | GitHub issue URL  |
-| Anything else         | Plain description |
+| Pattern                                                                | Type                |
+| ---------------------------------------------------------------------- | ------------------- |
+| `…/security/code-scanning/{n}` URL, or `alert#{n}` / `alert {n}` token | Code-scanning alert |
+| Number only (`123`)                                                    | GitHub issue        |
+| `#` + number (`#123`)                                                  | GitHub issue        |
+| Contains `github.com`                                                  | GitHub issue URL    |
+| Anything else                                                          | Plain description   |
+
+A **bare number stays a GitHub issue** — alerts require the alert URL or the explicit `alert#{n}` / `alert {n}` token, so there is zero collision with the issue-number rows.
 
 Launch context-gathering calls **in parallel**. The number of parallel calls depends on input type:
+
+**If input type is `code-scanning-alert`** — launch 2 calls in parallel:
+
+```
+Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
+  Check whether `.repomix/pack.xml` exists at the repository root.
+  - If it exists, call `mcp__repomix__attach_packed_output` with:
+    - `path`: [repository root absolute path]/.repomix/pack.xml
+  - If it is absent (or the attach fails), fall back to `mcp__repomix__pack_codebase` with:
+    - `directory`: [repository root absolute path]
+    - `compress`: true
+
+Agent (resolve-alert-context):
+  Use the Agent tool with:
+  - `subagent_type`: "autopilot:resolve-alert-context"
+  - `prompt`: "Fetch alert context. Alert number: [n]. Repository: [owner/repo]."
+  - `description`: "Resolve alert context"
+```
+
+If `resolve-alert-context` returns `state: "unresolved"` with a non-null `resolveError`, surface the error and STOP — do not fall through to the issue path or proceed against a misfetched target.
 
 **If input type is `github-issue`** — launch 3 calls in parallel:
 
@@ -32349,7 +32525,11 @@ Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
     - `compress`: true
 ```
 
-After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response — the stack pipeline's Context Gathering phase is the single place that reads the codebase from it. Phase 0 does NOT grep or read code: render the issue context below from the resolved issue JSON and the TODO results alone. Defer every codebase read to Context Gathering.
+After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response — the stack pipeline's Context Gathering phase is the single place that reads the codebase from it. Phase 0 does NOT grep or read code: render the issue/alert context below from the resolved JSON (and, for issues, the TODO results) alone. Defer every codebase read to Context Gathering.
+
+### Alert Context Output (code-scanning-alert input)
+
+For a `code-scanning-alert` input, render the context from the `resolve-alert-context` JSON instead of the issue block — `source`, `ruleId`, `severity`, `state`, `file:line`, and `message`. There is no TODO search and no assignee. The Steelmanned Intent derives from the alert rule and message. Everything downstream keys off the `code-scanning-alert` type: the branch is `security-<slug>` (NOT `issue-<n>-…`), the PR uses a `SECURITY:` title that records the alert reference (`htmlUrl`) and emits **no** `Closes #`, and the verify step polls alert state via `gh api repos/{owner}/{repo}/code-scanning/alerts/{n} --jq .state` (expecting `fixed` after merge + the next scan).
 
 ### Issue Context Output
 
@@ -32475,6 +32655,16 @@ Use this body for the `## Pre-Implementation` section:
 Invoke `Skill(autopilot:branch-create)` with arguments `<issue-number> --autopilot` (e.g., `42 --autopilot` for `#42`). The branch-create skill fetches the issue, generates an `issue-<number>-<slug>` branch name, and creates the branch directly without a confirmation prompt (the `--autopilot` flag suppresses Phase 5). Do NOT present a Hotfix/Trivial/Maintenance prefix prompt — issue inputs always use the `issue-<number>-<slug>` convention so the PR can link back via `Closes #<number>`. Conflict resolution still surfaces if the branch already exists.
 ```
 
+##### Input type is `code-scanning-alert`
+
+Use this body for the `## Pre-Implementation` section:
+
+```
+## Pre-Implementation
+
+Invoke `Skill(autopilot:branch-create)` with arguments `--security "<slug>" --autopilot`, where `<slug>` paraphrases the resolved alert's rule/file (e.g., `tainted-format-string`). The branch-create skill creates a `security-<slug>` branch directly (the `--autopilot` flag suppresses Phase 5). The alert is NOT a GitHub issue, so the `issue-<number>-<slug>` form does not apply and the PR emits no `Closes #` — it records the alert reference instead. Conflict resolution still surfaces if the branch already exists.
+```
+
 ##### Input type is `plain description`
 
 Use this body for the `## Pre-Implementation` section:
@@ -32533,7 +32723,7 @@ Output the PR URL after creation.
 
 3. **Format check** — After creating or updating the PR, validate its format:
    - Run `gh pr view --json title,body`
-   - Verify the body contains `**Issues:**` as a section heading (skip for special prefix branches: hotfix/trivial/maintenance)
+   - Verify the body contains `**Issues:**` as a section heading (skip for special prefix branches: hotfix/trivial/maintenance/proposal/security). For a `security-*` branch, instead verify the body contains an `**Alert:**` reference (the code-scanning alert URL) and NO `Closes #` — alerts close on re-scan, not via PR magic words.
    - Verify the body contains at least one `---` separator on its own line
    - Verify section ordering: `**Issues:**` MUST appear AFTER the last `---` separator (it must be the final section, not the first)
    - If `**Release notes:**` is present, verify it appears BEFORE `**Issues:**` and AFTER the description text
@@ -34194,15 +34384,19 @@ The two skills share the same front half. `plan` produces the plan and stops, as
 
 The skill detects the input type from its arguments and gathers context **in parallel**:
 
-| Argument pattern      | Type              |
-| --------------------- | ----------------- |
-| `123`                 | GitHub issue      |
-| `#123`                | GitHub issue      |
-| contains `github.com` | GitHub issue URL  |
-| anything else         | Plain description |
+| Argument pattern                                                | Type                |
+| --------------------------------------------------------------- | ------------------- |
+| `…/security/code-scanning/{n}` URL, `alert#{n}`, or `alert {n}` | Code-scanning alert |
+| `123`                                                           | GitHub issue        |
+| `#123`                                                          | GitHub issue        |
+| contains `github.com`                                           | GitHub issue URL    |
+| anything else                                                   | Plain description   |
+
+The classifier matches **top-to-bottom**: the code-scanning-alert row is checked first because an alert URL contains `github.com` and would otherwise misroute to `gh issue view`. A bare number stays a GitHub issue — alerts need the URL or the explicit `alert#{n}` / `alert {n}` token.
 
 - **Codebase snapshot (always).** Prefer the committed `.repomix/pack.xml` via `attach_packed_output`; fall back to a live `pack_codebase` when it is absent. Phase 0 only _attaches_ the pack — it does not read code from it; the returned `outputId` is handed to Phase 1, the single phase that reads the codebase. See [Committed Repomix pack](./repomix-pack.md).
 - **For GitHub issues (parallel sub-agents).** `resolve-issue-context` fetches the issue (and, when the caller opts in, idempotently self-assigns the current user); `search-codebase-todos` finds TODOs referencing the issue. Both return JSON (see [Sub-agents](#sub-agents-and-their-json-contracts)).
+- **For code-scanning alerts (one sub-agent).** `resolve-alert-context` resolves the alert through `gh api repos/{owner}/{repo}/code-scanning/alerts/{n}` (rule, severity, `file:line`, state, message, `html_url`) — never `gh issue view`. There is no TODO search and no self-assign. If it returns `state: "unresolved"` (gh unauthenticated, missing `security_events` scope, or alert not found), the skill surfaces the error and stops rather than misrouting. The alert drives the plan title/summary and a `security-<slug>` branch / `SECURITY:` PR; the PR records the alert reference and emits no `Closes #` (alerts close on the next scan), and the plan's verify step polls alert state via the code-scanning API.
 
 The skill then emits, for the user's review (all derived from the resolved issue JSON and TODOs, not a codebase scan): the rendered **issue context**, a one-line **steelmanned intent** (the request restated in its strongest form — the stable target for expert reviewers, copied verbatim into the plan's `## Summary`), and **Assumptions & Open Questions**. Any load-bearing open question is raised via `AskUserQuestion` before delegating.
 
@@ -34236,6 +34430,7 @@ If the stack cannot be detected, the skill asks the user via `AskUserQuestion`. 
 Before handing the plan to the user, the skill embeds the branch step so it runs first after approval. The exact block depends on the input type and current branch/worktree state:
 
 - **GitHub issue** → invoke `Skill(autopilot:branch-create)` with the issue number; it produces an `issue-<number>-<slug>` branch so the PR can `Closes #<number>`.
+- **Code-scanning alert** → invoke `Skill(autopilot:branch-create)` with `--security "<slug>"`; it produces a `security-<slug>` branch (no issue number, no `Closes #`).
 - **Plain description** → prompt for a branch type (Hotfix / Trivial / Maintenance) and branch via `branch-create` with that prefix.
 - **Already on a feature branch with active work** → no branch block is added.
 
@@ -34295,6 +34490,7 @@ Three sub-agents isolate work from the parent's context. Each returns a single s
 **Flow Legend:**
 
 - `resolve-issue-context` → `{ source, issueId, title, status, labels[], assignee|null, description, comments[] }`
+- `resolve-alert-context` → `{ source, alertNumber, ruleId, severity, state, file, line, message, htmlUrl, resolveError|null }` (code-scanning-alert input only; `state: "unresolved"` + `resolveError` on failure)
 - `search-codebase-todos` → `{ todos[{location, text}], total }`
 - `expert-review` → `{ expertRole, score, verdict: "approved"|"needs-revision", findings[3–5], revision|null }`
 
@@ -34332,6 +34528,7 @@ Three sub-agents isolate work from the parent's context. Each returns a single s
 | `claude-plugins/autopilot/skills/run/SKILL.md`               | `plan` plus the automated post-implementation chain                                     |
 | `claude-plugins/autopilot/agents/expert-review.md`           | Domain-expert plan reviewer (JSON verdict)                                              |
 | `claude-plugins/autopilot/agents/resolve-issue-context.md`   | GitHub issue context resolver (JSON)                                                    |
+| `claude-plugins/autopilot/agents/resolve-alert-context.md`   | Code-scanning alert context resolver via `gh api …/code-scanning/alerts/{n}` (JSON)     |
 | `claude-plugins/autopilot/agents/search-codebase-todos.md`   | TODO/issue-reference search (JSON)                                                      |
 </file>
 
@@ -38242,7 +38439,7 @@ Some changes don't require an issue (see [Special PR Prefixes](#special-pr-prefi
 <prefix>-<short-description>
 ```
 
-- `prefix` must be lowercase: `hotfix`, `trivial`, `maintenance`, or `proposal`
+- `prefix` must be lowercase: `hotfix`, `trivial`, `maintenance`, `proposal`, or `security`
 - Same rules apply: lowercase, hyphens only, aim for under 60 characters (hard limit: 100)
 
 **Examples:**
@@ -38251,6 +38448,7 @@ Some changes don't require an issue (see [Special PR Prefixes](#special-pr-prefi
 - ✅ `trivial-fix-typo-readme`
 - ✅ `maintenance-upgrade-node-22`
 - ✅ `proposal-add-vim-keybindings`
+- ✅ `security-tainted-format-string`
 
 ⚠️ Enforced locally by the `pre-push` git hook and in CI by [`deepakputhraya/action-branch-name`](https://github.com/deepakputhraya/action-branch-name). Invalid branch names block PR merge.
 
@@ -38480,12 +38678,13 @@ docs(auth): add jwt validation documentation
 
 Some changes don't fit the standard business-description format — they are either urgent, too small for an issue, purely infrastructural, or an out-of-the-blue suggestion. Special prefixes bypass PR title and description validation while keeping the history readable.
 
-| Prefix         | When to use                                                                  | Example                               |
-| -------------- | ---------------------------------------------------------------------------- | ------------------------------------- |
-| `HOTFIX:`      | Emergency production fixes                                                   | `HOTFIX: Memory leak in editor`       |
-| `TRIVIAL:`     | Changes not affecting production or CI/CD: typos, docs, comments, formatting | `TRIVIAL: Fix typo in README`         |
-| `MAINTENANCE:` | Infrastructure updates: deps, CI, configs                                    | `MAINTENANCE: Upgrade Node to 22 LTS` |
-| `PROPOSAL:`    | Suggest a change without filing an issue first; discussion happens on the PR | `PROPOSAL: Add Vim keybindings`       |
+| Prefix         | When to use                                                                  | Example                                    |
+| -------------- | ---------------------------------------------------------------------------- | ------------------------------------------ |
+| `HOTFIX:`      | Emergency production fixes                                                   | `HOTFIX: Memory leak in editor`            |
+| `TRIVIAL:`     | Changes not affecting production or CI/CD: typos, docs, comments, formatting | `TRIVIAL: Fix typo in README`              |
+| `MAINTENANCE:` | Infrastructure updates: deps, CI, configs                                    | `MAINTENANCE: Upgrade Node to 22 LTS`      |
+| `PROPOSAL:`    | Suggest a change without filing an issue first; discussion happens on the PR | `PROPOSAL: Add Vim keybindings`            |
+| `SECURITY:`    | Fixes for GitHub code-scanning alerts (close on re-scan, not via `Closes #`) | `SECURITY: Sanitize tainted format string` |
 
 **Rules:**
 
@@ -38618,7 +38817,7 @@ Only one strategy is used per repository. Reasons:
 
 **Before submitting:**
 
-- [ ] Branch name starts with `issue-<number>-` or one of the special prefixes (`hotfix-`, `trivial-`, `maintenance-`, `proposal-`)
+- [ ] Branch name starts with `issue-<number>-` or one of the special prefixes (`hotfix-`, `trivial-`, `maintenance-`, `proposal-`, `security-`)
 - [ ] PR title is a business-valuable description (no `#<n>:` prefix) or uses a recognized special prefix
 - [ ] PR description links the issue via `Closes #<n>` / `Fixes #<n>` / `Resolves #<n>` (when applicable)
 - [ ] All commits follow Conventional Commits format
