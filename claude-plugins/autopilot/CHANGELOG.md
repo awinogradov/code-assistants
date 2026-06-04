@@ -2,6 +2,60 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.2.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.1.0...autopilot@v1.2.0) (2026-06-04)
+
+## Release Notes
+
+The Autopilot Claude Plugin code review system now provides more thorough and contextual reviews, with better formatted output and improved review accuracy.
+
+## ✨ What's New
+
+### Enhanced code review context
+Code reviews now gather comprehensive project context before analyzing changes, including your CLAUDE.md guidelines, README documentation, and related TODO items. This ensures reviewers understand your project's specific requirements and conventions before making suggestions, leading to more relevant and actionable feedback.
+
+<details><summary>Related issues</summary>
+
+- [#233: Improve the code review skill: context parity, inline history, and rule checks](https://github.com/awinogradov/code-assistants/issues/233)
+</details>
+
+### Prior review history tracking
+Reviews now automatically load previous inline comments from earlier review rounds, enabling accurate follow-up reviews. Reviewers can see what was already discussed and whether previous feedback was addressed, avoiding repetitive comments and ensuring continuity across review iterations.
+
+<details><summary>Related issues</summary>
+
+- [#233: Improve the code review skill: context parity, inline history, and rule checks](https://github.com/awinogradov/code-assistants/issues/233)
+</details>
+
+### Expanded review rule checks
+The review system now includes 14 comprehensive checks covering task/solution alignment, dead code detection, unvalidated external input, and platform-specific standards for logging, documentation, and service integration. These automated checks help catch common issues that manual reviews might miss.
+
+<details><summary>Related issues</summary>
+
+- [#233: Improve the code review skill: context parity, inline history, and rule checks](https://github.com/awinogradov/code-assistants/issues/233)
+</details>
+
+### Consistent reference formatting
+All generated output — from skills to code reviews and release notes — now formats references consistently as clickable links. File paths, section references, commit SHAs, and issue numbers render as resolvable links instead of dead backticked text, making it easier to navigate between related content.
+
+<details><summary>Related issues</summary>
+
+- [#236: Standardize reference formatting and readability in generated output](https://github.com/awinogradov/code-assistants/issues/236)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #236 | [#237](https://github.com/awinogradov/code-assistants/pull/237) | @awinogradov |
+| #233 | [#234](https://github.com/awinogradov/code-assistants/pull/234) | @awinogradov |
+
+### Features
+
+* **autopilot:** inline format rules into skills ([ebc8a89](https://github.com/awinogradov/code-assistants/commit/ebc8a89cc06d62b355e23821b38887fc57094963))
+* **pr-review:** add logging, docs, service checks ([faf2b41](https://github.com/awinogradov/code-assistants/commit/faf2b41036f1b134c6f805e1cb1da0e223dfff5e))
+* **pr-review:** load inline history, add checks ([79daac4](https://github.com/awinogradov/code-assistants/commit/79daac485a20ea33d8ada4355204fc00a1ec49ee))
+* **pr-review:** load related todos for context ([68015b8](https://github.com/awinogradov/code-assistants/commit/68015b8cda6becd3395a43ebcc89c0607daea460))
 ## [1.1.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.0.0...autopilot@v1.1.0) (2026-06-01)
 
 ## Release Notes
