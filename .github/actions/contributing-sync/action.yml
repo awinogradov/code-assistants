@@ -1,5 +1,5 @@
 name: Contributing sync
-description: Sync CONTRIBUTING.md, CODE_OF_CONDUCT.md, LICENSE.md, the contributing workflow, the auto-label workflow, and the licenses workflow from an upstream repository into the current repository.
+description: Sync CONTRIBUTING.md, CODE_OF_CONDUCT.md, LICENSE.md, the contributing workflow, the auto-label workflow, the licenses workflow, and the validate-actions workflow from an upstream repository into the current repository.
 
 inputs:
   bot_token:
@@ -48,6 +48,7 @@ runs:
           .github/workflows/contributing.yml
           .github/workflows/auto-label.yml
           .github/workflows/licenses.yml
+          .github/workflows/validate-actions.yml
         )
         {
           echo "files<<__EOF__"

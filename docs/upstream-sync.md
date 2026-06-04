@@ -18,7 +18,7 @@ every consumer automatically, with no consumer workflow edit.
 | `code-review`  | `.github/workflows/code-review.yml`                                                                                                                               | `maintenance-sync-code-review`  | [`code-review-sync`](../.github/actions/code-review-sync/README.md)   |
 | `repomix`      | `.github/workflows/repomix-pack.yml`, `repomix.config.json`                                                                                                       | `maintenance-sync-repomix`      | [`repomix-sync`](../.github/actions/repomix-sync/README.md)           |
 | `release`      | `.github/workflows/release-create.yml`, `release-publish.yml`, `release-automerge.yml`                                                                            | `maintenance-sync-release`      | [`release-sync`](../.github/actions/release-sync/README.md)           |
-| `contributing` | `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, `.github/workflows/contributing.yml`, `.github/workflows/auto-label.yml`, `.github/workflows/licenses.yml` | `maintenance-sync-contributing` | [`contributing-sync`](../.github/actions/contributing-sync/README.md) |
+| `contributing` | `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, `.github/workflows/contributing.yml`, `.github/workflows/auto-label.yml`, `.github/workflows/licenses.yml`, `.github/workflows/validate-actions.yml` | `maintenance-sync-contributing` | [`contributing-sync`](../.github/actions/contributing-sync/README.md) |
 
 Each kind delegates to its `*-sync` action, which delegates the diff and PR mechanics to
 [`files-sync`](../.github/actions/files-sync/README.md). The action directories these synced
