@@ -117,8 +117,8 @@ Uncommitted-change handling is done in Phase 0 by `preflight-check` — do not r
 1. Get current branch name with `git branch --show-current`
 2. Validate branch name follows convention:
    - Standard: `issue-<number>-<short-description>` (e.g., `issue-123-add-feature`)
-   - Special prefix: `<hotfix|trivial|maintenance|proposal>-<short-description>` (e.g., `hotfix-memory-leak-editor`)
-3. Extract the issue number from the branch (e.g., `123` from `issue-123-add-feature`) for use in the `**Issues:**` section as `Closes #123`. OR detect the special prefix (`hotfix`, `trivial`, `maintenance`, `proposal`) and uppercase it for the PR title prefix (e.g., `HOTFIX:`).
+   - Special prefix: `<hotfix|trivial|maintenance|proposal|security>-<short-description>` (e.g., `hotfix-memory-leak-editor`, `security-tainted-format-string`)
+3. Extract the issue number from the branch (e.g., `123` from `issue-123-add-feature`) for use in the `**Issues:**` section as `Closes #123`. OR detect the special prefix (`hotfix`, `trivial`, `maintenance`, `proposal`, `security`) and uppercase it for the PR title prefix (e.g., `HOTFIX:`, `SECURITY:`). For a `security-` branch, emit NO `Closes #` — record the code-scanning alert reference instead (see Phase 4).
 4. If branch name is invalid, warn user and ask how to proceed
 
 ## Phase 2: Gather Context
@@ -139,7 +139,7 @@ If the agent reports breaking changes, treat `--release-notes` as mandatory — 
 ## Phase 3: Generate PR Title
 
 **Standard format:** `<Business-valuable description>`
-**Special prefix format:** `<PREFIX>: <Business-valuable description>` where `<PREFIX>` is one of `HOTFIX`, `TRIVIAL`, `MAINTENANCE`, `PROPOSAL`
+**Special prefix format:** `<PREFIX>: <Business-valuable description>` where `<PREFIX>` is one of `HOTFIX`, `TRIVIAL`, `MAINTENANCE`, `PROPOSAL`, `SECURITY`
 
 **Rules:**
 
@@ -215,7 +215,8 @@ Content rules:
 - The section MUST be present when any issue-linking magic words exist
 - DO NOT place magic words (e.g., `Closes #N`, `Related to #N`) as bare text in the description — they MUST be inside the `**Issues:**` section
 - Issue links MUST use magic words — NEVER use markdown links like `[#N](url)`
-- The section is omitted ONLY for special prefix branches (HOTFIX / TRIVIAL / MAINTENANCE / PROPOSAL) when no issue numbers are provided
+- The section is omitted ONLY for special prefix branches (HOTFIX / TRIVIAL / MAINTENANCE / PROPOSAL / SECURITY) when no issue numbers are provided
+- For a `security-` branch (code-scanning alert fix), the `**Issues:**` section is omitted and replaced by an `**Alert:**` section recording the alert reference — a `---` separator, then `**Alert:**` on its own line, then the alert URL (the `htmlUrl` resolved in Phase 0). Emit NO `Closes #`: code-scanning alerts close on the next scan, not via PR magic words. The `**Alert:**` section is last, in the same slot `**Issues:**` would occupy.
 
 **Magic Words:**
 
