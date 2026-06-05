@@ -121,9 +121,9 @@ _Code Review skipped 😢_`;
 /**
  * Fetch failure annotations, build the explain prompt, and emit the outputs the
  * separate `runClaude` explain step consumes. `explain` is set to `true` only
- * after a non-empty prompt is written, so the explain step is skipped (and the
- * comment degrades to links-only) when no failed check carries annotations or
- * the write fails — a skip is never blocked on the enhancement.
+ * when at least one failed check carries annotations (so there is something to
+ * explain) and the prompt is written; otherwise the explain step is skipped and
+ * the comment degrades to links-only — a skip is never blocked on the enhancement.
  */
 async function emitExplainContext(config: PreflightConfig, failed: FailedCheck[]): Promise<void> {
   try {
@@ -133,12 +133,12 @@ async function emitExplainContext(config: PreflightConfig, failed: FailedCheck[]
       config.repoName,
       failed,
     );
-    const prompt = buildExplainPrompt(failed, context);
-    if (Object.keys(context).length === 0 || prompt.trim().length === 0) {
+    if (Object.keys(context).length === 0) {
       await setOutput("explain", "false");
       return;
     }
 
+    const prompt = buildExplainPrompt(failed, context);
     const promptFile = `${process.env.RUNNER_TEMP ?? "/tmp"}/preflight-explain-prompt.txt`;
     await Bun.write(promptFile, prompt);
     await setOutput("explain_prompt_file", promptFile);
