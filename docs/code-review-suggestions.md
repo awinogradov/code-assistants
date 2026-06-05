@@ -49,7 +49,7 @@ The `pr:review` skill emits two new optional per-comment fields — `suggestion`
 **Flow legend:**
 
 - ① The skill emits each finding with optional `startLine` and `suggestion`; it crosses the action boundary as the `structured_output` JSON, validated by `inlineCommentSchema`.
-- ② Per comment, the action looks up the file's patch and extracts the hunk covering the line — used for `<file context>` and (via `isValidComment`) to confirm the whole range is in-diff.
+- ② Per comment, the action looks up the file's patch and extracts the hunk covering the line — used for `<file context>` and (via `anchorCommentToDiff`) to anchor the comment to the largest in-diff span ending at the line, or route it to the review body when the line itself is out-of-diff.
 - ③ The action renders the final body: original finding, then the suggestion fence (when present), then the cubic-shaped "Prompt for AI agents" `<details>`. The embedded prompt copy is cleaned (leading severity emoji and trailing rule link removed) and its `<file context>` is bounded to a window around the finding line — only this copy is transformed; the original finding above stays verbatim.
 - ④ Posted through the existing `createReview` call with `side`/`start_line`/`start_side` added for multi-line; GitHub renders the suggestion button and the collapsible prompt.
 
@@ -110,14 +110,22 @@ GitHub anchors a review comment to one line (`line`) or a range (`start_line`..`
 - **Single-line** — the model sets `line` only. The action posts `{ path, line, body, side: "RIGHT" }`.
 - **Multi-line** — the model sets `startLine` (first line) and `line` (last line). The action adds `start_line` + `start_side: "RIGHT"`. `side`/`start_side` are always `RIGHT` because only added/context lines (the new side of the diff) are commentable.
 
-`isValidComment` requires the **entire** `[startLine, line]` range to be in-diff. A contiguous in-diff range always sits within a single hunk, so a range that straddles a gap between hunks is rejected and the finding falls back to the review body — otherwise GitHub would reject the whole `createReview` call, not just that comment. Out-of-diff findings keep their prose and drop the suggestion (a suggestion is meaningless off the diff).
+`anchorCommentToDiff` fits each multi-line finding to the diff instead of dropping it. A contiguous in-diff range always sits within a single hunk (distinct hunks are separated by at least one omitted, non-commentable line), so anchoring on an in-diff span never makes GitHub reject the whole `createReview` call. The outcomes:
+
+- **Inverted range** (`startLine > line`) — normalized (swapped) before anything else.
+- **Fully in-diff range** — posted inline unchanged, with its one-click `suggestion`.
+- **Partly in-diff range** (crosses a hunk gap) — clamped to the largest contiguous in-diff sub-range ending at `line` and kept inline, but the `suggestion` is dropped: it replaces exactly the anchored lines, and the clamped span no longer matches the proposed text.
+- **Only `line` in-diff** — collapses to a single-line comment on `line` (suggestion dropped, same reason).
+- **`line` itself out-of-diff** — routed to the review body, where `formatInvalidComments` carries the `suggestion` along as a fenced block (display-only — the body is not line-anchored, so there is no apply button).
+
+The prose is never lost; only the one-click apply degrades when the anchor cannot match the suggested replacement.
 
 ## Source map
 
-| File                                                 | Responsibility                                                                                                                                      |
-| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/reviewOutput/reviewOutput.ts`                   | `inlineCommentSchema` (adds optional `startLine`/`suggestion`); `isValidComment` validates the multi-line range against the diff                    |
-| `src/reviewOutput/inlineCommentBody.ts`              | `findHunkForLine`, `renderInlineCommentBody`, `buildReviewComments` — renders the suggestion fence + AI-agent prompt and shapes the Octokit payload |
-| `src/submitReview.ts`                                | Calls `buildReviewComments(validComments, prFiles)` for the `createReview` `comments[]` array                                                       |
-| `action.yml`                                         | `CLAUDE_JSON_SCHEMA` permits the optional `startLine`/`suggestion` model output                                                                     |
-| `claude-plugins/autopilot/skills/pr:review/SKILL.md` | Tells the model when and how to emit `suggestion`/`startLine` (the "Code suggestions" section)                                                      |
+| File                                                 | Responsibility                                                                                                                                                                             |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/reviewOutput/reviewOutput.ts`                   | `inlineCommentSchema` (adds optional `startLine`/`suggestion`); `anchorCommentToDiff` clamps a comment's range to the diff (returns the inline comment, or `null` to route it to the body) |
+| `src/reviewOutput/inlineCommentBody.ts`              | `findHunkForLine`, `renderInlineCommentBody`, `buildReviewComments` — renders the suggestion fence + AI-agent prompt and shapes the Octokit payload                                        |
+| `src/submitReview.ts`                                | Calls `buildReviewComments(validComments, prFiles)` for the `createReview` `comments[]` array                                                                                              |
+| `action.yml`                                         | `CLAUDE_JSON_SCHEMA` permits the optional `startLine`/`suggestion` model output                                                                                                            |
+| `claude-plugins/autopilot/skills/pr:review/SKILL.md` | Tells the model when and how to emit `suggestion`/`startLine` (the "Code suggestions" section)                                                                                             |
