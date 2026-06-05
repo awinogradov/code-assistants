@@ -19,6 +19,7 @@ import {
   mcpConfigFileSchema,
   parseConfig,
   resolveClaudeBinary,
+  resolveRunMode,
   safeParseJson,
 } from "./runClaude.ts";
 
@@ -319,6 +320,20 @@ describe("extractUsage", () => {
       total_cost_usd: Number.POSITIVE_INFINITY,
     };
     expect(extractUsage(result)).toMatchObject({ tokensIn: 0, tokensOut: 0, costUsd: 0 });
+  });
+});
+
+describe("resolveRunMode", () => {
+  test("prefers the CLAUDE_RUN_MODE override when set", () => {
+    process.env.CLAUDE_RUN_MODE = "preflight";
+    expect(resolveRunMode("/autopilot:pr-review REPO: o/r")).toBe("preflight");
+    delete process.env.CLAUDE_RUN_MODE;
+  });
+
+  test("falls back to the prompt-derived mode when the override is unset", () => {
+    delete process.env.CLAUDE_RUN_MODE;
+    expect(resolveRunMode("/autopilot:pr-review REPO: o/r")).toBe("review");
+    expect(resolveRunMode("something else")).toBe("unknown");
   });
 });
 

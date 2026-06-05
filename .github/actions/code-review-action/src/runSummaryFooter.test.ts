@@ -54,6 +54,11 @@ describe("parseRunSummary", () => {
   test("parses a valid summary", () => {
     expect(parseRunSummary(JSON.stringify(coreSummary))).toEqual(coreSummary);
   });
+
+  test("accepts the preflight mode", () => {
+    const summary = { ...coreSummary, mode: "preflight" as const };
+    expect(parseRunSummary(JSON.stringify(summary))).toEqual(summary);
+  });
 });
 
 describe("renderRunSummaryFooter", () => {

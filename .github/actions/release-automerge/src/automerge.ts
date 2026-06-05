@@ -319,7 +319,7 @@ async function run(config: AutomergeConfig): Promise<void> {
     },
   );
   if (checks.hasFailed) {
-    console.log(`Skip: failed checks — ${checks.failedNames.join(", ")}`);
+    console.log(`Skip: failed checks — ${checks.failed.map((f) => f.name).join(", ")}`);
     return;
   }
   if (!checks.allCompleted) {

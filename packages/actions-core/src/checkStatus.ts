@@ -13,11 +13,27 @@
  */
 import type { Octokit } from "@octokit/rest";
 
+/**
+ * A single failed check, carrying a link to its run log so consumers can render
+ * an actionable reference instead of a bare name.
+ */
+export interface FailedCheck {
+  /** Display name: a check-run name or a commit-status context. */
+  name: string;
+  /**
+   * Link to the failing run's logs — a check-run `details_url`/`html_url`, or a
+   * commit-status `target_url`. Null when GitHub exposes none.
+   */
+  url: string | null;
+  /** Check-run id for fetching annotations; null for commit statuses (no annotations). */
+  checkRunId: number | null;
+}
+
 /** Aggregated check status result from both GitHub APIs. */
 export interface CheckResult {
   allCompleted: boolean;
   hasFailed: boolean;
-  failedNames: string[];
+  failed: FailedCheck[];
   pendingNames: string[];
 }
 
@@ -86,22 +102,26 @@ export async function fetchCheckStatuses(
     .map((run) => run.name);
   const failedRuns = siblingRuns
     .filter((run) => run.status === "completed" && failedConclusions.has(run.conclusion ?? ""))
-    .map((run) => run.name);
+    .map((run) => ({
+      name: run.name,
+      url: run.details_url ?? run.html_url ?? null,
+      checkRunId: run.id,
+    }));
 
   const pendingStatuses = commitStatus.data.statuses
     .filter((s) => s.state === "pending")
     .map((s) => s.context);
   const failedCommitStatuses = commitStatus.data.statuses
     .filter((s) => failedStatuses.has(s.state))
-    .map((s) => s.context);
+    .map((s) => ({ name: s.context, url: s.target_url ?? null, checkRunId: null }));
 
   const allPending = [...pendingRuns, ...pendingStatuses];
-  const allFailed = [...failedRuns, ...failedCommitStatuses];
+  const allFailed: FailedCheck[] = [...failedRuns, ...failedCommitStatuses];
 
   return {
     allCompleted: allPending.length === 0,
     hasFailed: allFailed.length > 0,
-    failedNames: allFailed,
+    failed: allFailed,
     pendingNames: allPending,
   };
 }
