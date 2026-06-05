@@ -127,13 +127,9 @@ export function buildExplainPrompt(
 ): string {
   const blocks = failed
     .filter((check) => context[check.name])
-    .map((check) =>
-      [`### ${check.name}`, "<<<ANNOTATIONS>>>", context[check.name], "<<<END>>>"].join("\n"),
-    );
+    .map((check) => `### ${check.name}\n<<<ANNOTATIONS>>>\n${context[check.name]}\n<<<END>>>`);
 
-  return [explainInstructions, "", "Failed checks and their logs:", "", blocks.join("\n\n")].join(
-    "\n",
-  );
+  return `${explainInstructions}\n\nFailed checks and their logs:\n\n${blocks.join("\n\n")}`;
 }
 
 /**
