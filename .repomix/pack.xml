@@ -4090,6 +4090,19 @@ describe("buildReviewComments", () => {
     expect(comment?.start_side).toBe("RIGHT");
   });
 
+  test("emits the post-clamp start_line for a narrowed multi-line anchor", () => {
+    // anchorCommentToDiff narrows a cross-hunk range to the in-diff span ending at
+    // `line`; buildReviewComments must send that clamped start_line, both lines in
+    // one hunk, so GitHub does not 422 the whole createReview call.
+    const [comment] = buildReviewComments(
+      [{ path: "src/a.ts", line: 4, startLine: 3, body: "b" }],
+      prFiles,
+    );
+    expect(comment?.line).toBe(4);
+    expect(comment?.start_line).toBe(3);
+    expect(comment?.start_side).toBe("RIGHT");
+  });
+
   test("renders without file context when the file has no patch", () => {
     const [comment] = buildReviewComments(
       [{ path: "src/a.ts", line: 2, body: "b" }],
@@ -4361,10 +4374,10 @@ export function buildReviewComments(
 import { describe, expect, test } from "bun:test";
 
 import {
+  anchorCommentToDiff,
   extractValidLines,
   formatInvalidComments,
   isAlreadyMentioned,
-  isValidComment,
   parseReactionOutput,
   parseStructuredOutput,
 } from "./reviewOutput.ts";
@@ -4480,14 +4493,19 @@ describe("extractValidLines", () => {
   });
 });
 
-describe("isValidComment", () => {
+describe("anchorCommentToDiff", () => {
   const valid = [{ path: "a.ts", line: 10 }];
-  test("matches path and line", () => {
-    expect(isValidComment({ path: "a.ts", line: 10, body: "x" }, valid)).toBe(true);
+  test("returns a single-line comment in-diff unchanged", () => {
+    expect(anchorCommentToDiff({ path: "a.ts", line: 10, body: "x" }, valid)).toEqual({
+      path: "a.ts",
+      line: 10,
+      body: "x",
+      startLine: undefined,
+    });
   });
-  test("rejects wrong line or path", () => {
-    expect(isValidComment({ path: "a.ts", line: 11, body: "x" }, valid)).toBe(false);
-    expect(isValidComment({ path: "b.ts", line: 10, body: "x" }, valid)).toBe(false);
+  test("routes a single-line comment off-diff to the body (null)", () => {
+    expect(anchorCommentToDiff({ path: "a.ts", line: 11, body: "x" }, valid)).toBeNull();
+    expect(anchorCommentToDiff({ path: "b.ts", line: 10, body: "x" }, valid)).toBeNull();
   });
 
   const range = [
@@ -4495,18 +4513,37 @@ describe("isValidComment", () => {
     { path: "a.ts", line: 11 },
     { path: "a.ts", line: 12 },
   ];
-  test("accepts a multi-line range fully in the diff", () => {
-    expect(isValidComment({ path: "a.ts", line: 12, body: "x", startLine: 10 }, range)).toBe(true);
+  test("keeps a full in-diff range and its suggestion", () => {
+    expect(
+      anchorCommentToDiff({ path: "a.ts", line: 12, body: "x", startLine: 10, suggestion: "f" }, range)
+    ).toEqual({ path: "a.ts", line: 12, body: "x", startLine: 10, suggestion: "f" });
   });
-  test("rejects a multi-line range straddling a non-diff line", () => {
+  test("clamps a cross-hunk range to the largest in-diff span ending at line, dropping the suggestion", () => {
     const gapped = [
+      { path: "a.ts", line: 9 },
+      { path: "a.ts", line: 11 },
+      { path: "a.ts", line: 12 },
+    ];
+    expect(
+      anchorCommentToDiff({ path: "a.ts", line: 12, body: "x", startLine: 9, suggestion: "f" }, gapped)
+    ).toEqual({ path: "a.ts", line: 12, body: "x", startLine: 11, suggestion: undefined });
+  });
+  test("falls back to a single-line comment when only line is in-diff, dropping the suggestion", () => {
+    const onlyLine = [
       { path: "a.ts", line: 10 },
       { path: "a.ts", line: 12 },
     ];
-    expect(isValidComment({ path: "a.ts", line: 12, body: "x", startLine: 10 }, gapped)).toBe(false);
+    expect(
+      anchorCommentToDiff({ path: "a.ts", line: 12, body: "x", startLine: 10, suggestion: "f" }, onlyLine)
+    ).toEqual({ path: "a.ts", line: 12, body: "x", startLine: undefined, suggestion: undefined });
   });
-  test("rejects an inverted range (startLine > line)", () => {
-    expect(isValidComment({ path: "a.ts", line: 10, body: "x", startLine: 12 }, range)).toBe(false);
+  test("normalizes an inverted range (startLine > line) and drops the suggestion", () => {
+    expect(
+      anchorCommentToDiff({ path: "a.ts", line: 10, body: "x", startLine: 12, suggestion: "f" }, range)
+    ).toEqual({ path: "a.ts", line: 12, body: "x", startLine: 10, suggestion: undefined });
+  });
+  test("routes a range whose last line is off-diff to the body (null)", () => {
+    expect(anchorCommentToDiff({ path: "a.ts", line: 13, body: "x", startLine: 11 }, range)).toBeNull();
   });
 });
 
@@ -4530,6 +4567,19 @@ describe("formatInvalidComments", () => {
     expect(out).toContain("`a.ts:9`");
     expect(out).toContain("🙋‍♂️ broken");
     expect(out).not.toContain("🚧");
+  });
+
+  test("carries a suggestion into the body as a fenced block when present", () => {
+    const out = formatInvalidComments([
+      { path: "a.ts", line: 9, body: "broken", suggestion: "  const fixed = 1;" },
+    ]);
+    expect(out).toContain("```suggestion\n  const fixed = 1;\n```");
+  });
+
+  test("omits the suggestion fence when no suggestion is set", () => {
+    expect(formatInvalidComments([{ path: "a.ts", line: 9, body: "broken" }])).not.toContain(
+      "```suggestion"
+    );
   });
 });
 </file>
@@ -4641,24 +4691,53 @@ export function extractValidLines(patches: Array<{ filename: string; patch?: str
 }
 
 /**
- * True when a comment's target exists in the diff. For a single-line comment that
- * is just `line`; for a multi-line comment the entire `[startLine, line]` range must
- * be in-diff. A range that straddles a gap between hunks is rejected — GitHub would
- * 422 the whole `createReview` call, not just the offending comment.
+ * Anchor a finding to the diff instead of dropping it when its range is only
+ * partly commentable.
+ *
+ * `validLines` holds every commentable new-file line, and distinct diff hunks are
+ * always separated by at least one omitted line — so a contiguous run of
+ * `validLines` can never span a hunk gap (the same invariant `buildReviewComments`
+ * relies on to locate a range's single hunk). Returns the inline-postable comment,
+ * anchored on the largest contiguous in-diff span ending at `line`; or `null` when
+ * `line` itself is out-of-diff, signalling the caller to route the finding to the
+ * review body. An inverted `startLine > line` range is normalized before validating.
+ *
+ * The one-click `suggestion` replaces exactly the anchored lines, so it is kept only
+ * when the emitted anchor matches the model's original `[startLine, line]` pair; any
+ * normalization or clamp would mis-apply the replacement, so the suggestion is dropped
+ * there (and carried into the review body instead when the finding falls all the way
+ * back via `formatInvalidComments`).
  */
-export function isValidComment(comment: InlineComment, validLines: ValidLine[]): boolean {
+export function anchorCommentToDiff(
+  comment: InlineComment,
+  validLines: ValidLine[]
+): InlineComment | null {
   const inDiff = (line: number): boolean =>
     validLines.some((vl) => vl.path === comment.path && vl.line === line);
 
-  const { startLine, line } = comment;
-  if (startLine === undefined) {
-    return inDiff(line);
+  const [startLine, line] =
+    comment.startLine !== undefined && comment.startLine > comment.line
+      ? [comment.line, comment.startLine]
+      : [comment.startLine, comment.line];
+
+  if (!inDiff(line)) {
+    return null;
   }
-  if (startLine > line) {
-    return false;
+
+  let anchorStart = line;
+  while (anchorStart - 1 >= (startLine ?? line) && inDiff(anchorStart - 1)) {
+    anchorStart -= 1;
   }
-  const range = Array.from({ length: line - startLine + 1 }, (_, i) => startLine + i);
-  return range.every(inDiff);
+
+  const emittedStart = anchorStart < line ? anchorStart : undefined;
+  const anchorUnchanged = emittedStart === comment.startLine && line === comment.line;
+
+  return {
+    ...comment,
+    startLine: emittedStart,
+    line,
+    suggestion: anchorUnchanged ? comment.suggestion : undefined,
+  };
 }
 
 /**
@@ -4672,7 +4751,10 @@ export function isAlreadyMentioned(comment: InlineComment, reviewBody: string): 
 
 /**
  * Format out-of-diff comments for inclusion in the review body.
- * Downgrades blockers (🚧) to suggestions (🙋‍♂️) since they're supplementary.
+ * Downgrades blockers (🚧) to suggestions (🙋‍♂️) since they're supplementary, and
+ * carries any one-click `suggestion` along as a fenced block so the proposed fix is
+ * still readable here — the body is not line-anchored, so it renders as plain text
+ * (no apply button) rather than being lost.
  */
 export function formatInvalidComments(comments: InlineComment[]): string {
   if (comments.length === 0) {
@@ -4682,7 +4764,9 @@ export function formatInvalidComments(comments: InlineComment[]): string {
   const formatted = comments
     .map((c) => {
       const body = c.body.replaceAll("🚧", "🙋‍♂️");
-      return `**\`${c.path}:${c.line}\`**\n\n${body}`;
+      const suggestion =
+        c.suggestion === undefined ? "" : `\n\n\`\`\`suggestion\n${c.suggestion}\n\`\`\``;
+      return `**\`${c.path}:${c.line}\`**\n\n${body}${suggestion}`;
     })
     .join("\n\n");
 
@@ -7712,11 +7796,12 @@ import type { Octokit } from "@octokit/rest";
 
 import type { ReviewEvent, ReviewThread } from "./github/githubReview.ts";
 import {
+  anchorCommentToDiff,
   extractValidLines,
   formatInvalidComments,
   isAlreadyMentioned,
-  isValidComment,
   parseStructuredOutput,
+  type InlineComment,
   type ValidLine,
 } from "./reviewOutput/reviewOutput.ts";
 import { buildReviewComments } from "./reviewOutput/inlineCommentBody.ts";
@@ -7832,9 +7917,18 @@ const { data: prFiles } = await octokit.rest.pulls.listFiles({
 
 const validLines = extractValidLines(prFiles);
 
-const validComments = allComments.filter((c) => isValidComment(c, validLines));
-const invalidComments = allComments
-  .filter((c) => !isValidComment(c, validLines))
+// Anchor each finding to the diff once. A non-null result posts inline (its range
+// clamped to the largest in-diff span ending at `line`); a null falls back to the
+// review body. Pairing source with result keeps the routing explicit instead of
+// re-deriving the invalid set by positional index.
+const anchored = allComments.map((comment) => ({
+  comment,
+  inline: anchorCommentToDiff(comment, validLines),
+}));
+const validComments: InlineComment[] = anchored.flatMap(({ inline }) => (inline ? [inline] : []));
+const invalidComments = anchored
+  .filter(({ inline }) => inline === null)
+  .map(({ comment }) => comment)
   .filter((c) => !isAlreadyMentioned(c, output.reviewComment));
 
 // Assemble the main review body, then append the per-run metrics as a collapsible
@@ -36478,7 +36572,7 @@ The `pr:review` skill emits two new optional per-comment fields — `suggestion`
 **Flow legend:**
 
 - ① The skill emits each finding with optional `startLine` and `suggestion`; it crosses the action boundary as the `structured_output` JSON, validated by `inlineCommentSchema`.
-- ② Per comment, the action looks up the file's patch and extracts the hunk covering the line — used for `<file context>` and (via `isValidComment`) to confirm the whole range is in-diff.
+- ② Per comment, the action looks up the file's patch and extracts the hunk covering the line — used for `<file context>` and (via `anchorCommentToDiff`) to anchor the comment to the largest in-diff span ending at the line, or route it to the review body when the line itself is out-of-diff.
 - ③ The action renders the final body: original finding, then the suggestion fence (when present), then the cubic-shaped "Prompt for AI agents" `<details>`. The embedded prompt copy is cleaned (leading severity emoji and trailing rule link removed) and its `<file context>` is bounded to a window around the finding line — only this copy is transformed; the original finding above stays verbatim.
 - ④ Posted through the existing `createReview` call with `side`/`start_line`/`start_side` added for multi-line; GitHub renders the suggestion button and the collapsible prompt.
 
@@ -36539,17 +36633,25 @@ GitHub anchors a review comment to one line (`line`) or a range (`start_line`..`
 - **Single-line** — the model sets `line` only. The action posts `{ path, line, body, side: "RIGHT" }`.
 - **Multi-line** — the model sets `startLine` (first line) and `line` (last line). The action adds `start_line` + `start_side: "RIGHT"`. `side`/`start_side` are always `RIGHT` because only added/context lines (the new side of the diff) are commentable.
 
-`isValidComment` requires the **entire** `[startLine, line]` range to be in-diff. A contiguous in-diff range always sits within a single hunk, so a range that straddles a gap between hunks is rejected and the finding falls back to the review body — otherwise GitHub would reject the whole `createReview` call, not just that comment. Out-of-diff findings keep their prose and drop the suggestion (a suggestion is meaningless off the diff).
+`anchorCommentToDiff` fits each multi-line finding to the diff instead of dropping it. A contiguous in-diff range always sits within a single hunk (distinct hunks are separated by at least one omitted, non-commentable line), so anchoring on an in-diff span never makes GitHub reject the whole `createReview` call. The outcomes:
+
+- **Inverted range** (`startLine > line`) — normalized (swapped) before anything else.
+- **Fully in-diff range** — posted inline unchanged, with its one-click `suggestion`.
+- **Partly in-diff range** (crosses a hunk gap) — clamped to the largest contiguous in-diff sub-range ending at `line` and kept inline, but the `suggestion` is dropped: it replaces exactly the anchored lines, and the clamped span no longer matches the proposed text.
+- **Only `line` in-diff** — collapses to a single-line comment on `line` (suggestion dropped, same reason).
+- **`line` itself out-of-diff** — routed to the review body, where `formatInvalidComments` carries the `suggestion` along as a fenced block (display-only — the body is not line-anchored, so there is no apply button).
+
+The prose is never lost; only the one-click apply degrades when the anchor cannot match the suggested replacement.
 
 ## Source map
 
-| File                                                 | Responsibility                                                                                                                                      |
-| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/reviewOutput/reviewOutput.ts`                   | `inlineCommentSchema` (adds optional `startLine`/`suggestion`); `isValidComment` validates the multi-line range against the diff                    |
-| `src/reviewOutput/inlineCommentBody.ts`              | `findHunkForLine`, `renderInlineCommentBody`, `buildReviewComments` — renders the suggestion fence + AI-agent prompt and shapes the Octokit payload |
-| `src/submitReview.ts`                                | Calls `buildReviewComments(validComments, prFiles)` for the `createReview` `comments[]` array                                                       |
-| `action.yml`                                         | `CLAUDE_JSON_SCHEMA` permits the optional `startLine`/`suggestion` model output                                                                     |
-| `claude-plugins/autopilot/skills/pr:review/SKILL.md` | Tells the model when and how to emit `suggestion`/`startLine` (the "Code suggestions" section)                                                      |
+| File                                                 | Responsibility                                                                                                                                                                             |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/reviewOutput/reviewOutput.ts`                   | `inlineCommentSchema` (adds optional `startLine`/`suggestion`); `anchorCommentToDiff` clamps a comment's range to the diff (returns the inline comment, or `null` to route it to the body) |
+| `src/reviewOutput/inlineCommentBody.ts`              | `findHunkForLine`, `renderInlineCommentBody`, `buildReviewComments` — renders the suggestion fence + AI-agent prompt and shapes the Octokit payload                                        |
+| `src/submitReview.ts`                                | Calls `buildReviewComments(validComments, prFiles)` for the `createReview` `comments[]` array                                                                                              |
+| `action.yml`                                         | `CLAUDE_JSON_SCHEMA` permits the optional `startLine`/`suggestion` model output                                                                                                            |
+| `claude-plugins/autopilot/skills/pr:review/SKILL.md` | Tells the model when and how to emit `suggestion`/`startLine` (the "Code suggestions" section)                                                                                             |
 </file>
 
 <file path="docs/plan-run-skills.md">
