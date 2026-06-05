@@ -470,6 +470,39 @@ runs:
         PR_AUTHOR: ${{ steps.pr.outputs.author }}
       run: bun run "${{ github.action_path }}/src/preflightChecks.ts"
 
+    - name: Explain failed checks
+      id: explain
+      if: steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.mode == 'review' && steps.preflight.outputs.explain == 'true'
+      continue-on-error: true
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude_oauth_token }}
+        CLAUDE_MODEL: ${{ inputs.model }}
+        CLAUDE_RUN_MODE: preflight
+        CLAUDE_JSON_SCHEMA: '{"type":"object","properties":{"reasons":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"reason":{"type":"string"}},"required":["name","reason"]}}},"required":["reasons"]}'
+        EXECUTION_OUTPUT_FILE: ${{ runner.temp }}/claude-explain-output.json
+        EXPLAIN_PROMPT_FILE: ${{ steps.preflight.outputs.explain_prompt_file }}
+        LOG_LEVEL: ${{ inputs.debug_logs == 'true' && 'debug' || 'info' }}
+      run: |
+        CLAUDE_PROMPT="$(cat "$EXPLAIN_PROMPT_FILE")"
+        export CLAUDE_PROMPT
+        bun run "${{ github.action_path }}/src/runClaude.ts"
+
+    - name: Post skip comment
+      if: always() && steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.mode == 'review' && steps.preflight.outputs.has_failures == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.bot_token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ steps.ctx.outputs.pr_number }}
+        REVIEWER: ${{ inputs.reviewer }}
+        PR_AUTHOR: ${{ steps.pr.outputs.author }}
+        FAILED_JSON: ${{ steps.preflight.outputs.failed_json }}
+        STRUCTURED_OUTPUT: ${{ steps.explain.outputs.structured_output }}
+        RUN_SUMMARY: ${{ steps.explain.outputs.run_summary }}
+      run: bun run "${{ github.action_path }}/src/preflightSkipComment.ts"
+
     - name: Code Review
       id: review
       if: steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.mode == 'review' && steps.preflight.outputs.skip_review != 'true'

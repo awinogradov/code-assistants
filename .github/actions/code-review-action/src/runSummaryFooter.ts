@@ -30,7 +30,7 @@ const footerEndMarker = "<!-- run-summary-end -->";
  * known literal, so a malformed value can never reach the rendered markdown.
  */
 export const runSummarySchema = z.object({
-  mode: z.enum(["review", "react", "unknown"]),
+  mode: z.enum(["review", "react", "unknown", "preflight"]),
   model_ms: z.number(),
   tokens_in: z.number(),
   tokens_out: z.number(),

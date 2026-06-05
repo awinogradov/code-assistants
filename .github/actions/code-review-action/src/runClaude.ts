@@ -327,7 +327,7 @@ async function run(): Promise<void> {
   // Emit the run summary (log + step output) BEFORE emitOutputs, which may
   // process.exit(1) on a non-success result — keeping the footer data available
   // to the separate submitReview step even on a failed run.
-  const summary = buildRunSummary(deriveMode(config.prompt), messages, { modelMs });
+  const summary = buildRunSummary(resolveRunMode(config.prompt), messages, { modelMs });
   log.info(summary, "Run summary.");
   await setOutput("run_summary", JSON.stringify(summary));
 
@@ -353,6 +353,17 @@ export function deriveMode(prompt: string): "review" | "react" | "unknown" {
   if (prompt.includes(reviewCommand)) return "review";
   if (prompt.includes(reactCommand)) return "react";
   return "unknown";
+}
+
+/**
+ * Resolve the run-summary mode. An explicit `CLAUDE_RUN_MODE` env wins over the
+ * prompt-derived mode so callers that run a one-shot whose prompt carries no
+ * slash-command marker — e.g. the preflight skip-path explain step — can label
+ * their footer (`preflight`) instead of falling through to `unknown`. An empty
+ * value falls back to {@link deriveMode}.
+ */
+export function resolveRunMode(prompt: string): string {
+  return process.env.CLAUDE_RUN_MODE || deriveMode(prompt);
 }
 
 /** Find the final SDK `result` message in the collected stream. */

@@ -23,11 +23,14 @@ interface FakeRun {
   name: string;
   status: string;
   conclusion: string | null;
+  details_url?: string | null;
+  html_url?: string | null;
 }
 
 interface FakeStatus {
   context: string;
   state: string;
+  target_url?: string | null;
 }
 
 interface CapturedCalls {
@@ -94,7 +97,7 @@ describe("fetchCheckStatuses", () => {
     expect(result).toEqual({
       allCompleted: true,
       hasFailed: false,
-      failedNames: [],
+      failed: [],
       pendingNames: [],
     });
   });
@@ -150,14 +153,33 @@ describe("fetchCheckStatuses", () => {
     expect(result.pendingNames).toEqual([]);
   });
 
-  test("failed conclusion is reported", async () => {
+  test("failed conclusion surfaces name, url, and check-run id", async () => {
     const { octokit } = fakeOctokit(
-      [{ id: 1, name: "lint", status: "completed", conclusion: "timed_out" }],
+      [
+        {
+          id: 7,
+          name: "lint",
+          status: "completed",
+          conclusion: "timed_out",
+          details_url: "https://ci.example/lint",
+        },
+        {
+          id: 8,
+          name: "build",
+          status: "completed",
+          conclusion: "failure",
+          html_url: "https://gh.example/build",
+        },
+      ],
       [],
     );
     const result = await fetchCheckStatuses(octokit, "o", "r", "sha", "automerge");
     expect(result.hasFailed).toBe(true);
-    expect(result.failedNames).toEqual(["lint"]);
+    // details_url wins; html_url is the fallback when details_url is absent.
+    expect(result.failed).toEqual([
+      { name: "lint", url: "https://ci.example/lint", checkRunId: 7 },
+      { name: "build", url: "https://gh.example/build", checkRunId: 8 },
+    ]);
   });
 
   test("combined commit statuses classify pending and failure", async () => {
@@ -165,14 +187,17 @@ describe("fetchCheckStatuses", () => {
       [],
       [
         { context: "ci/pending", state: "pending" },
-        { context: "ci/broken", state: "error" },
+        { context: "ci/broken", state: "error", target_url: "https://ci.example/broken" },
       ],
     );
     const result = await fetchCheckStatuses(octokit, "o", "r", "sha", "automerge");
     expect(result.allCompleted).toBe(false);
     expect(result.pendingNames).toEqual(["ci/pending"]);
     expect(result.hasFailed).toBe(true);
-    expect(result.failedNames).toEqual(["ci/broken"]);
+    // Commit statuses carry target_url but have no check-run id (no annotations).
+    expect(result.failed).toEqual([
+      { name: "ci/broken", url: "https://ci.example/broken", checkRunId: null },
+    ]);
   });
 });
 
@@ -180,19 +205,19 @@ describe("pollCheckStatuses", () => {
   const pending: CheckResult = {
     allCompleted: false,
     hasFailed: false,
-    failedNames: [],
+    failed: [],
     pendingNames: ["ci"],
   };
   const completed: CheckResult = {
     allCompleted: true,
     hasFailed: false,
-    failedNames: [],
+    failed: [],
     pendingNames: [],
   };
   const failed: CheckResult = {
     allCompleted: false,
     hasFailed: true,
-    failedNames: ["ci"],
+    failed: [{ name: "ci", url: null, checkRunId: null }],
     pendingNames: [],
   };
   const noSleep = (): Promise<void> => Promise.resolve();

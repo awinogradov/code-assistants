@@ -3,19 +3,30 @@
  * Polls GitHub Check Runs and Commit Statuses APIs until all sibling checks complete.
  * Skips review and posts a comment if any check has failed or if polling times out.
  *
+ * On failed checks this step does NOT post the skip comment itself: it emits the
+ * failed checks plus an "explain" prompt as step outputs, and the separate
+ * `runClaude` explain step + `preflightSkipComment.ts` post step assemble and
+ * post the enriched comment (mirroring the review/react flow). The timeout path,
+ * which makes no model call, still posts its comment inline here.
+ *
  * @example
  * GH_TOKEN=xxx REPO=owner/repo PR_NUMBER=123 PR_HEAD_SHA=abc JOB_NAME=review POLL_INTERVAL=10 CHECKS_TIMEOUT=600 PR_AUTHOR=user bun run scripts/preflightChecks.ts
  */
-import { fetchCheckStatuses, pollCheckStatuses } from "@code-assistants/actions-core/checkStatus";
+import {
+  fetchCheckStatuses,
+  pollCheckStatuses,
+  type FailedCheck,
+} from "@code-assistants/actions-core/checkStatus";
 import type { Octokit } from "@octokit/rest";
 
 import { setOutput } from "./actionsOutput.ts";
-import { normalizeBody, parseRepoEnv } from "./github/githubReview.ts";
+import { parseRepoEnv } from "./github/githubReview.ts";
+import { buildExplainPrompt, fetchFailureContext, postSkipComment } from "./skipComment.ts";
 
 /** Outcome of the preflight polling loop */
 type PreflightOutcome =
   | { status: "passed" }
-  | { status: "failed"; failedNames: string[] }
+  | { status: "failed"; failed: FailedCheck[] }
   | { status: "timeout"; pendingNames: string[] };
 
 /** Preflight configuration parsed from environment */
@@ -84,27 +95,13 @@ async function pollUntilComplete(config: PreflightConfig): Promise<PreflightOutc
   );
 
   if (result.hasFailed) {
-    return { status: "failed", failedNames: result.failedNames };
+    return { status: "failed", failed: result.failed };
   }
   if (result.allCompleted) {
     return { status: "passed" };
   }
 
   return { status: "timeout", pendingNames: result.pendingNames };
-}
-
-/** Build sarcastic comment for failed checks. */
-function buildFailureComment(author: string, failedNames: string[]): string {
-  const list = failedNames.map((name) => `- ${name}`).join("\n");
-
-  return `@${author}, I see red flags 🚩
-
-These checks have failed:
-${list}
-
-Fix all of them before asking anybody to review. Or move your PR to draft. Do what your heart says 💅
-
-_Code Review skipped 😢_`;
 }
 
 /** Build comment for polling timeout. */
@@ -122,38 +119,37 @@ _Code Review skipped 😢_`;
 }
 
 /**
- * Post a skip comment to the PR with dedup check.
- * Fetches recent bot comments and skips if the same comment already exists.
+ * Fetch failure annotations, build the explain prompt, and emit the outputs the
+ * separate `runClaude` explain step consumes. `explain` is set to `true` only
+ * after a non-empty prompt is written, so the explain step is skipped (and the
+ * comment degrades to links-only) when no failed check carries annotations or
+ * the write fails — a skip is never blocked on the enhancement.
  */
-async function postSkipComment(
-  octokit: Octokit,
-  owner: string,
-  repo: string,
-  prNumber: number,
-  reviewer: string,
-  body: string,
-): Promise<void> {
-  const { data: comments } = await octokit.rest.issues.listComments({
-    owner,
-    repo,
-    issue_number: prNumber,
-    per_page: 5,
-    direction: "desc",
-  });
+async function emitExplainContext(config: PreflightConfig, failed: FailedCheck[]): Promise<void> {
+  try {
+    const context = await fetchFailureContext(
+      config.octokit,
+      config.owner,
+      config.repoName,
+      failed,
+    );
+    const prompt = buildExplainPrompt(failed, context);
+    if (Object.keys(context).length === 0 || prompt.trim().length === 0) {
+      await setOutput("explain", "false");
+      return;
+    }
 
-  const lastBotComment = comments.find((c) => c.user?.login === reviewer);
-  if (lastBotComment && normalizeBody(lastBotComment.body ?? "") === normalizeBody(body)) {
-    console.log("✓ Skip comment already posted, skipping duplicate");
-    return;
+    const promptFile = `${process.env.RUNNER_TEMP ?? "/tmp"}/preflight-explain-prompt.txt`;
+    await Bun.write(promptFile, prompt);
+    await setOutput("explain_prompt_file", promptFile);
+    await setOutput("explain", "true");
+  } catch (error) {
+    // Fail open: never block a skip on the enhancement. Log error.message only —
+    // not the raw response/headers — so auth material can't leak into public logs.
+    const message = error instanceof Error ? error.message : String(error);
+    console.log(`::warning title=Preflight explain context failed::${message}`);
+    await setOutput("explain", "false");
   }
-
-  await octokit.rest.issues.createComment({
-    owner,
-    repo,
-    issue_number: prNumber,
-    body,
-  });
-  console.log("✓ Posted skip comment to PR");
 }
 
 // Main execution
@@ -169,17 +165,12 @@ try {
     console.log("✓ All checks passed, proceeding with review");
     await setOutput("skip_review", "false");
   } else if (outcome.status === "failed") {
-    console.log(`✗ Failed checks: ${outcome.failedNames.join(", ")}`);
-    const comment = buildFailureComment(config.prAuthor, outcome.failedNames);
-    await postSkipComment(
-      config.octokit,
-      config.owner,
-      config.repoName,
-      config.pullNumber,
-      config.reviewer,
-      comment,
-    );
+    const { failed } = outcome;
+    console.log(`✗ Failed checks: ${failed.map((f) => f.name).join(", ")}`);
     await setOutput("skip_review", "true");
+    await setOutput("has_failures", "true");
+    await setOutput("failed_json", JSON.stringify(failed));
+    await emitExplainContext(config, failed);
   } else {
     const timeoutMin = Math.round(config.timeoutMs / 60_000);
     console.log(`✗ Timeout after ${timeoutMin}min, pending: ${outcome.pendingNames.join(", ")}`);
