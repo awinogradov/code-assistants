@@ -159,6 +159,8 @@ If the agent reports breaking changes, treat `--release-notes` as mandatory — 
 
 ## Phase 4: Generate PR Description
 
+**Reference formatting (MANDATORY):** The generated body — both the description and the release-notes section — MUST follow the reference-formatting rules inlined at the end of this skill. The rule that keeps regressing: render every mention of a standard consistently as a link to its versioned RFC by stable ID (e.g., `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`), never a mix of bare text and links in the same body.
+
 The PR body uses `---` separators to divide three sections: description, release notes (optional), and issue links.
 
 **CRITICAL — Section ordering is MANDATORY and MUST NOT be rearranged:**
