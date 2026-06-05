@@ -51,6 +51,7 @@ async function runPullRequest(api: GitHubApi, prefixOverride: string): Promise<v
     prNumber: event.prNumber,
     baseSha: event.baseSha,
     headSha: event.headSha,
+    headRef: event.headRef,
     prefix,
     labelColor: process.env.LABEL_COLOR || defaultColor,
     labelDescriptionTemplate: process.env.LABEL_DESCRIPTION_TEMPLATE || defaultDescriptionTemplate,

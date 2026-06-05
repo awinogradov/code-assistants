@@ -39,6 +39,7 @@ const baseInput = {
   prNumber: 7,
   baseSha: "base",
   headSha: "head",
+  headRef: "feat/widget",
   prefix: "code-assistants/",
   labelColor: "5319e7",
   labelDescriptionTemplate: "Auto-applied: PR touches {label}",
@@ -97,5 +98,16 @@ describe("labelPr", () => {
 
     expect(result.touched).toEqual(["code-assistants/files-sync-action"]);
     expect(added).toEqual(["code-assistants/files-sync-action"]);
+  });
+
+  it("skips release PRs (head ref `release-*`) without touching any labels", async () => {
+    // Every api method throws by default, so a passing result proves the release
+    // guard short-circuits before any member enumeration or label I/O happens.
+    const result = await labelPr(buildApi({}), {
+      ...baseInput,
+      headRef: "release-autopilot-1.2.0",
+    });
+
+    expect(result).toEqual({ touched: [], added: [], removed: [] });
   });
 });

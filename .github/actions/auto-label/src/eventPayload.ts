@@ -4,7 +4,7 @@
  * that throws a descriptive error on anything unexpected.
  *
  * @example
- *   const { prNumber, baseSha, headSha } = readPullRequestEvent(process.env.GITHUB_EVENT_PATH!);
+ *   const { prNumber, baseSha, headSha, headRef } = readPullRequestEvent(process.env.GITHUB_EVENT_PATH!);
  */
 import { readFileSync } from "node:fs";
 
@@ -14,7 +14,7 @@ const pullRequestEventSchema = z.object({
   pull_request: z.object({
     number: z.number().int().positive(),
     base: z.object({ sha: z.string().min(1) }),
-    head: z.object({ sha: z.string().min(1) }),
+    head: z.object({ sha: z.string().min(1), ref: z.string().min(1) }),
   }),
 });
 
@@ -23,6 +23,8 @@ export interface PullRequestEvent {
   prNumber: number;
   baseSha: string;
   headSha: string;
+  /** Head branch name — lets label-PR mode skip release PRs (`release-*`). */
+  headRef: string;
 }
 
 /** Validates an already-parsed payload object — the pure, unit-testable core. */
@@ -32,6 +34,7 @@ export function parsePullRequestEvent(payload: unknown): PullRequestEvent {
     prNumber: parsed.pull_request.number,
     baseSha: parsed.pull_request.base.sha,
     headSha: parsed.pull_request.head.sha,
+    headRef: parsed.pull_request.head.ref,
   };
 }
 
