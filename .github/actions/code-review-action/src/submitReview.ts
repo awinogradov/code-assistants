@@ -9,11 +9,12 @@ import type { Octokit } from "@octokit/rest";
 
 import type { ReviewEvent, ReviewThread } from "./github/githubReview.ts";
 import {
+  anchorCommentToDiff,
   extractValidLines,
   formatInvalidComments,
   isAlreadyMentioned,
-  isValidComment,
   parseStructuredOutput,
+  type InlineComment,
   type ValidLine,
 } from "./reviewOutput/reviewOutput.ts";
 import { buildReviewComments } from "./reviewOutput/inlineCommentBody.ts";
@@ -129,9 +130,18 @@ const { data: prFiles } = await octokit.rest.pulls.listFiles({
 
 const validLines = extractValidLines(prFiles);
 
-const validComments = allComments.filter((c) => isValidComment(c, validLines));
-const invalidComments = allComments
-  .filter((c) => !isValidComment(c, validLines))
+// Anchor each finding to the diff once. A non-null result posts inline (its range
+// clamped to the largest in-diff span ending at `line`); a null falls back to the
+// review body. Pairing source with result keeps the routing explicit instead of
+// re-deriving the invalid set by positional index.
+const anchored = allComments.map((comment) => ({
+  comment,
+  inline: anchorCommentToDiff(comment, validLines),
+}));
+const validComments: InlineComment[] = anchored.flatMap(({ inline }) => (inline ? [inline] : []));
+const invalidComments = anchored
+  .filter(({ inline }) => inline === null)
+  .map(({ comment }) => comment)
   .filter((c) => !isAlreadyMentioned(c, output.reviewComment));
 
 // Assemble the main review body, then append the per-run metrics as a collapsible

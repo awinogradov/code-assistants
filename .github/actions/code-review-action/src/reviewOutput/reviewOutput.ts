@@ -104,24 +104,53 @@ export function extractValidLines(patches: Array<{ filename: string; patch?: str
 }
 
 /**
- * True when a comment's target exists in the diff. For a single-line comment that
- * is just `line`; for a multi-line comment the entire `[startLine, line]` range must
- * be in-diff. A range that straddles a gap between hunks is rejected — GitHub would
- * 422 the whole `createReview` call, not just the offending comment.
+ * Anchor a finding to the diff instead of dropping it when its range is only
+ * partly commentable.
+ *
+ * `validLines` holds every commentable new-file line, and distinct diff hunks are
+ * always separated by at least one omitted line — so a contiguous run of
+ * `validLines` can never span a hunk gap (the same invariant `buildReviewComments`
+ * relies on to locate a range's single hunk). Returns the inline-postable comment,
+ * anchored on the largest contiguous in-diff span ending at `line`; or `null` when
+ * `line` itself is out-of-diff, signalling the caller to route the finding to the
+ * review body. An inverted `startLine > line` range is normalized before validating.
+ *
+ * The one-click `suggestion` replaces exactly the anchored lines, so it is kept only
+ * when the emitted anchor matches the model's original `[startLine, line]` pair; any
+ * normalization or clamp would mis-apply the replacement, so the suggestion is dropped
+ * there (and carried into the review body instead when the finding falls all the way
+ * back via `formatInvalidComments`).
  */
-export function isValidComment(comment: InlineComment, validLines: ValidLine[]): boolean {
+export function anchorCommentToDiff(
+  comment: InlineComment,
+  validLines: ValidLine[]
+): InlineComment | null {
   const inDiff = (line: number): boolean =>
     validLines.some((vl) => vl.path === comment.path && vl.line === line);
 
-  const { startLine, line } = comment;
-  if (startLine === undefined) {
-    return inDiff(line);
+  const [startLine, line] =
+    comment.startLine !== undefined && comment.startLine > comment.line
+      ? [comment.line, comment.startLine]
+      : [comment.startLine, comment.line];
+
+  if (!inDiff(line)) {
+    return null;
   }
-  if (startLine > line) {
-    return false;
+
+  let anchorStart = line;
+  while (anchorStart - 1 >= (startLine ?? line) && inDiff(anchorStart - 1)) {
+    anchorStart -= 1;
   }
-  const range = Array.from({ length: line - startLine + 1 }, (_, i) => startLine + i);
-  return range.every(inDiff);
+
+  const emittedStart = anchorStart < line ? anchorStart : undefined;
+  const anchorUnchanged = emittedStart === comment.startLine && line === comment.line;
+
+  return {
+    ...comment,
+    startLine: emittedStart,
+    line,
+    suggestion: anchorUnchanged ? comment.suggestion : undefined,
+  };
 }
 
 /**
@@ -135,7 +164,10 @@ export function isAlreadyMentioned(comment: InlineComment, reviewBody: string): 
 
 /**
  * Format out-of-diff comments for inclusion in the review body.
- * Downgrades blockers (🚧) to suggestions (🙋‍♂️) since they're supplementary.
+ * Downgrades blockers (🚧) to suggestions (🙋‍♂️) since they're supplementary, and
+ * carries any one-click `suggestion` along as a fenced block so the proposed fix is
+ * still readable here — the body is not line-anchored, so it renders as plain text
+ * (no apply button) rather than being lost.
  */
 export function formatInvalidComments(comments: InlineComment[]): string {
   if (comments.length === 0) {
@@ -145,7 +177,9 @@ export function formatInvalidComments(comments: InlineComment[]): string {
   const formatted = comments
     .map((c) => {
       const body = c.body.replaceAll("🚧", "🙋‍♂️");
-      return `**\`${c.path}:${c.line}\`**\n\n${body}`;
+      const suggestion =
+        c.suggestion === undefined ? "" : `\n\n\`\`\`suggestion\n${c.suggestion}\n\`\`\``;
+      return `**\`${c.path}:${c.line}\`**\n\n${body}${suggestion}`;
     })
     .join("\n\n");
 

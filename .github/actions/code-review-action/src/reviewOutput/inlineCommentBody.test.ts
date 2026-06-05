@@ -125,6 +125,19 @@ describe("buildReviewComments", () => {
     expect(comment?.start_side).toBe("RIGHT");
   });
 
+  test("emits the post-clamp start_line for a narrowed multi-line anchor", () => {
+    // anchorCommentToDiff narrows a cross-hunk range to the in-diff span ending at
+    // `line`; buildReviewComments must send that clamped start_line, both lines in
+    // one hunk, so GitHub does not 422 the whole createReview call.
+    const [comment] = buildReviewComments(
+      [{ path: "src/a.ts", line: 4, startLine: 3, body: "b" }],
+      prFiles,
+    );
+    expect(comment?.line).toBe(4);
+    expect(comment?.start_line).toBe(3);
+    expect(comment?.start_side).toBe("RIGHT");
+  });
+
   test("renders without file context when the file has no patch", () => {
     const [comment] = buildReviewComments(
       [{ path: "src/a.ts", line: 2, body: "b" }],

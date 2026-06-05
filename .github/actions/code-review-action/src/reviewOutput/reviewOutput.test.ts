@@ -4,10 +4,10 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  anchorCommentToDiff,
   extractValidLines,
   formatInvalidComments,
   isAlreadyMentioned,
-  isValidComment,
   parseReactionOutput,
   parseStructuredOutput,
 } from "./reviewOutput.ts";
@@ -123,14 +123,19 @@ describe("extractValidLines", () => {
   });
 });
 
-describe("isValidComment", () => {
+describe("anchorCommentToDiff", () => {
   const valid = [{ path: "a.ts", line: 10 }];
-  test("matches path and line", () => {
-    expect(isValidComment({ path: "a.ts", line: 10, body: "x" }, valid)).toBe(true);
+  test("returns a single-line comment in-diff unchanged", () => {
+    expect(anchorCommentToDiff({ path: "a.ts", line: 10, body: "x" }, valid)).toEqual({
+      path: "a.ts",
+      line: 10,
+      body: "x",
+      startLine: undefined,
+    });
   });
-  test("rejects wrong line or path", () => {
-    expect(isValidComment({ path: "a.ts", line: 11, body: "x" }, valid)).toBe(false);
-    expect(isValidComment({ path: "b.ts", line: 10, body: "x" }, valid)).toBe(false);
+  test("routes a single-line comment off-diff to the body (null)", () => {
+    expect(anchorCommentToDiff({ path: "a.ts", line: 11, body: "x" }, valid)).toBeNull();
+    expect(anchorCommentToDiff({ path: "b.ts", line: 10, body: "x" }, valid)).toBeNull();
   });
 
   const range = [
@@ -138,18 +143,37 @@ describe("isValidComment", () => {
     { path: "a.ts", line: 11 },
     { path: "a.ts", line: 12 },
   ];
-  test("accepts a multi-line range fully in the diff", () => {
-    expect(isValidComment({ path: "a.ts", line: 12, body: "x", startLine: 10 }, range)).toBe(true);
+  test("keeps a full in-diff range and its suggestion", () => {
+    expect(
+      anchorCommentToDiff({ path: "a.ts", line: 12, body: "x", startLine: 10, suggestion: "f" }, range)
+    ).toEqual({ path: "a.ts", line: 12, body: "x", startLine: 10, suggestion: "f" });
   });
-  test("rejects a multi-line range straddling a non-diff line", () => {
+  test("clamps a cross-hunk range to the largest in-diff span ending at line, dropping the suggestion", () => {
     const gapped = [
+      { path: "a.ts", line: 9 },
+      { path: "a.ts", line: 11 },
+      { path: "a.ts", line: 12 },
+    ];
+    expect(
+      anchorCommentToDiff({ path: "a.ts", line: 12, body: "x", startLine: 9, suggestion: "f" }, gapped)
+    ).toEqual({ path: "a.ts", line: 12, body: "x", startLine: 11, suggestion: undefined });
+  });
+  test("falls back to a single-line comment when only line is in-diff, dropping the suggestion", () => {
+    const onlyLine = [
       { path: "a.ts", line: 10 },
       { path: "a.ts", line: 12 },
     ];
-    expect(isValidComment({ path: "a.ts", line: 12, body: "x", startLine: 10 }, gapped)).toBe(false);
+    expect(
+      anchorCommentToDiff({ path: "a.ts", line: 12, body: "x", startLine: 10, suggestion: "f" }, onlyLine)
+    ).toEqual({ path: "a.ts", line: 12, body: "x", startLine: undefined, suggestion: undefined });
   });
-  test("rejects an inverted range (startLine > line)", () => {
-    expect(isValidComment({ path: "a.ts", line: 10, body: "x", startLine: 12 }, range)).toBe(false);
+  test("normalizes an inverted range (startLine > line) and drops the suggestion", () => {
+    expect(
+      anchorCommentToDiff({ path: "a.ts", line: 10, body: "x", startLine: 12, suggestion: "f" }, range)
+    ).toEqual({ path: "a.ts", line: 12, body: "x", startLine: 10, suggestion: undefined });
+  });
+  test("routes a range whose last line is off-diff to the body (null)", () => {
+    expect(anchorCommentToDiff({ path: "a.ts", line: 13, body: "x", startLine: 11 }, range)).toBeNull();
   });
 });
 
@@ -173,5 +197,18 @@ describe("formatInvalidComments", () => {
     expect(out).toContain("`a.ts:9`");
     expect(out).toContain("🙋‍♂️ broken");
     expect(out).not.toContain("🚧");
+  });
+
+  test("carries a suggestion into the body as a fenced block when present", () => {
+    const out = formatInvalidComments([
+      { path: "a.ts", line: 9, body: "broken", suggestion: "  const fixed = 1;" },
+    ]);
+    expect(out).toContain("```suggestion\n  const fixed = 1;\n```");
+  });
+
+  test("omits the suggestion fence when no suggestion is set", () => {
+    expect(formatInvalidComments([{ path: "a.ts", line: 9, body: "broken" }])).not.toContain(
+      "```suggestion"
+    );
   });
 });
