@@ -140,15 +140,15 @@ export function buildExplainPrompt(
  * Neutralize a model-produced reason before rendering it into a public PR
  * comment. The reason derives from untrusted CI annotations, so the output side
  * is defended independently of the prompt framing: collapse to one line, unwrap
- * markdown links, strip HTML/backticks and the run-summary marker fragments,
- * defang URLs and `@`-mentions, and cap the length.
+ * markdown links, strip backticks and every angle bracket — so no HTML tag,
+ * comment, or run-summary marker can survive — defang URLs and `@`-mentions,
+ * and cap the length.
  */
 export function sanitizeReason(reason: string): string {
   const zeroWidth = String.fromCharCode(0x200b);
   return reason
     .replace(/\s+/g, " ")
     .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/<!--+|--+>/g, "")
     .replace(/[`<>]/g, "")
     .replace(/:\/\//g, `:${zeroWidth}//`)
     .replace(/@/g, `@${zeroWidth}`)

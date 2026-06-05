@@ -120,6 +120,13 @@ describe("sanitizeReason", () => {
     expect(sanitizeReason("a <!-- run-summary-start --> b")).not.toContain("<!--");
     expect(sanitizeReason("x".repeat(500)).length).toBeLessThanOrEqual(200);
   });
+
+  test("leaves no angle brackets, so no HTML comment terminator survives", () => {
+    // Covers the CodeQL cases: the --!> terminator and a residual <!-- after a single pass.
+    expect(sanitizeReason("x --!> y")).not.toMatch(/[<>]/);
+    expect(sanitizeReason("<!--<!--script-->")).not.toContain("<!--");
+    expect(sanitizeReason("<img src=x onerror=alert(1)>")).not.toMatch(/[<>]/);
+  });
 });
 
 function fakeAnnotationsOctokit(byId: Record<number, unknown[] | Error>): Octokit {
