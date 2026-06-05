@@ -4786,7 +4786,13 @@ export async function setOutput(key: string, value: string): Promise<void> {
  */
 import { describe, expect, test } from "bun:test";
 
-import { isBareAcknowledgement, requestsReReview, shouldSkipModelReply } from "./classifyReaction.ts";
+import {
+  authorAcknowledgesWhileBlocking,
+  hasAcknowledgementToken,
+  isBareAcknowledgement,
+  requestsReReview,
+  shouldSkipModelReply,
+} from "./classifyReaction.ts";
 
 describe("requestsReReview", () => {
   test("detects every re-review keyword variant", () => {
@@ -4811,6 +4817,27 @@ describe("requestsReReview", () => {
     expect(requestsReReview("Fixed — removed the unused import.")).toBe(false);
     expect(requestsReReview("this is intentional, the pattern is required")).toBe(false);
     expect(requestsReReview("")).toBe(false);
+  });
+});
+
+describe("hasAcknowledgementToken", () => {
+  test("detects a whole-word acknowledgement token", () => {
+    expect(hasAcknowledgementToken("@bot Fixed the import.")).toBe(true);
+    expect(hasAcknowledgementToken("@bot addressed in the description")).toBe(true);
+  });
+
+  test("only matches on a word boundary", () => {
+    expect(hasAcknowledgementToken("@bot I abandoned that approach.")).toBe(false);
+  });
+
+  test("is token-based, so a trailing question still counts", () => {
+    // The token gate is intentionally blind to "?" — isBareAcknowledgement layers
+    // the question check on top for the 👍 path.
+    expect(hasAcknowledgementToken("@bot Fixed it. Anything else?")).toBe(true);
+  });
+
+  test("an empty body has no token", () => {
+    expect(hasAcknowledgementToken("")).toBe(false);
   });
 });
 
@@ -4865,16 +4892,62 @@ describe("isBareAcknowledgement", () => {
   });
 });
 
+describe("authorAcknowledgesWhileBlocking", () => {
+  const arming: Parameters<typeof authorAcknowledgesWhileBlocking>[0] = {
+    prAuthor: "alice",
+    commentAuthor: "alice",
+    body: "Addressed it — added the migration section.",
+    botBlocking: true,
+  };
+
+  test("PR-author acknowledgement while the bot is blocking arms a re-verdict", () => {
+    expect(authorAcknowledgesWhileBlocking(arming)).toBe(true);
+  });
+
+  test("does not arm when the bot is not blocking", () => {
+    expect(authorAcknowledgesWhileBlocking({ ...arming, botBlocking: false })).toBe(false);
+  });
+
+  test("does not arm for a non-author commenter", () => {
+    expect(authorAcknowledgesWhileBlocking({ ...arming, commentAuthor: "bob" })).toBe(false);
+  });
+
+  test("does not arm when the PR author is unknown", () => {
+    expect(authorAcknowledgesWhileBlocking({ ...arming, prAuthor: "", commentAuthor: "" })).toBe(
+      false,
+    );
+  });
+
+  test("does not arm without a positive acknowledgement token", () => {
+    expect(
+      authorAcknowledgesWhileBlocking({ ...arming, body: "this is intentional, leave it" }),
+    ).toBe(false);
+  });
+
+  test("arms even when the claim is negated — the model, not the classifier, gates the verdict", () => {
+    // "I haven't fixed this yet" contains the token "fixed"; the classifier cannot
+    // parse negation, so it arms the pass and pr:answer judges the live thread state.
+    expect(authorAcknowledgesWhileBlocking({ ...arming, body: "I haven't fixed this yet" })).toBe(
+      true,
+    );
+  });
+});
+
 describe("shouldSkipModelReply", () => {
   const ack: Parameters<typeof shouldSkipModelReply>[0] = {
     botInThread: true,
     prAuthor: "alice",
     commentAuthor: "alice",
     body: "Fixed — done.",
+    botBlocking: false,
   };
 
   test("PR-author acknowledgement in a bot thread skips the model", () => {
     expect(shouldSkipModelReply(ack)).toBe(true);
+  });
+
+  test("does not skip when the bot is blocking — the reply must reach the model to re-verdict", () => {
+    expect(shouldSkipModelReply({ ...ack, botBlocking: true })).toBe(false);
   });
 
   test("a comment not in a bot thread never skips", () => {
@@ -4903,6 +4976,55 @@ describe("shouldSkipModelReply", () => {
     expect(shouldSkipModelReply({ ...ack, body: "pushed a fix, please re-review" })).toBe(false);
   });
 });
+
+describe("react classification truth table", () => {
+  // Mirrors the (ack_only, needs_reverdict) outputs computed in import.meta.main,
+  // pinning how the two gates combine across the scenarios in issue #275.
+  const classify = (input: Parameters<typeof shouldSkipModelReply>[0]) => ({
+    ackOnly: shouldSkipModelReply(input),
+    needsReverdict:
+      requestsReReview(input.body) ||
+      authorAcknowledgesWhileBlocking({
+        prAuthor: input.prAuthor,
+        commentAuthor: input.commentAuthor,
+        body: input.body,
+        botBlocking: input.botBlocking,
+      }),
+  });
+
+  const base = { botInThread: true, prAuthor: "alice", commentAuthor: "alice" };
+
+  test("author ack while blocking: reach the model and arm a re-verdict", () => {
+    expect(
+      classify({ ...base, body: "Addressed it in the latest push.", botBlocking: true }),
+    ).toEqual({
+      ackOnly: false,
+      needsReverdict: true,
+    });
+  });
+
+  test("author ack while not blocking: 👍 fast path, no re-verdict (issue #111 preserved)", () => {
+    expect(
+      classify({ ...base, body: "Addressed it in the latest push.", botBlocking: false }),
+    ).toEqual({
+      ackOnly: true,
+      needsReverdict: false,
+    });
+  });
+
+  test("explicit re-review request arms a re-verdict regardless of blocking", () => {
+    expect(classify({ ...base, body: "pushed a fix, PTAL", botBlocking: false })).toEqual({
+      ackOnly: false,
+      needsReverdict: true,
+    });
+  });
+
+  test("third-party ack while blocking neither skips nor arms", () => {
+    expect(
+      classify({ ...base, commentAuthor: "bob", body: "Looks fixed.", botBlocking: true }),
+    ).toEqual({ ackOnly: false, needsReverdict: false });
+  });
+});
 </file>
 
 <file path=".github/actions/code-review-action/src/classifyReaction.ts">
@@ -4916,7 +5038,10 @@ describe("shouldSkipModelReply", () => {
  * substantive pushback like "this is intentional" still receives a real reply.
  *
  * Run as a GitHub Action step: reads the comment context from env and writes
- * `ack_only=true|false` to `$GITHUB_OUTPUT`.
+ * `ack_only=true|false` and `needs_reverdict=true|false` to `$GITHUB_OUTPUT`.
+ * When the bot is currently blocking (`BOT_BLOCKING=true`), a PR-author
+ * acknowledgement no longer short-circuits to a 👍 and instead arms the verdict
+ * re-evaluation, so the bot can lift its own block (issue #275).
  *
  * @example
  * BOT_IN_THREAD=true PR_AUTHOR=alice COMMENT_AUTHOR=alice COMMENT_BODY="Fixed — done." \
@@ -4961,6 +5086,17 @@ export function requestsReReview(body: string): boolean {
 }
 
 /**
+ * True when a body carries a positive acknowledgement token — a whole-word
+ * signal (e.g. "fixed", "done", "addressed") that the author claims the bot's
+ * finding is handled. Matched on a word boundary so "abandoned" does not count
+ * as "done". Shared by {@link isBareAcknowledgement} and
+ * {@link authorAcknowledgesWhileBlocking}.
+ */
+export function hasAcknowledgementToken(body: string): boolean {
+  return acknowledgementPatterns.some((pattern) => pattern.test(body.toLowerCase()));
+}
+
+/**
  * True when a comment body is a bare acknowledgement: it carries a positive
  * acknowledgement signal and neither asks a question nor requests a re-review.
  * Requiring a positive signal — rather than only the absence of one — keeps
@@ -4975,7 +5111,7 @@ export function isBareAcknowledgement(body: string): boolean {
     return false;
   }
 
-  return acknowledgementPatterns.some((pattern) => pattern.test(body.toLowerCase()));
+  return hasAcknowledgementToken(body);
 }
 
 /** Inputs needed to decide whether a react-mode reply can skip the model. */
@@ -4984,17 +5120,54 @@ export interface ReactionClassification {
   prAuthor: string;
   commentAuthor: string;
   body: string;
+  /** Whether the bot's current verdict on the PR is `CHANGES_REQUESTED`. */
+  botBlocking: boolean;
+}
+
+/** Inputs for deciding whether a PR-author comment should arm a re-verdict. */
+export interface ReverdictArming {
+  prAuthor: string;
+  commentAuthor: string;
+  body: string;
+  botBlocking: boolean;
+}
+
+/**
+ * True when a PR-author comment should arm the verdict re-evaluation even
+ * without an explicit "re-review" phrase: the bot is currently blocking and the
+ * author signals the finding is addressed (e.g. "Added the section"). The
+ * classifier only arms the pass — `pr:answer` still decides the verdict from the
+ * live unresolved-thread state, not from the comment's claim (issue #275).
+ */
+export function authorAcknowledgesWhileBlocking({
+  prAuthor,
+  commentAuthor,
+  body,
+  botBlocking,
+}: ReverdictArming): boolean {
+  if (!botBlocking) {
+    return false;
+  }
+
+  if (!prAuthor || commentAuthor !== prAuthor) {
+    return false;
+  }
+
+  return hasAcknowledgementToken(body);
 }
 
 /**
  * True when the triggering reply is a PR-author acknowledgement inside a
  * bot-authored thread, so the model reply can be skipped in favour of a 👍.
+ * When the bot is currently blocking, the reply is NOT skipped — it must reach
+ * the model so the verdict can be re-evaluated and the block lifted (issue #275).
  */
 export function shouldSkipModelReply({
   botInThread,
   prAuthor,
   commentAuthor,
   body,
+  botBlocking,
 }: ReactionClassification): boolean {
   if (!botInThread) {
     return false;
@@ -5004,22 +5177,38 @@ export function shouldSkipModelReply({
     return false;
   }
 
-  return isBareAcknowledgement(body);
+  if (!isBareAcknowledgement(body)) {
+    return false;
+  }
+
+  return !botBlocking;
 }
 
 if (import.meta.main) {
+  const prAuthor = process.env.PR_AUTHOR ?? "";
+  const commentAuthor = process.env.COMMENT_AUTHOR ?? "";
+  const body = process.env.COMMENT_BODY ?? "";
+  // Absent or non-"true" means not blocking — the safe direction (preserves the
+  // pre-#275 👍 fast path and never spuriously arms a re-verdict).
+  const botBlocking = process.env.BOT_BLOCKING === "true";
+
   const ackOnly = shouldSkipModelReply({
     botInThread: process.env.BOT_IN_THREAD === "true",
-    prAuthor: process.env.PR_AUTHOR ?? "",
-    commentAuthor: process.env.COMMENT_AUTHOR ?? "",
-    body: process.env.COMMENT_BODY ?? "",
+    prAuthor,
+    commentAuthor,
+    body,
+    botBlocking,
   });
 
   await setOutput("ack_only", String(ackOnly));
 
-  // Gate pr:answer's verdict re-evaluation: only re-review when the comment
-  // explicitly asks for it, so plain replies skip the expensive pass.
-  const needsReverdict = requestsReReview(process.env.COMMENT_BODY ?? "");
+  // Gate pr:answer's verdict re-evaluation: re-review when the comment asks for
+  // it explicitly, or when the PR author says a blocker is addressed while the
+  // bot is still blocking — so plain chit-chat skips the expensive pass but a
+  // resolved-blocker claim can lift the block (issue #275).
+  const needsReverdict =
+    requestsReReview(body) ||
+    authorAcknowledgesWhileBlocking({ prAuthor, commentAuthor, body, botBlocking });
   await setOutput("needs_reverdict", String(needsReverdict));
 
   if (ackOnly) {
@@ -7926,13 +8115,15 @@ runs:
 
         # When react_to_comments is disabled, pass through explicit inputs
         if [[ "$INPUT_REACT_TO_COMMENTS" != "true" ]]; then
-          echo "mode=${INPUT_MODE}" >> "$GITHUB_OUTPUT"
-          echo "pr_number=${INPUT_PR_NUMBER:-${EVENT_PR_NUMBER:-$EVENT_ISSUE_NUMBER}}" >> "$GITHUB_OUTPUT"
-          echo "pr_head_sha=${INPUT_PR_HEAD_SHA:-$EVENT_PR_HEAD_SHA}" >> "$GITHUB_OUTPUT"
-          echo "comment_id=${INPUT_COMMENT_ID}" >> "$GITHUB_OUTPUT"
-          echo "comment_path=${INPUT_COMMENT_PATH}" >> "$GITHUB_OUTPUT"
-          echo "comment_line=${INPUT_COMMENT_LINE}" >> "$GITHUB_OUTPUT"
-          echo "skip=false" >> "$GITHUB_OUTPUT"
+          {
+            echo "mode=${INPUT_MODE}"
+            echo "pr_number=${INPUT_PR_NUMBER:-${EVENT_PR_NUMBER:-$EVENT_ISSUE_NUMBER}}"
+            echo "pr_head_sha=${INPUT_PR_HEAD_SHA:-$EVENT_PR_HEAD_SHA}"
+            echo "comment_id=${INPUT_COMMENT_ID}"
+            echo "comment_path=${INPUT_COMMENT_PATH}"
+            echo "comment_line=${INPUT_COMMENT_LINE}"
+            echo "skip=false"
+          } >> "$GITHUB_OUTPUT"
 
           delimiter="$(openssl rand -hex 16)"
           {
@@ -7946,10 +8137,12 @@ runs:
 
         # Auto-detection: pull_request event → review mode
         if [[ "$EVENT_NAME" == "pull_request" ]]; then
-          echo "mode=review" >> "$GITHUB_OUTPUT"
-          echo "pr_number=${EVENT_PR_NUMBER}" >> "$GITHUB_OUTPUT"
-          echo "pr_head_sha=${EVENT_PR_HEAD_SHA}" >> "$GITHUB_OUTPUT"
-          echo "skip=false" >> "$GITHUB_OUTPUT"
+          {
+            echo "mode=review"
+            echo "pr_number=${EVENT_PR_NUMBER}"
+            echo "pr_head_sha=${EVENT_PR_HEAD_SHA}"
+            echo "skip=false"
+          } >> "$GITHUB_OUTPUT"
           exit 0
         fi
 
@@ -8030,19 +8223,43 @@ runs:
           exit 0
         fi
 
-        echo "mode=react" >> "$GITHUB_OUTPUT"
-        echo "skip=false" >> "$GITHUB_OUTPUT"
-        echo "bot_in_thread=${BOT_IN_THREAD}" >> "$GITHUB_OUTPUT"
+        {
+          echo "mode=react"
+          echo "skip=false"
+          echo "bot_in_thread=${BOT_IN_THREAD}"
+        } >> "$GITHUB_OUTPUT"
 
         if [[ -n "$EVENT_ISSUE_NUMBER" ]]; then
-          echo "pr_number=${EVENT_ISSUE_NUMBER}" >> "$GITHUB_OUTPUT"
+          REACT_PR_NUMBER="$EVENT_ISSUE_NUMBER"
         else
-          echo "pr_number=${EVENT_PR_NUMBER}" >> "$GITHUB_OUTPUT"
+          REACT_PR_NUMBER="$EVENT_PR_NUMBER"
         fi
+        echo "pr_number=${REACT_PR_NUMBER}" >> "$GITHUB_OUTPUT"
 
-        echo "comment_id=${EFFECTIVE_ID}" >> "$GITHUB_OUTPUT"
-        echo "comment_path=${EVENT_COMMENT_PATH}" >> "$GITHUB_OUTPUT"
-        echo "comment_line=${EVENT_COMMENT_LINE}" >> "$GITHUB_OUTPUT"
+        # Whether the bot is currently blocking this PR (issue #275): reviewDecision
+        # is CHANGES_REQUESTED. The bot is the sole approver and the author cannot
+        # self-approve, so reviewDecision is a faithful, pagination-free proxy for the
+        # bot's own verdict. classifyReaction uses it to arm a verdict re-evaluation
+        # when the author says a blocker is addressed. A failed query degrades to
+        # "not blocking" (today's behaviour); only a genuine gh failure warns, so a
+        # null decision (no reviews yet) stays quiet.
+        if REACT_REVIEW_DECISION=$(gh pr view "$REACT_PR_NUMBER" --json reviewDecision --jq '.reviewDecision // ""' 2>/dev/null); then
+          :
+        else
+          REACT_REVIEW_DECISION=""
+          echo "::warning::gh pr view reviewDecision failed for PR #${REACT_PR_NUMBER}; treating bot as not blocking (issue #275 re-verdict will not arm)"
+        fi
+        BOT_BLOCKING="false"
+        if [[ "$REACT_REVIEW_DECISION" == "CHANGES_REQUESTED" ]]; then
+          BOT_BLOCKING="true"
+        fi
+        echo "bot_blocking=${BOT_BLOCKING}" >> "$GITHUB_OUTPUT"
+
+        {
+          echo "comment_id=${EFFECTIVE_ID}"
+          echo "comment_path=${EVENT_COMMENT_PATH}"
+          echo "comment_line=${EVENT_COMMENT_LINE}"
+        } >> "$GITHUB_OUTPUT"
 
         delimiter="$(openssl rand -hex 16)"
         {
@@ -8204,6 +8421,7 @@ runs:
       shell: bash
       env:
         BOT_IN_THREAD: ${{ steps.ctx.outputs.bot_in_thread }}
+        BOT_BLOCKING: ${{ steps.ctx.outputs.bot_blocking }}
         PR_AUTHOR: ${{ github.event.pull_request.user.login || github.event.issue.user.login }}
         COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
         COMMENT_BODY: ${{ steps.ctx.outputs.comment_body }}
@@ -30793,13 +31011,17 @@ Do NOT resolve when:
 
 ### Verdict Update
 
-**Gate:** Only perform this pass when `NEEDS_REVERDICT` is `true` (the comment asked for a re-review). When it is `false`, set `updatedVerdict: null` and `updatedReviewComment: null` and skip straight to producing the reply — do NOT scan threads or re-review. This keeps a plain reply from triggering a full re-evaluation; a genuine verdict change still lands on the next review run (a push) or when the author explicitly asks for a re-review.
+**PR-level resolution language** is prose asserting the PR's blocking verdict is lifted or the PR is now approvable — e.g. "resolved", "this is addressed", "looks resolved", "good to go", "approved". It is distinct from thread-level resolution (`resolveComments`), which only marks one specific finding handled. PR-level resolution language is allowed ONLY when this pass emits `updatedVerdict: "approve"`.
 
-When `NEEDS_REVERDICT` is `true`, check ALL remaining unresolved bot threads (not just the one being discussed) to determine:
+**Invariant:** the reply and the verdict must never diverge — the bot must not use PR-level resolution language while leaving a blocking verdict in place (issue #275).
 
-- If ALL 🚧 blockers are now resolved/retracted → `updatedVerdict: "approve"`
+**Gate:** Only perform the verdict pass when `NEEDS_REVERDICT` is `true`. When it is `false`, set `updatedVerdict: null` and `updatedReviewComment: null` and do NOT scan threads or re-review. The reply may still acknowledge the specific fix, and you may add the discussed finding to `resolveComments`, but it MUST NOT use PR-level resolution language — phrase it as state, not a promise: "Noted — the blocking verdict stands until a re-review confirms the fix." A genuine verdict change still lands on the next review run (a push) or when the author explicitly asks for a re-review.
+
+When `NEEDS_REVERDICT` is `true`, decide from the LIVE unresolved bot-thread state — not the author's claim — by checking ALL remaining unresolved bot threads (not just the one being discussed):
+
+- If ALL 🚧 blockers are now resolved/retracted → `updatedVerdict: "approve"` (PR-level resolution language is now permitted in the reply)
 - If this creates a NEW blocker → `updatedVerdict: "requestChanges"`
-- Otherwise → `updatedVerdict: null` (no change)
+- Otherwise → `updatedVerdict: null` (no change); the reply MUST NOT claim PR-level resolution
 
 ### Review Body Update
 
