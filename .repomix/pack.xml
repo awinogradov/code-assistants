@@ -96,6 +96,7 @@ The content is organized as follows:
         1.0.0.md
         1.1.0.md
         1.2.0.md
+        1.3.0.md
       src/
         github/
           githubReview.test.ts
@@ -3418,6 +3419,92 @@ The AI reviewer no longer adds "Available commands" footers to pull request desc
 ### CI
 
 * **code-review:** allow read-only gh api gets ([3259a63](https://github.com/awinogradov/code-assistants/commit/3259a630c47bec7323d581cbb34168914856b2d6))
+</file>
+
+<file path=".github/actions/code-review-action/.release_notes/1.3.0.md">
+## [1.3.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.2.0...code-review-action@v1.3.0) (2026-06-08)
+
+## Release Notes
+
+Code review action now explains AI review failures with direct links to check logs and automatically approves PRs when requested changes are addressed.
+
+## ✨ What's New
+
+### Smarter review failure explanations
+When the AI can't review your PR, you'll now get a detailed explanation with direct links to the failing check logs. The comment includes a clear summary of what went wrong, making it easy for your team to troubleshoot without digging through workflows.
+
+<details><summary>Related issues</summary>
+
+- [#280: Add check log links and an AI failure summary to the code-review skip comment](https://github.com/awinogradov/code-assistants/issues/280)
+</details>
+
+### Multi-line findings stay in context
+Review findings that span multiple lines now remain inline with your code even when they cross gaps in the diff. If a finding still needs to move to the main review body, it includes the suggested fix so you don't have to scroll back to the code to understand the recommendation.
+
+<details><summary>Related issues</summary>
+
+- [#265: Keep multi-line findings inline when their range crosses a hunk gap](https://github.com/awinogradov/code-assistants/issues/265)
+</details>
+
+### Concise AI agent prompts
+The "Prompt for AI agents" blocks in reviews are now copy-paste ready with focused context. Instead of including entire code hunks and review formatting, they show just the relevant diff window and clean instructions that AI agents can directly process.
+
+<details><summary>Related issues</summary>
+
+- [#258: Make the "Prompt for AI agents" review block concise and prompt-shaped](https://github.com/awinogradov/code-assistants/issues/258)
+</details>
+
+### Standardized reference formatting
+All generated PR descriptions, release notes, and review comments now follow a consistent reference formatting standard. Commit SHAs are always linked, RFC references point to stable versioned documents, and section anchors work reliably within the same document.
+
+<details><summary>Related issues</summary>
+
+- [#279: Apply RFC-0001 formatting to generated PR descriptions and release notes](https://github.com/awinogradov/code-assistants/issues/279)
+- [#259: Apply RFC-0001 reference formatting to PR review replies and comments](https://github.com/awinogradov/code-assistants/issues/259)
+</details>
+
+## 🐛 Bug Fixes
+
+### Automatic approval when changes are addressed
+The review bot now properly approves PRs when an author confirms they've addressed the requested changes and the bot agrees. Previously, the bot would acknowledge the fix in a comment but leave its blocking review status unchanged, requiring manual intervention or a "re-review" command.
+
+<details><summary>Related issues</summary>
+
+- [#275: Approve a blocked PR when the reviewer bot agrees its blockers are resolved](https://github.com/awinogradov/code-assistants/issues/275)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #280 | [#285](https://github.com/awinogradov/code-assistants/pull/285) | @awinogradov |
+| #265 | [#283](https://github.com/awinogradov/code-assistants/pull/283) | @awinogradov |
+| #279 | [#282](https://github.com/awinogradov/code-assistants/pull/282) | @awinogradov |
+| #275 | [#278](https://github.com/awinogradov/code-assistants/pull/278) | @awinogradov |
+| #259 | [#268](https://github.com/awinogradov/code-assistants/pull/268) | @awinogradov |
+| #258 | [#269](https://github.com/awinogradov/code-assistants/pull/269) | @awinogradov |
+
+### Features
+
+* **code-review-action:** bound prompt context and strip finding chrome ([e9dfc97](https://github.com/awinogradov/code-assistants/commit/e9dfc972cd2ce99df23012a1cb874ef5e6672ff2))
+* **code-review-action:** clamp out-of-diff finding ranges ([707d105](https://github.com/awinogradov/code-assistants/commit/707d1050b75b2e29b2592c907c0650f08e69b3df))
+* **code-review-action:** reuse review engine for skip reasons ([f62cc9c](https://github.com/awinogradov/code-assistants/commit/f62cc9cad7b2f78a188904712a1beb273bf0dbeb))
+
+### Bug Fixes
+
+* **code-review-action:** arm re-verdict on author ack ([3eb4bd2](https://github.com/awinogradov/code-assistants/commit/3eb4bd2dcf54c88605226f72b746e88b0c807ec5))
+* **code-review-action:** drop incomplete html-comment sanitizer regex ([053891b](https://github.com/awinogradov/code-assistants/commit/053891bdd62f3833b957f46fca0b15deae7615dc))
+
+### Refactoring
+
+* **code-review-action:** simplify explain prompt building ([67bf3f9](https://github.com/awinogradov/code-assistants/commit/67bf3f9de93325241be5985d0ab1ce1775e906da))
+
+### Tests
+
+* **code-review-action:** cover reused-engine skip flow ([fb3ded5](https://github.com/awinogradov/code-assistants/commit/fb3ded59b50abcb4147b8c9845938e0163ac1aeb))
+* **code-review-action:** guard reply formatting ([1559a23](https://github.com/awinogradov/code-assistants/commit/1559a234f6a9ac0e6fbc97cc3843662edf9381c9))
+* **code-review:** guard pr body reference formatting ([eada5e0](https://github.com/awinogradov/code-assistants/commit/eada5e0ff592428077d8244ad58b9439c555881e))
 </file>
 
 <file path=".github/actions/code-review-action/src/github/githubReview.test.ts">
@@ -9307,6 +9394,89 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.3.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.2.0...code-review-action@v1.3.0) (2026-06-08)
+
+## Release Notes
+
+Code review action now explains AI review failures with direct links to check logs and automatically approves PRs when requested changes are addressed.
+
+## ✨ What's New
+
+### Smarter review failure explanations
+When the AI can't review your PR, you'll now get a detailed explanation with direct links to the failing check logs. The comment includes a clear summary of what went wrong, making it easy for your team to troubleshoot without digging through workflows.
+
+<details><summary>Related issues</summary>
+
+- [#280: Add check log links and an AI failure summary to the code-review skip comment](https://github.com/awinogradov/code-assistants/issues/280)
+</details>
+
+### Multi-line findings stay in context
+Review findings that span multiple lines now remain inline with your code even when they cross gaps in the diff. If a finding still needs to move to the main review body, it includes the suggested fix so you don't have to scroll back to the code to understand the recommendation.
+
+<details><summary>Related issues</summary>
+
+- [#265: Keep multi-line findings inline when their range crosses a hunk gap](https://github.com/awinogradov/code-assistants/issues/265)
+</details>
+
+### Concise AI agent prompts
+The "Prompt for AI agents" blocks in reviews are now copy-paste ready with focused context. Instead of including entire code hunks and review formatting, they show just the relevant diff window and clean instructions that AI agents can directly process.
+
+<details><summary>Related issues</summary>
+
+- [#258: Make the "Prompt for AI agents" review block concise and prompt-shaped](https://github.com/awinogradov/code-assistants/issues/258)
+</details>
+
+### Standardized reference formatting
+All generated PR descriptions, release notes, and review comments now follow a consistent reference formatting standard. Commit SHAs are always linked, RFC references point to stable versioned documents, and section anchors work reliably within the same document.
+
+<details><summary>Related issues</summary>
+
+- [#279: Apply RFC-0001 formatting to generated PR descriptions and release notes](https://github.com/awinogradov/code-assistants/issues/279)
+- [#259: Apply RFC-0001 reference formatting to PR review replies and comments](https://github.com/awinogradov/code-assistants/issues/259)
+</details>
+
+## 🐛 Bug Fixes
+
+### Automatic approval when changes are addressed
+The review bot now properly approves PRs when an author confirms they've addressed the requested changes and the bot agrees. Previously, the bot would acknowledge the fix in a comment but leave its blocking review status unchanged, requiring manual intervention or a "re-review" command.
+
+<details><summary>Related issues</summary>
+
+- [#275: Approve a blocked PR when the reviewer bot agrees its blockers are resolved](https://github.com/awinogradov/code-assistants/issues/275)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #280 | [#285](https://github.com/awinogradov/code-assistants/pull/285) | @awinogradov |
+| #265 | [#283](https://github.com/awinogradov/code-assistants/pull/283) | @awinogradov |
+| #279 | [#282](https://github.com/awinogradov/code-assistants/pull/282) | @awinogradov |
+| #275 | [#278](https://github.com/awinogradov/code-assistants/pull/278) | @awinogradov |
+| #259 | [#268](https://github.com/awinogradov/code-assistants/pull/268) | @awinogradov |
+| #258 | [#269](https://github.com/awinogradov/code-assistants/pull/269) | @awinogradov |
+
+### Features
+
+* **code-review-action:** bound prompt context and strip finding chrome ([e9dfc97](https://github.com/awinogradov/code-assistants/commit/e9dfc972cd2ce99df23012a1cb874ef5e6672ff2))
+* **code-review-action:** clamp out-of-diff finding ranges ([707d105](https://github.com/awinogradov/code-assistants/commit/707d1050b75b2e29b2592c907c0650f08e69b3df))
+* **code-review-action:** reuse review engine for skip reasons ([f62cc9c](https://github.com/awinogradov/code-assistants/commit/f62cc9cad7b2f78a188904712a1beb273bf0dbeb))
+
+### Bug Fixes
+
+* **code-review-action:** arm re-verdict on author ack ([3eb4bd2](https://github.com/awinogradov/code-assistants/commit/3eb4bd2dcf54c88605226f72b746e88b0c807ec5))
+* **code-review-action:** drop incomplete html-comment sanitizer regex ([053891b](https://github.com/awinogradov/code-assistants/commit/053891bdd62f3833b957f46fca0b15deae7615dc))
+
+### Refactoring
+
+* **code-review-action:** simplify explain prompt building ([67bf3f9](https://github.com/awinogradov/code-assistants/commit/67bf3f9de93325241be5985d0ab1ce1775e906da))
+
+### Tests
+
+* **code-review-action:** cover reused-engine skip flow ([fb3ded5](https://github.com/awinogradov/code-assistants/commit/fb3ded59b50abcb4147b8c9845938e0163ac1aeb))
+* **code-review-action:** guard reply formatting ([1559a23](https://github.com/awinogradov/code-assistants/commit/1559a234f6a9ac0e6fbc97cc3843662edf9381c9))
+* **code-review:** guard pr body reference formatting ([eada5e0](https://github.com/awinogradov/code-assistants/commit/eada5e0ff592428077d8244ad58b9439c555881e))
 ## [1.2.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.1.0...code-review-action@v1.2.0) (2026-06-04)
 
 ## Release Notes
@@ -9764,7 +9934,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/package.json">
 {
   "name": "@code-assistants/code-review-action",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Composite GitHub Action that runs AI code review on pull requests via Claude Code.",
   "private": true,
   "type": "module",
@@ -9798,7 +9968,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/README.md">
 # Code review action
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.2.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.3.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that runs AI code review on pull requests using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Has two modes:
@@ -9932,7 +10102,7 @@ uses: awinogradov/code-assistants/.github/actions/code-review-action@v1
 </file>
 
 <file path=".github/actions/code-review-action/version">
-1.2.0
+1.3.0
 </file>
 
 <file path=".github/actions/code-review-sync/action.yml">
