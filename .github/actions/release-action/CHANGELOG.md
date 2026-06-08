@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.1.1](https://github.com/awinogradov/code-assistants/compare/release-action@v1.1.0...release-action@v1.1.1) (2026-06-08)
+
+## Release Notes
+
+Documentation updates for release v1.1.1 that affect review bot formatting behavior.
+
+## ✨ What's New
+
+### Improved reference formatting in PR reviews
+The release action now follows standardized reference formatting rules when generating review comments and replies. Commit SHAs are automatically linked for easy navigation, and document references follow consistent patterns that prevent broken links when files are moved or restructured.
+
+<details><summary>Related issues</summary>
+
+- [#259: Apply RFC-0001 reference formatting to PR review replies and comments](https://github.com/awinogradov/code-assistants/issues/259)
+</details>
+
+## 📚 Documentation & Settings Updates
+
+### RFC-0001 updated with section anchor guidance
+The reference formatting standard now clarifies how to link sections within the same document using anchors (e.g., `[Phase 6](#phase-6-reply-to-review-threads)`). Cross-document section references should include an inline summary instead of fragile anchor links that break when documents are restructured.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #259 | [#268](https://github.com/awinogradov/code-assistants/pull/268) | @awinogradov |
+
+### Documentation
+
+* **rfc:** allow same-document section anchors ([0cebbb6](https://github.com/awinogradov/code-assistants/commit/0cebbb6092e4a09a8412d485644bf99d9c683562))
 ## [1.1.0](https://github.com/awinogradov/code-assistants/compare/release-action@v1.0.2...release-action@v1.1.0) (2026-06-04)
 
 ## Release Notes
