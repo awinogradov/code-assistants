@@ -1,6 +1,6 @@
 {
   "name": "@code-assistants/validate-actions-action",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Composite GitHub Action that lints changed workflow files with actionlint and the inline run blocks of composite action.yml files with shellcheck.",
   "private": true,
   "type": "module",
