@@ -175,6 +175,7 @@ The content is organized as follows:
         1.0.1.md
         1.0.2.md
         1.1.0.md
+        1.1.1.md
       src/
         migrations/
           migratingAppend.test.ts
@@ -235,6 +236,7 @@ The content is organized as follows:
     release-automerge/
       .release_notes/
         0.1.0.md
+        0.2.0.md
       src/
         automerge.test.ts
         automerge.ts
@@ -13023,6 +13025,40 @@ The release publish workflow no longer writes untrusted PR filenames to environm
 * **release-action:** add backslash-only title ([0904d5b](https://github.com/awinogradov/code-assistants/commit/0904d5bbcd260d19481734f96b6bc7d8c694f29e))
 </file>
 
+<file path=".github/actions/release-action/.release_notes/1.1.1.md">
+## [1.1.1](https://github.com/awinogradov/code-assistants/compare/release-action@v1.1.0...release-action@v1.1.1) (2026-06-08)
+
+## Release Notes
+
+Documentation updates for release v1.1.1 that affect review bot formatting behavior.
+
+## ✨ What's New
+
+### Improved reference formatting in PR reviews
+The release action now follows standardized reference formatting rules when generating review comments and replies. Commit SHAs are automatically linked for easy navigation, and document references follow consistent patterns that prevent broken links when files are moved or restructured.
+
+<details><summary>Related issues</summary>
+
+- [#259: Apply RFC-0001 reference formatting to PR review replies and comments](https://github.com/awinogradov/code-assistants/issues/259)
+</details>
+
+## 📚 Documentation & Settings Updates
+
+### RFC-0001 updated with section anchor guidance
+The reference formatting standard now clarifies how to link sections within the same document using anchors (e.g., `[Phase 6](#phase-6-reply-to-review-threads)`). Cross-document section references should include an inline summary instead of fragile anchor links that break when documents are restructured.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #259 | [#268](https://github.com/awinogradov/code-assistants/pull/268) | @awinogradov |
+
+### Documentation
+
+* **rfc:** allow same-document section anchors ([0cebbb6](https://github.com/awinogradov/code-assistants/commit/0cebbb6092e4a09a8412d485644bf99d9c683562))
+</file>
+
 <file path=".github/actions/release-action/src/migrations/migratingAppend.test.ts">
 /**
  * Tests for MIGRATING.md section rendering and append.
@@ -23135,6 +23171,37 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.1.1](https://github.com/awinogradov/code-assistants/compare/release-action@v1.1.0...release-action@v1.1.1) (2026-06-08)
+
+## Release Notes
+
+Documentation updates for release v1.1.1 that affect review bot formatting behavior.
+
+## ✨ What's New
+
+### Improved reference formatting in PR reviews
+The release action now follows standardized reference formatting rules when generating review comments and replies. Commit SHAs are automatically linked for easy navigation, and document references follow consistent patterns that prevent broken links when files are moved or restructured.
+
+<details><summary>Related issues</summary>
+
+- [#259: Apply RFC-0001 reference formatting to PR review replies and comments](https://github.com/awinogradov/code-assistants/issues/259)
+</details>
+
+## 📚 Documentation & Settings Updates
+
+### RFC-0001 updated with section anchor guidance
+The reference formatting standard now clarifies how to link sections within the same document using anchors (e.g., `[Phase 6](#phase-6-reply-to-review-threads)`). Cross-document section references should include an inline summary instead of fragile anchor links that break when documents are restructured.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #259 | [#268](https://github.com/awinogradov/code-assistants/pull/268) | @awinogradov |
+
+### Documentation
+
+* **rfc:** allow same-document section anchors ([0cebbb6](https://github.com/awinogradov/code-assistants/commit/0cebbb6092e4a09a8412d485644bf99d9c683562))
 ## [1.1.0](https://github.com/awinogradov/code-assistants/compare/release-action@v1.0.2...release-action@v1.1.0) (2026-06-04)
 
 ## Release Notes
@@ -23418,7 +23485,7 @@ Add a `release` field to your package.json to configure release behavior. See th
 <file path=".github/actions/release-action/package.json">
 {
   "name": "@code-assistants/release-action",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Composite GitHub Action that automates conventional-commit releases for npm packages, GitHub Actions, and Claude plugins.",
   "private": true,
   "type": "module",
@@ -23457,7 +23524,7 @@ Add a `release` field to your package.json to configure release behavior. See th
 <file path=".github/actions/release-action/README.md">
 # Release action
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.1.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.1.1-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that automates the release pipeline for npm packages, GitHub Actions, and Claude plugins.
@@ -23732,7 +23799,7 @@ uses: awinogradov/code-assistants/.github/actions/release-action@v1
 </file>
 
 <file path=".github/actions/release-action/version">
-1.1.0
+1.1.1
 </file>
 
 <file path=".github/actions/release-automerge/.release_notes/0.1.0.md">
@@ -23841,6 +23908,35 @@ The release creation workflow documentation now explains why release PRs must be
 * **release-automerge:** gate auto-merge job to release branches ([d9783be](https://github.com/awinogradov/code-assistants/commit/d9783bebbb5a88414ec2bf09b5aad30313e76049))
 * **release-sync:** sync full release pipeline, not just auto-merge ([fa9ce72](https://github.com/awinogradov/code-assistants/commit/fa9ce7284f71f2ee229c742509d4a3eb08bdf2c0))
 * **release:** rename release/publish workflows to release-* ([53aac6d](https://github.com/awinogradov/code-assistants/commit/53aac6d09e07f9ebe721f39d6143bb44fd8c4c6c))
+</file>
+
+<file path=".github/actions/release-automerge/.release_notes/0.2.0.md">
+## [0.2.0](https://github.com/awinogradov/code-assistants/compare/release-automerge@v0.1.0...release-automerge@v0.2.0) (2026-06-08)
+
+## Release Notes
+
+The code review action now provides detailed explanations when it skips reviews, making it easier to understand and resolve failing checks.
+
+## ✨ What's New
+
+### Detailed skip explanations with direct log links
+When the code review action skips a review due to failing checks, it now posts a comprehensive comment that links each failing check directly to its logs and explains why it failed. This helps you quickly identify and resolve issues without hunting through GitHub's UI for the right logs.
+
+<details><summary>Related issues</summary>
+
+- [#280: Add check log links and an AI failure summary to the code-review skip comment](https://github.com/awinogradov/code-assistants/issues/280)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #280 | [#285](https://github.com/awinogradov/code-assistants/pull/285) | @awinogradov |
+
+### Features
+
+* **code-review-action:** reuse review engine for skip reasons ([f62cc9c](https://github.com/awinogradov/code-assistants/commit/f62cc9cad7b2f78a188904712a1beb273bf0dbeb))
 </file>
 
 <file path=".github/actions/release-automerge/src/automerge.test.ts">
@@ -24429,6 +24525,32 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [0.2.0](https://github.com/awinogradov/code-assistants/compare/release-automerge@v0.1.0...release-automerge@v0.2.0) (2026-06-08)
+
+## Release Notes
+
+The code review action now provides detailed explanations when it skips reviews, making it easier to understand and resolve failing checks.
+
+## ✨ What's New
+
+### Detailed skip explanations with direct log links
+When the code review action skips a review due to failing checks, it now posts a comprehensive comment that links each failing check directly to its logs and explains why it failed. This helps you quickly identify and resolve issues without hunting through GitHub's UI for the right logs.
+
+<details><summary>Related issues</summary>
+
+- [#280: Add check log links and an AI failure summary to the code-review skip comment](https://github.com/awinogradov/code-assistants/issues/280)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #280 | [#285](https://github.com/awinogradov/code-assistants/pull/285) | @awinogradov |
+
+### Features
+
+* **code-review-action:** reuse review engine for skip reasons ([f62cc9c](https://github.com/awinogradov/code-assistants/commit/f62cc9cad7b2f78a188904712a1beb273bf0dbeb))
 ## 0.1.0 (2026-05-29)
 
 ## Release Notes
@@ -24539,7 +24661,7 @@ The release creation workflow documentation now explains why release PRs must be
 <file path=".github/actions/release-automerge/package.json">
 {
   "name": "@code-assistants/release-automerge",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Composite GitHub Action that merges an approved, all-green release PR.",
   "private": true,
   "type": "module",
@@ -24570,7 +24692,7 @@ The release creation workflow documentation now explains why release PRs must be
 <file path=".github/actions/release-automerge/README.md">
 # Release auto-merge
 
-[![GitHub Release](https://img.shields.io/badge/release-v0.1.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v0.2.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that merges a release PR once it is fully green and
@@ -24725,7 +24847,7 @@ uses: awinogradov/code-assistants/.github/actions/release-automerge@v1
 </file>
 
 <file path=".github/actions/release-automerge/version">
-0.1.0
+0.2.0
 </file>
 
 <file path=".github/actions/release-sync/action.yml">
