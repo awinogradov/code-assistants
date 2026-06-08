@@ -2,6 +2,75 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.3.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.2.0...autopilot@v1.3.0) (2026-06-08)
+
+## Release Notes
+
+The Autopilot plugin now generates cleaner PR descriptions and release notes that follow proper reference formatting standards, making your documentation more professional and easier to navigate.
+
+## ✨ What's New
+
+### Smarter issue picker shows available work
+The issue picker now focuses on unassigned issues by default, helping you quickly find work that's actually available to pick up. No more scrolling past issues your teammates are already handling. Need to see everything? Just use the `--all` flag.
+
+<details><summary>Related issues</summary>
+
+- [#272: Hide assigned issues from the issue:run picker by default, with an --all flag](https://github.com/awinogradov/code-assistants/issues/272)
+</details>
+
+## 🐛 Bug Fixes
+
+### PR review bot now properly approves resolved blockers
+When you address a blocking review comment and the bot agrees it's fixed, it will now actually approve your PR instead of leaving the block in place. No more asking for "re-review" when the bot already agrees everything looks good.
+
+<details><summary>Related issues</summary>
+
+- [#275: Approve a blocked PR when the reviewer bot agrees its blockers are resolved](https://github.com/awinogradov/code-assistants/issues/275)
+</details>
+
+### Better link formatting in PR comments and reviews
+PR descriptions, release notes, and review comments now properly link to commits, issues, and RFCs. Commit SHAs are clickable, references follow consistent formatting rules, and cross-references won't break when files move around.
+
+<details><summary>Related issues</summary>
+
+- [#279: Apply RFC-0001 formatting to generated PR descriptions and release notes](https://github.com/awinogradov/code-assistants/issues/279)
+- [#259: Apply RFC-0001 reference formatting to PR review replies and comments](https://github.com/awinogradov/code-assistants/issues/259)
+</details>
+
+## 📚 Documentation & Settings Updates
+
+### Reference formatting standard updates
+The reference formatting guidelines now allow linking to sections within the same document using anchors, while cross-document references should include an inline summary to avoid broken links when documents get restructured.
+
+<details><summary>Related issues</summary>
+
+- [#259: Apply RFC-0001 reference formatting to PR review replies and comments](https://github.com/awinogradov/code-assistants/issues/259)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #279 | [#282](https://github.com/awinogradov/code-assistants/pull/282) | @awinogradov |
+| #275 | [#278](https://github.com/awinogradov/code-assistants/pull/278) | @awinogradov |
+| #259 | [#268](https://github.com/awinogradov/code-assistants/pull/268) | @awinogradov |
+| #272 | [#274](https://github.com/awinogradov/code-assistants/pull/274) | @awinogradov |
+
+### Features
+
+* **issue-run:** hide assigned issues from picker ([c611582](https://github.com/awinogradov/code-assistants/commit/c611582e5d6ec3075055e94056d1540a0a76e206))
+
+### Bug Fixes
+
+* **autopilot:** link commit shas in pr replies ([ed2ba1c](https://github.com/awinogradov/code-assistants/commit/ed2ba1c2f8d6a58d9c92e864e9a810d724b849bb))
+* **pr-answer:** bind resolution language to approve verdict ([6707eb1](https://github.com/awinogradov/code-assistants/commit/6707eb1a235bdefff64d0b9fe2eba76a95c84f30))
+* **pr:** wire reference formatting into pr bodies ([9213e15](https://github.com/awinogradov/code-assistants/commit/9213e1598de14772104df8ee18f6093e51147c89))
+
+### Documentation
+
+* **issue-run:** remove parenthetical from --all description ([506c434](https://github.com/awinogradov/code-assistants/commit/506c4345d14f26f936f4c0de562d793f48fbb704))
+* **rfc:** allow same-document section anchors ([0cebbb6](https://github.com/awinogradov/code-assistants/commit/0cebbb6092e4a09a8412d485644bf99d9c683562))
 ## [1.2.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.1.0...autopilot@v1.2.0) (2026-06-04)
 
 ## Release Notes
