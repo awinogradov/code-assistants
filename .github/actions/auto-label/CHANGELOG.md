@@ -2,6 +2,54 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [0.2.1](https://github.com/awinogradov/code-assistants/compare/auto-label-action@v0.2.0...auto-label-action@v0.2.1) (2026-06-08)
+
+## Release Notes
+
+Auto label action now loads properly and attributes label events to your project bot instead of github-actions[bot].
+
+## ✨ What's New
+
+### Bot identity for label operations
+Label add/remove events created by the auto-label action now appear under your project's bot account instead of the generic `github-actions[bot]`. This provides clearer audit trails and consistent bot attribution across your automation workflows.
+
+<details><summary>Related issues</summary>
+
+- [#267: Attribute auto-label add/remove events to BOT_USERNAME, not github-actions](https://github.com/awinogradov/code-assistants/issues/267)
+</details>
+
+## 🐛 Bug Fixes
+
+### Action loading restored
+The auto-label action was failing to load on every push due to an invalid token description containing GitHub expression syntax. The action now loads correctly and pull requests receive their workspace member labels as expected.
+
+<details><summary>Related issues</summary>
+
+- [#276: Auto label action fails to load: secrets context in input description](https://github.com/awinogradov/code-assistants/issues/276)
+</details>
+
+## ⚙️ Configuration Required
+
+### BOT_TOKEN secret
+You must configure a `BOT_TOKEN` secret with `pull-requests: write` and `issues: write` permissions. The action uses this token to attribute label operations to your project bot. Without this secret, the workflow will fail.
+
+## ⚠️ Breaking Changes
+
+### New secret requirement
+The auto-label action now requires a `BOT_TOKEN` secret. Downstream repositories syncing the `auto-label.yml` workflow must configure this secret or label operations will fail. The token needs `pull-requests: write` and `issues: write` permissions to manage labels on pull requests.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #276 | [#277](https://github.com/awinogradov/code-assistants/pull/277) | @awinogradov |
+| #267 | [#270](https://github.com/awinogradov/code-assistants/pull/270) | @awinogradov |
+
+### Bug Fixes
+
+* **auto-label:** attribute label events to bot ([c8fe71b](https://github.com/awinogradov/code-assistants/commit/c8fe71b9aa22406d1d7b615beda887ce6711ccf0))
+* **auto-label:** drop ${{ }} expression from token description ([e36649a](https://github.com/awinogradov/code-assistants/commit/e36649a180d8e706cddd3628e9ef5cfc99aa2af7))
 ## 0.2.0 (2026-06-01)
 
 ## Release Notes
