@@ -191,6 +191,21 @@ The content is organized as follows:
     licenses-audit/
       action.yml
       README.md
+    perf-report-action/
+      src/
+        classifyDeltas.test.ts
+        classifyDeltas.ts
+        noiseBands.test.ts
+        noiseBands.ts
+        perfReport.ts
+        renderComment.test.ts
+        renderComment.ts
+        snapshotLoad.test.ts
+        snapshotLoad.ts
+      action.yml
+      package.json
+      README.md
+      tsconfig.json
     release-action/
       .release_notes/
         0.1.0.md
@@ -15243,6 +15258,1552 @@ uses: awinogradov/code-assistants/.github/actions/licenses-audit@v1
 
 The synced `licenses.yml` workflow references the action via `@main` so consumer repos always pick
 up the latest audit logic. Pin to a tag if you want explicit control.
+</file>
+
+<file path=".github/actions/perf-report-action/src/classifyDeltas.test.ts">
+import { describe, expect, test } from "bun:test";
+
+import { bandLabelFor, deltaFor, outsideBand } from "./classifyDeltas.ts";
+import { defaultNoiseBands } from "./noiseBands.ts";
+import type { MetricResult } from "./snapshotLoad.ts";
+
+const ok = (value: number): MetricResult => ({ ok: true, value });
+const missing: MetricResult = { ok: false, reason: "missing" };
+
+describe("outsideBand", () => {
+  const band = { absolute: 200, relative: 0.1 };
+
+  test("inside when below the absolute threshold", () => {
+    expect(outsideBand(199, 0.5, band)).toBe(false);
+  });
+
+  test("outside exactly at both thresholds", () => {
+    expect(outsideBand(200, 0.1, band)).toBe(true);
+  });
+
+  test("inside when relative threshold not cleared", () => {
+    expect(outsideBand(250, 0.05, band)).toBe(false);
+  });
+
+  test("outside on absolute-only bands", () => {
+    expect(outsideBand(0.01, null, { absolute: 0.01 })).toBe(true);
+  });
+
+  test("inside when relative is required but base was zero", () => {
+    expect(outsideBand(300, null, band)).toBe(false);
+  });
+});
+
+describe("deltaFor", () => {
+  const band = defaultNoiseBands.timing;
+
+  test("classifies an unfavorable lower-is-better delta as regression", () => {
+    const delta = deltaFor(ok(1300), ok(1000), band, false);
+    expect(delta).toEqual({ kind: "ok", absolute: 300, relative: 0.3, regressed: true });
+  });
+
+  test("an improvement is never a regression", () => {
+    const delta = deltaFor(ok(700), ok(1000), band, false);
+    expect(delta.kind === "ok" && delta.regressed).toBe(false);
+  });
+
+  test("higher-is-better flips the unfavorable direction", () => {
+    const delta = deltaFor(ok(0.85), ok(0.95), defaultNoiseBands.score, true);
+    expect(delta.kind === "ok" && delta.regressed).toBe(true);
+  });
+
+  test("missing head propagates the reason", () => {
+    expect(deltaFor(missing, ok(1), band, false)).toEqual({ kind: "n/a", reason: "missing" });
+  });
+
+  test("missing base propagates the reason", () => {
+    expect(deltaFor(ok(1), missing, band, false)).toEqual({ kind: "n/a", reason: "missing" });
+  });
+});
+
+describe("bandLabelFor", () => {
+  test("renders the default bands like the original report", () => {
+    expect(bandLabelFor(defaultNoiseBands, "bundle")).toBe(">= 5% AND >= 1 KiB");
+    expect(bandLabelFor(defaultNoiseBands, "score")).toBe(">= 3 pts");
+    expect(bandLabelFor(defaultNoiseBands, "timing")).toBe(">= 10% AND >= 200 ms");
+    expect(bandLabelFor(defaultNoiseBands, "cls")).toBe(">= 0.01");
+  });
+
+  test("renders absolute-only overrides without the relative clause", () => {
+    expect(bandLabelFor({ ...defaultNoiseBands, timing: { absolute: 500 } }, "timing")).toBe(
+      ">= 500 ms"
+    );
+  });
+});
+</file>
+
+<file path=".github/actions/perf-report-action/src/classifyDeltas.ts">
+/**
+ * Delta classification against per-metric noise bands.
+ *
+ * A delta is a regression only when it clears the band (absolute AND, where
+ * defined, relative threshold) in the unfavorable direction. The same
+ * `outsideBand` decision drives both the regression verdict and the table
+ * display (`≈ 0` inside the band), so the comment can never advertise
+ * sub-noise variance.
+ *
+ * @example
+ *   const delta = deltaFor(head, base, bands.timing, false);
+ *   if (delta.kind === "ok" && delta.regressed) ...
+ */
+import type { NoiseBand, NoiseBands } from "./noiseBands.ts";
+import type { BundleSizes, LhHeadlines, MetricResult, Snapshot } from "./snapshotLoad.ts";
+
+/** A classified metric delta, or the reason it could not be computed. */
+export type MetricDelta =
+  | { kind: "ok"; absolute: number; relative: number | null; regressed: boolean }
+  | { kind: "n/a"; reason: string };
+
+const relativeChange = (absolute: number, base: number): number | null =>
+  base === 0 ? null : absolute / Math.abs(base);
+
+export const outsideBand = (
+  absolute: number,
+  relative: number | null,
+  band: NoiseBand
+): boolean => {
+  if (Math.abs(absolute) < band.absolute) return false;
+  if (band.relative === undefined) return true;
+  if (relative === null) return false;
+  return Math.abs(relative) >= band.relative;
+};
+
+export const deltaFor = (
+  head: MetricResult,
+  base: MetricResult,
+  band: NoiseBand,
+  higherIsBetter: boolean
+): MetricDelta => {
+  if (!head.ok) return { kind: "n/a", reason: head.reason };
+  if (!base.ok) return { kind: "n/a", reason: base.reason };
+  const absolute = head.value - base.value;
+  const relative = relativeChange(absolute, base.value);
+  const unfavorable = higherIsBetter ? absolute < 0 : absolute > 0;
+  const regressed = outsideBand(absolute, relative, band) && unfavorable;
+  return { kind: "ok", absolute, relative, regressed };
+};
+
+export const bundleDelta = (head: number, base: number, band: NoiseBand): MetricDelta =>
+  deltaFor({ ok: true, value: head }, { ok: true, value: base }, band, false);
+
+/** True when the delta clears the band — drives `≈ 0` rendering. */
+export const isMeaningful = (delta: MetricDelta, band: NoiseBand): boolean =>
+  delta.kind === "ok" && outsideBand(delta.absolute, delta.relative, band);
+
+/** One regressed metric, pre-formatted for the comment's regressions list. */
+export interface Regression {
+  metric: string;
+  base: string;
+  head: string;
+  delta: string;
+  band: string;
+}
+
+interface LhRegressionSpec {
+  key: keyof LhHeadlines;
+  label: string;
+  band: keyof Pick<NoiseBands, "score" | "timing" | "cls">;
+  higherIsBetter: boolean;
+}
+
+const lhRegressionSpecs: readonly LhRegressionSpec[] = [
+  { key: "performance", label: "Performance", band: "score", higherIsBetter: true },
+  { key: "accessibility", label: "Accessibility", band: "score", higherIsBetter: true },
+  { key: "lcpMs", label: "LCP", band: "timing", higherIsBetter: false },
+  { key: "tbtMs", label: "TBT", band: "timing", higherIsBetter: false },
+  { key: "cls", label: "CLS", band: "cls", higherIsBetter: false },
+  { key: "ttiMs", label: "TTI", band: "timing", higherIsBetter: false },
+];
+
+const withRelative = (band: NoiseBand, absoluteLabel: string): string =>
+  band.relative === undefined
+    ? `>= ${absoluteLabel}`
+    : `>= ${(band.relative * 100).toString()}% AND >= ${absoluteLabel}`;
+
+/** Human-readable band description rendered in the regressions list. */
+export const bandLabelFor = (bands: NoiseBands, kind: keyof NoiseBands): string => {
+  const band = bands[kind];
+  if (kind === "bundle") return withRelative(band, `${(band.absolute / 1024).toString()} KiB`);
+  if (kind === "score") return `>= ${Math.round(band.absolute * 100).toString()} pts`;
+  if (kind === "timing") return withRelative(band, `${band.absolute.toString()} ms`);
+  return `>= ${band.absolute.toString()}`;
+};
+
+/** Formatters injected by the renderer so values appear exactly as tabled. */
+export interface RegressionFormatters {
+  kib: (bytes: number) => string;
+  signedKib: (delta: MetricDelta) => string;
+  formatFor: (key: keyof LhHeadlines) => (m: MetricResult) => string;
+  signedFor: (key: keyof LhHeadlines) => (d: MetricDelta) => string;
+}
+
+export const collectRegressions = (
+  head: Snapshot,
+  base: Snapshot,
+  bands: NoiseBands,
+  fmt: RegressionFormatters
+): Regression[] => {
+  const regressions: Regression[] = [];
+  const bundleKeys: readonly (keyof BundleSizes)[] = ["raw", "gzip", "brotli"];
+  const bundleLabels: Record<keyof BundleSizes, string> = {
+    raw: "raw",
+    gzip: "gzip",
+    brotli: "brotli",
+  };
+  for (const key of bundleKeys) {
+    const delta = bundleDelta(head.bundle[key], base.bundle[key], bands.bundle);
+    if (delta.kind === "ok" && delta.regressed) {
+      regressions.push({
+        metric: `Bundle ${bundleLabels[key]}`,
+        base: fmt.kib(base.bundle[key]),
+        head: fmt.kib(head.bundle[key]),
+        delta: fmt.signedKib(delta),
+        band: bandLabelFor(bands, "bundle"),
+      });
+    }
+  }
+
+  if (!head.lighthouse.ok || !base.lighthouse.ok) return regressions;
+  const headHeadlines = head.lighthouse.headlines;
+  const baseHeadlines = base.lighthouse.headlines;
+  for (const spec of lhRegressionSpecs) {
+    const delta = deltaFor(
+      headHeadlines[spec.key],
+      baseHeadlines[spec.key],
+      bands[spec.band],
+      spec.higherIsBetter
+    );
+    if (delta.kind === "ok" && delta.regressed) {
+      regressions.push({
+        metric: `LH ${spec.label}`,
+        base: fmt.formatFor(spec.key)(baseHeadlines[spec.key]),
+        head: fmt.formatFor(spec.key)(headHeadlines[spec.key]),
+        delta: fmt.signedFor(spec.key)(delta),
+        band: bandLabelFor(bands, spec.band),
+      });
+    }
+  }
+  return regressions;
+};
+</file>
+
+<file path=".github/actions/perf-report-action/src/noiseBands.test.ts">
+import { describe, expect, test } from "bun:test";
+
+import { defaultNoiseBands, parseNoiseBands } from "./noiseBands.ts";
+
+describe("parseNoiseBands", () => {
+  test("returns defaults for undefined input", () => {
+    expect(parseNoiseBands(undefined)).toEqual(defaultNoiseBands);
+  });
+
+  test("returns defaults for empty input", () => {
+    expect(parseNoiseBands("  ")).toEqual(defaultNoiseBands);
+  });
+
+  test("merges a partial override over defaults", () => {
+    const bands = parseNoiseBands(JSON.stringify({ timing: { absolute: 500, relative: 0.2 } }));
+    expect(bands.timing).toEqual({ absolute: 500, relative: 0.2 });
+    expect(bands.bundle).toEqual(defaultNoiseBands.bundle);
+    expect(bands.score).toEqual(defaultNoiseBands.score);
+    expect(bands.cls).toEqual(defaultNoiseBands.cls);
+  });
+
+  test("accepts a band without relative threshold", () => {
+    const bands = parseNoiseBands(JSON.stringify({ bundle: { absolute: 2048 } }));
+    expect(bands.bundle).toEqual({ absolute: 2048 });
+  });
+
+  test("throws on malformed JSON", () => {
+    expect(() => parseNoiseBands("{not json")).toThrow();
+  });
+
+  test("throws on unknown keys", () => {
+    expect(() => parseNoiseBands(JSON.stringify({ bundel: { absolute: 1 } }))).toThrow();
+  });
+
+  test("throws on negative thresholds", () => {
+    expect(() => parseNoiseBands(JSON.stringify({ cls: { absolute: -1 } }))).toThrow();
+  });
+});
+</file>
+
+<file path=".github/actions/perf-report-action/src/noiseBands.ts">
+/**
+ * Per-metric noise bands for regression classification.
+ *
+ * A delta has to clear the absolute threshold AND (where defined) the
+ * relative threshold to count as a regression — inside the band it renders
+ * `≈ 0` so reviewers don't chase sub-noise variance. Defaults are the bands
+ * the report shipped with originally; consumers override them through the
+ * action's `noise-bands` input (a JSON object), parsed here with Zod so a
+ * typo fails loud instead of silently mis-classifying.
+ *
+ * @example
+ *   const bands = parseNoiseBands(process.env.NOISE_BANDS);
+ *   bands.bundle; // { absolute: 1024, relative: 0.05 }
+ */
+import { z } from "zod";
+
+/** Thresholds below which a metric delta is treated as noise. */
+export interface NoiseBand {
+  /** Absolute threshold below which a delta is considered noise. */
+  absolute: number;
+  /** Optional relative threshold (fraction, e.g. 0.05 = 5%). */
+  relative?: number;
+}
+
+/** The four band kinds the report classifies against. */
+export interface NoiseBands {
+  /** Bundle raw/gzip/brotli sizes, in bytes. */
+  bundle: NoiseBand;
+  /** Lighthouse category scores, on the 0–1 scale (0.03 = 3 points). */
+  score: NoiseBand;
+  /** Lighthouse timings (LCP, TBT, TTI), in milliseconds. */
+  timing: NoiseBand;
+  /** Cumulative Layout Shift, absolute. */
+  cls: NoiseBand;
+}
+
+export const defaultNoiseBands: NoiseBands = {
+  bundle: { absolute: 1024, relative: 0.05 },
+  score: { absolute: 0.03 },
+  timing: { absolute: 200, relative: 0.1 },
+  cls: { absolute: 0.01 },
+};
+
+const bandSchema = z.object({
+  absolute: z.number({ error: "band.absolute must be a number" }).nonnegative(),
+  relative: z.number({ error: "band.relative must be a number" }).nonnegative().optional(),
+});
+
+const bandsSchema = z
+  .object({
+    bundle: bandSchema.optional(),
+    score: bandSchema.optional(),
+    timing: bandSchema.optional(),
+    cls: bandSchema.optional(),
+  })
+  .strict();
+
+/**
+ * Parse the `noise-bands` input JSON and merge it over the defaults.
+ * An empty/unset input returns the defaults; malformed JSON or unknown keys
+ * throw so the entry point can emit a degraded comment naming the mistake.
+ */
+export const parseNoiseBands = (raw: string | undefined): NoiseBands => {
+  if (raw === undefined || raw.trim() === "") return defaultNoiseBands;
+  const parsed = bandsSchema.parse(JSON.parse(raw));
+  return {
+    bundle: parsed.bundle ?? defaultNoiseBands.bundle,
+    score: parsed.score ?? defaultNoiseBands.score,
+    timing: parsed.timing ?? defaultNoiseBands.timing,
+    cls: parsed.cls ?? defaultNoiseBands.cls,
+  };
+};
+</file>
+
+<file path=".github/actions/perf-report-action/src/perfReport.ts">
+/**
+ * Perf report comment generator — the action's entry point.
+ *
+ * Reads a head snapshot (and optionally a base snapshot) produced by the
+ * action's snapshot/baseline steps and emits a markdown comment body on
+ * stdout for `marocchino/sticky-pull-request-comment` to post on the PR.
+ * The regression count is appended to `$GITHUB_OUTPUT` (when set) as the
+ * `regression-count` step output.
+ *
+ * The script never fails the job: if anything goes wrong, a degraded comment
+ * is emitted to stdout and the error is written to stderr — the PR must
+ * never be blocked by report generation. The hard-fail gate is a separate
+ * future follow-up; do not add a `--fail-on-regression` flag here.
+ *
+ * Env: `BUNDLE_LABEL` (bundle table heading, defaults to "bundle"),
+ * `NOISE_BANDS` (optional JSON override of the per-metric noise bands).
+ *
+ * @example
+ *   BUNDLE_LABEL=dist/embed/index.html \
+ *     bun src/perfReport.ts --head perf-snapshot --base perf-baseline > perf-comment.md
+ */
+import { appendFile } from "node:fs/promises";
+import { parseArgs } from "node:util";
+
+import { parseNoiseBands } from "./noiseBands.ts";
+import { renderComment } from "./renderComment.ts";
+import { loadBase, loadSnapshot } from "./snapshotLoad.ts";
+
+const writeRegressionCount = async (count: number): Promise<void> => {
+  const outputPath = process.env.GITHUB_OUTPUT;
+  if (outputPath === undefined || outputPath === "") return;
+  await appendFile(outputPath, `regression-count=${count.toString()}\n`, "utf8");
+};
+
+const main = async (): Promise<void> => {
+  const { values } = parseArgs({
+    strict: true,
+    allowPositionals: false,
+    options: {
+      head: { type: "string" },
+      base: { type: "string" },
+    },
+  });
+  if (values.head === undefined) throw new Error("--head <dir> is required");
+
+  const bands = parseNoiseBands(process.env.NOISE_BANDS);
+  const bundleLabel = process.env.BUNDLE_LABEL ?? "bundle";
+  const head = await loadSnapshot(values.head);
+  const base = await loadBase(values.base);
+  const { markdown, regressionCount } = renderComment(head, base, { bundleLabel, bands });
+  process.stdout.write(markdown);
+  await writeRegressionCount(regressionCount);
+};
+
+try {
+  await main();
+} catch (error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  process.stderr.write(`perf-report: ${message}\n`);
+  process.stdout.write(`## Perf report\n\nReport generation failed: ${message}\n`);
+  try {
+    await writeRegressionCount(0);
+  } catch (outputError: unknown) {
+    const outputMessage = outputError instanceof Error ? outputError.message : String(outputError);
+    process.stderr.write(`perf-report: failed to write GITHUB_OUTPUT: ${outputMessage}\n`);
+  }
+}
+</file>
+
+<file path=".github/actions/perf-report-action/src/renderComment.test.ts">
+import { describe, expect, test } from "bun:test";
+
+import { defaultNoiseBands } from "./noiseBands.ts";
+import { renderComment } from "./renderComment.ts";
+import type { BaseSnapshot, LhHeadlines, Snapshot } from "./snapshotLoad.ts";
+
+// Values modeled on the source repo's documented baseline (perf 100/a11y 100,
+// LCP ~581 ms, TBT ~52 ms, CLS ~0.001, TTI ~318 ms, gzip ~646 KiB).
+const headlines = (over: Partial<Record<keyof LhHeadlines, number>> = {}): LhHeadlines => ({
+  performance: { ok: true, value: over.performance ?? 1 },
+  accessibility: { ok: true, value: over.accessibility ?? 1 },
+  lcpMs: { ok: true, value: over.lcpMs ?? 581 },
+  tbtMs: { ok: true, value: over.tbtMs ?? 52 },
+  cls: { ok: true, value: over.cls ?? 0.001 },
+  ttiMs: { ok: true, value: over.ttiMs ?? 318 },
+});
+
+const snapshot = (over: Partial<Snapshot> = {}): Snapshot => ({
+  bundle: { raw: 2881536, gzip: 661504, brotli: 524288 },
+  lighthouse: { ok: true, headlines: headlines() },
+  meta: {
+    sha: "abcdef1234567890",
+    ref: "feature",
+    runId: "7",
+    runUrl: "https://github.com/acme/repo/actions/runs/7",
+    lhStatus: "success",
+  },
+  files: ["bundle-stats.html", "index.html", "lighthouse-viewer.json", "meta.json"],
+  ...over,
+});
+
+const options = { bundleLabel: "dist/embed/index.html", bands: defaultNoiseBands };
+const noBaseline: BaseSnapshot = { ok: false, reason: "no-baseline" };
+
+describe("renderComment", () => {
+  test("within budget against an identical baseline", () => {
+    const { markdown, regressionCount } = renderComment(
+      snapshot(),
+      { ok: true, snapshot: snapshot() },
+      options
+    );
+    expect(regressionCount).toBe(0);
+    expect(markdown).toContain("✅ **within budget**");
+    expect(markdown).toContain("### 📦 Bundle — `dist/embed/index.html`");
+    expect(markdown).toContain("### ⚡ Lighthouse");
+    expect(markdown).toContain("| 🟢 | Gzip | 646.0 KiB | 646.0 KiB | ≈ 0 |");
+    expect(markdown).toContain("| 🟢 | CLS | 0.001 | 0.001 | ≈ 0 |");
+    expect(markdown).toContain("✅ ≥ 90");
+    expect(markdown).not.toContain("**Regressions**");
+    expect(markdown).toContain("Baseline <code>abcdef1</code> → Head <code>abcdef1</code>");
+    expect(markdown).toContain(
+      "artifacts: <code>bundle-stats.html</code>, <code>lighthouse-viewer.json</code>"
+    );
+  });
+
+  test("regressions cross the band and are listed with the band label", () => {
+    const head = snapshot({
+      bundle: { raw: 2881536, gzip: 761504, brotli: 524288 },
+      lighthouse: { ok: true, headlines: headlines({ lcpMs: 881 }) },
+    });
+    const { markdown, regressionCount } = renderComment(
+      head,
+      { ok: true, snapshot: snapshot() },
+      options
+    );
+    expect(regressionCount).toBe(2);
+    expect(markdown).toContain("⚠️ **warning** — 2 metric(s) regressed (no hard-fail yet).");
+    expect(markdown).toContain("**Regressions**");
+    expect(markdown).toContain("- **Bundle gzip**: 646.0 KiB → 743.7 KiB");
+    expect(markdown).toContain("band >= 5% AND >= 1 KiB)");
+    expect(markdown).toContain("- **LH LCP**: 581 ms → 881 ms");
+    expect(markdown).toContain("| 🔴 | LCP |");
+  });
+
+  test("no baseline renders head-only columns and the 🆕 verdict", () => {
+    const { markdown, regressionCount } = renderComment(snapshot(), noBaseline, options);
+    expect(regressionCount).toBe(0);
+    expect(markdown).toContain("🆕 **no baseline available**");
+    expect(markdown).toContain("| ⚪ | Raw | — | 2814.0 KiB | — |");
+    expect(markdown).toContain("| ⚪ | Performance | — | 100 | — | ✅ ≥ 90 |");
+    expect(markdown).toContain("Head <code>abcdef1</code>");
+    expect(markdown).not.toContain("Baseline");
+  });
+
+  test("failed Lighthouse degrades the section but keeps the bundle table", () => {
+    const head = snapshot({ lighthouse: { ok: false, reason: "measurement failed" } });
+    const { markdown } = renderComment(head, noBaseline, options);
+    expect(markdown).toContain("💔 Lighthouse measurement failed on this run (measurement failed)");
+    expect(markdown).toContain("### 📦 Bundle");
+  });
+
+  test("skipped Lighthouse omits the section entirely", () => {
+    const head = snapshot({ lighthouse: { ok: false, reason: "skipped" } });
+    const { markdown } = renderComment(head, noBaseline, options);
+    expect(markdown).not.toContain("Lighthouse");
+    expect(markdown).toContain("### 📦 Bundle");
+  });
+
+  test("custom bands change the classification", () => {
+    const head = snapshot({ lighthouse: { ok: true, headlines: headlines({ lcpMs: 881 }) } });
+    const { regressionCount } = renderComment(
+      head,
+      { ok: true, snapshot: snapshot() },
+      { ...options, bands: { ...defaultNoiseBands, timing: { absolute: 500 } } }
+    );
+    expect(regressionCount).toBe(0);
+  });
+});
+</file>
+
+<file path=".github/actions/perf-report-action/src/renderComment.ts">
+/**
+ * Markdown rendering for the perf comment.
+ *
+ * Renders the verdict line, the bundle table (labeled with the measured
+ * file's path), the Lighthouse table (omitted entirely when measurement was
+ * skipped), an optional regressions list, and a provenance footer. Display
+ * conventions: KiB with one decimal for sizes, 0–100 integers for Lighthouse
+ * scores, ms rounded to 10 ms above 1 s for timings, three decimals for CLS;
+ * deltas inside the noise band render `≈ 0`.
+ *
+ * @example
+ *   process.stdout.write(
+ *     renderComment(head, base, { bundleLabel: "dist/embed/index.html", bands })
+ *   );
+ */
+import {
+  bundleDelta,
+  collectRegressions,
+  deltaFor,
+  isMeaningful,
+  type MetricDelta,
+  type Regression,
+} from "./classifyDeltas.ts";
+import type { NoiseBand, NoiseBands } from "./noiseBands.ts";
+import type {
+  BaseSnapshot,
+  BundleSizes,
+  LhHeadlines,
+  LhSection,
+  MetricResult,
+  Snapshot,
+} from "./snapshotLoad.ts";
+
+const kib = (bytes: number): string => `${(bytes / 1024).toFixed(1)} KiB`;
+
+const signedKib =
+  (band: NoiseBand) =>
+  (delta: MetricDelta): string => {
+    if (delta.kind === "n/a") return "—";
+    if (!isMeaningful(delta, band)) return "≈ 0";
+    const sign = delta.absolute >= 0 ? "+" : "-";
+    return `${sign}${(Math.abs(delta.absolute) / 1024).toFixed(1)} KiB`;
+  };
+
+const formatScore = (result: MetricResult): string =>
+  result.ok ? Math.round(result.value * 100).toString() : "—";
+
+const signedScore =
+  (band: NoiseBand) =>
+  (delta: MetricDelta): string => {
+    if (delta.kind === "n/a") return "—";
+    if (!isMeaningful(delta, band)) return "≈ 0";
+    const points = Math.round(delta.absolute * 100);
+    const sign = points >= 0 ? "+" : "-";
+    return `${sign}${Math.abs(points).toString()}`;
+  };
+
+const roundMs = (ms: number): number => (ms >= 1000 ? Math.round(ms / 10) * 10 : Math.round(ms));
+
+const formatMs = (result: MetricResult): string =>
+  result.ok ? `${roundMs(result.value).toLocaleString("en-US")} ms` : "—";
+
+const signedMs =
+  (band: NoiseBand) =>
+  (delta: MetricDelta): string => {
+    if (delta.kind === "n/a") return "—";
+    if (!isMeaningful(delta, band)) return "≈ 0";
+    const sign = delta.absolute >= 0 ? "+" : "-";
+    return `${sign}${roundMs(Math.abs(delta.absolute)).toLocaleString("en-US")} ms`;
+  };
+
+const formatCls = (result: MetricResult): string => (result.ok ? result.value.toFixed(3) : "—");
+
+const signedCls =
+  (band: NoiseBand) =>
+  (delta: MetricDelta): string => {
+    if (delta.kind === "n/a") return "—";
+    if (!isMeaningful(delta, band)) return "≈ 0";
+    const sign = delta.absolute >= 0 ? "+" : "-";
+    return `${sign}${Math.abs(delta.absolute).toFixed(3)}`;
+  };
+
+const shortSha = (sha: string): string => (sha.length >= 7 ? sha.slice(0, 7) : sha);
+
+interface MetricTarget {
+  readonly satisfies: (value: number) => boolean;
+  readonly label: string;
+}
+
+const lhTargets: Partial<Record<keyof LhHeadlines, MetricTarget>> = {
+  performance: { satisfies: (v) => v >= 0.9, label: "≥ 90" },
+  accessibility: { satisfies: (v) => v >= 0.95, label: "≥ 95" },
+  lcpMs: { satisfies: (v) => v <= 1000, label: "≤ 1,000 ms" },
+  ttiMs: { satisfies: (v) => v <= 1000, label: "≤ 1,000 ms" },
+};
+
+const statusFor = (delta: MetricDelta): string => {
+  if (delta.kind === "n/a") return "⚪";
+  return delta.regressed ? "🔴" : "🟢";
+};
+
+const targetCell = (result: MetricResult, target: MetricTarget | undefined): string => {
+  if (target === undefined) return "—";
+  if (!result.ok) return `🎯 ${target.label}`;
+  return `${target.satisfies(result.value) ? "✅" : "❌"} ${target.label}`;
+};
+
+const bundleRowLabel = (key: keyof BundleSizes): string =>
+  key === "raw" ? "Raw" : key === "gzip" ? "Gzip" : "Brotli";
+
+const renderBundleRow = (
+  key: keyof BundleSizes,
+  head: BundleSizes,
+  base: BundleSizes | undefined,
+  band: NoiseBand
+): string => {
+  const headStr = kib(head[key]);
+  const label = bundleRowLabel(key);
+  if (base === undefined) {
+    return `| ⚪ | ${label} | — | ${headStr} | — |`;
+  }
+  const delta = bundleDelta(head[key], base[key], band);
+  return `| ${statusFor(delta)} | ${label} | ${kib(base[key])} | ${headStr} | ${signedKib(band)(delta)} |`;
+};
+
+const renderBundleTable = (
+  head: BundleSizes,
+  base: BundleSizes | undefined,
+  bundleLabel: string,
+  band: NoiseBand
+): string => {
+  const headerLines = [
+    `### 📦 Bundle — \`${bundleLabel}\``,
+    "",
+    "| Status | Metric | Base | Head | Δ |",
+    "| :---: | :--- | ---: | ---: | ---: |",
+  ];
+  const rows = (["raw", "gzip", "brotli"] as const).map((key) =>
+    renderBundleRow(key, head, base, band)
+  );
+  return [...headerLines, ...rows].join("\n");
+};
+
+interface LhRowSpec {
+  readonly key: keyof LhHeadlines;
+  readonly label: string;
+  readonly format: (m: MetricResult) => string;
+  readonly signed: (band: NoiseBand) => (d: MetricDelta) => string;
+  readonly band: keyof Pick<NoiseBands, "score" | "timing" | "cls">;
+  readonly higherIsBetter: boolean;
+}
+
+const lhRowSpecs: readonly LhRowSpec[] = [
+  { key: "performance", label: "Performance", format: formatScore, signed: signedScore, band: "score", higherIsBetter: true },
+  { key: "accessibility", label: "Accessibility", format: formatScore, signed: signedScore, band: "score", higherIsBetter: true },
+  { key: "lcpMs", label: "LCP", format: formatMs, signed: signedMs, band: "timing", higherIsBetter: false },
+  { key: "tbtMs", label: "TBT", format: formatMs, signed: signedMs, band: "timing", higherIsBetter: false },
+  { key: "cls", label: "CLS", format: formatCls, signed: signedCls, band: "cls", higherIsBetter: false },
+  { key: "ttiMs", label: "TTI", format: formatMs, signed: signedMs, band: "timing", higherIsBetter: false },
+];
+
+const renderLhRow = (
+  spec: LhRowSpec,
+  head: LhHeadlines,
+  baseHeadlines: LhHeadlines | undefined,
+  bands: NoiseBands
+): string => {
+  const headM = head[spec.key];
+  const headStr = spec.format(headM);
+  const target = targetCell(headM, lhTargets[spec.key]);
+  if (baseHeadlines === undefined) {
+    return `| ⚪ | ${spec.label} | — | ${headStr} | — | ${target} |`;
+  }
+  const baseM = baseHeadlines[spec.key];
+  const band = bands[spec.band];
+  const delta = deltaFor(headM, baseM, band, spec.higherIsBetter);
+  return `| ${statusFor(delta)} | ${spec.label} | ${spec.format(baseM)} | ${headStr} | ${spec.signed(band)(delta)} | ${target} |`;
+};
+
+const renderLhTable = (head: LhSection, base: LhSection | undefined, bands: NoiseBands): string => {
+  const sectionHeader = "### ⚡ Lighthouse";
+  if (!head.ok) {
+    return [
+      sectionHeader,
+      "",
+      `💔 Lighthouse measurement failed on this run (${head.reason}) — see workflow log.`,
+    ].join("\n");
+  }
+  const baseHeadlines = base?.ok === true ? base.headlines : undefined;
+  const rows = lhRowSpecs.map((spec) => renderLhRow(spec, head.headlines, baseHeadlines, bands));
+  return [
+    sectionHeader,
+    "",
+    "| Status | Metric | Base | Head | Δ | Target |",
+    "| :---: | :--- | ---: | ---: | ---: | :--- |",
+    ...rows,
+  ].join("\n");
+};
+
+const renderRegressionList = (regressions: Regression[]): string => {
+  if (regressions.length === 0) return "";
+  const lines = regressions.map(
+    (r) => `- **${r.metric}**: ${r.base} → ${r.head} (Δ ${r.delta}, band ${r.band})`
+  );
+  return ["", "**Regressions**", "", ...lines].join("\n");
+};
+
+const gzipHighlight = (head: BundleSizes, base: BundleSizes, band: NoiseBand): string => {
+  const delta = bundleDelta(head.gzip, base.gzip, band);
+  if (!isMeaningful(delta, band)) return `gzip ${kib(head.gzip)}`;
+  return `gzip ${kib(base.gzip)} → ${kib(head.gzip)}`;
+};
+
+const perfHighlight = (headM: MetricResult, baseM: MetricResult, band: NoiseBand): string => {
+  if (!headM.ok) return "";
+  const head = formatScore(headM);
+  if (!baseM.ok) return `Perf ${head}`;
+  const delta = deltaFor(headM, baseM, band, true);
+  if (!isMeaningful(delta, band)) return `Perf ${head}`;
+  return `Perf ${formatScore(baseM)} → ${head}`;
+};
+
+const renderHeadlineHighlight = (head: Snapshot, base: Snapshot, bands: NoiseBands): string => {
+  const bundle = gzipHighlight(head.bundle, base.bundle, bands.bundle);
+  if (!head.lighthouse.ok || !base.lighthouse.ok) return bundle;
+  const perf = perfHighlight(
+    head.lighthouse.headlines.performance,
+    base.lighthouse.headlines.performance,
+    bands.score
+  );
+  if (perf === "") return bundle;
+  return `${perf} · ${bundle}`;
+};
+
+const renderHeadline = (
+  head: Snapshot,
+  base: BaseSnapshot,
+  regressions: Regression[],
+  bands: NoiseBands
+): string => {
+  if (!base.ok) {
+    return "🆕 **no baseline available** — this PR will establish one once the default branch has a successful perf run.";
+  }
+  if (regressions.length > 0) {
+    return `⚠️ **warning** — ${regressions.length.toString()} metric(s) regressed (no hard-fail yet).`;
+  }
+  return `✅ **within budget** · ${renderHeadlineHighlight(head, base.snapshot, bands)}`;
+};
+
+const renderFooter = (head: Snapshot, base: BaseSnapshot): string => {
+  const headSha = `<code>${shortSha(head.meta.sha)}</code>`;
+  const compare = base.ok
+    ? `Baseline <code>${shortSha(base.snapshot.meta.sha)}</code> → Head ${headSha}`
+    : `Head ${headSha}`;
+  const link = `<a href="${head.meta.runUrl}">workflow run</a>`;
+  const extras = head.files.filter((file) => file !== "index.html" && file !== "meta.json");
+  const artifacts =
+    extras.length === 0
+      ? ""
+      : ` · artifacts: ${extras.map((file) => `<code>${file}</code>`).join(", ")}`;
+  return `<sub>${compare} · ${link}${artifacts}</sub>`;
+};
+
+/** Options threaded from the action inputs into the renderer. */
+export interface RenderOptions {
+  /** Path label for the bundle table heading (the measured file). */
+  bundleLabel: string;
+  bands: NoiseBands;
+}
+
+/** The full comment plus the regression count exposed as a step output. */
+export interface RenderedComment {
+  markdown: string;
+  regressionCount: number;
+}
+
+export const renderComment = (
+  head: Snapshot,
+  base: BaseSnapshot,
+  options: RenderOptions
+): RenderedComment => {
+  const { bands, bundleLabel } = options;
+  const fmt = {
+    kib,
+    signedKib: signedKib(bands.bundle),
+    formatFor: (key: keyof LhHeadlines) =>
+      key === "cls" ? formatCls : key === "performance" || key === "accessibility" ? formatScore : formatMs,
+    signedFor: (key: keyof LhHeadlines) =>
+      key === "cls"
+        ? signedCls(bands.cls)
+        : key === "performance" || key === "accessibility"
+          ? signedScore(bands.score)
+          : signedMs(bands.timing),
+  };
+  const regressions = base.ok ? collectRegressions(head, base.snapshot, bands, fmt) : [];
+  const lhSkipped = !head.lighthouse.ok && head.lighthouse.reason === "skipped";
+  const sections = [
+    "## Perf report",
+    "",
+    renderHeadline(head, base, regressions, bands),
+    "",
+    renderBundleTable(
+      head.bundle,
+      base.ok ? base.snapshot.bundle : undefined,
+      bundleLabel,
+      bands.bundle
+    ),
+  ];
+  if (!lhSkipped) {
+    sections.push(
+      "",
+      renderLhTable(head.lighthouse, base.ok ? base.snapshot.lighthouse : undefined, bands)
+    );
+  }
+  const regressionBlock = renderRegressionList(regressions);
+  if (regressionBlock !== "") sections.push(regressionBlock);
+  sections.push("", renderFooter(head, base));
+  return { markdown: `${sections.join("\n")}\n`, regressionCount: regressions.length };
+};
+</file>
+
+<file path=".github/actions/perf-report-action/src/snapshotLoad.test.ts">
+import { describe, expect, test } from "bun:test";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { resolve } from "node:path";
+
+import { loadBase, loadSnapshot } from "./snapshotLoad.ts";
+
+const meta = (lhStatus: "success" | "failed" | "skipped") => ({
+  sha: "0123456789abcdef",
+  ref: "feature-branch",
+  runId: "42",
+  runUrl: "https://github.com/acme/repo/actions/runs/42",
+  lhStatus,
+});
+
+const lhr = {
+  categories: { performance: { score: 1 }, accessibility: { score: 0.98 } },
+  audits: {
+    "largest-contentful-paint": { numericValue: 581 },
+    "total-blocking-time": { numericValue: 52 },
+    "cumulative-layout-shift": { numericValue: 0.001 },
+    interactive: { numericValue: 318 },
+  },
+};
+
+const writeSnapshotDir = async (options: {
+  lhStatus: "success" | "failed" | "skipped";
+  lhrJson?: string;
+}): Promise<string> => {
+  const dir = await mkdtemp(resolve(tmpdir(), "perf-snapshot-"));
+  await writeFile(resolve(dir, "meta.json"), JSON.stringify(meta(options.lhStatus)), "utf8");
+  await writeFile(resolve(dir, "index.html"), "<html>".repeat(1000), "utf8");
+  if (options.lhrJson !== undefined) {
+    await writeFile(resolve(dir, "lighthouse-viewer.json"), options.lhrJson, "utf8");
+  }
+  return dir;
+};
+
+describe("loadSnapshot", () => {
+  test("loads bundle sizes, headlines, and the file list", async () => {
+    const dir = await writeSnapshotDir({ lhStatus: "success", lhrJson: JSON.stringify(lhr) });
+    const snapshot = await loadSnapshot(dir);
+    expect(snapshot.bundle.raw).toBe(6000);
+    expect(snapshot.bundle.gzip).toBeGreaterThan(0);
+    expect(snapshot.bundle.brotli).toBeGreaterThan(0);
+    expect(snapshot.bundle.gzip).toBeLessThan(snapshot.bundle.raw);
+    expect(snapshot.files).toEqual(["index.html", "lighthouse-viewer.json", "meta.json"]);
+    if (!snapshot.lighthouse.ok) throw new Error("expected lighthouse ok");
+    expect(snapshot.lighthouse.headlines.lcpMs).toEqual({ ok: true, value: 581 });
+    expect(snapshot.lighthouse.headlines.performance).toEqual({ ok: true, value: 1 });
+  });
+
+  test("degrades to 'measurement failed' when lhStatus is failed", async () => {
+    const dir = await writeSnapshotDir({ lhStatus: "failed" });
+    const snapshot = await loadSnapshot(dir);
+    expect(snapshot.lighthouse).toEqual({ ok: false, reason: "measurement failed" });
+  });
+
+  test("marks skipped measurement distinctly", async () => {
+    const dir = await writeSnapshotDir({ lhStatus: "skipped" });
+    const snapshot = await loadSnapshot(dir);
+    expect(snapshot.lighthouse).toEqual({ ok: false, reason: "skipped" });
+  });
+
+  test("degrades to partial measurement when a headline is missing", async () => {
+    const partial = { ...lhr, audits: { ...lhr.audits, interactive: {} } };
+    const dir = await writeSnapshotDir({ lhStatus: "success", lhrJson: JSON.stringify(partial) });
+    const snapshot = await loadSnapshot(dir);
+    expect(snapshot.lighthouse).toEqual({
+      ok: false,
+      reason: "partial measurement (missing ttiMs)",
+    });
+  });
+
+  test("degrades to parse error on corrupt LHR json", async () => {
+    const dir = await writeSnapshotDir({ lhStatus: "success", lhrJson: "{broken" });
+    const snapshot = await loadSnapshot(dir);
+    if (snapshot.lighthouse.ok) throw new Error("expected lighthouse degrade");
+    expect(snapshot.lighthouse.reason).toStartWith("parse error:");
+  });
+
+  test("throws on incompatible meta.json", async () => {
+    const dir = await mkdtemp(resolve(tmpdir(), "perf-snapshot-"));
+    await writeFile(resolve(dir, "meta.json"), JSON.stringify({ sha: 1 }), "utf8");
+    await writeFile(resolve(dir, "index.html"), "<html>", "utf8");
+    expect(loadSnapshot(dir)).rejects.toThrow();
+  });
+});
+
+describe("loadBase", () => {
+  test("no directory argument means head-only mode", async () => {
+    expect(await loadBase(undefined)).toEqual({ ok: false, reason: "no-baseline" });
+  });
+
+  test("missing directory means head-only mode", async () => {
+    expect(await loadBase("/nonexistent/perf-baseline")).toEqual({
+      ok: false,
+      reason: "no-baseline",
+    });
+  });
+
+  test("unreadable snapshot degrades instead of throwing", async () => {
+    const dir = await mkdtemp(resolve(tmpdir(), "perf-baseline-"));
+    await writeFile(resolve(dir, "meta.json"), "{broken", "utf8");
+    expect(await loadBase(dir)).toEqual({ ok: false, reason: "no-baseline" });
+  });
+
+  test("loads a valid baseline", async () => {
+    const dir = await writeSnapshotDir({ lhStatus: "success", lhrJson: JSON.stringify(lhr) });
+    const base = await loadBase(dir);
+    expect(base.ok).toBe(true);
+  });
+});
+</file>
+
+<file path=".github/actions/perf-report-action/src/snapshotLoad.ts">
+/**
+ * Snapshot loading for the perf report.
+ *
+ * A snapshot directory (produced by the action's snapshot step) contains:
+ *   - `index.html`             — the measured bundle artifact, raw bytes
+ *   - `lighthouse-viewer.json` — optional; missing when LH failed or was skipped
+ *   - `bundle-stats.html`      — optional treemap, listed in the footer only
+ *   - `meta.json`              — { sha, ref, runId, runUrl, lhStatus }
+ *
+ * Bundle sizes are computed in-process via async `node:zlib` (gzip level 9 +
+ * brotli) so a multi-megabyte artifact does not block the event loop.
+ * Lighthouse headlines are extracted with finite-number guards — partial LH
+ * output downgrades that section to "partial measurement" rather than
+ * emitting NaN deltas. `meta.json` is Zod-validated: a baseline produced by
+ * an older incompatible action version degrades to head-only mode upstream
+ * instead of mis-rendering.
+ *
+ * @example
+ *   const head = await loadSnapshot("perf-snapshot");
+ *   const base = await loadBase("perf-baseline");
+ */
+import { readdir, readFile, stat } from "node:fs/promises";
+import { resolve } from "node:path";
+import { promisify } from "node:util";
+import { brotliCompress, gzip } from "node:zlib";
+
+import { z } from "zod";
+
+const gzipAsync = promisify(gzip);
+const brotliAsync = promisify(brotliCompress);
+
+const snapshotMetaSchema = z.object({
+  sha: z.string({ error: "meta.sha must be a string" }),
+  ref: z.string({ error: "meta.ref must be a string" }),
+  runId: z.string({ error: "meta.runId must be a string" }),
+  runUrl: z.string({ error: "meta.runUrl must be a string" }),
+  lhStatus: z.enum(["success", "failed", "skipped"], {
+    error: "meta.lhStatus must be success | failed | skipped",
+  }),
+});
+
+/** Run provenance written by the action's snapshot step. */
+export type SnapshotMeta = z.infer<typeof snapshotMetaSchema>;
+
+/** Sizes of the measured bundle artifact, in bytes. */
+export interface BundleSizes {
+  raw: number;
+  gzip: number;
+  brotli: number;
+}
+
+const lhrSchema = z
+  .object({
+    categories: z.record(z.string(), z.object({ score: z.number().nullish() }).loose()).optional(),
+    audits: z
+      .record(z.string(), z.object({ numericValue: z.number().nullish() }).loose())
+      .optional(),
+  })
+  .loose();
+
+type LhrLike = z.infer<typeof lhrSchema>;
+
+/** A headline metric: present and finite, or absent with a reason. */
+export type MetricResult = { ok: true; value: number } | { ok: false; reason: string };
+
+/** The six Lighthouse headline metrics the comment reports. */
+export interface LhHeadlines {
+  performance: MetricResult;
+  accessibility: MetricResult;
+  lcpMs: MetricResult;
+  tbtMs: MetricResult;
+  cls: MetricResult;
+  ttiMs: MetricResult;
+}
+
+/** The Lighthouse section of a snapshot: full headlines or a degrade reason. */
+export type LhSection = { ok: true; headlines: LhHeadlines } | { ok: false; reason: string };
+
+/** One loaded snapshot: bundle sizes, Lighthouse section, provenance, files. */
+export interface Snapshot {
+  bundle: BundleSizes;
+  lighthouse: LhSection;
+  meta: SnapshotMeta;
+  /** Filenames present in the snapshot directory, for the footer artifact list. */
+  files: string[];
+}
+
+/** A baseline snapshot, or the reason head-only mode applies. */
+export type BaseSnapshot = { ok: true; snapshot: Snapshot } | { ok: false; reason: string };
+
+const finite = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value);
+
+const sizeBundle = async (htmlPath: string): Promise<BundleSizes> => {
+  const buffer = await readFile(htmlPath);
+  const [gz, br] = await Promise.all([gzipAsync(buffer, { level: 9 }), brotliAsync(buffer)]);
+  return { raw: buffer.byteLength, gzip: gz.byteLength, brotli: br.byteLength };
+};
+
+const extractHeadlines = (lhr: LhrLike): LhHeadlines => {
+  const category = (id: string): MetricResult => {
+    const score = lhr.categories?.[id]?.score;
+    return finite(score) ? { ok: true, value: score } : { ok: false, reason: "missing" };
+  };
+  const audit = (id: string): MetricResult => {
+    const value = lhr.audits?.[id]?.numericValue;
+    return finite(value) ? { ok: true, value } : { ok: false, reason: "missing" };
+  };
+  return {
+    performance: category("performance"),
+    accessibility: category("accessibility"),
+    lcpMs: audit("largest-contentful-paint"),
+    tbtMs: audit("total-blocking-time"),
+    cls: audit("cumulative-layout-shift"),
+    ttiMs: audit("interactive"),
+  };
+};
+
+const requiredHeadlines: readonly (keyof LhHeadlines)[] = [
+  "performance",
+  "accessibility",
+  "lcpMs",
+  "tbtMs",
+  "cls",
+  "ttiMs",
+];
+
+const readLighthouse = async (
+  path: string,
+  lhStatus: SnapshotMeta["lhStatus"]
+): Promise<LhSection> => {
+  if (lhStatus === "skipped") return { ok: false, reason: "skipped" };
+  if (lhStatus !== "success") return { ok: false, reason: "measurement failed" };
+  try {
+    const lhr = lhrSchema.parse(JSON.parse(await readFile(path, "utf8")));
+    const headlines = extractHeadlines(lhr);
+    const missing = requiredHeadlines.filter((key) => !headlines[key].ok);
+    if (missing.length > 0) {
+      return { ok: false, reason: `partial measurement (missing ${missing.join(", ")})` };
+    }
+    return { ok: true, headlines };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, reason: `parse error: ${message}` };
+  }
+};
+
+/** Load a snapshot directory. Throws when the directory is unreadable. */
+export const loadSnapshot = async (dir: string): Promise<Snapshot> => {
+  const meta = snapshotMetaSchema.parse(
+    JSON.parse(await readFile(resolve(dir, "meta.json"), "utf8"))
+  );
+  const bundle = await sizeBundle(resolve(dir, "index.html"));
+  const lighthouse = await readLighthouse(resolve(dir, "lighthouse-viewer.json"), meta.lhStatus);
+  const files = (await readdir(dir)).sort();
+  return { bundle, lighthouse, meta, files };
+};
+
+const isReadableDir = async (dir: string): Promise<boolean> => {
+  try {
+    return (await stat(dir)).isDirectory();
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Load the baseline snapshot. Any failure (missing dir, expired artifact,
+ * incompatible meta) degrades to head-only mode — the PR must never be
+ * blocked by a bad baseline.
+ */
+export const loadBase = async (dir: string | undefined): Promise<BaseSnapshot> => {
+  if (dir === undefined) return { ok: false, reason: "no-baseline" };
+  if (!(await isReadableDir(dir))) return { ok: false, reason: "no-baseline" };
+  try {
+    return { ok: true, snapshot: await loadSnapshot(dir) };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(
+      `perf-report: base snapshot unreadable (${message}); falling back to head-only.\n`
+    );
+    return { ok: false, reason: "no-baseline" };
+  }
+};
+</file>
+
+<file path=".github/actions/perf-report-action/action.yml">
+name: Perf report
+description: Build a target, measure bundle sizes and Lighthouse headlines, compare against a default-branch baseline, and post a sticky PR comment with classified deltas.
+
+inputs:
+  build-command:
+    description: Shell command that builds the measured artifact (e.g. `bun run --filter @org/app build`).
+    required: true
+  bundle-file:
+    description: Path to the built file whose raw/gzip/brotli sizes are reported. Also labels the bundle table in the comment.
+    required: true
+  bundle-analyze-command:
+    description: Optional shell command that generates bundle stats (e.g. a treemap). Runs after the build when set.
+    required: false
+    default: ""
+  bundle-stats-file:
+    description: Optional path to a stats HTML file copied into the snapshot artifact as `bundle-stats.html`.
+    required: false
+    default: ""
+  lighthouse-command:
+    description: |
+      Optional shell command that runs Lighthouse and writes the JSON report to the `lighthouse-report` path. A failing command degrades the comment's Lighthouse section to "measurement failed" instead of failing the job. When empty, Lighthouse is skipped and the comment reports bundle sizes only.
+    required: false
+    default: ""
+  lighthouse-report:
+    description: Path where the Lighthouse JSON report lands after `lighthouse-command` runs.
+    required: false
+    default: perf-reports/lighthouse-viewer.json
+  noise-bands:
+    description: |
+      Optional JSON object overriding the per-metric noise bands, e.g. `{"timing": {"absolute": 500, "relative": 0.2}}`. Keys: `bundle` (bytes), `score` (0-1 scale), `timing` (ms), `cls`. Each band takes `absolute` and optional `relative` thresholds; a delta must clear both to count as a regression. Defaults: bundle >= 1 KiB and >= 5%, score >= 3 pts, timing >= 200 ms and >= 10%, CLS >= 0.01.
+    required: false
+    default: ""
+  baseline-lookback:
+    description: How many recent successful default-branch runs of the calling workflow to probe for a baseline artifact.
+    required: false
+    default: "5"
+  comment-header:
+    description: Sticky-comment header key. Lets a repo post multiple independent perf comments.
+    required: false
+    default: Perf
+  github-token:
+    description: |
+      Token for baseline discovery (`gh run list` / `gh run download`, needs `actions: read`) and the sticky comment (needs `pull-requests: write`). The workflow's default token is sufficient; pass it explicitly when the calling job overrides permissions.
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  regression-count:
+    description: Number of metrics that crossed their noise band in the unfavorable direction. "0" when there is no baseline or the report degraded.
+    value: ${{ steps.report.outputs.regression-count }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: 1.x
+
+    - name: Install action dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: bun install --frozen-lockfile --filter @code-assistants/perf-report-action
+
+    - name: Build target
+      shell: bash
+      env:
+        BUILD_COMMAND: ${{ inputs.build-command }}
+        BUNDLE_ANALYZE_COMMAND: ${{ inputs.bundle-analyze-command }}
+      run: |
+        if [ -z "$BUILD_COMMAND" ]; then
+          echo "::error::build-command input is required"
+          exit 1
+        fi
+        bash -c "$BUILD_COMMAND"
+        if [ -n "$BUNDLE_ANALYZE_COMMAND" ]; then
+          bash -c "$BUNDLE_ANALYZE_COMMAND"
+        fi
+
+    # Lighthouse can flake on shared runners. Continue on error so a bad run
+    # degrades the comment to "measurement failed" instead of failing the job.
+    - name: Run Lighthouse
+      id: lighthouse
+      if: inputs.lighthouse-command != ''
+      shell: bash
+      continue-on-error: true
+      env:
+        LIGHTHOUSE_COMMAND: ${{ inputs.lighthouse-command }}
+      run: bash -c "$LIGHTHOUSE_COMMAND"
+
+    # head_ref is attacker-controllable on PRs (a fork can name its branch
+    # `foo"$(cmd)`). Route ref-derived values through env vars and build
+    # meta.json via jq so values are JSON-escaped and never re-evaluated by
+    # the shell.
+    - name: Snapshot head perf outputs
+      shell: bash
+      env:
+        BUNDLE_FILE: ${{ inputs.bundle-file }}
+        BUNDLE_STATS_FILE: ${{ inputs.bundle-stats-file }}
+        LIGHTHOUSE_REPORT: ${{ inputs.lighthouse-report }}
+        LIGHTHOUSE_CONFIGURED: ${{ inputs.lighthouse-command != '' }}
+        LH_OUTCOME: ${{ steps.lighthouse.outcome }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        HEAD_REF: ${{ github.head_ref || github.ref_name }}
+        HEAD_RUN_ID: ${{ github.run_id }}
+        HEAD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        set -eo pipefail
+        if [ ! -f "$BUNDLE_FILE" ]; then
+          echo "::error::bundle-file not found at $BUNDLE_FILE — check build-command and bundle-file inputs"
+          exit 1
+        fi
+        mkdir -p perf-snapshot
+        cp "$BUNDLE_FILE" perf-snapshot/index.html
+        if [ -n "$BUNDLE_STATS_FILE" ] && [ -f "$BUNDLE_STATS_FILE" ]; then
+          cp "$BUNDLE_STATS_FILE" perf-snapshot/bundle-stats.html
+        fi
+        LH_STATUS="failed"
+        if [ "$LIGHTHOUSE_CONFIGURED" != "true" ]; then
+          LH_STATUS="skipped"
+        elif [ "$LH_OUTCOME" = "success" ] && [ -f "$LIGHTHOUSE_REPORT" ]; then
+          cp "$LIGHTHOUSE_REPORT" perf-snapshot/lighthouse-viewer.json
+          LH_STATUS="success"
+        fi
+        jq -n \
+          --arg sha "$HEAD_SHA" \
+          --arg ref "$HEAD_REF" \
+          --arg runId "$HEAD_RUN_ID" \
+          --arg runUrl "$HEAD_RUN_URL" \
+          --arg lhStatus "$LH_STATUS" \
+          '{sha: $sha, ref: $ref, runId: $runId, runUrl: $runUrl, lhStatus: $lhStatus}' \
+          > perf-snapshot/meta.json
+
+    # Walk back through recent successful default-branch runs of the calling
+    # workflow and pull the first one that still has the artifact (older runs
+    # may have expired). Always exits 0 — a missing baseline must not fail the
+    # workflow. The workflow FILE name is derived from GITHUB_WORKFLOW_REF so
+    # renaming the workflow's display name does not orphan baseline history.
+    #
+    # Fork PR guard: `pull-requests: write` is not granted to fork
+    # `pull_request` runs, so the comment steps would fail with 403. Skip
+    # baseline-fetch + comment-generate + sticky-comment entirely on fork PRs.
+    - name: Find baseline
+      if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        WORKFLOW_REF: ${{ github.workflow_ref }}
+        BASELINE_LOOKBACK: ${{ inputs.baseline-lookback }}
+      run: |
+        set +e
+        mkdir -p perf-baseline
+        WORKFLOW_FILE="${WORKFLOW_REF#*/.github/workflows/}"
+        WORKFLOW_FILE="${WORKFLOW_FILE%@*}"
+        RUN_IDS=$(gh run list \
+          --branch "$DEFAULT_BRANCH" \
+          --workflow "$WORKFLOW_FILE" \
+          --status success \
+          --limit "$BASELINE_LOOKBACK" \
+          --json databaseId \
+          --jq '.[].databaseId' 2>/dev/null)
+        if [ -z "$RUN_IDS" ]; then
+          echo "No successful $DEFAULT_BRANCH runs of $WORKFLOW_FILE yet — head-only mode."
+          exit 0
+        fi
+        while IFS= read -r id; do
+          [ -z "$id" ] && continue
+          echo "Trying baseline from run $id..."
+          if gh run download "$id" --name perf-snapshot-main --dir perf-baseline/ 2>/dev/null; then
+            echo "Baseline downloaded from run $id."
+            exit 0
+          fi
+        done <<< "$RUN_IDS"
+        echo "All $BASELINE_LOOKBACK recent $DEFAULT_BRANCH runs had no usable artifact (expired or missing) — head-only mode."
+        rm -rf perf-baseline
+        mkdir -p perf-baseline
+        exit 0
+
+    # MUST exit 0 — the gate lives in a future follow-up; do not add
+    # --fail-on-regression here. The generator writes regression-count to
+    # GITHUB_OUTPUT itself.
+    - name: Generate comment
+      id: report
+      if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+      shell: bash
+      env:
+        BUNDLE_LABEL: ${{ inputs.bundle-file }}
+        NOISE_BANDS: ${{ inputs.noise-bands }}
+      run: |
+        bun "${{ github.action_path }}/src/perfReport.ts" \
+          --head perf-snapshot \
+          --base perf-baseline \
+          > perf-comment.md || true
+
+    # Sticky comment posts once per PR and updates in place on subsequent
+    # pushes. `continue-on-error` is a belt-and-suspenders safety net for
+    # token edge cases.
+    - name: Sticky perf comment
+      if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+      continue-on-error: true
+      uses: marocchino/sticky-pull-request-comment@v2
+      with:
+        header: ${{ inputs.comment-header }}
+        path: perf-comment.md
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+
+    # Only pull_request and default-branch push runs produce meaningfully
+    # named artifacts; other events (workflow_dispatch, feature-branch push)
+    # skip the upload instead of failing on if-no-files-found or poisoning
+    # the baseline name.
+    - name: Upload perf snapshot
+      if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref_name == github.event.repository.default_branch)
+      uses: actions/upload-artifact@v4
+      with:
+        name: >-
+          ${{
+            github.event_name == 'pull_request'
+              && format('perf-snapshot-pr-{0}', github.event.pull_request.number)
+              || 'perf-snapshot-main'
+          }}
+        path: perf-snapshot/
+        retention-days: 30
+        if-no-files-found: error
+</file>
+
+<file path=".github/actions/perf-report-action/package.json">
+{
+  "name": "@code-assistants/perf-report-action",
+  "version": "0.1.0",
+  "description": "Composite GitHub Action that posts a sticky PR comment with bundle-size and Lighthouse deltas against a main-branch baseline.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "release": {
+    "type": "github-action"
+  },
+  "agents": {
+    "rules": "Bun",
+    "language": "typescript"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "clean": "rm -rf node_modules .turbo"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "typescript": "6.0.3"
+  }
+}
+</file>
+
+<file path=".github/actions/perf-report-action/README.md">
+# Perf report
+
+Composite GitHub Action that builds a target, measures bundle sizes (raw / gzip / brotli) and Lighthouse headlines (Performance, Accessibility, LCP, TBT, CLS, TTI), compares them against a baseline from the default branch, and posts a single sticky PR comment with the deltas classified against per-metric noise bands.
+
+Reporting-only by design: the job never fails on a regression. Regressions surface as commentary (and the `regression-count` output); a hard-fail gate is a deliberate follow-up.
+
+## How it works
+
+```text
+build-command → bundle-file sizes ┐
+lighthouse-command → report JSON  ├→ head snapshot ─┐
+                                  ┘                 ├→ classified deltas → sticky comment
+gh run download (≤ lookback main runs) → baseline ──┘                      + artifact upload
+```
+
+On every run the action builds the target and snapshots the head measurements. On same-repo `pull_request` runs it additionally walks back through up to `baseline-lookback` recent successful default-branch runs of the **calling workflow**, downloads the first `perf-snapshot-main` artifact that still exists, renders the comparison, and upserts the sticky comment (keyed by `comment-header`). On `push` to the default branch it only uploads the snapshot — that upload is what future PRs use as their baseline.
+
+## Usage
+
+```yaml
+name: Perf
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# PR runs are cancelled by newer pushes to the same branch. Main runs are
+# never cancelled — every commit on main must produce its own baseline
+# snapshot, otherwise downstream PRs lose comparison points.
+concurrency:
+  group: >-
+    ${{
+      github.event_name == 'pull_request'
+        && format('perf-pr-{0}', github.event.pull_request.number)
+        || format('perf-main-{0}', github.sha)
+    }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  pull-requests: write
+  actions: read
+
+jobs:
+  perf:
+    name: Report
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      # Your toolchain + dependency install/caching stay here — the action
+      # only runs the commands you pass it.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+
+      - uses: awinogradov/code-assistants/.github/actions/perf-report-action@v1
+        with:
+          build-command: bun run --filter @org/app build
+          bundle-file: apps/app/dist/embed/index.html
+          bundle-analyze-command: bun run --filter @org/app bundle-analyze
+          bundle-stats-file: apps/app/bundle-stats/index.html
+          lighthouse-command: bun run perf
+```
+
+## Inputs
+
+| Input                    | Required | Default                               | Description                                                                   |
+| ------------------------ | -------- | ------------------------------------- | ----------------------------------------------------------------------------- |
+| `build-command`          | yes      | —                                     | Shell command that builds the measured artifact                               |
+| `bundle-file`            | yes      | —                                     | Built file whose raw/gzip/brotli sizes are reported; labels the bundle table  |
+| `bundle-analyze-command` | no       | `""`                                  | Optional stats/treemap generation, runs after the build                       |
+| `bundle-stats-file`      | no       | `""`                                  | Stats HTML copied into the snapshot artifact as `bundle-stats.html`           |
+| `lighthouse-command`     | no       | `""`                                  | Command producing the Lighthouse JSON report; empty skips Lighthouse entirely |
+| `lighthouse-report`      | no       | `perf-reports/lighthouse-viewer.json` | Where the Lighthouse report lands                                             |
+| `noise-bands`            | no       | `""`                                  | JSON override of per-metric noise bands (see Behavior)                        |
+| `baseline-lookback`      | no       | `5`                                   | Recent successful default-branch runs probed for a baseline artifact          |
+| `comment-header`         | no       | `Perf`                                | Sticky-comment header key — vary it to post multiple independent comments     |
+| `github-token`           | no       | the workflow's `github.token`         | Token for baseline discovery and the sticky comment                           |
+
+## Outputs
+
+| Output             | Description                                                                                                                                                 |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `regression-count` | Metrics that crossed their noise band in the unfavorable direction. `0` when there is no baseline or the report degraded. Hook for a future hard-fail gate. |
+
+## Permissions
+
+The calling job owns the permissions (a composite action cannot set them):
+
+- `pull-requests: write` — sticky comment
+- `actions: read` — `gh run list` / `gh run download` for baseline discovery
+- `contents: read` — checkout
+
+## Behavior
+
+- **Noise bands.** A delta counts as a regression only when it clears the band's `absolute` AND (where defined) `relative` thresholds in the unfavorable direction; inside the band the Δ column renders `≈ 0` so reviewers don't chase sub-noise variance. Defaults: bundle ≥ 1 KiB and ≥ 5%, Lighthouse scores ≥ 3 points, timings ≥ 200 ms and ≥ 10%, CLS ≥ 0.01. Override per metric kind via `noise-bands`, e.g. `{"timing": {"absolute": 500, "relative": 0.2}}` — a malformed override degrades the comment to "Report generation failed" naming the mistake, never fails the job.
+- **Verdict line.** ✅ `within budget` (everything inside bands or improved) · ⚠️ `warning — N metric(s) regressed` with a `**Regressions**` list · 🆕 `no baseline available` (first runs after adoption) · 💔 `Lighthouse measurement failed` (the bundle table still renders).
+- **Baseline mechanics.** The baseline is the `perf-snapshot-main` artifact of a recent successful default-branch run of the calling workflow (matched by workflow file name, so renaming the workflow's display name is safe). Artifacts expire (30-day retention) — when all probed runs lack one, the comment renders head-only with a 🆕 verdict and this PR's merge establishes a fresh baseline. `gh run list --status success` filters on the whole run's conclusion: if your perf workflow has other jobs that fail on main, baselines starve — keep the perf job in its own workflow.
+- **Fork PRs.** `pull-requests: write` is not granted to fork `pull_request` runs, so baseline discovery, comment generation, and the sticky comment are skipped on PRs from forks. The build and snapshot still run.
+- **Event matrix.** Same-repo `pull_request`: full flow, artifact `perf-snapshot-pr-<n>`. Default-branch `push`: build + snapshot + artifact `perf-snapshot-main` (no comment). Other events: build + snapshot only, no upload.
+- **Lighthouse degrade.** A failing `lighthouse-command` or unreadable/partial report degrades the Lighthouse section (the run stays green); an empty `lighthouse-command` omits the section entirely for bundle-only consumers.
+
+## Versioning
+
+Reference the action by a tag of this repo, e.g.:
+
+```yaml
+uses: awinogradov/code-assistants/.github/actions/perf-report-action@v1
+```
+
+Pin to a tag for explicit control, or use `@main` to always pick up the latest behavior.
+</file>
+
+<file path=".github/actions/perf-report-action/tsconfig.json">
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["bun"]
+  },
+  "include": ["*.ts", "src/**/*.ts"]
+}
 </file>
 
 <file path=".github/actions/release-action/.release_notes/0.1.0.md">
@@ -45103,6 +46664,7 @@ export default config;
     ".github/actions/code-review-cost-monitor",
     ".github/actions/auto-label",
     ".github/actions/validate-actions",
+    ".github/actions/perf-report-action",
     "claude-plugins/*",
     "packages/*"
   ],
@@ -45217,6 +46779,7 @@ The `docs/` guides are numbered chapters in reading order — newcomers start at
 - [`repomix-sync`](./.github/actions/repomix-sync/README.md) — sync the `repomix-pack` workflow and `repomix.config.json` from upstream so each consumer commits its own codebase snapshot
 - [`release-sync`](./.github/actions/release-sync/README.md) — sync the release pipeline workflows (`release`, `publish`, `release-automerge`) from upstream so each consumer runs the same release flow
 - [`validate-actions`](./.github/actions/validate-actions/README.md) — lint changed workflow files and composite action inline shell on pull requests
+- [`perf-report-action`](./.github/actions/perf-report-action/README.md) — build a target, measure bundle sizes and Lighthouse headlines, compare against a default-branch baseline, and post a sticky PR comment with classified deltas
 
 ## Contributing
 
