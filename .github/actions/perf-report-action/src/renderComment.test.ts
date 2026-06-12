@@ -44,6 +44,7 @@ describe("renderComment", () => {
     expect(markdown).toContain("### 📦 Bundle — `dist/embed/index.html`");
     expect(markdown).toContain("### ⚡ Lighthouse");
     expect(markdown).toContain("| 🟢 | Gzip | 646.0 KiB | 646.0 KiB | ≈ 0 |");
+    expect(markdown).toContain("| 🟢 | CLS | 0.001 | 0.001 | ≈ 0 |");
     expect(markdown).toContain("✅ ≥ 90");
     expect(markdown).not.toContain("**Regressions**");
     expect(markdown).toContain("Baseline <code>abcdef1</code> → Head <code>abcdef1</code>");

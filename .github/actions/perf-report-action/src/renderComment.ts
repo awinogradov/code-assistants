@@ -75,7 +75,7 @@ const signedCls =
   (band: NoiseBand) =>
   (delta: MetricDelta): string => {
     if (delta.kind === "n/a") return "—";
-    if (!isMeaningful(delta, band)) return "—";
+    if (!isMeaningful(delta, band)) return "≈ 0";
     const sign = delta.absolute >= 0 ? "+" : "-";
     return `${sign}${Math.abs(delta.absolute).toFixed(3)}`;
   };
