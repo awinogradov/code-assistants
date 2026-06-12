@@ -187,7 +187,7 @@ async function main(): Promise<void> {
   core.setOutput('pr-number', String(pr.number));
   core.setOutput('pr-url', pr.htmlUrl);
 
-  core.info(`Pull request ready: ${pr.htmlUrl}`);
+  core.notice(`Pull request ready: ${pr.htmlUrl}`, { title: env.title });
   await writePrReadySummary(pr, env.title, paths);
 }
 
