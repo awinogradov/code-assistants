@@ -71,6 +71,7 @@ The `docs/` guides are numbered chapters in reading order — newcomers start at
 - [`repomix-sync`](./.github/actions/repomix-sync/README.md) — sync the `repomix-pack` workflow and `repomix.config.json` from upstream so each consumer commits its own codebase snapshot
 - [`release-sync`](./.github/actions/release-sync/README.md) — sync the release pipeline workflows (`release`, `publish`, `release-automerge`) from upstream so each consumer runs the same release flow
 - [`validate-actions`](./.github/actions/validate-actions/README.md) — lint changed workflow files and composite action inline shell on pull requests
+- [`perf-report-action`](./.github/actions/perf-report-action/README.md) — build a target, measure bundle sizes and Lighthouse headlines, compare against a default-branch baseline, and post a sticky PR comment with classified deltas
 
 ## Contributing
 
