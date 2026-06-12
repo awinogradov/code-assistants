@@ -340,6 +340,7 @@ describe("resolveRunMode", () => {
 describe("buildRunSummary", () => {
   test("maps timings and usage onto the snake_case log fields", () => {
     const messages = [
+      { type: "system", subtype: "init", model: "claude-opus-4-8" },
       { type: "assistant", message: { content: [{ type: "tool_use" }] } },
       {
         type: "result",
@@ -353,8 +354,10 @@ describe("buildRunSummary", () => {
         },
       },
     ];
-    expect(buildRunSummary("review", messages, { modelMs: 34000 })).toEqual({
+    expect(buildRunSummary("review", messages, { modelMs: 34000 }, "claude-sonnet-4-6")).toEqual({
       mode: "review",
+      // the init message's model (what actually ran) wins over the configured fallback
+      model: "claude-opus-4-8",
       model_ms: 34000,
       // total input = input(500) + cache_read(400) + cache_creation(20)
       tokens_in: 920,
@@ -368,8 +371,9 @@ describe("buildRunSummary", () => {
   });
 
   test("defaults usage fields to 0 when no result message is present", () => {
-    expect(buildRunSummary("react", [], { modelMs: 5 })).toEqual({
+    expect(buildRunSummary("react", [], { modelMs: 5 }, "claude-sonnet-4-6")).toEqual({
       mode: "react",
+      model: "claude-sonnet-4-6",
       model_ms: 5,
       tokens_in: 0,
       tokens_out: 0,

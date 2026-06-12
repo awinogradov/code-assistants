@@ -16,6 +16,7 @@ const reasonsOutput = JSON.stringify({ reasons: [{ name: "Auto label", reason: "
 
 const runSummary = JSON.stringify({
   mode: "preflight",
+  model: "claude-sonnet-4-6",
   model_ms: 1200,
   tokens_in: 100,
   tokens_out: 20,
