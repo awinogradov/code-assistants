@@ -8,7 +8,7 @@
  *   const rules = resolvePackageAgentsRules(await readPackageJson());
  *   // rules: 'Bun' | 'Bun+React+Tailwind' | 'NodeJS+React' | 'NodeJS+React+Tailwind'
  *
- * @see https://github.com/awinogradov/code-assistants/blob/main/docs/agents-field.md
+ * @see https://github.com/awinogradov/code-assistants/blob/main/docs/02-agents-field.md
  */
 
 import { z } from 'zod';
@@ -23,7 +23,7 @@ export const agentsRulesValues = [
 export type AgentsRules = (typeof agentsRulesValues)[number];
 
 export const agentsFieldDocsUrl =
-  'https://github.com/awinogradov/code-assistants/blob/main/docs/agents-field.md';
+  'https://github.com/awinogradov/code-assistants/blob/main/docs/02-agents-field.md';
 
 const packageJsonSchema = z
   .object({

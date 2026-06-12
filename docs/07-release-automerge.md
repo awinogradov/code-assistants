@@ -1,5 +1,7 @@
 # Release auto-merge
 
+> Chapter 7 of the [repository docs](../README.md#repository-docs).
+
 Release PRs (branch `release-<version>`) are auto-approved by
 [`code-review-action`](../.github/actions/code-review-action/README.md) but then
 sit approved-but-unmerged until a human clicks merge, stalling the publish
@@ -71,7 +73,7 @@ the merge with no manual step.
   preflight (see [the shared `checkStatus` helper][checkstatus]), deduplicated by name
   and excluding the action's own job.
 - **Opt-in gate (default off):** the action merges only when `release.automerge`
-  resolves to `true` (see the [`release` field spec](./release-field.md)). Because
+  resolves to `true` (see the [`release` field spec](./06-release-field.md)). Because
   a monorepo opens one release PR **per member** (`release-<member>-<version>`),
   the gate resolves per member: it identifies the releasing member from the PR's
   `<member>/.release_notes/<version>.md` file (the same signal the publish step
@@ -157,7 +159,7 @@ directories these workflows invoke (`release-action`, `release-automerge`) are
 schedule.
 
 The merge this action performs is what feeds the publish step; see the
-[`release` field spec](./release-field.md) for how `release-action` then selects
+[`release` field spec](./06-release-field.md) for how `release-action` then selects
 artifacts on publish.
 
 [checkstatus]: ../packages/actions-core/src/checkStatus.ts

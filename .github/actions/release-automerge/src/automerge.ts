@@ -290,7 +290,7 @@ async function run(config: AutomergeConfig): Promise<void> {
 
   if (!(await fetchAutomergeOptIn(config, pr.number))) {
     console.log(
-      "Skip: auto-merge disabled — set release.automerge:true on the release member or root package.json (see docs/release-automerge.md)",
+      "Skip: auto-merge disabled — set release.automerge:true on the release member or root package.json (see docs/07-release-automerge.md)",
     );
     return;
   }

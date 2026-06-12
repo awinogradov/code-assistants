@@ -8,7 +8,7 @@ import {
 
 describe('resolvePackageAgentsRules', () => {
   test('rejects empty input with docs link', () => {
-    expect(() => resolvePackageAgentsRules('')).toThrow(/agents-field\.md/);
+    expect(() => resolvePackageAgentsRules('')).toThrow(/02-agents-field\.md/);
   });
 
   test('rejects non-JSON input with docs link and allowed values', () => {

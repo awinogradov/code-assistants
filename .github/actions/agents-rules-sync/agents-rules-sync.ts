@@ -108,7 +108,7 @@ async function main(): Promise<void> {
   if (raw === null) {
     throw new Error(
       `package.json not found at ${env.destRepo.owner}/${env.destRepo.name}@${env.base}. ` +
-        `Add a package.json with an \`agents.rules\` field — see https://github.com/awinogradov/code-assistants/blob/main/docs/agents-field.md`,
+        `Add a package.json with an \`agents.rules\` field — see https://github.com/awinogradov/code-assistants/blob/main/docs/02-agents-field.md`,
     );
   }
 

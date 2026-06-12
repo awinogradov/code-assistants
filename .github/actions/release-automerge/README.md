@@ -22,10 +22,10 @@ false`, read at the PR head SHA,
   (15s interval, 8-minute cap inside the 10-minute job) rather than skipped; a
   failed check skips, as does one still pending after the cap.
 
-> **The `APPROVED` decision comes from auto-approval.** [`code-review-action`](../code-review-action/README.md) posts it for trusted release-PR authors. That requires the release PR to be authored by an identity **distinct** from the reviewer (GitHub forbids approving your own PR); see [Author and approver must be distinct identities](../../../docs/release-automerge.md#author-and-approver-must-be-distinct-identities). Without a recorded approval this action never merges.
+> **The `APPROVED` decision comes from auto-approval.** [`code-review-action`](../code-review-action/README.md) posts it for trusted release-PR authors. That requires the release PR to be authored by an identity **distinct** from the reviewer (GitHub forbids approving your own PR); see [Author and approver must be distinct identities](../../../docs/07-release-automerge.md#author-and-approver-must-be-distinct-identities). Without a recorded approval this action never merges.
 
 > **Opt-in (default off).** Auto-merge is disabled unless `release.automerge`
-> resolves to `true` (see the [`release` field spec](../../../docs/release-field.md)).
+> resolves to `true` (see the [`release` field spec](../../../docs/06-release-field.md)).
 > A monorepo opens one release PR per member (`release-<member>-<version>`), so the
 > gate resolves per member: it reads the member's own `release.automerge` and falls
 > back to the root default. Set it on the root to enable the whole repo, or on a
@@ -39,7 +39,7 @@ evaluation is rejected rather than merged unreviewed. The check aggregation reus
 the same logic as the AI-review preflight (the shared
 [`checkStatus`](../../../packages/actions-core/src/checkStatus.ts) helper),
 deduplicated by name and excluding the action's own job. See the
-[Release auto-merge flow](../../../docs/release-automerge.md) doc for the full
+[Release auto-merge flow](../../../docs/07-release-automerge.md) doc for the full
 picture and the downstream-sync design.
 
 ## Usage

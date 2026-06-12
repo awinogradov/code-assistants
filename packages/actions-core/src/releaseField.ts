@@ -10,7 +10,7 @@
  * Detection is fail-closed for `type`: a missing field or an unrecognized
  * value throws an `Error` referencing the spec doc.
  *
- * @see ../../../docs/release-field.md
+ * @see ../../../docs/06-release-field.md
  *
  * @example
  * ```typescript
@@ -23,7 +23,7 @@
  * ```
  */
 
-const DOCS_LINK = "docs/release-field.md";
+const DOCS_LINK = "docs/06-release-field.md";
 
 /**
  * Recognized release types. Order mirrors the table in the release-action
@@ -146,7 +146,7 @@ function readSlack(release: Record<string, unknown>): string | undefined {
  *   this function performs the runtime validation).
  * @returns The validated {@link ReleaseConfig}.
  * @throws {Error} when the field is missing or invalid. The message names the
- *   field, lists allowed values, and points to `docs/release-field.md`.
+ *   field, lists allowed values, and points to `docs/06-release-field.md`.
  *
  * @example
  * ```typescript

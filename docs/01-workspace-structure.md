@@ -1,10 +1,12 @@
 # Workspace structure
 
+> Chapter 1 of the [repository docs](../README.md#repository-docs).
+
 Where new actions, packages, and apps go in this repository, and how each kind plugs into the Bun workspace, `tsconfig.json`, `action.yml`, and the Turbo task graph.
 
 ## Overview
 
-This repo is a single Bun workspace (`bun@1`). Workspace members live in two places today: composite GitHub Actions under `.github/actions/<name>/` and shared libraries under `packages/<name>/`. Standalone apps (CLIs, services) are reserved for a future iteration.
+This repo is a single Bun workspace (`bun@1`). Workspace members live in three places today: composite GitHub Actions under `.github/actions/<name>/`, shared libraries under `packages/<name>/`, and Claude Code plugins under `claude-plugins/<name>/`. Standalone apps (CLIs, services) are reserved for a future iteration.
 
 The top-level layout — illustrative, not exhaustive:
 
@@ -47,13 +49,15 @@ Directory contents:
 
 Worked examples:
 
-| Action                                                         | Layout              | Entry invoked from `action.yml`                  |
-| -------------------------------------------------------------- | ------------------- | ------------------------------------------------ |
-| [`files-sync`](../.github/actions/files-sync/)                 | root entry + `src/` | `${{ github.action_path }}/files-sync.ts`        |
-| [`agents-rules-sync`](../.github/actions/agents-rules-sync/)   | root entry + `src/` | `${{ github.action_path }}/agents-rules-sync.ts` |
-| [`release-action`](../.github/actions/release-action/)         | `src/`-only         | `${{ github.action_path }}/src/<entry>.ts`       |
-| [`code-review-action`](../.github/actions/code-review-action/) | `src/`-only         | `${{ github.action_path }}/src/<entry>.ts`       |
-| [`auto-label`](../.github/actions/auto-label/)                 | `src/`-only         | `${{ github.action_path }}/src/autoLabel.ts`     |
+| Action                                                         | Layout              | Entry invoked from `action.yml`                    |
+| -------------------------------------------------------------- | ------------------- | -------------------------------------------------- |
+| [`files-sync`](../.github/actions/files-sync/)                 | root entry + `src/` | `${{ github.action_path }}/files-sync.ts`          |
+| [`agents-rules-sync`](../.github/actions/agents-rules-sync/)   | root entry + `src/` | `${{ github.action_path }}/agents-rules-sync.ts`   |
+| [`release-action`](../.github/actions/release-action/)         | `src/`-only         | `${{ github.action_path }}/src/<entry>.ts`         |
+| [`release-automerge`](../.github/actions/release-automerge/)   | `src/`-only         | `${{ github.action_path }}/src/automerge.ts`       |
+| [`code-review-action`](../.github/actions/code-review-action/) | `src/`-only         | `${{ github.action_path }}/src/<entry>.ts`         |
+| [`auto-label`](../.github/actions/auto-label/)                 | `src/`-only         | `${{ github.action_path }}/src/autoLabel.ts`       |
+| [`validate-actions`](../.github/actions/validate-actions/)     | `src/`-only         | `${{ github.action_path }}/src/validateActions.ts` |
 
 Required `package.json` scripts: see [Workspace scripts](#workspace-scripts).
 
@@ -107,11 +111,11 @@ Consumers import per-module (copy-pasted from `.github/actions/files-sync/src/ch
 import { fetchRawContent } from "@code-assistants/actions-core/fetchRawContent";
 ```
 
-Required scripts: see [Workspace scripts](#workspace-scripts) (`test` is opt-in for packages — add it only when test files exist; `actions-core` today has none).
+Required scripts: see [Workspace scripts](#workspace-scripts) (`test` is opt-in for packages — add it only when test files exist).
 
 **Extract vs. duplicate:** extract into a package when two or more actions need the same helper. Duplicate when it's used in only one place.
 
-Worked example: [`actions-core`](../packages/actions-core/) (single export `fetchRawContent`).
+Worked example: [`actions-core`](../packages/actions-core/) (four exports: `fetchRawContent`, `checkStatus`, `parseRepo`, `releaseField`).
 
 ## Apps
 
@@ -135,7 +139,7 @@ Turbo handles per-package execution and caching. You don't need to `cd` into the
 
 ### The `agents` field
 
-The root `package.json` declares the repo's stack via a top-level `agents` object — see [`docs/agents-field.md`](./agents-field.md) for the contract. This repo sets:
+The root `package.json` declares the repo's stack via a top-level `agents` object — see [`docs/02-agents-field.md`](./02-agents-field.md) for the contract. This repo sets:
 
 ```json
 {
@@ -148,7 +152,7 @@ The root `package.json` declares the repo's stack via a top-level `agents` objec
 
 ### The `release` field
 
-A workspace member's `package.json` declares its release config via a top-level `release` object — see [`docs/release-field.md`](./release-field.md) for the contract. Consumed by [`release-action`](../.github/actions/release-action/README.md) to pick the version source, npm-publish step, major-version tag, and the optional Slack notification channel. The repo-root `package.json` may also declare `release.members` to opt specific workspace paths into monorepo mode — see [`docs/release-field.md`](./release-field.md#monorepo-root) and the [release-action monorepo section](../.github/actions/release-action/README.md#monorepo-mode). Example for a Node.js library member:
+A workspace member's `package.json` declares its release config via a top-level `release` object — see [`docs/06-release-field.md`](./06-release-field.md) for the contract. Consumed by [`release-action`](../.github/actions/release-action/README.md) to pick the version source, npm-publish step, major-version tag, and the optional Slack notification channel. The repo-root `package.json` may also declare `release.members` to opt specific workspace paths into monorepo mode — see [`docs/06-release-field.md`](./06-release-field.md#monorepo-root) and the [release-action monorepo section](../.github/actions/release-action/README.md#monorepo-mode). Example for a Node.js library member:
 
 ```json
 {
@@ -164,12 +168,12 @@ A workspace member's `package.json` declares its release config via a top-level 
 
 Every TypeScript workspace member (actions and packages) declares its scripts in its own `package.json`. Turbo discovers them per-package — there is no central script registry to update when you add a member.
 
-| Script      | Required?                            | Command (today)              | Notes                                                                                                                                                                                                                            |
-| ----------- | ------------------------------------ | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `typecheck` | Yes                                  | `tsc --noEmit`               | Runs in Turbo's `typecheck` task. Always present in TS members.                                                                                                                                                                  |
-| `test`      | Yes for actions, opt-in for packages | `bun test`                   | Bun's runner handles unit, integration, and e2e tests in the same invocation — test files live alongside source under `src/` per CLAUDE.md §3.1. Add this script only when the member has tests (`actions-core` today has none). |
-| `clean`     | Yes                                  | `rm -rf node_modules .turbo` | Removes per-member install and Turbo caches.                                                                                                                                                                                     |
-| `build`     | Optional                             | (none today)                 | Add only when the member produces a compiled output. Today every member runs TypeScript directly via Bun (`bun <entry>.ts`), so no build step is needed.                                                                         |
+| Script      | Required?                            | Command (today)              | Notes                                                                                                                                                                                            |
+| ----------- | ------------------------------------ | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `typecheck` | Yes                                  | `tsc --noEmit`               | Runs in Turbo's `typecheck` task. Always present in TS members.                                                                                                                                  |
+| `test`      | Yes for actions, opt-in for packages | `bun test`                   | Bun's runner handles unit, integration, and e2e tests in the same invocation — test files live alongside source under `src/` per CLAUDE.md §3.1. Add this script only when the member has tests. |
+| `clean`     | Yes                                  | `rm -rf node_modules .turbo` | Removes per-member install and Turbo caches.                                                                                                                                                     |
+| `build`     | Optional                             | (none today)                 | Add only when the member produces a compiled output. Today every member runs TypeScript directly via Bun (`bun <entry>.ts`), so no build step is needed.                                         |
 
 **Other script names** (`lint`, `format`, `validate`, `prepare`) are root-only: they live in the root `package.json` and operate across the whole repo (Prettier, the `scripts/validate-plugins.ts` check, Husky setup). Do NOT duplicate them at the member level.
 
@@ -222,12 +226,12 @@ No CI matrix entry, no release-workflow registration, no extra `turbo.json` conf
 
 ## Current vs. target
 
-As of 2026-05-23.
+As of 2026-06-12.
 
-| Rule                                                      | State                                                                                                                      |
-| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| All source `.ts` (entries, helpers, tests) under `src/`   | Target — `files-sync` and `agents-rules-sync` still have root entries (configs like `*.config.ts` always stay at the root) |
-| Package name `@code-assistants/<name>-action` for actions | Current                                                                                                                    |
-| Package name `@code-assistants/<name>` for packages       | Current                                                                                                                    |
-| `test` script in every TS workspace member                | N/A — `actions-core` has none by design                                                                                    |
-| `apps/` directory                                         | Target — no apps exist yet                                                                                                 |
+| Rule                                                      | State                                                                                                                                                                                                                |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| All source `.ts` (entries, helpers, tests) under `src/`   | Target — `files-sync` and `agents-rules-sync` still have root entries (configs like `*.config.ts` always stay at the root)                                                                                           |
+| Package name `@code-assistants/<name>-action` for actions | Current — with two settled exceptions: directories already ending in `-action` keep their name as-is (`release-action`, `code-review-action`), and `release-automerge` is named `@code-assistants/release-automerge` |
+| Package name `@code-assistants/<name>` for packages       | Current                                                                                                                                                                                                              |
+| `test` script in every TS workspace member                | Current — every TS member, including `actions-core`, now has tests                                                                                                                                                   |
+| `apps/` directory                                         | Target — no apps exist yet                                                                                                                                                                                           |

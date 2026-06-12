@@ -19,7 +19,7 @@ describe("readReleaseField — type", () => {
   });
 
   test("missing-field error references the docs", () => {
-    expect(() => readReleaseField({ name: "x" })).toThrow(/docs\/release-field\.md/);
+    expect(() => readReleaseField({ name: "x" })).toThrow(/docs\/06-release-field\.md/);
   });
 
   test("throws when release is a bare string (old shape)", () => {
