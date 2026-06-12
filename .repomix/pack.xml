@@ -6430,6 +6430,7 @@ const reasonsOutput = JSON.stringify({ reasons: [{ name: "Auto label", reason: "
 
 const runSummary = JSON.stringify({
   mode: "preflight",
+  model: "claude-sonnet-4-6",
   model_ms: 1200,
   tokens_in: 100,
   tokens_out: 20,
@@ -7251,6 +7252,7 @@ describe("resolveRunMode", () => {
 describe("buildRunSummary", () => {
   test("maps timings and usage onto the snake_case log fields", () => {
     const messages = [
+      { type: "system", subtype: "init", model: "claude-opus-4-8" },
       { type: "assistant", message: { content: [{ type: "tool_use" }] } },
       {
         type: "result",
@@ -7264,8 +7266,10 @@ describe("buildRunSummary", () => {
         },
       },
     ];
-    expect(buildRunSummary("review", messages, { modelMs: 34000 })).toEqual({
+    expect(buildRunSummary("review", messages, { modelMs: 34000 }, "claude-sonnet-4-6")).toEqual({
       mode: "review",
+      // the init message's model (what actually ran) wins over the configured fallback
+      model: "claude-opus-4-8",
       model_ms: 34000,
       // total input = input(500) + cache_read(400) + cache_creation(20)
       tokens_in: 920,
@@ -7279,8 +7283,9 @@ describe("buildRunSummary", () => {
   });
 
   test("defaults usage fields to 0 when no result message is present", () => {
-    expect(buildRunSummary("react", [], { modelMs: 5 })).toEqual({
+    expect(buildRunSummary("react", [], { modelMs: 5 }, "claude-sonnet-4-6")).toEqual({
       mode: "react",
+      model: "claude-sonnet-4-6",
       model_ms: 5,
       tokens_in: 0,
       tokens_out: 0,
@@ -7659,7 +7664,7 @@ async function run(): Promise<void> {
   // Emit the run summary (log + step output) BEFORE emitOutputs, which may
   // process.exit(1) on a non-success result — keeping the footer data available
   // to the separate submitReview step even on a failed run.
-  const summary = buildRunSummary(resolveRunMode(config.prompt), messages, { modelMs });
+  const summary = buildRunSummary(resolveRunMode(config.prompt), messages, { modelMs }, config.model);
   log.info(summary, "Run summary.");
   await setOutput("run_summary", JSON.stringify(summary));
 
@@ -7704,6 +7709,22 @@ export function findResultMessage(messages: unknown[]): Record<string, unknown> 
     (m): m is Record<string, unknown> =>
       typeof m === "object" && m !== null && (m as Record<string, unknown>).type === "result"
   );
+}
+
+/**
+ * Extract the model that actually ran from the SDK `system`/`init` message,
+ * or `undefined` when the stream ended before init so the caller can fall
+ * back to the configured model.
+ */
+function findInitModel(messages: unknown[]): string | undefined {
+  const init = messages.find(
+    (m): m is Record<string, unknown> =>
+      typeof m === "object" &&
+      m !== null &&
+      (m as Record<string, unknown>).type === "system" &&
+      (m as Record<string, unknown>).subtype === "init"
+  );
+  return typeof init?.model === "string" ? init.model : undefined;
 }
 
 /** True when an assistant message content array holds at least one `tool_use` block. */
@@ -7770,19 +7791,23 @@ export interface PhaseTimings {
 }
 
 /**
- * Build the structured per-run summary: mode, phase timings, token usage, cost,
- * and tool round-trips. Returns the snake_case-keyed object that is logged as a
- * single line — separated from logging so the field mapping is unit-testable.
+ * Build the structured per-run summary: mode, model, phase timings, token
+ * usage, cost, and tool round-trips. Returns the snake_case-keyed object that
+ * is logged as a single line — separated from logging so the field mapping is
+ * unit-testable. The model comes from the SDK init message (what actually
+ * ran), with the configured model as the fallback.
  */
 export function buildRunSummary(
   mode: string,
   messages: unknown[],
-  timings: PhaseTimings
+  timings: PhaseTimings,
+  fallbackModel: string
 ): Record<string, number | string> {
   const usage = extractUsage(findResultMessage(messages));
 
   return {
     mode,
+    model: findInitModel(messages) ?? fallbackModel,
     model_ms: timings.modelMs,
     tokens_in: usage.tokensIn,
     tokens_out: usage.tokensOut,
@@ -7881,6 +7906,7 @@ import {
 
 const coreSummary: RunSummary = {
   mode: "review",
+  model: "claude-sonnet-4-6",
   model_ms: 34000,
   tokens_in: 500,
   tokens_out: 100,
@@ -7944,23 +7970,16 @@ describe("renderRunSummaryFooter", () => {
   });
 
   test("keeps the blank line after <br /> so the table renders inside <details>", () => {
-    expect(renderRunSummaryFooter(coreSummary, reviewer)).toContain(
-      "<br />\n\n| <sub>Metric</sub> | <sub>Value</sub> |",
-    );
+    expect(renderRunSummaryFooter(coreSummary, reviewer)).toContain("<br />\n\n| Metric | Value |");
   });
 
-  test("keeps the delimiter row free of <sub> so the table parses", () => {
+  test("formats durations as seconds and cost as USD", () => {
     const footer = renderRunSummaryFooter(coreSummary, reviewer);
-    expect(footer).toContain("\n| --- | --- |\n");
-    expect(footer).not.toContain("<sub>---");
-  });
-
-  test("formats durations as seconds and cost as USD in <sub> cells", () => {
-    const footer = renderRunSummaryFooter(coreSummary, reviewer);
-    expect(footer).toContain("| <sub>Model time</sub> | <sub>34.0s</sub> |");
-    expect(footer).toContain("| <sub>Cost (USD)</sub> | <sub>$0.35</sub> |");
-    expect(footer).toContain("| <sub>Tokens in / out</sub> | <sub>500 / 100</sub> |");
-    expect(footer).toContain("| <sub>Cache read / write</sub> | <sub>400 / 20</sub> |");
+    expect(footer).toContain("| Model | claude-sonnet-4-6 |");
+    expect(footer).toContain("| Model time | 34.0s |");
+    expect(footer).toContain("| Cost (USD) | $0.35 |");
+    expect(footer).toContain("| Tokens in / out | 500 / 100 |");
+    expect(footer).toContain("| Cache read / write | 400 / 20 |");
   });
 
   test("renders no fan-out rows (single-pass review)", () => {
@@ -8064,11 +8083,13 @@ const footerEndMarker = "<!-- run-summary-end -->";
 
 /**
  * Schema for the serialized per-run summary passed via the `RUN_SUMMARY` env.
- * Strict (no coercion): every metric must already be a number and `mode` a
- * known literal, so a malformed value can never reach the rendered markdown.
+ * Strict (no coercion): every metric must already be a number, `model` a
+ * string, and `mode` a known literal, so a malformed value can never reach
+ * the rendered markdown.
  */
 export const runSummarySchema = z.object({
   mode: z.enum(["review", "react", "unknown", "preflight"]),
+  model: z.string(),
   model_ms: z.number(),
   tokens_in: z.number(),
   tokens_out: z.number(),
@@ -8106,21 +8127,11 @@ function formatSeconds(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-/**
- * Render one table row with each cell wrapped in `<sub>` so GitHub draws the
- * run diagnostics in its smaller font, de-emphasizing them relative to the
- * review findings. The wrapping is per cell because GFM stops parsing a pipe
- * table that is wrapped in `<sub>` as a whole; cell values are trusted
- * internal metrics, so no HTML escaping is needed.
- */
-function formatSubRow(label: string, value: string): string {
-  return `| <sub>${label}</sub> | <sub>${value}</sub> |`;
-}
-
-/** Build the `<sub>`-wrapped markdown metric rows for the single-pass review run. */
+/** Build the markdown metric rows for the single-pass review run. */
 function buildRows(summary: RunSummary): string[] {
   const rows = [
     ["Mode", summary.mode],
+    ["Model", summary.model],
     ["Model time", formatSeconds(summary.model_ms)],
     ["Tool round-trips", String(summary.tool_round_trips)],
     ["Assistant turns", String(summary.num_turns)],
@@ -8129,15 +8140,13 @@ function buildRows(summary: RunSummary): string[] {
     ["Cost (USD)", `$${summary.cost_usd.toFixed(2)}`],
   ];
 
-  return rows.map(([label, value]) => formatSubRow(label, value));
+  return rows.map(([label, value]) => `| ${label} | ${value} |`);
 }
 
 /**
  * Render the run-summary footer: a visible `@<reviewer>` usage hint followed by
  * the marker-wrapped, collapsible metrics block (built from the shared
- * {@link buildMarkedDetailsBlock} helper). The table cells render in `<sub>`
- * small text (see {@link formatSubRow}) so the diagnostics stay visually
- * secondary to the review content.
+ * {@link buildMarkedDetailsBlock} helper).
  *
  * The hint is stable text and sits *outside* the strip markers so it survives
  * {@link stripRunSummaryFooter} and stays in the comment after dedup; only the
@@ -8156,8 +8165,7 @@ export function renderRunSummaryFooter(summary: RunSummary, reviewer: string): s
       startMarker: footerStartMarker,
       endMarker: footerEndMarker,
       summary: "Review run summary 🤖",
-      // The delimiter row stays bare: wrapping it in <sub> breaks GFM table parsing.
-      bodyLines: [formatSubRow("Metric", "Value"), "| --- | --- |", ...buildRows(summary)],
+      bodyLines: ["| Metric | Value |", "| --- | --- |", ...buildRows(summary)],
     }),
   ].join("\n");
 }
@@ -40090,7 +40098,7 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 
 ## Rendered footer
 
-`renderRunSummaryFooter` emits a visible `@<reviewer>` usage hint followed by the collapsible metrics block. The hint is stable text and sits **outside** the strip markers so it survives dedup stripping and stays in the comment; only the run-varying metrics are marker-bounded. Inside the block, the start marker sits directly above the `---` rule, and a blank line after `<br />` lets the GitHub-flavored markdown table render inside `<details>`. Every table cell is wrapped in `<sub>` so the diagnostics render in GitHub's smaller font and stay visually secondary to the review findings — per cell, not around the table, because GFM stops parsing a pipe table wrapped in inline HTML, and the `| --- | --- |` delimiter row stays bare for the same reason (GitHub also strips `style`/`class`, so `<sub>` is the only sanctioned small-text treatment).
+`renderRunSummaryFooter` emits a visible `@<reviewer>` usage hint followed by the collapsible metrics block. The hint is stable text and sits **outside** the strip markers so it survives dedup stripping and stays in the comment; only the run-varying metrics are marker-bounded. Inside the block, the start marker sits directly above the `---` rule, and a blank line after `<br />` lets the GitHub-flavored markdown table render inside `<details>`.
 
 ```text
 > 💡 `@review-bot <comment>` — Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.
@@ -40101,21 +40109,22 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 <summary>Review run summary 🤖</summary>
 <br />
 
-| <sub>Metric</sub> | <sub>Value</sub> |
+| Metric | Value |
 | --- | --- |
-| <sub>Mode</sub> | <sub>review</sub> |
-| <sub>Model time</sub> | <sub>34.0s</sub> |
-| <sub>Tool round-trips</sub> | <sub>10</sub> |
-| <sub>Assistant turns</sub> | <sub>3</sub> |
-| <sub>Tokens in / out</sub> | <sub>157825 / 36705</sub> |
-| <sub>Cache read / write</sub> | <sub>157000 / 800</sub> |
-| <sub>Cost (USD)</sub> | <sub>$0.35</sub> |
+| Mode | review |
+| Model | claude-sonnet-4-6 |
+| Model time | 34.0s |
+| Tool round-trips | 10 |
+| Assistant turns | 3 |
+| Tokens in / out | 157825 / 36705 |
+| Cache read / write | 157000 / 800 |
+| Cost (USD) | $0.35 |
 
 </details>
 <!-- run-summary-end -->
 ```
 
-**Tokens in** is the total input the model consumed — fresh input plus cache reads plus cache creation — so it stays plausible under heavy prompt caching (reading only the uncached `input_tokens` reports a misleading near-zero residual). **Cache read / write** is the breakdown of that total.
+**Model** is the model that actually served the run — read from the SDK's `system`/`init` message, falling back to the action's `model` input when the stream ends before init. **Tokens in** is the total input the model consumed — fresh input plus cache reads plus cache creation — so it stays plausible under heavy prompt caching (reading only the uncached `input_tokens` reports a misleading near-zero residual). **Cache read / write** is the breakdown of that total.
 
 **The footer is machine-consumed.** The scheduled [`code-review-cost-monitor`](../.github/actions/code-review-cost-monitor/README.md) action parses these tables back out of recent PR reviews to detect cost regressions, so the markers and the exact row labels above are a compatibility contract — renaming a label or restructuring the table breaks the monitor's parser (it fails loudly when a scan parses zero footers). The monitor's optional attribution step also reuses `runClaude.ts` as its model engine.
 
