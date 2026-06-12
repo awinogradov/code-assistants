@@ -8,7 +8,7 @@ repository into the current repository's `CLAUDE.md` and opens a single pull req
 the difference.
 
 The action reads the consumer's `agents.rules` field (see
-[docs/agents-field.md](../../../docs/agents-field.md)), builds the corresponding source path
+[docs/02-agents-field.md](../../../docs/02-agents-field.md)), builds the corresponding source path
 (`rules/<value>.md`), and delegates the diff and PR mechanics to the
 [`files-sync`](../files-sync/README.md) action. It does not require `actions/checkout` and
 never touches the runner's working tree.
@@ -105,7 +105,7 @@ See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/a
   to `CLAUDE.md` will be overwritten when the upstream rules file changes.
 - If `CLAUDE.md` already matches `rules/<value>.md`, no PR is created.
 - If `package.json` is missing, malformed, or lacks `agents.rules` (or its value is
-  unrecognized), the action fails with a link to `docs/agents-field.md` and the list of
+  unrecognized), the action fails with a link to `docs/02-agents-field.md` and the list of
   accepted values.
 
 ## Flow

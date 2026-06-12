@@ -1,5 +1,7 @@
 # Review run-summary footer
 
+> Chapter 3 of the [repository docs](../README.md#repository-docs).
+
 `code-review-action` instruments every review run with per-run metrics — model latency, token usage, cache hits, cost, and tool round-trips. These numbers were invaluable while optimizing the action, but they used to live only in the Actions run logs.
 
 The run-summary footer surfaces them directly under each review: a collapsed `<details>` block appended to the **main review comment and the preflight skip comment** — never on inline comments, never on `react`-mode replies — so reviewers can spot a slow or expensive run at a glance without digging through workflow logs. The skip-comment footer is described in "Preflight skip comments" below; the rest of this document covers the review path.

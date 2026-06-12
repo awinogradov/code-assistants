@@ -1,5 +1,7 @@
 # The `agents` field
 
+> Chapter 2 of the [repository docs](../README.md#repository-docs).
+
 Autopilot skills detect a repository's tech stack and source language by reading a custom `agents` object from the repo-root `package.json`. This document specifies the field, its accepted values, and how each consuming skill uses it.
 
 ## Why it exists
@@ -24,7 +26,7 @@ The field coexists with normal npm metadata. It is not consumed by npm, Bun, or 
 
 ### Workspaces
 
-Consuming skills always read the **repository-root** `package.json` to detect stack and language; workspace members are not walked. Members may declare their own `agents` field anyway, and this repository does so on every workspace member to keep stack metadata visible at every module boundary — consistent with the per-member `docs/`, `CLAUDE.md`, and `AGENTS.md` convention recorded in `docs/workspace-structure.md`.
+Consuming skills always read the **repository-root** `package.json` to detect stack and language; workspace members are not walked. Members may declare their own `agents` field anyway, and this repository does so on every workspace member to keep stack metadata visible at every module boundary — consistent with the per-member `docs/`, `CLAUDE.md`, and `AGENTS.md` convention recorded in `docs/01-workspace-structure.md`.
 
 Rules for member declarations:
 
@@ -56,7 +58,7 @@ Identifies the tech stack and points at a matching rule set under `rules/` in th
 
 Any other value is treated as unrecognized.
 
-The resolved rules file is published to `CLAUDE.md` by default. The [`agents-rules-sync`](../.github/actions/agents-rules-sync/README.md) action can additionally expose it as `AGENTS.md` via a Git symlink — see the [`agents-md`](../.github/actions/agents-rules-sync/README.md#inputs) input.
+The resolved rules file is published to `CLAUDE.md` by default. The [`agents-rules-sync`](../.github/actions/agents-rules-sync/README.md) action can additionally expose it as `AGENTS.md` via a Git symlink — see the [`agents-md`](../.github/actions/agents-rules-sync/README.md#inputs) input (default `false`). Opt in when the repo is also worked on by OpenAI/agents-compatible tooling that reads `AGENTS.md`: the symlink keeps both ecosystems on the same rules file with a single source of truth, so the two can never drift.
 
 ### `language`
 

@@ -1,5 +1,7 @@
 # The committed Repomix pack
 
+> Chapter 9 of the [repository docs](../README.md#repository-docs).
+
 This repository commits a packed snapshot of `main` at `.repomix/pack.xml` and keeps it fresh with CI on every merge. Autopilot skills read this snapshot for codebase context instead of re-packing on every run. This document describes the artifact, the workflow that produces it, and the contract skills follow to consume it.
 
 ## Why it exists

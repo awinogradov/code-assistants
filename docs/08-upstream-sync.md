@@ -1,5 +1,7 @@
 # Upstream sync
 
+> Chapter 8 of the [repository docs](../README.md#repository-docs).
+
 `awinogradov/code-assistants` is an upstream hub: consumer repositories pull shared standards
 and workflows from it on a schedule and receive one maintenance pull request per change. A
 consumer wires this up with a single workflow, `.github/workflows/upstream.yml`, that runs the
@@ -12,12 +14,12 @@ every consumer automatically, with no consumer workflow edit.
 
 ## Sync kinds
 
-| Kind           | Files synced into the consumer                                                                                                                                    | Maintenance branch              | Action                                                                |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------- |
-| `agents-rules` | `rules/<stack>.md` → `CLAUDE.md`                                                                                                                                  | `maintenance-sync-agents-rules` | [`agents-rules-sync`](../.github/actions/agents-rules-sync/README.md) |
-| `code-review`  | `.github/workflows/code-review.yml`                                                                                                                               | `maintenance-sync-code-review`  | [`code-review-sync`](../.github/actions/code-review-sync/README.md)   |
-| `repomix`      | `.github/workflows/repomix-pack.yml`, `repomix.config.json`                                                                                                       | `maintenance-sync-repomix`      | [`repomix-sync`](../.github/actions/repomix-sync/README.md)           |
-| `release`      | `.github/workflows/release-create.yml`, `release-publish.yml`, `release-automerge.yml`                                                                            | `maintenance-sync-release`      | [`release-sync`](../.github/actions/release-sync/README.md)           |
+| Kind           | Files synced into the consumer                                                                                                                                                                              | Maintenance branch              | Action                                                                |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------- |
+| `agents-rules` | `rules/<stack>.md` → `CLAUDE.md`                                                                                                                                                                            | `maintenance-sync-agents-rules` | [`agents-rules-sync`](../.github/actions/agents-rules-sync/README.md) |
+| `code-review`  | `.github/workflows/code-review.yml`                                                                                                                                                                         | `maintenance-sync-code-review`  | [`code-review-sync`](../.github/actions/code-review-sync/README.md)   |
+| `repomix`      | `.github/workflows/repomix-pack.yml`, `repomix.config.json`                                                                                                                                                 | `maintenance-sync-repomix`      | [`repomix-sync`](../.github/actions/repomix-sync/README.md)           |
+| `release`      | `.github/workflows/release-create.yml`, `release-publish.yml`, `release-automerge.yml`                                                                                                                      | `maintenance-sync-release`      | [`release-sync`](../.github/actions/release-sync/README.md)           |
 | `contributing` | `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, `.github/workflows/contributing.yml`, `.github/workflows/auto-label.yml`, `.github/workflows/licenses.yml`, `.github/workflows/validate-actions.yml` | `maintenance-sync-contributing` | [`contributing-sync`](../.github/actions/contributing-sync/README.md) |
 
 Each kind delegates to its `*-sync` action, which delegates the diff and PR mechanics to

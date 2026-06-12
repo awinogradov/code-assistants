@@ -1,10 +1,12 @@
 # The `release` field
 
+> Chapter 6 of the [repository docs](../README.md#repository-docs).
+
 [`release-action`](../.github/actions/release-action/README.md) reads all per-repo release configuration from a single `release` object in the repo-root `package.json`. This document specifies the field, its accepted values, and the consumer's detection algorithm.
 
 ## Why it exists
 
-Release type controls publish targets, version source, and the major-version tag — concerns parallel to stack detection via [`agents`](./agents-field.md), but consumed by a different tool. Slack-notification config (the channel) lives next to the type because it's the same kind of per-repo release setting. Keeping all of it under a single `release` object on `package.json` (sibling of `agents`) gives contributors one place to declare per-repo release metadata, with no separate YAML file.
+Release type controls publish targets, version source, and the major-version tag — concerns parallel to stack detection via [`agents`](./02-agents-field.md), but consumed by a different tool. Slack-notification config (the channel) lives next to the type because it's the same kind of per-repo release setting. Keeping all of it under a single `release` object on `package.json` (sibling of `agents`) gives contributors one place to declare per-repo release metadata, with no separate YAML file.
 
 ## Location
 

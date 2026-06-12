@@ -1,5 +1,7 @@
 # Plan and run skills
 
+> Chapter 5 of the [repository docs](../README.md#repository-docs).
+
 How `/autopilot:plan` and `/autopilot:run` turn a task — a GitHub issue or a free-form description — into a validated, expert-reviewed implementation plan, and (for `run`) all the way into a merged pull request.
 
 The two skills share the same front half. `plan` produces the plan and stops, asking what to do next. `run` is `plan` plus an automated post-implementation chain: commit → PR → monitor. Everything below applies to both unless a section calls out a difference.
@@ -104,7 +106,7 @@ The skill detects the input type from its arguments and gathers context **in par
 
 The classifier matches **top-to-bottom**: the code-scanning-alert row is checked first because an alert URL contains `github.com` and would otherwise misroute to `gh issue view`. A bare number stays a GitHub issue — alerts need the URL or the explicit `alert#{n}` / `alert {n}` token.
 
-- **Codebase snapshot (always).** Prefer the committed `.repomix/pack.xml` via `attach_packed_output`; fall back to a live `pack_codebase` when it is absent. Phase 0 only _attaches_ the pack — it does not read code from it; the returned `outputId` is handed to Phase 1, the single phase that reads the codebase. See [Committed Repomix pack](./repomix-pack.md).
+- **Codebase snapshot (always).** Prefer the committed `.repomix/pack.xml` via `attach_packed_output`; fall back to a live `pack_codebase` when it is absent. Phase 0 only _attaches_ the pack — it does not read code from it; the returned `outputId` is handed to Phase 1, the single phase that reads the codebase. See [Committed Repomix pack](./09-repomix-pack.md).
 - **For GitHub issues (parallel sub-agents).** `resolve-issue-context` fetches the issue (and, when the caller opts in, idempotently self-assigns the current user); `search-codebase-todos` finds TODOs referencing the issue. Both return JSON (see [Sub-agents](#sub-agents-and-their-json-contracts)).
 - **For code-scanning alerts (one sub-agent).** `resolve-alert-context` resolves the alert through `gh api repos/{owner}/{repo}/code-scanning/alerts/{n}` (rule, severity, `file:line`, state, message, `html_url`) — never `gh issue view`. There is no TODO search and no self-assign. If it returns `state: "unresolved"` (gh unauthenticated, missing `security_events` scope, or alert not found), the skill surfaces the error and stops rather than misrouting. The alert drives the plan title/summary and a `security-<slug>` branch / `SECURITY:` PR; the PR records the alert reference and emits no `Closes #` (alerts close on the next scan), and the plan's verify step polls alert state via the code-scanning API.
 
@@ -174,7 +176,7 @@ Apply the expert findings and the validated score to the draft, replace the `Sco
 
 ## Sub-agents and their JSON contracts
 
-Three sub-agents isolate work from the parent's context. Each returns a single schema-validated JSON object so the parent consumes typed fields instead of parsing prose.
+Three sub-agents isolate work from the parent's context. Each returns a single schema-validated JSON object so the parent consumes typed fields instead of parsing prose. The launching skills declare `Agent` in their frontmatter `allowed-tools` — that grant is what makes the fan-out possible at all.
 
 ```text
         ┌──────────────────────────────────────────────┐

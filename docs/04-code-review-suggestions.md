@@ -1,5 +1,7 @@
 # Inline suggestions and AI-agent prompts
 
+> Chapter 4 of the [repository docs](../README.md#repository-docs).
+
 `code-review-action` posts inline PR findings as plain `{path, line, body}` comments. That tells the author _what_ is wrong, but they still hand-apply every fix, and an external coding agent has no structured handle on the finding.
 
 Two affordances make a review directly actionable — both modelled on the third-party cubic reviewer:
