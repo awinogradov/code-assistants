@@ -7,7 +7,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Octokit } from "@octokit/rest";
 
-import { collectRuns } from "./collectRuns.ts";
+import { collectRuns, FooterDriftError } from "./collectRuns.ts";
 
 const now = new Date("2026-06-12T00:00:00Z");
 
@@ -135,15 +135,25 @@ describe("collectRuns()", () => {
     ).rejects.toThrow("boom");
   });
 
-  test("throws the parser-drift tripwire when reviews exist but none parse", () => {
+  test("throws the parser-drift tripwire when reviews exist but none parse", async () => {
     const { octokit } = makeOctokit({
       prPages: [[{ number: 5, updated_at: "2026-06-11T00:00:00Z" }]],
       reviewsByPr: { 5: [{ body: "no footer here", submitted_at: "2026-06-11T00:00:00Z" }] },
     });
 
-    expect(
-      collectRuns(octokit, { owner: "o", repo: "r", lookbackDays: 30, now }),
-    ).rejects.toThrow("footer format may have changed");
+    const error: unknown = await collectRuns(octokit, {
+      owner: "o",
+      repo: "r",
+      lookbackDays: 30,
+      now,
+    }).catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(FooterDriftError);
+    expect(error).toMatchObject({
+      message: expect.stringContaining("footer format may have changed"),
+      scannedReviews: 1,
+      lookbackDays: 30,
+    });
   });
 
   test("returns empty without throwing when no reviews were scanned", async () => {

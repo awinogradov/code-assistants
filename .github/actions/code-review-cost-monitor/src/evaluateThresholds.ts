@@ -41,8 +41,8 @@ export interface ThresholdVerdict {
   reasons: BreachReason[];
 }
 
-/** Median of a non-empty list. */
-function median(values: number[]): number {
+/** Median of a list (0 when empty). Shared with the report renderer. */
+export function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   const lower = sorted[mid - 1] ?? 0;

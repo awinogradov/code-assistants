@@ -15,6 +15,7 @@
  */
 import type { RunRecord } from "./collectRuns.ts";
 import type { BreachReason, ThresholdVerdict } from "./evaluateThresholds.ts";
+import { median } from "./evaluateThresholds.ts";
 
 /** Inputs for one report rendering. */
 export interface ReportParams {
@@ -140,21 +141,11 @@ export function buildReport(params: ReportParams): string {
     "### Normalized metrics",
     "",
     `- Total cost: ${usd(reviews.reduce((sum, r) => sum + r.costUsd, 0))}`,
-    `- Median cost per run: ${usd(medianOf(reviews.map((r) => r.costUsd)))}`,
+    `- Median cost per run: ${usd(median(reviews.map((r) => r.costUsd)))}`,
     `- Cost ↔ output-tokens correlation (Pearson r): ${correlation.toFixed(2)}`,
   ];
 
   return sections.join("\n");
-}
-
-/** Median of a possibly-empty list (0 when empty). */
-function medianOf(values: number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  const lower = sorted[mid - 1] ?? 0;
-  const upper = sorted[mid] ?? 0;
-  return sorted.length % 2 === 0 ? (lower + upper) / 2 : upper;
 }
 
 /**
