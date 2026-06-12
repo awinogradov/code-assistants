@@ -1,13 +1,13 @@
 /**
  * Tests for reportIssue.ts.
  * Covers create/comment/cooldown-skip paths, the closed-issue cooldown, the
- * pull_request filter on the issues listing, and attribution rendering —
- * all against a mocked Octokit.
+ * pull_request filter on the issues listing, attribution rendering, and the
+ * annotation message format — all against a mocked Octokit.
  */
 import { describe, expect, test } from "bun:test";
 import type { Octokit } from "@octokit/rest";
 
-import { buildIssueBody, parseAttribution, postReport, reportMarker } from "./reportIssue.ts";
+import { buildIssueBody, parseAttribution, postReport, reportAnnotation, reportMarker } from "./reportIssue.ts";
 
 const now = new Date("2026-06-12T00:00:00Z");
 
@@ -223,5 +223,19 @@ describe("parseAttribution()", () => {
     expect(parseAttribution(true, "not json")).toEqual({ requested: true });
     expect(parseAttribution(true, '{"other":1}')).toEqual({ requested: true });
     expect(parseAttribution(false, '{"narrative":"x"}')).toEqual({ requested: false });
+  });
+});
+
+describe("reportAnnotation()", () => {
+  test("links the created issue", () => {
+    expect(reportAnnotation({ issueUrl: "https://github.com/o/r/issues/99", action: "created" })).toBe(
+      "Cost report created: https://github.com/o/r/issues/99",
+    );
+  });
+
+  test("links the existing issue on a cooldown skip", () => {
+    expect(reportAnnotation({ issueUrl: "https://github.com/o/r/issues/5", action: "skipped-cooldown" })).toBe(
+      "Cost report skipped-cooldown: https://github.com/o/r/issues/5",
+    );
   });
 });
