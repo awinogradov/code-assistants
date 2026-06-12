@@ -1,0 +1,88 @@
+name: Ban patterns
+description: Fail the job with an error annotation when forbidden regex patterns match files in the working tree. Patterns, paths, and globs are consumer-supplied and passed through env vars so they are never shell-interpolated.
+
+inputs:
+  patterns:
+    description: |
+      Newline-separated list of extended (ERE) regex patterns to ban. Blank lines are ignored.
+      GitHub does not enforce `required: true` at runtime, so the action fails explicitly when
+      the list is empty or whitespace-only.
+    required: true
+  paths:
+    description: |
+      Newline-separated list of files or directories to search. Blank lines are ignored.
+      Defaults to the whole working tree.
+    required: false
+    default: "."
+  include-globs:
+    description: |
+      Newline-separated list of file globs passed to grep as `--include` filters (e.g. `*.ts`).
+      Globs match the file basename only — scope directories via `paths`. Blank lines are
+      ignored. Empty means all files.
+    required: false
+    default: ""
+  error-message:
+    description: Single-line message emitted in the error annotation when any pattern matches.
+    required: false
+    default: "Banned pattern found."
+  issue-link:
+    description: URL appended to the error annotation pointing at the rule's rationale.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Scan for banned patterns
+      shell: bash
+      env:
+        PATTERNS: ${{ inputs.patterns }}
+        SEARCH_PATHS: ${{ inputs.paths }}
+        INCLUDE_GLOBS: ${{ inputs.include-globs }}
+        ERROR_MESSAGE: ${{ inputs.error-message }}
+        ISSUE_LINK: ${{ inputs.issue-link }}
+      run: |
+        set -euo pipefail
+
+        if [ -z "$(printf '%s' "$PATTERNS" | tr -d '[:space:]')" ]; then
+          echo "::error::ban-patterns: the patterns input is required and cannot be empty."
+          exit 1
+        fi
+
+        include_args=()
+        while IFS= read -r glob; do
+          [ -n "$glob" ] && include_args+=("--include=$glob")
+        done <<< "$INCLUDE_GLOBS"
+
+        search_paths=()
+        while IFS= read -r path; do
+          [ -n "$path" ] && search_paths+=("$path")
+        done <<< "$SEARCH_PATHS"
+        [ "${#search_paths[@]}" -gt 0 ] || search_paths=(".")
+
+        violations=""
+        while IFS= read -r pattern; do
+          [ -n "$pattern" ] || continue
+          status=0
+          matches="$(grep -rIEn --exclude-dir=.git --exclude-dir=node_modules \
+            ${include_args[@]+"${include_args[@]}"} -e "$pattern" -- "${search_paths[@]}")" || status=$?
+          if [ "$status" -eq 0 ]; then
+            violations+="Pattern '$pattern' matched:"$'\n'"$matches"$'\n'
+          elif [ "$status" -gt 1 ]; then
+            echo "::error::ban-patterns: grep exited with $status for pattern '$pattern' (invalid regex or unreadable path)."
+            exit "$status"
+          fi
+        done <<< "$PATTERNS"
+
+        if [ -n "$violations" ]; then
+          guard="ban-patterns-${GITHUB_RUN_ID:-local}-$RANDOM"
+          echo "::stop-commands::$guard"
+          printf '%s' "$violations"
+          echo "::$guard::"
+          message="$ERROR_MESSAGE"
+          [ -n "$ISSUE_LINK" ] && message="$message See $ISSUE_LINK"
+          echo "::error::$message"
+          exit 1
+        fi
+
+        echo "No banned patterns found."
