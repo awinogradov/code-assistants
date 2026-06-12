@@ -1,0 +1,60 @@
+# Source: https://github.com/awinogradov/code-assistants/blob/main/.github/workflows/code-review-cost-monitor.yml
+# This file is distributed to downstream repositories by an automated sync.
+# Edits made downstream are overwritten on the next run.
+# To change it, open a pull request against the source file above.
+#
+# Repository secrets consumed by this workflow:
+#   - `BOT_TOKEN` (required): PAT or GitHub App installation token with
+#     `contents: read` + `issues: write`, used to read PR reviews and open or
+#     update the cost-report issue under the bot identity.
+#   - `ANTHROPIC_CODE_REVIEW` (optional): Anthropic API key for the attribution
+#     step. Only consumed when a run is dispatched with `attribution: true`;
+#     the scheduled run is fully deterministic and makes no model call.
+
+name: Code review cost monitor
+
+on:
+  schedule:
+    # Daily, off the hour — top-of-hour crons are routinely delayed or dropped.
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+    inputs:
+      lookback_days:
+        description: "Days of PR reviews to scrape (months as days, e.g. 90). Empty keeps the action default (30)."
+        required: false
+        default: ""
+      attribution:
+        description: "Run the model-backed root-cause narrative on a breach."
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  # Serialize a manual dispatch overlapping the cron — the issue create/comment
+  # path is not atomic. Do not cancel: let an in-flight post finish.
+  group: cost-monitor-${{ github.workflow }}
+  cancel-in-progress: false
+
+# All writes go through BOT_TOKEN; the default GITHUB_TOKEN only reads the
+# checkout, so an `issues: write` grant here would be dead weight.
+permissions:
+  contents: read
+
+jobs:
+  monitor:
+    name: Monitor review cost
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Full history so the attribution step can diff the review process
+      # between the baseline window and now.
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: awinogradov/code-assistants/.github/actions/code-review-cost-monitor@main
+        with:
+          bot_token: ${{ secrets.BOT_TOKEN }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_CODE_REVIEW }}
+          lookback_days: ${{ inputs.lookback_days }}
+          attribution: ${{ inputs.attribution }}

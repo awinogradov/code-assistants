@@ -1,5 +1,5 @@
 name: Code review sync
-description: Sync the AI code-review workflow from an upstream repository into the current repository.
+description: Sync the AI code-review workflows (review + cost monitor) from an upstream repository into the current repository.
 
 inputs:
   bot_token:
@@ -11,7 +11,7 @@ inputs:
       Git author/committer login for the sync commit. Defaults to `github-actions[bot]` when unset. Pass the `vars.BOT_USERNAME` repository variable to attribute commits to a dedicated bot identity.
     required: false
   source-repo:
-    description: Source repository in `owner/name` form that hosts the canonical `.github/workflows/code-review.yml`.
+    description: Source repository in `owner/name` form that hosts the canonical code-review workflows (`code-review.yml`, `code-review-cost-monitor.yml`).
     required: false
     default: awinogradov/code-assistants
   source-ref:
@@ -43,6 +43,7 @@ runs:
         set -euo pipefail
         paths=(
           .github/workflows/code-review.yml
+          .github/workflows/code-review-cost-monitor.yml
         )
         {
           echo "files<<__EOF__"

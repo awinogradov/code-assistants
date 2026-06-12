@@ -88,6 +88,8 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 
 **Tokens in** is the total input the model consumed — fresh input plus cache reads plus cache creation — so it stays plausible under heavy prompt caching (reading only the uncached `input_tokens` reports a misleading near-zero residual). **Cache read / write** is the breakdown of that total.
 
+**The footer is machine-consumed.** The scheduled [`code-review-cost-monitor`](../.github/actions/code-review-cost-monitor/README.md) action parses these tables back out of recent PR reviews to detect cost regressions, so the markers and the exact row labels above are a compatibility contract — renaming a label or restructuring the table breaks the monitor's parser (it fails loudly when a scan parses zero footers). The monitor's optional attribution step also reuses `runClaude.ts` as its model engine.
+
 ## Clean approvals
 
 The pr:review skill returns an empty `reviewComment` for an approval with no findings — by contract no review prose is written, the APPROVE event speaks for itself. Posting a comment that is _only_ the stats footer reads as an empty (or broken) review and is indistinguishable from a genuine content-free-approval failure, so `submitReview.ts` builds the body through `buildReviewBody`: when the review body is empty and there are no inline comments, it substitutes a minimal `✅ No issues found.` line before appending the footer. Reviews that carry findings are unchanged. The dedup and consecutive-approval guards still compare the raw (empty) `reviewComment`, so repeat clean approvals are skipped rather than re-posted.

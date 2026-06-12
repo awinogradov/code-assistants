@@ -20,7 +20,7 @@
     },
     ".github/actions/agents-rules-sync": {
       "name": "@code-assistants/agents-rules-sync-action",
-      "version": "2.0.0",
+      "version": "2.0.1",
       "dependencies": {
         "@actions/core": "3.0.1",
         "@code-assistants/actions-core": "workspace:*",
@@ -36,7 +36,7 @@
     },
     ".github/actions/auto-label": {
       "name": "@code-assistants/auto-label-action",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "dependencies": {
         "@actions/core": "3.0.1",
         "@code-assistants/actions-core": "workspace:*",
@@ -51,12 +51,27 @@
     },
     ".github/actions/code-review-action": {
       "name": "@code-assistants/code-review-action",
-      "version": "1.1.0",
+      "version": "1.3.0",
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "0.2.126",
         "@code-assistants/actions-core": "workspace:*",
         "@octokit/rest": "22.0.1",
         "pino": "10.3.1",
+        "zod": "4.4.3",
+      },
+      "devDependencies": {
+        "@types/bun": "1.3.14",
+        "typescript": "6.0.3",
+      },
+    },
+    ".github/actions/code-review-cost-monitor": {
+      "name": "@code-assistants/code-review-cost-monitor-action",
+      "version": "0.0.0",
+      "dependencies": {
+        "@actions/core": "3.0.1",
+        "@code-assistants/actions-core": "workspace:*",
+        "@octokit/plugin-retry": "8.1.0",
+        "@octokit/rest": "22.0.1",
         "zod": "4.4.3",
       },
       "devDependencies": {
@@ -82,7 +97,7 @@
     },
     ".github/actions/release-action": {
       "name": "@code-assistants/release-action",
-      "version": "1.0.2",
+      "version": "1.1.1",
       "dependencies": {
         "@anthropic-ai/sdk": "0.92.0",
         "@code-assistants/actions-core": "workspace:*",
@@ -102,7 +117,7 @@
     },
     ".github/actions/release-automerge": {
       "name": "@code-assistants/release-automerge",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@code-assistants/actions-core": "workspace:*",
         "@octokit/rest": "22.0.1",
@@ -114,7 +129,7 @@
     },
     ".github/actions/validate-actions": {
       "name": "@code-assistants/validate-actions-action",
-      "version": "0.1.0",
+      "version": "0.2.1",
       "dependencies": {
         "yaml": "2.9.0",
         "zod": "4.4.3",
@@ -126,7 +141,7 @@
     },
     "claude-plugins/autopilot": {
       "name": "autopilot",
-      "version": "1.1.0",
+      "version": "1.3.0",
     },
     "packages/actions-core": {
       "name": "@code-assistants/actions-core",
@@ -183,6 +198,8 @@
     "@code-assistants/auto-label-action": ["@code-assistants/auto-label-action@workspace:.github/actions/auto-label"],
 
     "@code-assistants/code-review-action": ["@code-assistants/code-review-action@workspace:.github/actions/code-review-action"],
+
+    "@code-assistants/code-review-cost-monitor-action": ["@code-assistants/code-review-cost-monitor-action@workspace:.github/actions/code-review-cost-monitor"],
 
     "@code-assistants/files-sync-action": ["@code-assistants/files-sync-action@workspace:.github/actions/files-sync"],
 
@@ -247,6 +264,8 @@
     "@octokit/plugin-request-log": ["@octokit/plugin-request-log@6.0.0", "", { "peerDependencies": { "@octokit/core": ">=6" } }, "sha512-UkOzeEN3W91/eBq9sPZNQ7sUBvYCqYbrrD8gTbBuGtHEuycE4/awMXcYvx6sVYo7LypPhmQwwpUe4Yyu4QZN5Q=="],
 
     "@octokit/plugin-rest-endpoint-methods": ["@octokit/plugin-rest-endpoint-methods@17.0.0", "", { "dependencies": { "@octokit/types": "^16.0.0" }, "peerDependencies": { "@octokit/core": ">=6" } }, "sha512-B5yCyIlOJFPqUUeiD0cnBJwWJO8lkJs5d8+ze9QDP6SvfiXSz1BF+91+0MeI1d2yxgOhU/O+CvtiZ9jSkHhFAw=="],
+
+    "@octokit/plugin-retry": ["@octokit/plugin-retry@8.1.0", "", { "dependencies": { "@octokit/request-error": "^7.0.2", "@octokit/types": "^16.0.0", "bottleneck": "^2.15.3" }, "peerDependencies": { "@octokit/core": ">=7" } }, "sha512-O1FZgXeiGb2sowEr/hYTr6YunGdSAFWnr2fyW39Ah85H8O33ELASQxcvOFF5LE6Tjekcyu2ms4qAzJVhSaJxTw=="],
 
     "@octokit/request": ["@octokit/request@10.0.9", "", { "dependencies": { "@octokit/endpoint": "^11.0.3", "@octokit/request-error": "^7.0.2", "@octokit/types": "^16.0.0", "content-type": "^2.0.0", "fast-content-type-parse": "^3.0.0", "json-with-bigint": "^3.5.3", "universal-user-agent": "^7.0.2" } }, "sha512-o8Bi3f608eyM+7BmBiUWxFsdjLb3/ym1cQek5LZOv9KkZcxRrHCPhhRzm6xjO6HVZ85ItD6+sTsjxo821SVa/A=="],
 
@@ -333,6 +352,8 @@
     "before-after-hook": ["before-after-hook@4.0.0", "", {}, "sha512-q6tR3RPqIB1pMiTRMFcZwuG5T8vwp+vUvEG0vuI6B+Rikh5BfPp2fQ82c925FOs+b0lcFQ8CFrL+KbilfZFhOQ=="],
 
     "body-parser": ["body-parser@2.2.2", "", { "dependencies": { "bytes": "^3.1.2", "content-type": "^1.0.5", "debug": "^4.4.3", "http-errors": "^2.0.0", "iconv-lite": "^0.7.0", "on-finished": "^2.4.1", "qs": "^6.14.1", "raw-body": "^3.0.1", "type-is": "^2.0.1" } }, "sha512-oP5VkATKlNwcgvxi0vM0p/D3n2C3EReYVX+DNYs5TjZFn/oQt2j+4sVJtSMr18pdRr8wjTcBl6LoV+FUwzPmNA=="],
+
+    "bottleneck": ["bottleneck@2.19.5", "", {}, "sha512-VHiNCbI1lKdl44tGrhNfU3lup0Tj/ZBMJB5/2ZbNXRCPuRCO7ed2mgcK4r17y+KB2EfuYuRaVlwNbAeaWGSpbw=="],
 
     "bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
 
@@ -765,6 +786,8 @@
     "@code-assistants/auto-label-action/zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
 
     "@code-assistants/code-review-action/zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
+
+    "@code-assistants/code-review-cost-monitor-action/zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
 
     "@code-assistants/files-sync-action/zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
 

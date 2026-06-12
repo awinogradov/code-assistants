@@ -24,6 +24,7 @@
     ".github/actions/release-action",
     ".github/actions/release-automerge",
     ".github/actions/code-review-action",
+    ".github/actions/code-review-cost-monitor",
     ".github/actions/auto-label",
     ".github/actions/validate-actions",
     "claude-plugins/*",

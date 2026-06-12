@@ -1,0 +1,128 @@
+name: Code review cost monitor
+description: Parse the "Review run summary" footers from recent PR reviews, evaluate configurable cost-regression thresholds against a rolling baseline, and open (or update) a single deduplicated cost-report issue on a breach. Deterministic by default; an optional model-backed attribution step runs only on a breach.
+
+inputs:
+  bot_token:
+    description: |
+      PAT (classic with `repo`, or fine-grained with `contents: read` + `issues: write`) or GitHub App installation token used to read PR reviews and open/update the cost-report issue. Pass the secrets.BOT_TOKEN secret so the issue is attributed to the bot identity that owns the token. Required: an empty value fails the GitHub API calls with no fallback.
+    required: true
+  anthropic_api_key:
+    description: |
+      Anthropic API key for the optional attribution step. Only used when `attribution` is `true` and a breach fired; leave empty to keep the monitor fully deterministic and free.
+    required: false
+    default: ""
+  model:
+    description: Claude model for the attribution narrative.
+    required: false
+    default: "claude-sonnet-4-6"
+  comparison_mode:
+    description: "`rolling-baseline` compares the recent-window median against the prior window; `previous-run` compares the last run against the one before it (noisy — per-run cost tracks output size)."
+    required: false
+    default: "rolling-baseline"
+  baseline_window:
+    description: Number of trailing review runs per comparison window.
+    required: false
+    default: "14"
+  increase_pct:
+    description: Percent increase of the compared cost metric that fires a breach.
+    required: false
+    default: "25"
+  single_run_ceiling_usd:
+    description: Absolute per-run cost ceiling (USD) that fires regardless of percentages.
+    required: false
+    default: "1.50"
+  normalized_regression_pct:
+    description: Percent increase of the median cost per output token that fires a breach — a process regression independent of PR size.
+    required: false
+    default: "25"
+  min_runs:
+    description: Minimum review runs (overall and per comparison window) before windowed thresholds are evaluated.
+    required: false
+    default: "8"
+  lookback_days:
+    description: How many days of PR reviews to scrape. Months are expressed as days (e.g. `90`).
+    required: false
+    default: "30"
+  attribution:
+    description: Set to `true` to run one model pass on a breach that attributes the regression to the change that caused it. Requires `anthropic_api_key`.
+    required: false
+    default: "false"
+  issue_label:
+    description: Label identifying the cost-report issue for dedup.
+    required: false
+    default: "code-review-cost"
+  cooldown_days:
+    description: Minimum days between posted reports; suppresses re-alerts on a sustained breach.
+    required: false
+    default: "7"
+
+outputs:
+  breach:
+    description: "`true` when at least one threshold fired."
+    value: ${{ steps.monitor.outputs.breach }}
+  issue_url:
+    description: URL of the created or updated cost-report issue. Empty when no breach fired or the cooldown suppressed the post.
+    value: ${{ steps.report.outputs.issue_url }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: 1.x
+
+    - name: Install action dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: bun install --frozen-lockfile --filter @code-assistants/code-review-cost-monitor-action
+
+    - name: Collect metrics and evaluate thresholds
+      id: monitor
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.bot_token }}
+        COMPARISON_MODE: ${{ inputs.comparison_mode }}
+        BASELINE_WINDOW: ${{ inputs.baseline_window }}
+        INCREASE_PCT: ${{ inputs.increase_pct }}
+        SINGLE_RUN_CEILING_USD: ${{ inputs.single_run_ceiling_usd }}
+        NORMALIZED_REGRESSION_PCT: ${{ inputs.normalized_regression_pct }}
+        MIN_RUNS: ${{ inputs.min_runs }}
+        LOOKBACK_DAYS: ${{ inputs.lookback_days }}
+      run: bun "${{ github.action_path }}/src/costMonitor.ts"
+
+    - name: Install attribution dependencies
+      if: steps.monitor.outputs.breach == 'true' && inputs.attribution == 'true' && inputs.anthropic_api_key != ''
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: bun install --frozen-lockfile --filter @code-assistants/code-review-action
+
+    - name: Attribute regression
+      id: attribute
+      if: steps.monitor.outputs.breach == 'true' && inputs.attribution == 'true' && inputs.anthropic_api_key != ''
+      continue-on-error: true
+      shell: bash
+      # Default working directory on purpose: the script lives in the _actions
+      # download, but the model's git commands must see the workflow's
+      # checked-out workspace history.
+      env:
+        PROMPT_FILE: ${{ steps.monitor.outputs.prompt_file }}
+        CLAUDE_MODEL: ${{ inputs.model }}
+        CLAUDE_RUN_MODE: cost-attribution
+        CLAUDE_TIMEOUT_MINUTES: "10"
+        CLAUDE_JSON_SCHEMA: '{"type":"object","properties":{"narrative":{"type":"string"}},"required":["narrative"]}'
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+      run: CLAUDE_PROMPT="$(cat "$PROMPT_FILE")" bun "${{ github.action_path }}/../code-review-action/src/runClaude.ts"
+
+    - name: Post cost-report issue
+      id: report
+      if: steps.monitor.outputs.breach == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.bot_token }}
+        REPORT_FILE: ${{ steps.monitor.outputs.report_file }}
+        ISSUE_LABEL: ${{ inputs.issue_label }}
+        COOLDOWN_DAYS: ${{ inputs.cooldown_days }}
+        ATTRIBUTION_REQUESTED: ${{ inputs.attribution }}
+        ATTRIBUTION_JSON: ${{ steps.attribute.outputs.structured_output }}
+      run: bun "${{ github.action_path }}/src/reportIssue.ts"

@@ -64,7 +64,8 @@ The `docs/` guides are numbered chapters in reading order — newcomers start at
 - [`release-action`](./.github/actions/release-action/README.md) — conventional-commit-driven release pipeline for npm packages, GitHub Actions, and Claude plugins
 - [`release-automerge`](./.github/actions/release-automerge/README.md) — merge an approved, all-green release PR (`^release-`), driven by an event-based workflow so `release-publish.yml` runs without a manual click
 - [`code-review-action`](./.github/actions/code-review-action/README.md) — AI code review for pull requests via Claude Code, with a react mode for replying to bot mentions
-- [`code-review-sync`](./.github/actions/code-review-sync/README.md) — sync the canonical AI code-review workflow (`code-review.yml`) from upstream and open one PR with the difference
+- [`code-review-cost-monitor`](./.github/actions/code-review-cost-monitor/README.md) — watch the review run-summary footers for cost regressions on a schedule and open (or update) a deduplicated cost-report issue
+- [`code-review-sync`](./.github/actions/code-review-sync/README.md) — sync the canonical AI code-review workflows (`code-review.yml`, `code-review-cost-monitor.yml`) from upstream and open one PR with the differences
 - [`auto-label`](./.github/actions/auto-label/README.md) — label PRs with `<scope>/<workspace-member>` labels for the workspace members a diff touches, and prune orphan labels on merge
 - [`repomix-sync`](./.github/actions/repomix-sync/README.md) — sync the `repomix-pack` workflow and `repomix.config.json` from upstream so each consumer commits its own codebase snapshot
 - [`release-sync`](./.github/actions/release-sync/README.md) — sync the release pipeline workflows (`release`, `publish`, `release-automerge`) from upstream so each consumer runs the same release flow
