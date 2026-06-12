@@ -364,16 +364,16 @@ claude-plugins/
     README.md
     version
 docs/
-  agents-field.md
-  code-review-run-summary.md
-  code-review-suggestions.md
-  plan-run-skills.md
-  plan-skills-audit.md
-  release-automerge.md
-  release-field.md
-  repomix-pack.md
-  upstream-sync.md
-  workspace-structure.md
+  01-workspace-structure.md
+  02-agents-field.md
+  03-code-review-run-summary.md
+  04-code-review-suggestions.md
+  05-plan-run-skills.md
+  06-release-field.md
+  07-release-automerge.md
+  08-upstream-sync.md
+  09-repomix-pack.md
+  appendix-a-plan-skills-audit.md
 packages/
   actions-core/
     src/
@@ -905,7 +905,7 @@ import {
 
 describe('resolvePackageAgentsRules', () => {
   test('rejects empty input with docs link', () => {
-    expect(() => resolvePackageAgentsRules('')).toThrow(/agents-field\.md/);
+    expect(() => resolvePackageAgentsRules('')).toThrow(/02-agents-field\.md/);
   });
 
   test('rejects non-JSON input with docs link and allowed values', () => {
@@ -965,7 +965,7 @@ describe('resolvePackageAgentsRules', () => {
  *   const rules = resolvePackageAgentsRules(await readPackageJson());
  *   // rules: 'Bun' | 'Bun+React+Tailwind' | 'NodeJS+React' | 'NodeJS+React+Tailwind'
  *
- * @see https://github.com/awinogradov/code-assistants/blob/main/docs/agents-field.md
+ * @see https://github.com/awinogradov/code-assistants/blob/main/docs/02-agents-field.md
  */
 
 import { z } from 'zod';
@@ -980,7 +980,7 @@ export const agentsRulesValues = [
 export type AgentsRules = (typeof agentsRulesValues)[number];
 
 export const agentsFieldDocsUrl =
-  'https://github.com/awinogradov/code-assistants/blob/main/docs/agents-field.md';
+  'https://github.com/awinogradov/code-assistants/blob/main/docs/02-agents-field.md';
 
 const packageJsonSchema = z
   .object({
@@ -1237,7 +1237,7 @@ async function main(): Promise<void> {
   if (raw === null) {
     throw new Error(
       `package.json not found at ${env.destRepo.owner}/${env.destRepo.name}@${env.base}. ` +
-        `Add a package.json with an \`agents.rules\` field — see https://github.com/awinogradov/code-assistants/blob/main/docs/agents-field.md`,
+        `Add a package.json with an \`agents.rules\` field — see https://github.com/awinogradov/code-assistants/blob/main/docs/02-agents-field.md`,
     );
   }
 
@@ -1546,7 +1546,7 @@ repository into the current repository's `CLAUDE.md` and opens a single pull req
 the difference.
 
 The action reads the consumer's `agents.rules` field (see
-[docs/agents-field.md](../../../docs/agents-field.md)), builds the corresponding source path
+[docs/02-agents-field.md](../../../docs/02-agents-field.md)), builds the corresponding source path
 (`rules/<value>.md`), and delegates the diff and PR mechanics to the
 [`files-sync`](../files-sync/README.md) action. It does not require `actions/checkout` and
 never touches the runner's working tree.
@@ -1643,7 +1643,7 @@ See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/a
   to `CLAUDE.md` will be overwritten when the upstream rules file changes.
 - If `CLAUDE.md` already matches `rules/<value>.md`, no PR is created.
 - If `package.json` is missing, malformed, or lacks `agents.rules` (or its value is
-  unrecognized), the action fails with a link to `docs/agents-field.md` and the list of
+  unrecognized), the action fails with a link to `docs/02-agents-field.md` and the list of
   accepted values.
 
 ## Flow
@@ -10157,13 +10157,13 @@ The `pr:review` skill carries the full review rubric (all `CHECK-*` rules) inlin
 
 Every review comment carries a collapsed **"Review run summary 🤖"** footer ("under the cut") with the run's latency, token usage, cache hits, cost, and tool round-trips. The metrics are computed in `runClaude.ts`, passed to `submitReview.ts` via the `run_summary` step output, and appended to the **main review comment only** (never inline, never on `react`-mode replies). The footer is wrapped in HTML-comment markers so it is stripped before duplicate-review detection, keeping run-varying numbers from defeating dedup.
 
-See [Review run-summary footer](../../../docs/code-review-run-summary.md) for the full data flow and diagram.
+See [Review run-summary footer](../../../docs/03-code-review-run-summary.md) for the full data flow and diagram.
 
 ## Inline suggestions & AI-agent prompts
 
 Each inline finding can carry a one-click GitHub **`suggestion`** block (the author commits the fix in one click) and a collapsible **"Prompt for AI agents"** block (a ready-to-paste prompt with the finding and the surrounding diff hunk). The `pr:review` skill emits an optional `suggestion` (verbatim replacement) and `startLine` (multi-line range) per comment; `submitReview.ts` renders the suggestion fence and the deterministic agent prompt and posts them through the existing `createReview` call — adding `start_line`/`side` for multi-line ranges. The feature is always-on; no inputs configure it.
 
-See [Inline suggestions and AI-agent prompts](../../../docs/code-review-suggestions.md) for the full data flow, a rendered example, and the source map.
+See [Inline suggestions and AI-agent prompts](../../../docs/04-code-review-suggestions.md) for the full data flow, a rendered example, and the source map.
 
 ## Labels
 
@@ -14083,7 +14083,7 @@ describe("discoverMembers", () => {
  * the caller should fall back to standalone mode — discovery returns an empty
  * array in that case; the {@link detectMode} helper signals the mode.
  *
- * @see ../../../../docs/release-field.md
+ * @see ../../../../docs/06-release-field.md
  */
 import { join, relative } from "node:path";
 
@@ -18920,7 +18920,7 @@ if (import.meta.main) {
  * `release` field via {@link readReleaseField}, and emits the result on the
  * `type` output channel (`$GITHUB_OUTPUT`).
  *
- * @see ../../../../docs/release-field.md
+ * @see ../../../../docs/06-release-field.md
  *
  * @example
  * ```bash
@@ -18934,7 +18934,7 @@ import { readReleaseField } from "@code-assistants/actions-core/releaseField";
 
 import { discoverMembers } from "./monorepo/discoverMembers.ts";
 
-const DOCS_LINK = "docs/release-field.md";
+const DOCS_LINK = "docs/06-release-field.md";
 const PACKAGE_JSON = "package.json";
 
 async function readPackageJson(): Promise<unknown> {
@@ -22648,7 +22648,7 @@ Updated workflows.
  * extracts AI-generated release notes, and posts a rich message with
  * version, notes, and a link to the GitHub release.
  *
- * @see ../../../../docs/release-field.md
+ * @see ../../../../docs/06-release-field.md
  *
  * @example
  * ```bash
@@ -23801,7 +23801,7 @@ Add a `release` field to your package.json to configure release behavior. See th
 
 Composite GitHub Action that automates the release pipeline for npm packages, GitHub Actions, and Claude plugins.
 
-The action drives a two-phase flow — **create** opens a release PR that bumps the version, generates the changelog from [conventional commits](https://www.conventionalcommits.org/), enriches it with ticket details (Linear, Jira, GitHub Issues) and an optional AI-generated summary; **publish** runs when the release PR is merged and creates the git tag, npm publish, GitHub Release, floating major-version tag, and Slack notification — selecting the right artifacts based on the `release` field in `package.json` (see [`docs/release-field.md`](../../../docs/release-field.md)).
+The action drives a two-phase flow — **create** opens a release PR that bumps the version, generates the changelog from [conventional commits](https://www.conventionalcommits.org/), enriches it with ticket details (Linear, Jira, GitHub Issues) and an optional AI-generated summary; **publish** runs when the release PR is merged and creates the git tag, npm publish, GitHub Release, floating major-version tag, and Slack notification — selecting the right artifacts based on the `release` field in `package.json` (see [`docs/06-release-field.md`](../../../docs/06-release-field.md)).
 
 ## Usage
 
@@ -23906,7 +23906,7 @@ jobs:
 
 ## Release type
 
-Release behavior is driven by the top-level `release` field in the consumer's `package.json`. See [`docs/release-field.md`](../../../docs/release-field.md) for the full spec; the at-a-glance table is reproduced below in the same row order. The fallback chain for the version source is `version` file → `package.json` → `plugin.json` → `pyproject.toml`.
+Release behavior is driven by the top-level `release` field in the consumer's `package.json`. See [`docs/06-release-field.md`](../../../docs/06-release-field.md) for the full spec; the at-a-glance table is reproduced below in the same row order. The fallback chain for the version source is `version` file → `package.json` → `plugin.json` → `pyproject.toml`.
 
 | Value            | Version source   | NPM publish | GitHub Release | Major version tag (`v1`) |
 | ---------------- | ---------------- | ----------- | -------------- | ------------------------ |
@@ -23972,7 +23972,7 @@ Store the token as a secret (e.g. `BOT_TOKEN`) and pass it via `bot_token: ${{ s
 
 The Configure Git step inside the action commits as the `bot_username` input, defaulting to `github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>`. Pass `bot_username: ${{ vars.BOT_USERNAME }}` to author releases as a dedicated bot identity.
 
-> **Distinct identity when auto-approval is enabled.** If release PRs are auto-approved by [`code-review-action`](../code-review-action/README.md) (to feed [`release-automerge`](../release-automerge/README.md)), the `bot_token` identity that opens the PR must **differ** from the reviewer identity that approves it — GitHub forbids approving your own PR. In this repo, `release-create.yml` opens PRs with `GH_TOKEN` while the reviewer/merge token is `BOT_TOKEN`. See [Author and approver must be distinct identities](../../../docs/release-automerge.md#author-and-approver-must-be-distinct-identities).
+> **Distinct identity when auto-approval is enabled.** If release PRs are auto-approved by [`code-review-action`](../code-review-action/README.md) (to feed [`release-automerge`](../release-automerge/README.md)), the `bot_token` identity that opens the PR must **differ** from the reviewer identity that approves it — GitHub forbids approving your own PR. In this repo, `release-create.yml` opens PRs with `GH_TOKEN` while the reviewer/merge token is `BOT_TOKEN`. See [Author and approver must be distinct identities](../../../docs/07-release-automerge.md#author-and-approver-must-be-distinct-identities).
 
 ## Monorepo mode
 
@@ -24685,7 +24685,7 @@ async function run(config: AutomergeConfig): Promise<void> {
 
   if (!(await fetchAutomergeOptIn(config, pr.number))) {
     console.log(
-      "Skip: auto-merge disabled — set release.automerge:true on the release member or root package.json (see docs/release-automerge.md)",
+      "Skip: auto-merge disabled — set release.automerge:true on the release member or root package.json (see docs/07-release-automerge.md)",
     );
     return;
   }
@@ -24986,10 +24986,10 @@ false`, read at the PR head SHA,
   (15s interval, 8-minute cap inside the 10-minute job) rather than skipped; a
   failed check skips, as does one still pending after the cap.
 
-> **The `APPROVED` decision comes from auto-approval.** [`code-review-action`](../code-review-action/README.md) posts it for trusted release-PR authors. That requires the release PR to be authored by an identity **distinct** from the reviewer (GitHub forbids approving your own PR); see [Author and approver must be distinct identities](../../../docs/release-automerge.md#author-and-approver-must-be-distinct-identities). Without a recorded approval this action never merges.
+> **The `APPROVED` decision comes from auto-approval.** [`code-review-action`](../code-review-action/README.md) posts it for trusted release-PR authors. That requires the release PR to be authored by an identity **distinct** from the reviewer (GitHub forbids approving your own PR); see [Author and approver must be distinct identities](../../../docs/07-release-automerge.md#author-and-approver-must-be-distinct-identities). Without a recorded approval this action never merges.
 
 > **Opt-in (default off).** Auto-merge is disabled unless `release.automerge`
-> resolves to `true` (see the [`release` field spec](../../../docs/release-field.md)).
+> resolves to `true` (see the [`release` field spec](../../../docs/06-release-field.md)).
 > A monorepo opens one release PR per member (`release-<member>-<version>`), so the
 > gate resolves per member: it reads the member's own `release.automerge` and falls
 > back to the root default. Set it on the root to enable the whole repo, or on a
@@ -25003,7 +25003,7 @@ evaluation is rejected rather than merged unreviewed. The check aggregation reus
 the same logic as the AI-review preflight (the shared
 [`checkStatus`](../../../packages/actions-core/src/checkStatus.ts) helper),
 deduplicated by name and excluding the action's own job. See the
-[Release auto-merge flow](../../../docs/release-automerge.md) doc for the full
+[Release auto-merge flow](../../../docs/07-release-automerge.md) doc for the full
 picture and the downstream-sync design.
 
 ## Usage
@@ -25210,7 +25210,7 @@ difference. The synced set is:
 
 Together these are the full release pipeline: `release-create.yml` creates the release
 PR, `release-automerge.yml` merges it once it is approved and green, and
-`release-publish.yml` runs on the merge. See the [Release auto-merge flow](../../../docs/release-automerge.md)
+`release-publish.yml` runs on the merge. See the [Release auto-merge flow](../../../docs/07-release-automerge.md)
 doc for how the merge gate works. The actions these workflows invoke
 ([`release-action`](../release-action/README.md),
 [`release-automerge`](../release-automerge/README.md)) are **not** synced — downstream
@@ -25396,7 +25396,7 @@ The synced set is:
 
 The workflow propagates the CI that commits a packed codebase snapshot to `.repomix/pack.xml`
 on every merge to the default branch; the config pins that pack's output for a deterministic,
-reviewable diff. See the [Committed Repomix pack](../../../docs/repomix-pack.md) doc for how the
+reviewable diff. See the [Committed Repomix pack](../../../docs/09-repomix-pack.md) doc for how the
 snapshot is produced and consumed. Each consumer repo packs its own codebase — there is no
 shared artifact.
 
@@ -37221,7 +37221,7 @@ All user-invocable entries are skills. Skills natively accept `$ARGUMENTS` and s
 
 ### Codebase context snapshot
 
-The skills that need whole-codebase context — `/autopilot:plan`, `/autopilot:run`, `/autopilot:issue-create`, `/autopilot:pr-review`, `/autopilot:pr-answer`, `/autopilot:pr-resolve` — read the committed `.repomix/pack.xml` snapshot first (via `attach_packed_output`) and fall back to a live `pack_codebase` when it is absent. The snapshot is refreshed by CI on every merge to `main`; see the consumer host repo's [Committed Repomix pack](../../docs/repomix-pack.md) doc for details.
+The skills that need whole-codebase context — `/autopilot:plan`, `/autopilot:run`, `/autopilot:issue-create`, `/autopilot:pr-review`, `/autopilot:pr-answer`, `/autopilot:pr-resolve` — read the committed `.repomix/pack.xml` snapshot first (via `attach_packed_output`) and fall back to a live `pack_codebase` when it is absent. The snapshot is refreshed by CI on every merge to `main`; see the consumer host repo's [Committed Repomix pack](../../docs/09-repomix-pack.md) doc for details.
 
 ### `/autopilot:branch-create`
 
@@ -37300,7 +37300,7 @@ Update an existing PR's title and description based on current branch commits.
 
 ### `/autopilot:plan`
 
-Perform deep analysis and create a validated implementation plan. Detects tech stack automatically. Uses the [codebase context snapshot](#codebase-context-snapshot). See [how the plan and run skills work](../../docs/plan-run-skills.md) for the full phase-by-phase flow.
+Perform deep analysis and create a validated implementation plan. Detects tech stack automatically. Uses the [codebase context snapshot](#codebase-context-snapshot). See [how the plan and run skills work](../../docs/05-plan-run-skills.md) for the full phase-by-phase flow.
 
 ```bash
 /autopilot:plan #42                                                      # From GitHub issue
@@ -37312,7 +37312,7 @@ Perform deep analysis and create a validated implementation plan. Detects tech s
 
 ### `/autopilot:run`
 
-Plan, implement, commit, create PR, and monitor until approved. Same as `/autopilot:plan` but after plan confirmation, automatically commits, creates a PR, and monitors for review approval. Uses the [codebase context snapshot](#codebase-context-snapshot). See [how the plan and run skills work](../../docs/plan-run-skills.md#how-run-differs-automated-post-implementation) for the automated post-implementation chain.
+Plan, implement, commit, create PR, and monitor until approved. Same as `/autopilot:plan` but after plan confirmation, automatically commits, creates a PR, and monitors for review approval. Uses the [codebase context snapshot](#codebase-context-snapshot). See [how the plan and run skills work](../../docs/05-plan-run-skills.md#how-run-differs-automated-post-implementation) for the automated post-implementation chain.
 
 ```bash
 /autopilot:run #42                                                      # From GitHub issue
@@ -37516,8 +37516,250 @@ See [Local development](#local-development) in the Installation section.
 1.3.0
 </file>
 
-<file path="docs/agents-field.md">
+<file path="docs/01-workspace-structure.md">
+# Workspace structure
+
+> Chapter 1 of the [repository docs](../README.md#repository-docs).
+
+Where new actions, packages, and apps go in this repository, and how each kind plugs into the Bun workspace, `tsconfig.json`, `action.yml`, and the Turbo task graph.
+
+## Overview
+
+This repo is a single Bun workspace (`bun@1`). Workspace members live in three places today: composite GitHub Actions under `.github/actions/<name>/`, shared libraries under `packages/<name>/`, and Claude Code plugins under `claude-plugins/<name>/`. Standalone apps (CLIs, services) are reserved for a future iteration.
+
+The top-level layout — illustrative, not exhaustive:
+
+```text
+code-assistants/
+├── .github/
+│   ├── actions/          # composite GitHub Actions (workspace members + YAML-only)
+│   └── workflows/
+├── claude-plugins/       # Claude Code plugins
+├── docs/                 # repository docs (you are here)
+├── packages/             # shared TypeScript libraries (workspace members)
+├── rules/                # stack-specific rule sets surfaced via CLAUDE.md
+├── scripts/              # repo-root scripts
+├── CLAUDE.md             # symlink → rules/Bun.md
+├── package.json          # root manifest, defines `workspaces` and `agents`
+└── turbo.json            # task graph (typecheck, test, clean)
+```
+
+Read this doc top to bottom on your first day. After that, the [Current vs. target](#current-vs-target) table is the fastest way to check what's settled and what's still in motion.
+
+## Actions
+
+Composite GitHub Actions live under `.github/actions/<name>/`. They come in two flavors. Both are valid — pick the one that matches the work.
+
+### TypeScript action
+
+A composite action that runs Bun-executed TypeScript. It IS a Bun workspace member.
+
+Directory contents:
+
+- `action.yml` — composite step definitions, invokes the entry via `${{ github.action_path }}/<entry-path>`
+- `package.json` — workspace member, package name `@code-assistants/<name>-action`
+- `tsconfig.json` — includes `src/**/*.ts`
+- `src/` — all source code (helpers, tests, and entry files)
+- `README.md`
+- Optional: `docs/`, `CLAUDE.md`, `AGENTS.md` (see [Per-member docs and agent files](#per-member-docs-and-agent-files))
+- Optional: tool config files with a `.ts`/`.mjs` extension (e.g., `vitest.config.ts`) — configs live at the root, not under `src/`
+
+**Target rule:** every `.ts` source file (entries, helpers, tests) should live under `src/`. Tool config files keyed by extension (`*.config.ts`, `*.config.mjs`) are exempt and remain at the root. Today two actions still have a root entry file (`files-sync.ts`, `agents-rules-sync.ts`) invoked directly by `action.yml` — that is the current state for source code, not a violation; see [Current vs. target](#current-vs-target).
+
+Worked examples:
+
+| Action                                                         | Layout              | Entry invoked from `action.yml`                    |
+| -------------------------------------------------------------- | ------------------- | -------------------------------------------------- |
+| [`files-sync`](../.github/actions/files-sync/)                 | root entry + `src/` | `${{ github.action_path }}/files-sync.ts`          |
+| [`agents-rules-sync`](../.github/actions/agents-rules-sync/)   | root entry + `src/` | `${{ github.action_path }}/agents-rules-sync.ts`   |
+| [`release-action`](../.github/actions/release-action/)         | `src/`-only         | `${{ github.action_path }}/src/<entry>.ts`         |
+| [`release-automerge`](../.github/actions/release-automerge/)   | `src/`-only         | `${{ github.action_path }}/src/automerge.ts`       |
+| [`code-review-action`](../.github/actions/code-review-action/) | `src/`-only         | `${{ github.action_path }}/src/<entry>.ts`         |
+| [`auto-label`](../.github/actions/auto-label/)                 | `src/`-only         | `${{ github.action_path }}/src/autoLabel.ts`       |
+| [`validate-actions`](../.github/actions/validate-actions/)     | `src/`-only         | `${{ github.action_path }}/src/validateActions.ts` |
+
+Required `package.json` scripts: see [Workspace scripts](#workspace-scripts).
+
+### YAML composite action
+
+A composite action that only stitches together existing third-party steps — no TypeScript, no `package.json`, no `tsconfig.json`. NOT a workspace member.
+
+Directory contents:
+
+- `action.yml`
+- `README.md`
+
+Worked examples: [`contributing-check`](../.github/actions/contributing-check/), [`contributing-sync`](../.github/actions/contributing-sync/).
+
+Use this flavor when the action only composes other actions (no logic of your own). Otherwise pick the TypeScript flavor.
+
+## Packages
+
+Shared libraries reused by actions or other packages. NOT consumed standalone. Always a Bun workspace member.
+
+Directory layout (`packages/<name>/`):
+
+```text
+packages/<name>/
+├── package.json          # workspace name `@code-assistants/<name>` (no -action suffix)
+├── tsconfig.json
+├── README.md             # optional
+├── docs/                 # optional (see Per-member docs and agent files)
+├── CLAUDE.md             # optional
+├── AGENTS.md             # optional
+└── src/
+    └── <module>.ts       # one file per exported module
+```
+
+Source code (entries, helpers, tests) lives under `src/`, never at the package root. Tool config files with a `.ts`/`.mjs` extension (e.g., `vitest.config.ts`) are the exception — like at the repo root (`lint-staged.config.ts`, `prettier.config.ts`), configs stay at the package root and are not imported as modules.
+
+`package.json` `exports` field maps the public surface — one entry per `src/` module:
+
+```json
+{
+  "name": "@code-assistants/<name>",
+  "exports": {
+    "./<module>": "./src/<module>.ts"
+  }
+}
+```
+
+Consumers import per-module (copy-pasted from `.github/actions/files-sync/src/changeDetector.ts`):
+
+```ts
+import { fetchRawContent } from "@code-assistants/actions-core/fetchRawContent";
+```
+
+Required scripts: see [Workspace scripts](#workspace-scripts) (`test` is opt-in for packages — add it only when test files exist).
+
+**Extract vs. duplicate:** extract into a package when two or more actions need the same helper. Duplicate when it's used in only one place.
+
+Worked example: [`actions-core`](../packages/actions-core/) (four exports: `fetchRawContent`, `checkStatus`, `parseRepo`, `releaseField`).
+
+## Apps
+
+No `apps/` directory exists yet. Location and naming convention will be decided in a follow-up issue when the first app lands.
+
+## Run and test a new member
+
+From the repo root:
+
+```bash
+bun install              # refresh the lockfile after editing workspaces
+bun run typecheck        # runs the `typecheck` task across the workspace via Turbo
+bun run test             # runs the `test` task across the workspace via Turbo
+```
+
+Use `bun run test`, not `bun test` — the root `package.json` maps `test` to `turbo run test` (`bun test` is Bun's own test runner and does not dispatch workspace scripts; it exits with "No tests found" when invoked at the repo root).
+
+Turbo handles per-package execution and caching. You don't need to `cd` into the member.
+
+## Cross-cutting
+
+### The `agents` field
+
+The root `package.json` declares the repo's stack via a top-level `agents` object — see [`docs/02-agents-field.md`](./02-agents-field.md) for the contract. This repo sets:
+
+```json
+{
+  "agents": {
+    "rules": "Bun",
+    "language": "typescript"
+  }
+}
+```
+
+### The `release` field
+
+A workspace member's `package.json` declares its release config via a top-level `release` object — see [`docs/06-release-field.md`](./06-release-field.md) for the contract. Consumed by [`release-action`](../.github/actions/release-action/README.md) to pick the version source, npm-publish step, major-version tag, and the optional Slack notification channel. The repo-root `package.json` may also declare `release.members` to opt specific workspace paths into monorepo mode — see [`docs/06-release-field.md`](./06-release-field.md#monorepo-root) and the [release-action monorepo section](../.github/actions/release-action/README.md#monorepo-mode). Example for a Node.js library member:
+
+```json
+{
+  "name": "@org/ingest",
+  "release": {
+    "type": "lib-nodejs",
+    "slack": "#releases"
+  }
+}
+```
+
+### Workspace scripts
+
+Every TypeScript workspace member (actions and packages) declares its scripts in its own `package.json`. Turbo discovers them per-package — there is no central script registry to update when you add a member.
+
+| Script      | Required?                            | Command (today)              | Notes                                                                                                                                                                                            |
+| ----------- | ------------------------------------ | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `typecheck` | Yes                                  | `tsc --noEmit`               | Runs in Turbo's `typecheck` task. Always present in TS members.                                                                                                                                  |
+| `test`      | Yes for actions, opt-in for packages | `bun test`                   | Bun's runner handles unit, integration, and e2e tests in the same invocation — test files live alongside source under `src/` per CLAUDE.md §3.1. Add this script only when the member has tests. |
+| `clean`     | Yes                                  | `rm -rf node_modules .turbo` | Removes per-member install and Turbo caches.                                                                                                                                                     |
+| `build`     | Optional                             | (none today)                 | Add only when the member produces a compiled output. Today every member runs TypeScript directly via Bun (`bun <entry>.ts`), so no build step is needed.                                         |
+
+**Other script names** (`lint`, `format`, `validate`, `prepare`) are root-only: they live in the root `package.json` and operate across the whole repo (Prettier, the `scripts/validate-plugins.ts` check, Husky setup). Do NOT duplicate them at the member level.
+
+Specialised script types as the project grows — e.g., `test:unit`, `test:integration`, `test:e2e`, `bench`, `start` — should be added per-member only when there is a reason to run them in isolation (the default `bun test` already covers everything under `src/`). Mirror the Turbo task graph if you add a name that should be cache-aware.
+
+### Turbo task graph
+
+`turbo.json` defines three tasks. Each task runs only in workspace members that declare the matching `package.json` script — there is no global config to update when you add a new member.
+
+| Task        | `inputs`                                                                 | Cached?             |
+| ----------- | ------------------------------------------------------------------------ | ------------------- |
+| `typecheck` | `action.yml`, `*.ts`, `src/**/*.ts`, `tsconfig.json`, `package.json`     | Yes                 |
+| `test`      | `*.ts`, `src/**/*.ts`, `tsconfig.json`, `package.json` (no `action.yml`) | Yes                 |
+| `clean`     | _none_                                                                   | No (`cache: false`) |
+
+`action.yml` is intentionally excluded from `test` inputs — changes to action metadata invalidate `typecheck` but not the test cache. If you add a task that needs cache-aware action-metadata sensitivity, include `action.yml` in its `inputs`.
+
+### Per-member docs and agent files
+
+Any action or package directory (TypeScript action, YAML composite action, or package) MAY include:
+
+- `docs/` — a member-scoped docs directory for material too specific or too long for the README
+- `CLAUDE.md` — agent rules that apply only inside that member's directory (Claude Code loads these in addition to the repo-root `CLAUDE.md`)
+- `AGENTS.md` — optional, same scope as `CLAUDE.md` but consumed by other agent tooling
+
+None of these are required. Use them when a member has enough surface area to need it; for small members a `README.md` alone is fine.
+
+### CLAUDE.md §3.1 file organization
+
+- Single module → flat file (`foo.ts`).
+- Multiple related files → directory with NO `index.ts` (`foo/foo.ts`, `foo/foo.test.ts`, `foo/foo.types.ts`).
+
+These rules are inherited from CLAUDE.md (a symlink to `rules/Bun.md`); not duplicated here.
+
+### Registering a new member
+
+For TypeScript actions and packages:
+
+1. Create the directory layout described above.
+2. Add the directory path to root `package.json` `workspaces`, then run `bun install` from the repo root to refresh the lockfile.
+3. Add a row to root `README.md` under the appropriate section (`## GitHub Actions` for actions, `## Repository docs` for docs, etc.).
+
+For YAML composite actions:
+
+1. Create the directory with just `action.yml` + `README.md`.
+2. Add a row to root `README.md` under `## GitHub Actions`.
+3. Skip the `workspaces` entry — YAML composite actions are not workspace members.
+
+No CI matrix entry, no release-workflow registration, no extra `turbo.json` config is required today.
+
+## Current vs. target
+
+As of 2026-06-12.
+
+| Rule                                                      | State                                                                                                                                                                                                                |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| All source `.ts` (entries, helpers, tests) under `src/`   | Target — `files-sync` and `agents-rules-sync` still have root entries (configs like `*.config.ts` always stay at the root)                                                                                           |
+| Package name `@code-assistants/<name>-action` for actions | Current — with two settled exceptions: directories already ending in `-action` keep their name as-is (`release-action`, `code-review-action`), and `release-automerge` is named `@code-assistants/release-automerge` |
+| Package name `@code-assistants/<name>` for packages       | Current                                                                                                                                                                                                              |
+| `test` script in every TS workspace member                | Current — every TS member, including `actions-core`, now has tests                                                                                                                                                   |
+| `apps/` directory                                         | Target — no apps exist yet                                                                                                                                                                                           |
+</file>
+
+<file path="docs/02-agents-field.md">
 # The `agents` field
+
+> Chapter 2 of the [repository docs](../README.md#repository-docs).
 
 Autopilot skills detect a repository's tech stack and source language by reading a custom `agents` object from the repo-root `package.json`. This document specifies the field, its accepted values, and how each consuming skill uses it.
 
@@ -37543,7 +37785,7 @@ The field coexists with normal npm metadata. It is not consumed by npm, Bun, or 
 
 ### Workspaces
 
-Consuming skills always read the **repository-root** `package.json` to detect stack and language; workspace members are not walked. Members may declare their own `agents` field anyway, and this repository does so on every workspace member to keep stack metadata visible at every module boundary — consistent with the per-member `docs/`, `CLAUDE.md`, and `AGENTS.md` convention recorded in `docs/workspace-structure.md`.
+Consuming skills always read the **repository-root** `package.json` to detect stack and language; workspace members are not walked. Members may declare their own `agents` field anyway, and this repository does so on every workspace member to keep stack metadata visible at every module boundary — consistent with the per-member `docs/`, `CLAUDE.md`, and `AGENTS.md` convention recorded in `docs/01-workspace-structure.md`.
 
 Rules for member declarations:
 
@@ -37575,7 +37817,7 @@ Identifies the tech stack and points at a matching rule set under `rules/` in th
 
 Any other value is treated as unrecognized.
 
-The resolved rules file is published to `CLAUDE.md` by default. The [`agents-rules-sync`](../.github/actions/agents-rules-sync/README.md) action can additionally expose it as `AGENTS.md` via a Git symlink — see the [`agents-md`](../.github/actions/agents-rules-sync/README.md#inputs) input.
+The resolved rules file is published to `CLAUDE.md` by default. The [`agents-rules-sync`](../.github/actions/agents-rules-sync/README.md) action can additionally expose it as `AGENTS.md` via a Git symlink — see the [`agents-md`](../.github/actions/agents-rules-sync/README.md#inputs) input (default `false`). Opt in when the repo is also worked on by OpenAI/agents-compatible tooling that reads `AGENTS.md`: the symlink keeps both ecosystems on the same rules file with a single source of truth, so the two can never drift.
 
 ### `language`
 
@@ -37698,8 +37940,10 @@ To add a new stack:
 To add a new language: extend the language-to-pattern table in `claude-plugins/autopilot/skills/todo-cleanup/SKILL.md` and mirror the change here.
 </file>
 
-<file path="docs/code-review-run-summary.md">
+<file path="docs/03-code-review-run-summary.md">
 # Review run-summary footer
+
+> Chapter 3 of the [repository docs](../README.md#repository-docs).
 
 `code-review-action` instruments every review run with per-run metrics — model latency, token usage, cache hits, cost, and tool round-trips. These numbers were invaluable while optimizing the action, but they used to live only in the Actions run logs.
 
@@ -37822,8 +38066,10 @@ Because the reasons derive from untrusted CI annotations, `skipComment.ts` sanit
 | `action.yml`                  | Wires `run_summary` into Submit Review; runs the `explain` (`runClaude`) + `post` skip steps with the `model` input           |
 </file>
 
-<file path="docs/code-review-suggestions.md">
+<file path="docs/04-code-review-suggestions.md">
 # Inline suggestions and AI-agent prompts
+
+> Chapter 4 of the [repository docs](../README.md#repository-docs).
 
 `code-review-action` posts inline PR findings as plain `{path, line, body}` comments. That tells the author _what_ is wrong, but they still hand-apply every fix, and an external coding agent has no structured handle on the finding.
 
@@ -37956,8 +38202,10 @@ The prose is never lost; only the one-click apply degrades when the anchor canno
 | `claude-plugins/autopilot/skills/pr:review/SKILL.md` | Tells the model when and how to emit `suggestion`/`startLine` (the "Code suggestions" section)                                                                                             |
 </file>
 
-<file path="docs/plan-run-skills.md">
+<file path="docs/05-plan-run-skills.md">
 # Plan and run skills
+
+> Chapter 5 of the [repository docs](../README.md#repository-docs).
 
 How `/autopilot:plan` and `/autopilot:run` turn a task — a GitHub issue or a free-form description — into a validated, expert-reviewed implementation plan, and (for `run`) all the way into a merged pull request.
 
@@ -38063,7 +38311,7 @@ The skill detects the input type from its arguments and gathers context **in par
 
 The classifier matches **top-to-bottom**: the code-scanning-alert row is checked first because an alert URL contains `github.com` and would otherwise misroute to `gh issue view`. A bare number stays a GitHub issue — alerts need the URL or the explicit `alert#{n}` / `alert {n}` token.
 
-- **Codebase snapshot (always).** Prefer the committed `.repomix/pack.xml` via `attach_packed_output`; fall back to a live `pack_codebase` when it is absent. Phase 0 only _attaches_ the pack — it does not read code from it; the returned `outputId` is handed to Phase 1, the single phase that reads the codebase. See [Committed Repomix pack](./repomix-pack.md).
+- **Codebase snapshot (always).** Prefer the committed `.repomix/pack.xml` via `attach_packed_output`; fall back to a live `pack_codebase` when it is absent. Phase 0 only _attaches_ the pack — it does not read code from it; the returned `outputId` is handed to Phase 1, the single phase that reads the codebase. See [Committed Repomix pack](./09-repomix-pack.md).
 - **For GitHub issues (parallel sub-agents).** `resolve-issue-context` fetches the issue (and, when the caller opts in, idempotently self-assigns the current user); `search-codebase-todos` finds TODOs referencing the issue. Both return JSON (see [Sub-agents](#sub-agents-and-their-json-contracts)).
 - **For code-scanning alerts (one sub-agent).** `resolve-alert-context` resolves the alert through `gh api repos/{owner}/{repo}/code-scanning/alerts/{n}` (rule, severity, `file:line`, state, message, `html_url`) — never `gh issue view`. There is no TODO search and no self-assign. If it returns `state: "unresolved"` (gh unauthenticated, missing `security_events` scope, or alert not found), the skill surfaces the error and stops rather than misrouting. The alert drives the plan title/summary and a `security-<slug>` branch / `SECURITY:` PR; the PR records the alert reference and emits no `Closes #` (alerts close on the next scan), and the plan's verify step polls alert state via the code-scanning API.
 
@@ -38133,7 +38381,7 @@ Apply the expert findings and the validated score to the draft, replace the `Sco
 
 ## Sub-agents and their JSON contracts
 
-Three sub-agents isolate work from the parent's context. Each returns a single schema-validated JSON object so the parent consumes typed fields instead of parsing prose.
+Three sub-agents isolate work from the parent's context. Each returns a single schema-validated JSON object so the parent consumes typed fields instead of parsing prose. The launching skills declare `Agent` in their frontmatter `allowed-tools` — that grant is what makes the fan-out possible at all.
 
 ```text
         ┌──────────────────────────────────────────────┐
@@ -38201,299 +38449,16 @@ Three sub-agents isolate work from the parent's context. Each returns a single s
 | `claude-plugins/autopilot/agents/search-codebase-todos.md`   | TODO/issue-reference search (JSON)                                                      |
 </file>
 
-<file path="docs/plan-skills-audit.md">
-# Plan skills audit
-
-A dimension-by-dimension audit of the three planning skills, with each finding citing an exact file and line, rated by impact, and paired with a concrete recommendation. The deliverable is this findings document and the prioritized optimization plan at the end; no skill is rewritten here. The recommendations seed follow-up issues.
-
-Tracking issue: [#171](https://github.com/awinogradov/code-assistants/issues/171).
-
-## Subjects
-
-| File                                                         | Role                                                                              |
-| ------------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| `claude-plugins/autopilot/skills/plan/SKILL.md`              | Orchestrator — input resolution, preflight, common rules, delegation (Phases 0–2) |
-| `claude-plugins/autopilot/skills/plan-bun/SKILL.md`          | Bun stack pipeline (Phases 1–5)                                                   |
-| `claude-plugins/autopilot/skills/plan-nodejs-react/SKILL.md` | NodeJS+React stack pipeline (Phases 1–5)                                          |
-
-Cross-referenced agents: `claude-plugins/autopilot/agents/expert-review.md`, `…/resolve-issue-context.md`, `…/search-codebase-todos.md`.
-
-## Methodology
-
-Each skill and agent was read in full. Every claim below cites `file:line` against the files as they exist at audit time. Citations were then re-verified line-by-line by an independent pass; the corrections that pass produced are folded in here, and the ones worth recording are listed under [Citation verification notes](#citation-verification-notes). Impact is rated **High / Med / Low** by how much the issue inflates tokens, breaks control flow, or risks silent drift.
-
-## Findings by dimension
-
-### 1. Logical issues / inconsistencies
-
-| #   | Impact | Finding                                                                                                                                                                                                                                                                                              | Citation                                                                                                                                           |
-| --- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1.1 | High   | **Score/review act on a plan that does not exist yet.** Phase 3 "Rate the plan" and Phase 4 expert review both consume a plan artifact that Phase 5 ("Output Format") is the first to assemble. The Phase 4 prompt even interpolates the literal placeholder `[full plan text from Phase 5 output]`. | `plan-bun/SKILL.md:80`, `:125`, `:133`; mirrored `plan-nodejs-react/SKILL.md:80`, `:130`, `:138`                                                   |
-| 1.2 | Med    | **Two competing clarification mechanisms.** A "Quiz Mode Format" (A/B/C/D text block) coexists with the mandated `AskUserQuestion` tool and its formatting note. The skills never say which to use, and Quiz Mode is never actually invoked by any phase — it reads as dead instruction.             | Quiz Mode `plan-bun/SKILL.md:193`, `plan-nodejs-react/SKILL.md` (Quiz Mode section), `plan/SKILL.md:384`; AskUserQuestion note `plan/SKILL.md:312` |
-| 1.3 | Med    | **Auto-Iteration mixes silent and interactive control flow.** Step 2 says "Ask clarifying questions in quiz format" (interactive), while step 3 says "Re-analyze and re-score internally (do not output retry details)" (silent). The loop is simultaneously user-facing and hidden.                 | `plan-bun/SKILL.md:95-97`; mirrored in `plan-nodejs-react`                                                                                         |
-
-### 2. Phase ordering
-
-| #   | Impact | Finding                                                                                                                                                                                                                                                                                        | Citation                                                             |
-| --- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| 2.1 | High   | **Validate → Review → Output is inverted.** Scoring (Phase 3) and expert review (Phase 4) precede plan output (Phase 5), but a plan must be drafted before it can be scored or reviewed. A correct order is Draft → Expert Review → Score → Finalize, so the score reflects the reviewed plan. | `plan-bun/SKILL.md:76` (Phase 3), `:101` (Phase 4), `:133` (Phase 5) |
-| 2.2 | Med    | **Explicit forward reference confirms the inversion.** The Phase 4 expert prompt literally pastes "[full plan text from Phase 5 output]" — naming a later phase's artifact as input to an earlier phase.                                                                                       | `plan-bun/SKILL.md:125`; `plan-nodejs-react/SKILL.md:130`            |
-
-### 3. Context-gathering effectiveness
-
-This is the dimension with the largest practical waste, and the framing matters — see the [Citation verification notes](#citation-verification-notes) for one claim that the verification pass corrected.
-
-| #   | Impact | Finding                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Citation                                                                                                                                                    |
-| --- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 3.1 | High   | **The same tree is traversed up to three ways in one run, with no stated division of labor.** (a) Phase 0 acquires a repomix snapshot and searches it via `grep_repomix_output`/`read_repomix_output`; (b) stack Phase 1 step 2 launches Explore agents **unconditionally**, which crawl the live tree via Grep/Glob/Read; (c) stack Phase 1 step 6 searches the snapshot again, and Phase 2 adds a "Fall back to Grep, Read, or Glob" live path. Nothing says which source answers which question, so broad discovery work is repeated.                                                                                                                                       | snapshot `plan/SKILL.md:104-141`; Explore agents `plan-bun/SKILL.md:43-48`; snapshot re-search `plan-bun/SKILL.md:56`; live fallback `plan-bun/SKILL.md:64` |
-| 3.2 | Med    | **The snapshot-first contract is never propagated to the stack skills.** `docs/repomix-pack.md:53-61` defines a snapshot-first-with-fallback contract and the orchestrator's Phase 0 follows it, but the stack skills launch live Explore agents with no reference to it. The contract also states (`:61`) that on a feature branch the snapshot "lags by the in-flight changes — acceptable, since review-time skills obtain the actual diff separately." The plan stack skills _do_ obtain the branch diff separately (`plan-bun/SKILL.md:40-42`), so the unconditional Explore crawl is largely redundant with already-available context rather than a freshness necessity. | contract `docs/repomix-pack.md:53-61`; feature-branch lag `:61`; branch diff `plan-bun/SKILL.md:40-42`                                                      |
-| 3.3 | Med    | **No snapshot freshness signal.** Phase 0 attaches `.repomix/pack.xml` whenever it exists, with no check of how stale it is (it is refreshed only on merge to `main` by `.github/workflows/repomix-pack.yml`). Combined with 3.1, the run can search a stale snapshot _and_ read fresh files with no rule for reconciling the two.                                                                                                                                                                                                                                                                                                                                             | `plan/SKILL.md:104-110`; `.github/workflows/repomix-pack.yml` (`pull_request: types:[closed]`)                                                              |
-| 3.4 | Med    | **Doc-lookup / repo-docs / CLAUDE.md blocks are duplicated into the stack skills.** The orchestrator declares these under "Common Instructions … apply to ALL stacks," then each stack skill restates them in Phase 1 steps 3–5.                                                                                                                                                                                                                                                                                                                                                                                                                                               | orchestrator `plan/SKILL.md:203-235` (lookup), `:237-244` (repo docs), `:271-273` (CLAUDE.md); duplicated `plan-bun/SKILL.md:49-55`                         |
-
-Recommendation for the dimension: state one decision rule — snapshot serves broad/whole-repo reads; live tools (Explore/Grep) serve fresh-or-targeted reads the snapshot cannot — make the Explore step conditional on that rule, and drop the duplicated global blocks from the stack skills.
-
-### 4. Skills / agents / tools usage
-
-| #   | Impact | Finding                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Citation                                                                                                                                                                             |
-| --- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 4.1 | High   | **The sub-agent launcher tool is never granted, yet every skill instructs sub-agent launches.** `allowed-tools` lists the todo tools `TaskList`/`TaskUpdate`/`TaskCreate` and (in the orchestrator) the `Skill(...)` invocations, but none lists `Task` — the tool that actually spawns sub-agents. Meanwhile Phase 0 says "Use the Agent tool" for the context agents, and the stack skills say "Launch Explore agents" and "launch a `autopilot:expert-review` sub-agent … multiple Agent tool calls." If skill `allowed-tools` is enforced as a hard gate, these launches are unreachable; if it is advisory, the list is still misleading. Worth confirming which, then fixing the grant or the instructions to match. | omits `Task`: `plan/SKILL.md:5-21`, `plan-bun/SKILL.md:5-19`, `plan-nodejs-react/SKILL.md:5-19`; sub-agent instructions: `plan/SKILL.md:112-122`, `plan-bun/SKILL.md:43`, `:115-127` |
-| 4.2 | Low    | **`TaskCreate` is granted but unused in the stack skills.** The stack skills only discover tasks (`TaskList`) and update them (`TaskUpdate`); they never create. The `TaskCreate` grant is dead.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | grant `plan-bun/SKILL.md:8`; usage `plan-bun/SKILL.md:24-34`                                                                                                                         |
-| 4.3 | Low    | **`expert-review` inherits all tools.** The agent only reads the plan text passed in its prompt, but its frontmatter declares no `tools:` restriction (only `model: inherit`), so it inherits the full tool set. Tightening to a minimal set (or none) reduces blast radius.                                                                                                                                                                                                                                                                                                                                                                                                                                               | `expert-review.md:1-5`                                                                                                                                                               |
-
-### 5. Token optimization
-
-| #   | Impact | Finding                                                                                                                                                                       | Citation                                                                               |
-| --- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| 5.1 | High   | **The entire Phase 1–5 pipeline is duplicated across both stack skills** (~200 lines each, ~90% identical). Every fix to the pipeline must be made twice and is loaded twice. | `plan-bun/SKILL.md:36-189` vs `plan-nodejs-react/SKILL.md:36-194`                      |
-| 5.2 | Med    | **Doc-lookup protocol is effectively triplicated** — the orchestrator's Common Instructions plus a near-verbatim copy in each stack skill.                                    | `plan/SKILL.md:203-235`; `plan-bun/SKILL.md:49-53`; `plan-nodejs-react/SKILL.md:49-53` |
-| 5.3 | Low    | **Quiz Mode Format is repeated in all three skills** (~10 lines each) and is dead (see 1.2).                                                                                  | `plan/SKILL.md:384`, `plan-bun/SKILL.md:193`, `plan-nodejs-react` Quiz Mode section    |
-
-### 6. Performance optimization
-
-| #   | Impact | Finding                                                                                                                                                                                 | Citation                                                                                      |
-| --- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| 6.1 | Good   | **The high-value fan-outs are already parallel** — Phase 0's context calls, the doc-lookup resolve→query batches, and the Phase 4 expert reviews all run in parallel. No change needed. | `plan/SKILL.md:99` (parallel note), `:218` (resolve/query); `plan-bun/SKILL.md:115` (experts) |
-| 6.2 | Low    | **Phase 1 step 1 runs `git log` then `git diff` sequentially.** Independent commands; batchable, but the wall-clock upside is negligible. Note only.                                    | `plan-bun/SKILL.md:40-42`                                                                     |
-
-### 7. Structured output for sub-agents
-
-| #   | Impact | Finding                                                                                                                                                                                                                                                                                                                      | Citation                                                                                      |
-| --- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| 7.1 | High   | **All three sub-agents return free-text the parent must parse.** `expert-review` emits a markdown report block (Score / Verdict / 3–5 findings); `resolve-issue-context` and `search-codebase-todos` emit prose blocks with bold-label fields. None is schema-validated, so format drift silently breaks downstream parsing. | `expert-review.md:51-59`; `resolve-issue-context.md:87-102`; `search-codebase-todos.md:24-31` |
-| 7.2 | Med    | **`expert-review`'s contract is exactly a schema.** The score (0–100), verdict enum, and the 3–5-finding cap are structured fields a JSON schema would enforce far more reliably than prose instructions.                                                                                                                    | `expert-review.md:51-59`                                                                      |
-
-### 8. Instruction deduplication
-
-`plan-bun` and `plan-nodejs-react` are ~90% identical. Their only real deltas:
-
-| Delta                                | `plan-bun`                              | `plan-nodejs-react`                              |
-| ------------------------------------ | --------------------------------------- | ------------------------------------------------ |
-| Phase 1 step 3 example libraries     | `zod`, `hono`, `@effect/schema` (`:49`) | `react`, `next`, `@tanstack/react-query` (`:49`) |
-| Phase 4 expert table                 | 5 rows (`:107-113`)                     | 10 rows (`:107-118`)                             |
-| Phase 5 verify example / test runner | `bun test …` (`:156`)                   | `vitest run …` (`:161`)                          |
-
-| #   | Impact | Finding                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| --- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 8.1 | High   | Because the two pipelines are copies, the tables and verify lines have **already drifted** (different expert lists, different test runner, and the verify example sits on different lines because the longer expert table shifts content down). This is exactly the silent-drift risk the tracking issue calls out. Collapse to one shared pipeline (move Phase 1–5 into the orchestrator's Common Instructions or a shared include) and reduce each stack skill to its three deltas above. |
-
-## Prioritized optimization plan
-
-Ranked by impact-to-effort. Each row was filed as a follow-up issue linking #171.
-
-| P   | Issue | Recommendation                                                                                                                                                                                                                         | Dimensions | Impact | Effort  |
-| --- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ------ | ------- |
-| P1  | #181  | Fix phase ordering — draft the plan before scoring/expert review; remove the `[full plan text from Phase 5 output]` forward reference                                                                                                  | 1, 2       | High   | Low     |
-| P2  | #182  | Reconcile the sub-agent launcher — confirm whether skill `allowed-tools` is an enforced gate, then either grant `Task` in all three skills or rewrite the sub-agent instructions to match                                              | 4          | High   | Low     |
-| P3  | #183  | Reconcile context-gathering — one decision rule (snapshot = broad reads, live tools = fresh/targeted), make Explore agents conditional, and surface snapshot staleness so the pack and the live crawl stop re-traversing the same tree | 3, 6       | High   | Low–Med |
-| P4  | #184  | Deduplicate the Phase 1–5 pipeline into a single shared source; reduce each stack skill to its three deltas                                                                                                                            | 5, 8       | High   | Med     |
-| P5  | #185  | Give `expert-review` and the context agents schema-validated output                                                                                                                                                                    | 7          | Med    | Med     |
-| P6  | #186  | Remove the triplicated doc-lookup / repo-docs / CLAUDE.md blocks from the stack skills                                                                                                                                                 | 3, 5       | Med    | Low     |
-| P7  | #187  | Resolve Quiz Mode vs `AskUserQuestion` — remove the dead Quiz Mode                                                                                                                                                                     | 1, 5       | Low    | Low     |
-| P8  | #188  | Trim over-granted tools — drop the unused `TaskCreate` grant from the stack skills and scope `expert-review`'s tools                                                                                                                   | 4          | Low    | Low     |
-
-## Citation verification notes
-
-Corrections produced by the independent re-verification pass, recorded so future readers trust the line numbers:
-
-- **`docs/repomix-pack.md` contract location and meaning.** The snapshot-first-with-fallback contract is at `:53-61`, not earlier in the file. Importantly, the contract's fallback is to `pack_codebase` (still a pack) only when the pack is **absent or attach fails** — it is **not** a staleness-triggered fallback to live tools. Snapshot staleness on feature branches is explicitly called "acceptable" (`:61`). Finding 3.2 is framed accordingly; an earlier draft that described a "fall-back-when-stale" clause was incorrect.
-- **`plan-bun` verify example line.** The `bun test` verify example is at `:156`. The corresponding `vitest run` example in `plan-nodejs-react` is at `:161` — the offset is real and caused by the longer (10-row) expert table shifting content down, which is itself evidence for finding 8.1.
-- **`TaskCreate` grant line.** In `plan-bun`, `TaskCreate` is at `:8` (`TaskList` `:6`, `TaskUpdate` `:7`). This is the todo tool, distinct from the absent sub-agent launcher `Task` discussed in 4.1.
-</file>
-
-<file path="docs/release-automerge.md">
-# Release auto-merge
-
-Release PRs (branch `release-<version>`) are auto-approved by
-[`code-review-action`](../.github/actions/code-review-action/README.md) but then
-sit approved-but-unmerged until a human clicks merge, stalling the publish
-pipeline. This repository closes that gap with an event-driven
-[`release-automerge`](../.github/actions/release-automerge/README.md) action that
-merges a release PR the moment it is green and approved. This document describes
-why it exists, how the merge gate works, and how the workflow is propagated
-downstream.
-
-## Why it exists
-
-GitHub's native auto-merge cannot be scoped to a specific PR or branch under this
-repository's org settings, so it cannot be limited to release branches. A custom,
-event-driven action is the only way to merge **only** release PRs without
-babysitting each release. Because it re-evaluates on every relevant event, it is
-self-healing: a late approval or a re-run that turns the last check green triggers
-the merge with no manual step.
-
-## How it works
-
-```
- release PR (head: release-<version>)
-   │ checks run            code-review-action auto-approves
-   │ (CI, lint, …)         (release-* PR by trusted author)
-   ▼                                  │
- ┌──────────────────────────────────────────────────────────┐
- │ release-automerge.yml  (event-driven)                     │
- │ on: check_suite[completed] · pull_request_review[submitted]│
- └───────────────────────────┬───────────────────────────────┘
-                             ▼
-   ┌───────────────────────────────────────────────────┐
-   │ release-automerge action                          │
-   │ 1. resolve open PR for the head SHA               │
-   │ 2. head ref ~ ^release-  AND  state == open ?     │
-   │ 3. release.automerge === true (member|root) ?     │
-   │ 4. reviewDecision == APPROVED ?                   │
-   │ 5. all checks green? (poll until settled)         │
-   │ 6. merge (sha-pinned) with an allowed method      │
-   └───────────────────────────┬───────────────────────┘
-                  ▼ all true                ▼ any false / any error
-            merge PR                   no-op (never merge)
-                  │
-                  ▼ merge cascades (PAT bot_token)
-            release-publish.yml runs on merge
-```
-
-- **Triggers:** `pull_request_review: [submitted]` and `check_suite: [completed]`.
-  `pull_request_review` is the primary trigger — the approval that unblocks a
-  release PR is posted by `code-review-action` as a real PAT, so it fires reliably.
-  `check_suite` is only a best-effort backstop: GitHub does **not** redeliver
-  `check_suite` events for check suites produced by the `GITHUB_TOKEN` CI workflows,
-  so on a release branch it cannot be relied on to fire when the last check turns
-  green. Because an approval routinely lands while CI is still running, the action
-  **polls** for the pending checks to settle rather than skipping (see Merge
-  conditions) — that, not `check_suite`, is what covers "checks finishing after
-  approval," and it needs no consumer-specific workflow names. Both events expose
-  the head branch reliably (`pull_request.head.ref` / `check_suite.head_branch`), so
-  the job carries an `if:` guard that runs it **only** when that branch matches
-  `^release-`; the action re-checks `^release-` internally as defense in depth. (The
-  `status` event is intentionally not a trigger: its payload has no reliable
-  release-branch signal to filter on.)
-- **Merge conditions (all must hold):** the head ref matches `^release-`, the PR is
-  open, the repo opted in via `release.automerge === true`,
-  `reviewDecision == APPROVED`, and every sibling check is green. Approval is checked
-  **first** so non-approval review events skip immediately; only then does the action
-  wait on checks. Pending checks are **polled** (15s interval) until they complete or
-  an 8-minute timeout elapses — within the job's 10-minute limit — then failed → skip,
-  still-pending → skip. The check aggregation reuses the same logic as the AI-review
-  preflight (see [the shared `checkStatus` helper][checkstatus]), deduplicated by name
-  and excluding the action's own job.
-- **Opt-in gate (default off):** the action merges only when `release.automerge`
-  resolves to `true` (see the [`release` field spec](./release-field.md)). Because
-  a monorepo opens one release PR **per member** (`release-<member>-<version>`),
-  the gate resolves per member: it identifies the releasing member from the PR's
-  `<member>/.release_notes/<version>.md` file (the same signal the publish step
-  uses), then takes the member's own `release.automerge`, falling back to the
-  root default — `member ?? root ?? false`. Both are read at the triggering head
-  SHA, so the flag travels with the release branch. A missing `package.json` is a
-  clean skip; a malformed one fails closed (no merge); a non-boolean `automerge`
-  is rejected; a PR whose releasing member cannot be resolved is left unmerged.
-  **Migration:** because downstream repos reference the action via `@main`, this
-  gate ships as a behavior change — every repo that relied on auto-merge must add
-  `release.automerge: true` to its root (or per-member) `package.json`, or its
-  release PRs will stay approved-but-unmerged until a human merges them.
-- **Merge method:** the action reads the repository's allowed merge methods
-  (`allow_rebase_merge` / `allow_squash_merge` / `allow_merge_commit`) and prefers
-  `rebase`, falling back to `squash` then `merge`. The merge is pinned to the
-  triggering head SHA, so a push that lands mid-evaluation is rejected rather than
-  merged unreviewed.
-- **Fail-closed:** any unmet condition or unexpected error results in no merge.
-  An already-merged or no-longer-mergeable PR is treated as a clean no-op so
-  concurrent events do not error.
-
-### Why a PAT/App token, not `GITHUB_TOKEN`
-
-The action merges with the repository's `BOT_TOKEN` (a PAT or GitHub App
-installation token), **not** the default `GITHUB_TOKEN`. A merge performed with
-`GITHUB_TOKEN` does not trigger downstream workflows, so
-[`release-publish.yml`](../.github/workflows/release-publish.yml) — which runs on
-`pull_request_target: [closed]` for `**/.release_notes/**` — would never fire and
-the release would not publish. The upstream auto-approval is posted with the same
-token for the same reason.
-
-> **Ruleset bypass for protected `main`.** If `main` is governed by a ruleset
-> (`pull_request` / required-status-checks / linear-history / signed-commits
-> rules), the `BOT_TOKEN` identity must be a **bypass actor** on it, and the
-> ruleset's allowed merge methods must include the method the action selects —
-> otherwise `gh`/the merge API returns an opaque 403/422. A required check that is
-> _skipped_ on release branches (e.g. the AI review) must report a neutral/success
-> conclusion or be marked non-required, or it will block the merge. Add the bot to
-> the ruleset's bypass list (Settings → Rules → the branch ruleset → Bypass list).
-
-### Author and approver must be distinct identities
-
-GitHub forbids a user from approving its own pull request. The auto-approval is
-posted by the `code-review-action` reviewer (`BOT_USERNAME`, authenticated with
-`BOT_TOKEN`), so the release PR must be **authored by a different identity** —
-otherwise the `APPROVE` call fails with `422 Can not approve your own pull
-request`, no approval is recorded, and the PR never reaches the
-`reviewDecision == APPROVED` gate above.
-
-[`release-create.yml`](../.github/workflows/release-create.yml) therefore opens
-the release PR with a `GH_TOKEN` secret whose identity is **not** the reviewer,
-and that identity is listed in the `RELEASE_PR_AUTHORS` variable
-`code-review-action` trusts for auto-approval. The reviewer (`BOT_TOKEN`) then
-approves it, and because that approval is posted by a real PAT — not
-`GITHUB_TOKEN` — it triggers this action via `pull_request_review`. A failed
-auto-approval is surfaced as a workflow `::error::` rather than silently
-skipped, so a shared-identity misconfiguration cannot hide.
-
-## Downstream propagation
-
-`release-automerge.yml` is one of three workflows that form the release pipeline,
-and all three are distributed to downstream repositories together — exactly like the
-code-review and repomix workflows:
-
-```
-   upstream.yml ──hourly──> release-sync ──> files-sync
-     (cron)                  (wraps files-sync)   │
-                                                  ▼
-              PR: sync .github/workflows/{release,publish,release-automerge}.yml
-              (action dirs NOT synced — referenced via @main)
-```
-
-The [`release-sync`](../.github/actions/release-sync/README.md) action wraps
-[`files-sync`](../.github/actions/files-sync/README.md) to sync the full pipeline —
-`release-create.yml` (opens the release PR), `release-publish.yml` (publishes on
-merge), and `release-automerge.yml` (merges the approved, green PR) — to a
-`maintenance-sync-release` branch and open (or reuse) a single PR. The action
-directories these workflows invoke (`release-action`, `release-automerge`) are
-**not** synced — downstream repos reference them via `@main`, the same way
-`code-review.yml` references `code-review-action`. The `release` step of the
-[`upstream-sync`](../.github/actions/upstream-sync/README.md) action — invoked by
-[`upstream.yml`](../.github/workflows/upstream.yml) — runs it on the existing hourly
-schedule.
-
-The merge this action performs is what feeds the publish step; see the
-[`release` field spec](./release-field.md) for how `release-action` then selects
-artifacts on publish.
-
-[checkstatus]: ../packages/actions-core/src/checkStatus.ts
-</file>
-
-<file path="docs/release-field.md">
+<file path="docs/06-release-field.md">
 # The `release` field
+
+> Chapter 6 of the [repository docs](../README.md#repository-docs).
 
 [`release-action`](../.github/actions/release-action/README.md) reads all per-repo release configuration from a single `release` object in the repo-root `package.json`. This document specifies the field, its accepted values, and the consumer's detection algorithm.
 
 ## Why it exists
 
-Release type controls publish targets, version source, and the major-version tag — concerns parallel to stack detection via [`agents`](./agents-field.md), but consumed by a different tool. Slack-notification config (the channel) lives next to the type because it's the same kind of per-repo release setting. Keeping all of it under a single `release` object on `package.json` (sibling of `agents`) gives contributors one place to declare per-repo release metadata, with no separate YAML file.
+Release type controls publish targets, version source, and the major-version tag — concerns parallel to stack detection via [`agents`](./02-agents-field.md), but consumed by a different tool. Slack-notification config (the channel) lives next to the type because it's the same kind of per-repo release setting. Keeping all of it under a single `release` object on `package.json` (sibling of `agents`) gives contributors one place to declare per-repo release metadata, with no separate YAML file.
 
 ## Location
 
@@ -38675,72 +38640,178 @@ To add a new release type:
 3. Add a row to the table above and mirror it in `.github/actions/release-action/README.md` (keep both tables in the same row order).
 </file>
 
-<file path="docs/repomix-pack.md">
-# The committed Repomix pack
+<file path="docs/07-release-automerge.md">
+# Release auto-merge
 
-This repository commits a packed snapshot of `main` at `.repomix/pack.xml` and keeps it fresh with CI on every merge. Autopilot skills read this snapshot for codebase context instead of re-packing on every run. This document describes the artifact, the workflow that produces it, and the contract skills follow to consume it.
+> Chapter 7 of the [repository docs](../README.md#repository-docs).
+
+Release PRs (branch `release-<version>`) are auto-approved by
+[`code-review-action`](../.github/actions/code-review-action/README.md) but then
+sit approved-but-unmerged until a human clicks merge, stalling the publish
+pipeline. This repository closes that gap with an event-driven
+[`release-automerge`](../.github/actions/release-automerge/README.md) action that
+merges a release PR the moment it is green and approved. This document describes
+why it exists, how the merge gate works, and how the workflow is propagated
+downstream.
 
 ## Why it exists
 
-Several Autopilot skills (`/plan`, `/issue-create`, `/run`, `/pr-review`, `/pr-resolve`, `/pr-answer`) need whole-codebase context to ground their output. Each previously called `mcp__repomix__pack_codebase` on every invocation, which:
+GitHub's native auto-merge cannot be scoped to a specific PR or branch under this
+repository's org settings, so it cannot be limited to release branches. A custom,
+event-driven action is the only way to merge **only** release PRs without
+babysitting each release. Because it re-evaluates on every relevant event, it is
+self-healing: a late approval or a re-run that turns the last check green triggers
+the merge with no manual step.
 
-- repeats the in-memory pack cost on every run, adding latency; and
-- makes the skill hard-depend on the Repomix MCP server being reachable.
-
-A committed snapshot removes the per-run pack tax, lets skills ingest a stable artifact, and produces a reviewable diff log of how the codebase shape changes over time.
-
-## The artifact
-
-- **Path:** `.repomix/pack.xml`
-- **Format:** Repomix XML (`<file>` tags), full-repo, uncompressed.
-- **Source of truth:** reflects `main` at the most recent merge commit. It is regenerated by CI, not by hand.
-
-`.repomix/` is intentionally **not** in `.gitignore` — the pack is a committed artifact.
-
-## How it is produced
-
-The `.github/workflows/repomix-pack.yml` workflow regenerates the pack on every merge to `main`:
+## How it works
 
 ```
-┌────────────┐  merged   ┌──────────────────────┐   push    ┌─────────────────┐
-│  PR #N     │ ────────▶ │ repomix-pack.yml     │ ────────▶ │ main            │
-│  closed    │           │ (npx repomix pack)   │           │ .repomix/       │
-│ into main  │           │  detect diff         │           │   pack.xml      │
-└────────────┘           └──────────────────────┘           └─────────────────┘
-                                  │
-                                  │ no diff
-                                  ▼
-                            (skip commit)
+ release PR (head: release-<version>)
+   │ checks run            code-review-action auto-approves
+   │ (CI, lint, …)         (release-* PR by trusted author)
+   ▼                                  │
+ ┌──────────────────────────────────────────────────────────┐
+ │ release-automerge.yml  (event-driven)                     │
+ │ on: check_suite[completed] · pull_request_review[submitted]│
+ └───────────────────────────┬───────────────────────────────┘
+                             ▼
+   ┌───────────────────────────────────────────────────┐
+   │ release-automerge action                          │
+   │ 1. resolve open PR for the head SHA               │
+   │ 2. head ref ~ ^release-  AND  state == open ?     │
+   │ 3. release.automerge === true (member|root) ?     │
+   │ 4. reviewDecision == APPROVED ?                   │
+   │ 5. all checks green? (poll until settled)         │
+   │ 6. merge (sha-pinned) with an allowed method      │
+   └───────────────────────────┬───────────────────────┘
+                  ▼ all true                ▼ any false / any error
+            merge PR                   no-op (never merge)
+                  │
+                  ▼ merge cascades (PAT bot_token)
+            release-publish.yml runs on merge
 ```
 
-- **Trigger:** `pull_request` `types: [closed]`, `branches: [main]`, gated by `if: github.event.pull_request.merged == true` — runs on the merge, not on every `push`.
-- **Pack:** pinned `npx repomix@<version>` (exact version, no `^`/`~`) so pack diffs reflect codebase drift, not tool-version drift.
-- **Commit:** the pack is staged and committed only when `git diff --cached --quiet -- .repomix/pack.xml` reports a staged change — this covers both a modified file and a brand-new untracked one (e.g. the very first run). The auto-commit uses the Conventional-Commits message `chore(repomix): refresh pack from #<PR>`.
-- **Push:** uses the repo's `BOT_TOKEN` secret (with `BOT_USERNAME` as the git author, matching `upstream.yml`/`release-create.yml`). The default `GITHUB_TOKEN` cannot push to protected `main` or trigger downstream workflows. Because this step pushes **directly** to `main`, the `BOT_TOKEN` identity must also be a **bypass actor** on the protected-branch ruleset; `contents: write` alone is insufficient. When the ruleset's `pull_request` rule is active, a direct push is rejected with `GH013` ("Changes must be made through a pull request") no matter the token's scope. Add the bot to the ruleset's bypass list to allow it.
+- **Triggers:** `pull_request_review: [submitted]` and `check_suite: [completed]`.
+  `pull_request_review` is the primary trigger — the approval that unblocks a
+  release PR is posted by `code-review-action` as a real PAT, so it fires reliably.
+  `check_suite` is only a best-effort backstop: GitHub does **not** redeliver
+  `check_suite` events for check suites produced by the `GITHUB_TOKEN` CI workflows,
+  so on a release branch it cannot be relied on to fire when the last check turns
+  green. Because an approval routinely lands while CI is still running, the action
+  **polls** for the pending checks to settle rather than skipping (see Merge
+  conditions) — that, not `check_suite`, is what covers "checks finishing after
+  approval," and it needs no consumer-specific workflow names. Both events expose
+  the head branch reliably (`pull_request.head.ref` / `check_suite.head_branch`), so
+  the job carries an `if:` guard that runs it **only** when that branch matches
+  `^release-`; the action re-checks `^release-` internally as defense in depth. (The
+  `status` event is intentionally not a trigger: its payload has no reliable
+  release-branch signal to filter on.)
+- **Merge conditions (all must hold):** the head ref matches `^release-`, the PR is
+  open, the repo opted in via `release.automerge === true`,
+  `reviewDecision == APPROVED`, and every sibling check is green. Approval is checked
+  **first** so non-approval review events skip immediately; only then does the action
+  wait on checks. Pending checks are **polled** (15s interval) until they complete or
+  an 8-minute timeout elapses — within the job's 10-minute limit — then failed → skip,
+  still-pending → skip. The check aggregation reuses the same logic as the AI-review
+  preflight (see [the shared `checkStatus` helper][checkstatus]), deduplicated by name
+  and excluding the action's own job.
+- **Opt-in gate (default off):** the action merges only when `release.automerge`
+  resolves to `true` (see the [`release` field spec](./06-release-field.md)). Because
+  a monorepo opens one release PR **per member** (`release-<member>-<version>`),
+  the gate resolves per member: it identifies the releasing member from the PR's
+  `<member>/.release_notes/<version>.md` file (the same signal the publish step
+  uses), then takes the member's own `release.automerge`, falling back to the
+  root default — `member ?? root ?? false`. Both are read at the triggering head
+  SHA, so the flag travels with the release branch. A missing `package.json` is a
+  clean skip; a malformed one fails closed (no merge); a non-boolean `automerge`
+  is rejected; a PR whose releasing member cannot be resolved is left unmerged.
+  **Migration:** because downstream repos reference the action via `@main`, this
+  gate ships as a behavior change — every repo that relied on auto-merge must add
+  `release.automerge: true` to its root (or per-member) `package.json`, or its
+  release PRs will stay approved-but-unmerged until a human merges them.
+- **Merge method:** the action reads the repository's allowed merge methods
+  (`allow_rebase_merge` / `allow_squash_merge` / `allow_merge_commit`) and prefers
+  `rebase`, falling back to `squash` then `merge`. The merge is pinned to the
+  triggering head SHA, so a push that lands mid-evaluation is rejected rather than
+  merged unreviewed.
+- **Fail-closed:** any unmet condition or unexpected error results in no merge.
+  An already-merged or no-longer-mergeable PR is treated as a clean no-op so
+  concurrent events do not error.
 
-### Determinism
+### Why a PAT/App token, not `GITHUB_TOKEN`
 
-`repomix.config.json` at the repo root pins the output for a clean, reviewable diff:
+The action merges with the repository's `BOT_TOKEN` (a PAT or GitHub App
+installation token), **not** the default `GITHUB_TOKEN`. A merge performed with
+`GITHUB_TOKEN` does not trigger downstream workflows, so
+[`release-publish.yml`](../.github/workflows/release-publish.yml) — which runs on
+`pull_request_target: [closed]` for `**/.release_notes/**` — would never fire and
+the release would not publish. The upstream auto-approval is posted with the same
+token for the same reason.
 
-- `output.filePath: ".repomix/pack.xml"` and `output.style: "xml"` — fixed location and format.
-- `ignore.customPatterns: [".repomix/**"]` — excludes the pack itself, so each run does not re-pack the previously committed snapshot (which would cause recursive bloat and a perpetually-dirty diff).
-- `output.git.sortByChanges: false` — Repomix defaults this to `true`, ordering files by git-change frequency, which shifts on every merge and produces noise unrelated to actual code changes.
+> **Ruleset bypass for protected `main`.** If `main` is governed by a ruleset
+> (`pull_request` / required-status-checks / linear-history / signed-commits
+> rules), the `BOT_TOKEN` identity must be a **bypass actor** on it, and the
+> ruleset's allowed merge methods must include the method the action selects —
+> otherwise `gh`/the merge API returns an opaque 403/422. A required check that is
+> _skipped_ on release branches (e.g. the AI review) must report a neutral/success
+> conclusion or be marked non-required, or it will block the merge. Add the bot to
+> the ruleset's bypass list (Settings → Rules → the branch ruleset → Bypass list).
 
-`node_modules/`, `dist/`, `.turbo/`, and `coverage/` are excluded automatically because Repomix honors `.gitignore` and its built-in default patterns.
+### Author and approver must be distinct identities
 
-## How skills consume it
+GitHub forbids a user from approving its own pull request. The auto-approval is
+posted by the `code-review-action` reviewer (`BOT_USERNAME`, authenticated with
+`BOT_TOKEN`), so the release PR must be **authored by a different identity** —
+otherwise the `APPROVE` call fails with `422 Can not approve your own pull
+request`, no approval is recorded, and the PR never reaches the
+`reviewDecision == APPROVED` gate above.
 
-The 6 packing skills follow a **snapshot-first with fallback** contract:
+[`release-create.yml`](../.github/workflows/release-create.yml) therefore opens
+the release PR with a `GH_TOKEN` secret whose identity is **not** the reviewer,
+and that identity is listed in the `RELEASE_PR_AUTHORS` variable
+`code-review-action` trusts for auto-approval. The reviewer (`BOT_TOKEN`) then
+approves it, and because that approval is posted by a real PAT — not
+`GITHUB_TOKEN` — it triggers this action via `pull_request_review`. A failed
+auto-approval is surfaced as a workflow `::error::` rather than silently
+skipped, so a shared-identity misconfiguration cannot hide.
 
-1. Check whether `.repomix/pack.xml` exists at the repository root.
-2. If it exists, call `mcp__repomix__attach_packed_output` with `path: <repo root>/.repomix/pack.xml` to obtain an `outputId`.
-3. If it is absent (or the attach fails), fall back to `mcp__repomix__pack_codebase` with the skill's existing arguments.
+## Downstream propagation
 
-Either path yields an `outputId`; the downstream flow (`grep_repomix_output` / `read_repomix_output`) is identical. Because the snapshot reflects `main` at the last merge, on a feature branch it lags by the in-flight changes — acceptable, since review-time skills obtain the actual diff separately and use the pack only for surrounding context.
+`release-automerge.yml` is one of three workflows that form the release pipeline,
+and all three are distributed to downstream repositories together — exactly like the
+code-review and repomix workflows:
+
+```
+   upstream.yml ──hourly──> release-sync ──> files-sync
+     (cron)                  (wraps files-sync)   │
+                                                  ▼
+              PR: sync .github/workflows/{release,publish,release-automerge}.yml
+              (action dirs NOT synced — referenced via @main)
+```
+
+The [`release-sync`](../.github/actions/release-sync/README.md) action wraps
+[`files-sync`](../.github/actions/files-sync/README.md) to sync the full pipeline —
+`release-create.yml` (opens the release PR), `release-publish.yml` (publishes on
+merge), and `release-automerge.yml` (merges the approved, green PR) — to a
+`maintenance-sync-release` branch and open (or reuse) a single PR. The action
+directories these workflows invoke (`release-action`, `release-automerge`) are
+**not** synced — downstream repos reference them via `@main`, the same way
+`code-review.yml` references `code-review-action`. The `release` step of the
+[`upstream-sync`](../.github/actions/upstream-sync/README.md) action — invoked by
+[`upstream.yml`](../.github/workflows/upstream.yml) — runs it on the existing hourly
+schedule.
+
+The merge this action performs is what feeds the publish step; see the
+[`release` field spec](./06-release-field.md) for how `release-action` then selects
+artifacts on publish.
+
+[checkstatus]: ../packages/actions-core/src/checkStatus.ts
 </file>
 
-<file path="docs/upstream-sync.md">
+<file path="docs/08-upstream-sync.md">
 # Upstream sync
+
+> Chapter 8 of the [repository docs](../README.md#repository-docs).
 
 `awinogradov/code-assistants` is an upstream hub: consumer repositories pull shared standards
 and workflows from it on a schedule and receive one maintenance pull request per change. A
@@ -38754,12 +38825,12 @@ every consumer automatically, with no consumer workflow edit.
 
 ## Sync kinds
 
-| Kind           | Files synced into the consumer                                                                                                                                    | Maintenance branch              | Action                                                                |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------- |
-| `agents-rules` | `rules/<stack>.md` → `CLAUDE.md`                                                                                                                                  | `maintenance-sync-agents-rules` | [`agents-rules-sync`](../.github/actions/agents-rules-sync/README.md) |
-| `code-review`  | `.github/workflows/code-review.yml`                                                                                                                               | `maintenance-sync-code-review`  | [`code-review-sync`](../.github/actions/code-review-sync/README.md)   |
-| `repomix`      | `.github/workflows/repomix-pack.yml`, `repomix.config.json`                                                                                                       | `maintenance-sync-repomix`      | [`repomix-sync`](../.github/actions/repomix-sync/README.md)           |
-| `release`      | `.github/workflows/release-create.yml`, `release-publish.yml`, `release-automerge.yml`                                                                            | `maintenance-sync-release`      | [`release-sync`](../.github/actions/release-sync/README.md)           |
+| Kind           | Files synced into the consumer                                                                                                                                                                              | Maintenance branch              | Action                                                                |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------- |
+| `agents-rules` | `rules/<stack>.md` → `CLAUDE.md`                                                                                                                                                                            | `maintenance-sync-agents-rules` | [`agents-rules-sync`](../.github/actions/agents-rules-sync/README.md) |
+| `code-review`  | `.github/workflows/code-review.yml`                                                                                                                                                                         | `maintenance-sync-code-review`  | [`code-review-sync`](../.github/actions/code-review-sync/README.md)   |
+| `repomix`      | `.github/workflows/repomix-pack.yml`, `repomix.config.json`                                                                                                                                                 | `maintenance-sync-repomix`      | [`repomix-sync`](../.github/actions/repomix-sync/README.md)           |
+| `release`      | `.github/workflows/release-create.yml`, `release-publish.yml`, `release-automerge.yml`                                                                                                                      | `maintenance-sync-release`      | [`release-sync`](../.github/actions/release-sync/README.md)           |
 | `contributing` | `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, `.github/workflows/contributing.yml`, `.github/workflows/auto-label.yml`, `.github/workflows/licenses.yml`, `.github/workflows/validate-actions.yml` | `maintenance-sync-contributing` | [`contributing-sync`](../.github/actions/contributing-sync/README.md) |
 
 Each kind delegates to its `*-sync` action, which delegates the diff and PR mechanics to
@@ -38828,240 +38899,195 @@ triggers, concurrency, and permissions — only the `jobs:` section changes, so 
 branches.
 </file>
 
-<file path="docs/workspace-structure.md">
-# Workspace structure
+<file path="docs/09-repomix-pack.md">
+# The committed Repomix pack
 
-Where new actions, packages, and apps go in this repository, and how each kind plugs into the Bun workspace, `tsconfig.json`, `action.yml`, and the Turbo task graph.
+> Chapter 9 of the [repository docs](../README.md#repository-docs).
 
-## Overview
+This repository commits a packed snapshot of `main` at `.repomix/pack.xml` and keeps it fresh with CI on every merge. Autopilot skills read this snapshot for codebase context instead of re-packing on every run. This document describes the artifact, the workflow that produces it, and the contract skills follow to consume it.
 
-This repo is a single Bun workspace (`bun@1`). Workspace members live in two places today: composite GitHub Actions under `.github/actions/<name>/` and shared libraries under `packages/<name>/`. Standalone apps (CLIs, services) are reserved for a future iteration.
+## Why it exists
 
-The top-level layout — illustrative, not exhaustive:
+Several Autopilot skills (`/plan`, `/issue-create`, `/run`, `/pr-review`, `/pr-resolve`, `/pr-answer`) need whole-codebase context to ground their output. Each previously called `mcp__repomix__pack_codebase` on every invocation, which:
 
-```text
-code-assistants/
-├── .github/
-│   ├── actions/          # composite GitHub Actions (workspace members + YAML-only)
-│   └── workflows/
-├── claude-plugins/       # Claude Code plugins
-├── docs/                 # repository docs (you are here)
-├── packages/             # shared TypeScript libraries (workspace members)
-├── rules/                # stack-specific rule sets surfaced via CLAUDE.md
-├── scripts/              # repo-root scripts
-├── CLAUDE.md             # symlink → rules/Bun.md
-├── package.json          # root manifest, defines `workspaces` and `agents`
-└── turbo.json            # task graph (typecheck, test, clean)
+- repeats the in-memory pack cost on every run, adding latency; and
+- makes the skill hard-depend on the Repomix MCP server being reachable.
+
+A committed snapshot removes the per-run pack tax, lets skills ingest a stable artifact, and produces a reviewable diff log of how the codebase shape changes over time.
+
+## The artifact
+
+- **Path:** `.repomix/pack.xml`
+- **Format:** Repomix XML (`<file>` tags), full-repo, uncompressed.
+- **Source of truth:** reflects `main` at the most recent merge commit. It is regenerated by CI, not by hand.
+
+`.repomix/` is intentionally **not** in `.gitignore` — the pack is a committed artifact.
+
+## How it is produced
+
+The `.github/workflows/repomix-pack.yml` workflow regenerates the pack on every merge to `main`:
+
+```
+┌────────────┐  merged   ┌──────────────────────┐   push    ┌─────────────────┐
+│  PR #N     │ ────────▶ │ repomix-pack.yml     │ ────────▶ │ main            │
+│  closed    │           │ (npx repomix pack)   │           │ .repomix/       │
+│ into main  │           │  detect diff         │           │   pack.xml      │
+└────────────┘           └──────────────────────┘           └─────────────────┘
+                                  │
+                                  │ no diff
+                                  ▼
+                            (skip commit)
 ```
 
-Read this doc top to bottom on your first day. After that, the [Current vs. target](#current-vs-target) table is the fastest way to check what's settled and what's still in motion.
+- **Trigger:** `pull_request` `types: [closed]`, `branches: [main]`, gated by `if: github.event.pull_request.merged == true` — runs on the merge, not on every `push`.
+- **Pack:** pinned `npx repomix@<version>` (exact version, no `^`/`~`) so pack diffs reflect codebase drift, not tool-version drift.
+- **Commit:** the pack is staged and committed only when `git diff --cached --quiet -- .repomix/pack.xml` reports a staged change — this covers both a modified file and a brand-new untracked one (e.g. the very first run). The auto-commit uses the Conventional-Commits message `chore(repomix): refresh pack from #<PR>`.
+- **Push:** uses the repo's `BOT_TOKEN` secret (with `BOT_USERNAME` as the git author, matching `upstream.yml`/`release-create.yml`). The default `GITHUB_TOKEN` cannot push to protected `main` or trigger downstream workflows. Because this step pushes **directly** to `main`, the `BOT_TOKEN` identity must also be a **bypass actor** on the protected-branch ruleset; `contents: write` alone is insufficient. When the ruleset's `pull_request` rule is active, a direct push is rejected with `GH013` ("Changes must be made through a pull request") no matter the token's scope. Add the bot to the ruleset's bypass list to allow it.
 
-## Actions
+### Determinism
 
-Composite GitHub Actions live under `.github/actions/<name>/`. They come in two flavors. Both are valid — pick the one that matches the work.
+`repomix.config.json` at the repo root pins the output for a clean, reviewable diff:
 
-### TypeScript action
+- `output.filePath: ".repomix/pack.xml"` and `output.style: "xml"` — fixed location and format.
+- `ignore.customPatterns: [".repomix/**"]` — excludes the pack itself, so each run does not re-pack the previously committed snapshot (which would cause recursive bloat and a perpetually-dirty diff).
+- `output.git.sortByChanges: false` — Repomix defaults this to `true`, ordering files by git-change frequency, which shifts on every merge and produces noise unrelated to actual code changes.
 
-A composite action that runs Bun-executed TypeScript. It IS a Bun workspace member.
+`node_modules/`, `dist/`, `.turbo/`, and `coverage/` are excluded automatically because Repomix honors `.gitignore` and its built-in default patterns.
 
-Directory contents:
+## How skills consume it
 
-- `action.yml` — composite step definitions, invokes the entry via `${{ github.action_path }}/<entry-path>`
-- `package.json` — workspace member, package name `@code-assistants/<name>-action`
-- `tsconfig.json` — includes `src/**/*.ts`
-- `src/` — all source code (helpers, tests, and entry files)
-- `README.md`
-- Optional: `docs/`, `CLAUDE.md`, `AGENTS.md` (see [Per-member docs and agent files](#per-member-docs-and-agent-files))
-- Optional: tool config files with a `.ts`/`.mjs` extension (e.g., `vitest.config.ts`) — configs live at the root, not under `src/`
+The 6 packing skills follow a **snapshot-first with fallback** contract:
 
-**Target rule:** every `.ts` source file (entries, helpers, tests) should live under `src/`. Tool config files keyed by extension (`*.config.ts`, `*.config.mjs`) are exempt and remain at the root. Today two actions still have a root entry file (`files-sync.ts`, `agents-rules-sync.ts`) invoked directly by `action.yml` — that is the current state for source code, not a violation; see [Current vs. target](#current-vs-target).
+1. Check whether `.repomix/pack.xml` exists at the repository root.
+2. If it exists, call `mcp__repomix__attach_packed_output` with `path: <repo root>/.repomix/pack.xml` to obtain an `outputId`.
+3. If it is absent (or the attach fails), fall back to `mcp__repomix__pack_codebase` with the skill's existing arguments.
 
-Worked examples:
+Either path yields an `outputId`; the downstream flow (`grep_repomix_output` / `read_repomix_output`) is identical. Because the snapshot reflects `main` at the last merge, on a feature branch it lags by the in-flight changes — acceptable, since review-time skills obtain the actual diff separately and use the pack only for surrounding context.
+</file>
 
-| Action                                                         | Layout              | Entry invoked from `action.yml`                  |
-| -------------------------------------------------------------- | ------------------- | ------------------------------------------------ |
-| [`files-sync`](../.github/actions/files-sync/)                 | root entry + `src/` | `${{ github.action_path }}/files-sync.ts`        |
-| [`agents-rules-sync`](../.github/actions/agents-rules-sync/)   | root entry + `src/` | `${{ github.action_path }}/agents-rules-sync.ts` |
-| [`release-action`](../.github/actions/release-action/)         | `src/`-only         | `${{ github.action_path }}/src/<entry>.ts`       |
-| [`code-review-action`](../.github/actions/code-review-action/) | `src/`-only         | `${{ github.action_path }}/src/<entry>.ts`       |
-| [`auto-label`](../.github/actions/auto-label/)                 | `src/`-only         | `${{ github.action_path }}/src/autoLabel.ts`     |
+<file path="docs/appendix-a-plan-skills-audit.md">
+# Plan skills audit
 
-Required `package.json` scripts: see [Workspace scripts](#workspace-scripts).
+> Appendix A of the [repository docs](../README.md#repository-docs).
 
-### YAML composite action
+> **Status: Historical — largely implemented.** This is a point-in-time audit; its file:line citations describe the skills as they were when it was written, and most of its recommendations have since shipped:
+> finding 1.1 in [e4b9f48](https://github.com/awinogradov/code-assistants/commit/e4b9f48), 1.2 in [1835f85](https://github.com/awinogradov/code-assistants/commit/1835f85), 3.4 in [162791e](https://github.com/awinogradov/code-assistants/commit/162791e), 4.1 in [4825b20](https://github.com/awinogradov/code-assistants/commit/4825b20), 5.1 in [65fc291](https://github.com/awinogradov/code-assistants/commit/65fc291), and 7.1 in [8734148](https://github.com/awinogradov/code-assistants/commit/8734148).
+> Read it for the audit method and the rationale behind the current skill structure — not as actionable guidance.
 
-A composite action that only stitches together existing third-party steps — no TypeScript, no `package.json`, no `tsconfig.json`. NOT a workspace member.
+A dimension-by-dimension audit of the three planning skills, with each finding citing an exact file and line, rated by impact, and paired with a concrete recommendation. The deliverable is this findings document and the prioritized optimization plan at the end; no skill is rewritten here. The recommendations seed follow-up issues.
 
-Directory contents:
+Tracking issue: [#171](https://github.com/awinogradov/code-assistants/issues/171).
 
-- `action.yml`
-- `README.md`
+## Subjects
 
-Worked examples: [`contributing-check`](../.github/actions/contributing-check/), [`contributing-sync`](../.github/actions/contributing-sync/).
+| File                                                         | Role                                                                              |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| `claude-plugins/autopilot/skills/plan/SKILL.md`              | Orchestrator — input resolution, preflight, common rules, delegation (Phases 0–2) |
+| `claude-plugins/autopilot/skills/plan-bun/SKILL.md`          | Bun stack pipeline (Phases 1–5)                                                   |
+| `claude-plugins/autopilot/skills/plan-nodejs-react/SKILL.md` | NodeJS+React stack pipeline (Phases 1–5)                                          |
 
-Use this flavor when the action only composes other actions (no logic of your own). Otherwise pick the TypeScript flavor.
+Cross-referenced agents: `claude-plugins/autopilot/agents/expert-review.md`, `…/resolve-issue-context.md`, `…/search-codebase-todos.md`.
 
-## Packages
+## Methodology
 
-Shared libraries reused by actions or other packages. NOT consumed standalone. Always a Bun workspace member.
+Each skill and agent was read in full. Every claim below cites `file:line` against the files as they exist at audit time. Citations were then re-verified line-by-line by an independent pass; the corrections that pass produced are folded in here, and the ones worth recording are listed under [Citation verification notes](#citation-verification-notes). Impact is rated **High / Med / Low** by how much the issue inflates tokens, breaks control flow, or risks silent drift.
 
-Directory layout (`packages/<name>/`):
+## Findings by dimension
 
-```text
-packages/<name>/
-├── package.json          # workspace name `@code-assistants/<name>` (no -action suffix)
-├── tsconfig.json
-├── README.md             # optional
-├── docs/                 # optional (see Per-member docs and agent files)
-├── CLAUDE.md             # optional
-├── AGENTS.md             # optional
-└── src/
-    └── <module>.ts       # one file per exported module
-```
+### 1. Logical issues / inconsistencies
 
-Source code (entries, helpers, tests) lives under `src/`, never at the package root. Tool config files with a `.ts`/`.mjs` extension (e.g., `vitest.config.ts`) are the exception — like at the repo root (`lint-staged.config.ts`, `prettier.config.ts`), configs stay at the package root and are not imported as modules.
+| #   | Impact | Finding                                                                                                                                                                                                                                                                                              | Citation                                                                                                                                           |
+| --- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.1 | High   | **Score/review act on a plan that does not exist yet.** Phase 3 "Rate the plan" and Phase 4 expert review both consume a plan artifact that Phase 5 ("Output Format") is the first to assemble. The Phase 4 prompt even interpolates the literal placeholder `[full plan text from Phase 5 output]`. | `plan-bun/SKILL.md:80`, `:125`, `:133`; mirrored `plan-nodejs-react/SKILL.md:80`, `:130`, `:138`                                                   |
+| 1.2 | Med    | **Two competing clarification mechanisms.** A "Quiz Mode Format" (A/B/C/D text block) coexists with the mandated `AskUserQuestion` tool and its formatting note. The skills never say which to use, and Quiz Mode is never actually invoked by any phase — it reads as dead instruction.             | Quiz Mode `plan-bun/SKILL.md:193`, `plan-nodejs-react/SKILL.md` (Quiz Mode section), `plan/SKILL.md:384`; AskUserQuestion note `plan/SKILL.md:312` |
+| 1.3 | Med    | **Auto-Iteration mixes silent and interactive control flow.** Step 2 says "Ask clarifying questions in quiz format" (interactive), while step 3 says "Re-analyze and re-score internally (do not output retry details)" (silent). The loop is simultaneously user-facing and hidden.                 | `plan-bun/SKILL.md:95-97`; mirrored in `plan-nodejs-react`                                                                                         |
 
-`package.json` `exports` field maps the public surface — one entry per `src/` module:
+### 2. Phase ordering
 
-```json
-{
-  "name": "@code-assistants/<name>",
-  "exports": {
-    "./<module>": "./src/<module>.ts"
-  }
-}
-```
+| #   | Impact | Finding                                                                                                                                                                                                                                                                                        | Citation                                                             |
+| --- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| 2.1 | High   | **Validate → Review → Output is inverted.** Scoring (Phase 3) and expert review (Phase 4) precede plan output (Phase 5), but a plan must be drafted before it can be scored or reviewed. A correct order is Draft → Expert Review → Score → Finalize, so the score reflects the reviewed plan. | `plan-bun/SKILL.md:76` (Phase 3), `:101` (Phase 4), `:133` (Phase 5) |
+| 2.2 | Med    | **Explicit forward reference confirms the inversion.** The Phase 4 expert prompt literally pastes "[full plan text from Phase 5 output]" — naming a later phase's artifact as input to an earlier phase.                                                                                       | `plan-bun/SKILL.md:125`; `plan-nodejs-react/SKILL.md:130`            |
 
-Consumers import per-module (copy-pasted from `.github/actions/files-sync/src/changeDetector.ts`):
+### 3. Context-gathering effectiveness
 
-```ts
-import { fetchRawContent } from "@code-assistants/actions-core/fetchRawContent";
-```
+This is the dimension with the largest practical waste, and the framing matters — see the [Citation verification notes](#citation-verification-notes) for one claim that the verification pass corrected.
 
-Required scripts: see [Workspace scripts](#workspace-scripts) (`test` is opt-in for packages — add it only when test files exist; `actions-core` today has none).
+| #   | Impact | Finding                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Citation                                                                                                                                                    |
+| --- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 3.1 | High   | **The same tree is traversed up to three ways in one run, with no stated division of labor.** (a) Phase 0 acquires a repomix snapshot and searches it via `grep_repomix_output`/`read_repomix_output`; (b) stack Phase 1 step 2 launches Explore agents **unconditionally**, which crawl the live tree via Grep/Glob/Read; (c) stack Phase 1 step 6 searches the snapshot again, and Phase 2 adds a "Fall back to Grep, Read, or Glob" live path. Nothing says which source answers which question, so broad discovery work is repeated.                                                                                                                                          | snapshot `plan/SKILL.md:104-141`; Explore agents `plan-bun/SKILL.md:43-48`; snapshot re-search `plan-bun/SKILL.md:56`; live fallback `plan-bun/SKILL.md:64` |
+| 3.2 | Med    | **The snapshot-first contract is never propagated to the stack skills.** `docs/09-repomix-pack.md:53-61` defines a snapshot-first-with-fallback contract and the orchestrator's Phase 0 follows it, but the stack skills launch live Explore agents with no reference to it. The contract also states (`:61`) that on a feature branch the snapshot "lags by the in-flight changes — acceptable, since review-time skills obtain the actual diff separately." The plan stack skills _do_ obtain the branch diff separately (`plan-bun/SKILL.md:40-42`), so the unconditional Explore crawl is largely redundant with already-available context rather than a freshness necessity. | contract `docs/09-repomix-pack.md:53-61`; feature-branch lag `:61`; branch diff `plan-bun/SKILL.md:40-42`                                                   |
+| 3.3 | Med    | **No snapshot freshness signal.** Phase 0 attaches `.repomix/pack.xml` whenever it exists, with no check of how stale it is (it is refreshed only on merge to `main` by `.github/workflows/repomix-pack.yml`). Combined with 3.1, the run can search a stale snapshot _and_ read fresh files with no rule for reconciling the two.                                                                                                                                                                                                                                                                                                                                                | `plan/SKILL.md:104-110`; `.github/workflows/repomix-pack.yml` (`pull_request: types:[closed]`)                                                              |
+| 3.4 | Med    | **Doc-lookup / repo-docs / CLAUDE.md blocks are duplicated into the stack skills.** The orchestrator declares these under "Common Instructions … apply to ALL stacks," then each stack skill restates them in Phase 1 steps 3–5.                                                                                                                                                                                                                                                                                                                                                                                                                                                  | orchestrator `plan/SKILL.md:203-235` (lookup), `:237-244` (repo docs), `:271-273` (CLAUDE.md); duplicated `plan-bun/SKILL.md:49-55`                         |
 
-**Extract vs. duplicate:** extract into a package when two or more actions need the same helper. Duplicate when it's used in only one place.
+Recommendation for the dimension: state one decision rule — snapshot serves broad/whole-repo reads; live tools (Explore/Grep) serve fresh-or-targeted reads the snapshot cannot — make the Explore step conditional on that rule, and drop the duplicated global blocks from the stack skills.
 
-Worked example: [`actions-core`](../packages/actions-core/) (single export `fetchRawContent`).
+### 4. Skills / agents / tools usage
 
-## Apps
+| #   | Impact | Finding                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Citation                                                                                                                                                                             |
+| --- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 4.1 | High   | **The sub-agent launcher tool is never granted, yet every skill instructs sub-agent launches.** `allowed-tools` lists the todo tools `TaskList`/`TaskUpdate`/`TaskCreate` and (in the orchestrator) the `Skill(...)` invocations, but none lists `Task` — the tool that actually spawns sub-agents. Meanwhile Phase 0 says "Use the Agent tool" for the context agents, and the stack skills say "Launch Explore agents" and "launch a `autopilot:expert-review` sub-agent … multiple Agent tool calls." If skill `allowed-tools` is enforced as a hard gate, these launches are unreachable; if it is advisory, the list is still misleading. Worth confirming which, then fixing the grant or the instructions to match. | omits `Task`: `plan/SKILL.md:5-21`, `plan-bun/SKILL.md:5-19`, `plan-nodejs-react/SKILL.md:5-19`; sub-agent instructions: `plan/SKILL.md:112-122`, `plan-bun/SKILL.md:43`, `:115-127` |
+| 4.2 | Low    | **`TaskCreate` is granted but unused in the stack skills.** The stack skills only discover tasks (`TaskList`) and update them (`TaskUpdate`); they never create. The `TaskCreate` grant is dead.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | grant `plan-bun/SKILL.md:8`; usage `plan-bun/SKILL.md:24-34`                                                                                                                         |
+| 4.3 | Low    | **`expert-review` inherits all tools.** The agent only reads the plan text passed in its prompt, but its frontmatter declares no `tools:` restriction (only `model: inherit`), so it inherits the full tool set. Tightening to a minimal set (or none) reduces blast radius.                                                                                                                                                                                                                                                                                                                                                                                                                                               | `expert-review.md:1-5`                                                                                                                                                               |
 
-No `apps/` directory exists yet. Location and naming convention will be decided in a follow-up issue when the first app lands.
+### 5. Token optimization
 
-## Run and test a new member
+| #   | Impact | Finding                                                                                                                                                                       | Citation                                                                               |
+| --- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| 5.1 | High   | **The entire Phase 1–5 pipeline is duplicated across both stack skills** (~200 lines each, ~90% identical). Every fix to the pipeline must be made twice and is loaded twice. | `plan-bun/SKILL.md:36-189` vs `plan-nodejs-react/SKILL.md:36-194`                      |
+| 5.2 | Med    | **Doc-lookup protocol is effectively triplicated** — the orchestrator's Common Instructions plus a near-verbatim copy in each stack skill.                                    | `plan/SKILL.md:203-235`; `plan-bun/SKILL.md:49-53`; `plan-nodejs-react/SKILL.md:49-53` |
+| 5.3 | Low    | **Quiz Mode Format is repeated in all three skills** (~10 lines each) and is dead (see 1.2).                                                                                  | `plan/SKILL.md:384`, `plan-bun/SKILL.md:193`, `plan-nodejs-react` Quiz Mode section    |
 
-From the repo root:
+### 6. Performance optimization
 
-```bash
-bun install              # refresh the lockfile after editing workspaces
-bun run typecheck        # runs the `typecheck` task across the workspace via Turbo
-bun run test             # runs the `test` task across the workspace via Turbo
-```
+| #   | Impact | Finding                                                                                                                                                                                 | Citation                                                                                      |
+| --- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| 6.1 | Good   | **The high-value fan-outs are already parallel** — Phase 0's context calls, the doc-lookup resolve→query batches, and the Phase 4 expert reviews all run in parallel. No change needed. | `plan/SKILL.md:99` (parallel note), `:218` (resolve/query); `plan-bun/SKILL.md:115` (experts) |
+| 6.2 | Low    | **Phase 1 step 1 runs `git log` then `git diff` sequentially.** Independent commands; batchable, but the wall-clock upside is negligible. Note only.                                    | `plan-bun/SKILL.md:40-42`                                                                     |
 
-Use `bun run test`, not `bun test` — the root `package.json` maps `test` to `turbo run test` (`bun test` is Bun's own test runner and does not dispatch workspace scripts; it exits with "No tests found" when invoked at the repo root).
+### 7. Structured output for sub-agents
 
-Turbo handles per-package execution and caching. You don't need to `cd` into the member.
+| #   | Impact | Finding                                                                                                                                                                                                                                                                                                                      | Citation                                                                                      |
+| --- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| 7.1 | High   | **All three sub-agents return free-text the parent must parse.** `expert-review` emits a markdown report block (Score / Verdict / 3–5 findings); `resolve-issue-context` and `search-codebase-todos` emit prose blocks with bold-label fields. None is schema-validated, so format drift silently breaks downstream parsing. | `expert-review.md:51-59`; `resolve-issue-context.md:87-102`; `search-codebase-todos.md:24-31` |
+| 7.2 | Med    | **`expert-review`'s contract is exactly a schema.** The score (0–100), verdict enum, and the 3–5-finding cap are structured fields a JSON schema would enforce far more reliably than prose instructions.                                                                                                                    | `expert-review.md:51-59`                                                                      |
 
-## Cross-cutting
+### 8. Instruction deduplication
 
-### The `agents` field
+`plan-bun` and `plan-nodejs-react` are ~90% identical. Their only real deltas:
 
-The root `package.json` declares the repo's stack via a top-level `agents` object — see [`docs/agents-field.md`](./agents-field.md) for the contract. This repo sets:
+| Delta                                | `plan-bun`                              | `plan-nodejs-react`                              |
+| ------------------------------------ | --------------------------------------- | ------------------------------------------------ |
+| Phase 1 step 3 example libraries     | `zod`, `hono`, `@effect/schema` (`:49`) | `react`, `next`, `@tanstack/react-query` (`:49`) |
+| Phase 4 expert table                 | 5 rows (`:107-113`)                     | 10 rows (`:107-118`)                             |
+| Phase 5 verify example / test runner | `bun test …` (`:156`)                   | `vitest run …` (`:161`)                          |
 
-```json
-{
-  "agents": {
-    "rules": "Bun",
-    "language": "typescript"
-  }
-}
-```
+| #   | Impact | Finding                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| --- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 8.1 | High   | Because the two pipelines are copies, the tables and verify lines have **already drifted** (different expert lists, different test runner, and the verify example sits on different lines because the longer expert table shifts content down). This is exactly the silent-drift risk the tracking issue calls out. Collapse to one shared pipeline (move Phase 1–5 into the orchestrator's Common Instructions or a shared include) and reduce each stack skill to its three deltas above. |
 
-### The `release` field
+## Prioritized optimization plan
 
-A workspace member's `package.json` declares its release config via a top-level `release` object — see [`docs/release-field.md`](./release-field.md) for the contract. Consumed by [`release-action`](../.github/actions/release-action/README.md) to pick the version source, npm-publish step, major-version tag, and the optional Slack notification channel. The repo-root `package.json` may also declare `release.members` to opt specific workspace paths into monorepo mode — see [`docs/release-field.md`](./release-field.md#monorepo-root) and the [release-action monorepo section](../.github/actions/release-action/README.md#monorepo-mode). Example for a Node.js library member:
+Ranked by impact-to-effort. Each row was filed as a follow-up issue linking #171.
 
-```json
-{
-  "name": "@org/ingest",
-  "release": {
-    "type": "lib-nodejs",
-    "slack": "#releases"
-  }
-}
-```
+| P   | Issue | Recommendation                                                                                                                                                                                                                         | Dimensions | Impact | Effort  |
+| --- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ------ | ------- |
+| P1  | #181  | Fix phase ordering — draft the plan before scoring/expert review; remove the `[full plan text from Phase 5 output]` forward reference                                                                                                  | 1, 2       | High   | Low     |
+| P2  | #182  | Reconcile the sub-agent launcher — confirm whether skill `allowed-tools` is an enforced gate, then either grant `Task` in all three skills or rewrite the sub-agent instructions to match                                              | 4          | High   | Low     |
+| P3  | #183  | Reconcile context-gathering — one decision rule (snapshot = broad reads, live tools = fresh/targeted), make Explore agents conditional, and surface snapshot staleness so the pack and the live crawl stop re-traversing the same tree | 3, 6       | High   | Low–Med |
+| P4  | #184  | Deduplicate the Phase 1–5 pipeline into a single shared source; reduce each stack skill to its three deltas                                                                                                                            | 5, 8       | High   | Med     |
+| P5  | #185  | Give `expert-review` and the context agents schema-validated output                                                                                                                                                                    | 7          | Med    | Med     |
+| P6  | #186  | Remove the triplicated doc-lookup / repo-docs / CLAUDE.md blocks from the stack skills                                                                                                                                                 | 3, 5       | Med    | Low     |
+| P7  | #187  | Resolve Quiz Mode vs `AskUserQuestion` — remove the dead Quiz Mode                                                                                                                                                                     | 1, 5       | Low    | Low     |
+| P8  | #188  | Trim over-granted tools — drop the unused `TaskCreate` grant from the stack skills and scope `expert-review`'s tools                                                                                                                   | 4          | Low    | Low     |
 
-### Workspace scripts
+## Citation verification notes
 
-Every TypeScript workspace member (actions and packages) declares its scripts in its own `package.json`. Turbo discovers them per-package — there is no central script registry to update when you add a member.
+Corrections produced by the independent re-verification pass, recorded so future readers trust the line numbers:
 
-| Script      | Required?                            | Command (today)              | Notes                                                                                                                                                                                                                            |
-| ----------- | ------------------------------------ | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `typecheck` | Yes                                  | `tsc --noEmit`               | Runs in Turbo's `typecheck` task. Always present in TS members.                                                                                                                                                                  |
-| `test`      | Yes for actions, opt-in for packages | `bun test`                   | Bun's runner handles unit, integration, and e2e tests in the same invocation — test files live alongside source under `src/` per CLAUDE.md §3.1. Add this script only when the member has tests (`actions-core` today has none). |
-| `clean`     | Yes                                  | `rm -rf node_modules .turbo` | Removes per-member install and Turbo caches.                                                                                                                                                                                     |
-| `build`     | Optional                             | (none today)                 | Add only when the member produces a compiled output. Today every member runs TypeScript directly via Bun (`bun <entry>.ts`), so no build step is needed.                                                                         |
-
-**Other script names** (`lint`, `format`, `validate`, `prepare`) are root-only: they live in the root `package.json` and operate across the whole repo (Prettier, the `scripts/validate-plugins.ts` check, Husky setup). Do NOT duplicate them at the member level.
-
-Specialised script types as the project grows — e.g., `test:unit`, `test:integration`, `test:e2e`, `bench`, `start` — should be added per-member only when there is a reason to run them in isolation (the default `bun test` already covers everything under `src/`). Mirror the Turbo task graph if you add a name that should be cache-aware.
-
-### Turbo task graph
-
-`turbo.json` defines three tasks. Each task runs only in workspace members that declare the matching `package.json` script — there is no global config to update when you add a new member.
-
-| Task        | `inputs`                                                                 | Cached?             |
-| ----------- | ------------------------------------------------------------------------ | ------------------- |
-| `typecheck` | `action.yml`, `*.ts`, `src/**/*.ts`, `tsconfig.json`, `package.json`     | Yes                 |
-| `test`      | `*.ts`, `src/**/*.ts`, `tsconfig.json`, `package.json` (no `action.yml`) | Yes                 |
-| `clean`     | _none_                                                                   | No (`cache: false`) |
-
-`action.yml` is intentionally excluded from `test` inputs — changes to action metadata invalidate `typecheck` but not the test cache. If you add a task that needs cache-aware action-metadata sensitivity, include `action.yml` in its `inputs`.
-
-### Per-member docs and agent files
-
-Any action or package directory (TypeScript action, YAML composite action, or package) MAY include:
-
-- `docs/` — a member-scoped docs directory for material too specific or too long for the README
-- `CLAUDE.md` — agent rules that apply only inside that member's directory (Claude Code loads these in addition to the repo-root `CLAUDE.md`)
-- `AGENTS.md` — optional, same scope as `CLAUDE.md` but consumed by other agent tooling
-
-None of these are required. Use them when a member has enough surface area to need it; for small members a `README.md` alone is fine.
-
-### CLAUDE.md §3.1 file organization
-
-- Single module → flat file (`foo.ts`).
-- Multiple related files → directory with NO `index.ts` (`foo/foo.ts`, `foo/foo.test.ts`, `foo/foo.types.ts`).
-
-These rules are inherited from CLAUDE.md (a symlink to `rules/Bun.md`); not duplicated here.
-
-### Registering a new member
-
-For TypeScript actions and packages:
-
-1. Create the directory layout described above.
-2. Add the directory path to root `package.json` `workspaces`, then run `bun install` from the repo root to refresh the lockfile.
-3. Add a row to root `README.md` under the appropriate section (`## GitHub Actions` for actions, `## Repository docs` for docs, etc.).
-
-For YAML composite actions:
-
-1. Create the directory with just `action.yml` + `README.md`.
-2. Add a row to root `README.md` under `## GitHub Actions`.
-3. Skip the `workspaces` entry — YAML composite actions are not workspace members.
-
-No CI matrix entry, no release-workflow registration, no extra `turbo.json` config is required today.
-
-## Current vs. target
-
-As of 2026-05-23.
-
-| Rule                                                      | State                                                                                                                      |
-| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| All source `.ts` (entries, helpers, tests) under `src/`   | Target — `files-sync` and `agents-rules-sync` still have root entries (configs like `*.config.ts` always stay at the root) |
-| Package name `@code-assistants/<name>-action` for actions | Current                                                                                                                    |
-| Package name `@code-assistants/<name>` for packages       | Current                                                                                                                    |
-| `test` script in every TS workspace member                | N/A — `actions-core` has none by design                                                                                    |
-| `apps/` directory                                         | Target — no apps exist yet                                                                                                 |
+- **`docs/09-repomix-pack.md` contract location and meaning.** The snapshot-first-with-fallback contract is at `:53-61`, not earlier in the file. Importantly, the contract's fallback is to `pack_codebase` (still a pack) only when the pack is **absent or attach fails** — it is **not** a staleness-triggered fallback to live tools. Snapshot staleness on feature branches is explicitly called "acceptable" (`:61`). Finding 3.2 is framed accordingly; an earlier draft that described a "fall-back-when-stale" clause was incorrect.
+- **`plan-bun` verify example line.** The `bun test` verify example is at `:156`. The corresponding `vitest run` example in `plan-nodejs-react` is at `:161` — the offset is real and caused by the longer (10-row) expert table shifting content down, which is itself evidence for finding 8.1.
+- **`TaskCreate` grant line.** In `plan-bun`, `TaskCreate` is at `:8` (`TaskList` `:6`, `TaskUpdate` `:7`). This is the todo tool, distinct from the absent sub-agent launcher `Task` discussed in 4.1.
 </file>
 
 <file path="packages/actions-core/src/checkStatus.test.ts">
@@ -39689,7 +39715,7 @@ describe("readReleaseField — type", () => {
   });
 
   test("missing-field error references the docs", () => {
-    expect(() => readReleaseField({ name: "x" })).toThrow(/docs\/release-field\.md/);
+    expect(() => readReleaseField({ name: "x" })).toThrow(/docs\/06-release-field\.md/);
   });
 
   test("throws when release is a bare string (old shape)", () => {
@@ -39873,7 +39899,7 @@ describe("readRootRelease — automerge", () => {
  * Detection is fail-closed for `type`: a missing field or an unrecognized
  * value throws an `Error` referencing the spec doc.
  *
- * @see ../../../docs/release-field.md
+ * @see ../../../docs/06-release-field.md
  *
  * @example
  * ```typescript
@@ -39886,7 +39912,7 @@ describe("readRootRelease — automerge", () => {
  * ```
  */
 
-const DOCS_LINK = "docs/release-field.md";
+const DOCS_LINK = "docs/06-release-field.md";
 
 /**
  * Recognized release types. Order mirrors the table in the release-action
@@ -40009,7 +40035,7 @@ function readSlack(release: Record<string, unknown>): string | undefined {
  *   this function performs the runtime validation).
  * @returns The validated {@link ReleaseConfig}.
  * @throws {Error} when the field is missing or invalid. The message names the
- *   field, lists allowed values, and points to `docs/release-field.md`.
+ *   field, lists allowed values, and points to `docs/06-release-field.md`.
  *
  * @example
  * ```typescript
@@ -42785,16 +42811,38 @@ See the [plugin README](./claude-plugins/autopilot/README.md#installation) for s
 
 ## Repository docs
 
-- [Workspace structure](./docs/workspace-structure.md) — where new actions, packages, and apps go, and how they wire into Turbo
-- [`agents` field spec](./docs/agents-field.md) — how skills detect a repository's tech stack from `package.json`
-- [`release` field spec](./docs/release-field.md) — how `release-action` picks the right artifacts for npm packages, GitHub Actions, and Claude plugins
-- [Release auto-merge flow](./docs/release-automerge.md) — the event-driven action that merges approved, all-green release PRs, and how its workflow is propagated downstream
-- [Committed Repomix pack](./docs/repomix-pack.md) — the `.repomix/pack.xml` snapshot, the merge-triggered workflow that refreshes it, and the snapshot-first contract skills follow
-- [Upstream sync](./docs/upstream-sync.md) — the one-action `upstream-sync` aggregator and the thin `upstream.yml` consumers run, with per-kind opt-out
-- [Review run-summary footer](./docs/code-review-run-summary.md) — how `code-review-action` surfaces per-run cost/latency/token metrics in a collapsible footer on the main review comment and on preflight skip comments
-- [Inline suggestions and AI-agent prompts](./docs/code-review-suggestions.md) — how `code-review-action` adds one-click GitHub suggestion blocks and a "Prompt for AI agents" block to each inline finding
-- [Plan and run skills](./docs/plan-run-skills.md) — how the `plan` and `run` skills work end to end: phases, orchestrator↔stack delegation, sub-agent fan-out, and run's automated post-implementation, with ASCII diagrams
-- [Plan skills audit](./docs/plan-skills-audit.md) — a dimension-by-dimension audit of the `plan`, `plan-bun`, and `plan-nodejs-react` skills with a prioritized optimization plan
+The `docs/` guides are numbered chapters in reading order — newcomers start at chapter 1 and read on; agents and returning readers jump to the part they need.
+
+**Part I — Orientation.** Read this first: how the monorepo is laid out and how repositories declare their stack.
+
+1. [Workspace structure](./docs/01-workspace-structure.md) — where new actions, packages, and apps go, and how they wire into Turbo
+2. [`agents` field spec](./docs/02-agents-field.md) — how skills detect a repository's tech stack from `package.json`
+
+**Part II — Code review.** How the AI review action presents findings and reports its cost.
+
+3. [Review run-summary footer](./docs/03-code-review-run-summary.md) — how `code-review-action` surfaces per-run cost/latency/token metrics in a collapsible footer on the main review comment and on preflight skip comments
+4. [Inline suggestions and AI-agent prompts](./docs/04-code-review-suggestions.md) — how `code-review-action` adds one-click GitHub suggestion blocks and a "Prompt for AI agents" block to each inline finding
+
+**Part III — Autopilot skills.** How the plugin's planning skills turn a task into a reviewed plan.
+
+5. [Plan and run skills](./docs/05-plan-run-skills.md) — how the `plan` and `run` skills work end to end: phases, orchestrator↔stack delegation, sub-agent fan-out, and run's automated post-implementation, with ASCII diagrams
+
+**Part IV — Release pipeline.** How workspace members version, release, and auto-merge.
+
+6. [`release` field spec](./docs/06-release-field.md) — how `release-action` picks the right artifacts for npm packages, GitHub Actions, and Claude plugins
+7. [Release auto-merge flow](./docs/07-release-automerge.md) — the event-driven action that merges approved, all-green release PRs, and how its workflow is propagated downstream
+
+**Part V — Maintenance automation.** The machinery that keeps this repo and its consumers in sync.
+
+8. [Upstream sync](./docs/08-upstream-sync.md) — the one-action `upstream-sync` aggregator and the thin `upstream.yml` consumers run, with per-kind opt-out
+9. [Committed Repomix pack](./docs/09-repomix-pack.md) — the `.repomix/pack.xml` snapshot, the merge-triggered workflow that refreshes it, and the snapshot-first contract skills follow
+
+**Appendix.** Historical records — kept for context, not current guidance.
+
+- [Plan skills audit](./docs/appendix-a-plan-skills-audit.md) — a dimension-by-dimension audit of the `plan`, `plan-bun`, and `plan-nodejs-react` skills; most of its recommendations have since shipped
+
+**Standards.**
+
 - [Reference formatting (RFC-0001)](./rfc/0001-reference-formatting.md) — the single reference-formatting + readability standard, versioned as an RFC, inlined into every skill and the release-notes prompt and kept in sync by the `referenceFormattingSync` test; see [`rfc/`](./rfc/README.md) for the RFC convention
 - [Stack rule sets](./rules/) — `Bun`, `Bun+React+Tailwind`, `NodeJS+React`, `NodeJS+React+Tailwind`
 
@@ -42809,6 +42857,7 @@ See the [plugin README](./claude-plugins/autopilot/README.md#installation) for s
 - [`release-action`](./.github/actions/release-action/README.md) — conventional-commit-driven release pipeline for npm packages, GitHub Actions, and Claude plugins
 - [`release-automerge`](./.github/actions/release-automerge/README.md) — merge an approved, all-green release PR (`^release-`), driven by an event-based workflow so `release-publish.yml` runs without a manual click
 - [`code-review-action`](./.github/actions/code-review-action/README.md) — AI code review for pull requests via Claude Code, with a react mode for replying to bot mentions
+- [`code-review-sync`](./.github/actions/code-review-sync/README.md) — sync the canonical AI code-review workflow (`code-review.yml`) from upstream and open one PR with the difference
 - [`auto-label`](./.github/actions/auto-label/README.md) — label PRs with `<scope>/<workspace-member>` labels for the workspace members a diff touches, and prune orphan labels on merge
 - [`repomix-sync`](./.github/actions/repomix-sync/README.md) — sync the `repomix-pack` workflow and `repomix.config.json` from upstream so each consumer commits its own codebase snapshot
 - [`release-sync`](./.github/actions/release-sync/README.md) — sync the release pipeline workflows (`release`, `publish`, `release-automerge`) from upstream so each consumer runs the same release flow
