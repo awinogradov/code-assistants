@@ -75,6 +75,7 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 | Metric | Value |
 | --- | --- |
 | Mode | review |
+| Model | claude-sonnet-4-6 |
 | Model time | 34.0s |
 | Tool round-trips | 10 |
 | Assistant turns | 3 |
@@ -86,7 +87,7 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 <!-- run-summary-end -->
 ```
 
-**Tokens in** is the total input the model consumed — fresh input plus cache reads plus cache creation — so it stays plausible under heavy prompt caching (reading only the uncached `input_tokens` reports a misleading near-zero residual). **Cache read / write** is the breakdown of that total.
+**Model** is the model that actually served the run — read from the SDK's `system`/`init` message, falling back to the action's `model` input when the stream ends before init. **Tokens in** is the total input the model consumed — fresh input plus cache reads plus cache creation — so it stays plausible under heavy prompt caching (reading only the uncached `input_tokens` reports a misleading near-zero residual). **Cache read / write** is the breakdown of that total.
 
 **The footer is machine-consumed.** The scheduled [`code-review-cost-monitor`](../.github/actions/code-review-cost-monitor/README.md) action parses these tables back out of recent PR reviews to detect cost regressions, so the markers and the exact row labels above are a compatibility contract — renaming a label or restructuring the table breaks the monitor's parser (it fails loudly when a scan parses zero footers). The monitor's optional attribution step also reuses `runClaude.ts` as its model engine.
 

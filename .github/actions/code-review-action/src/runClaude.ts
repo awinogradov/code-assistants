@@ -327,7 +327,7 @@ async function run(): Promise<void> {
   // Emit the run summary (log + step output) BEFORE emitOutputs, which may
   // process.exit(1) on a non-success result — keeping the footer data available
   // to the separate submitReview step even on a failed run.
-  const summary = buildRunSummary(resolveRunMode(config.prompt), messages, { modelMs });
+  const summary = buildRunSummary(resolveRunMode(config.prompt), messages, { modelMs }, config.model);
   log.info(summary, "Run summary.");
   await setOutput("run_summary", JSON.stringify(summary));
 
@@ -372,6 +372,22 @@ export function findResultMessage(messages: unknown[]): Record<string, unknown> 
     (m): m is Record<string, unknown> =>
       typeof m === "object" && m !== null && (m as Record<string, unknown>).type === "result"
   );
+}
+
+/**
+ * Extract the model that actually ran from the SDK `system`/`init` message,
+ * or `undefined` when the stream ended before init so the caller can fall
+ * back to the configured model.
+ */
+function findInitModel(messages: unknown[]): string | undefined {
+  const init = messages.find(
+    (m): m is Record<string, unknown> =>
+      typeof m === "object" &&
+      m !== null &&
+      (m as Record<string, unknown>).type === "system" &&
+      (m as Record<string, unknown>).subtype === "init"
+  );
+  return typeof init?.model === "string" ? init.model : undefined;
 }
 
 /** True when an assistant message content array holds at least one `tool_use` block. */
@@ -438,19 +454,23 @@ export interface PhaseTimings {
 }
 
 /**
- * Build the structured per-run summary: mode, phase timings, token usage, cost,
- * and tool round-trips. Returns the snake_case-keyed object that is logged as a
- * single line — separated from logging so the field mapping is unit-testable.
+ * Build the structured per-run summary: mode, model, phase timings, token
+ * usage, cost, and tool round-trips. Returns the snake_case-keyed object that
+ * is logged as a single line — separated from logging so the field mapping is
+ * unit-testable. The model comes from the SDK init message (what actually
+ * ran), with the configured model as the fallback.
  */
 export function buildRunSummary(
   mode: string,
   messages: unknown[],
-  timings: PhaseTimings
+  timings: PhaseTimings,
+  fallbackModel: string
 ): Record<string, number | string> {
   const usage = extractUsage(findResultMessage(messages));
 
   return {
     mode,
+    model: findInitModel(messages) ?? fallbackModel,
     model_ms: timings.modelMs,
     tokens_in: usage.tokensIn,
     tokens_out: usage.tokensOut,

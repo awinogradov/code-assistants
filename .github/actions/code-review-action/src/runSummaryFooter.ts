@@ -26,11 +26,13 @@ const footerEndMarker = "<!-- run-summary-end -->";
 
 /**
  * Schema for the serialized per-run summary passed via the `RUN_SUMMARY` env.
- * Strict (no coercion): every metric must already be a number and `mode` a
- * known literal, so a malformed value can never reach the rendered markdown.
+ * Strict (no coercion): every metric must already be a number, `model` a
+ * string, and `mode` a known literal, so a malformed value can never reach
+ * the rendered markdown.
  */
 export const runSummarySchema = z.object({
   mode: z.enum(["review", "react", "unknown", "preflight"]),
+  model: z.string(),
   model_ms: z.number(),
   tokens_in: z.number(),
   tokens_out: z.number(),
@@ -72,6 +74,7 @@ function formatSeconds(ms: number): string {
 function buildRows(summary: RunSummary): string[] {
   const rows = [
     ["Mode", summary.mode],
+    ["Model", summary.model],
     ["Model time", formatSeconds(summary.model_ms)],
     ["Tool round-trips", String(summary.tool_round_trips)],
     ["Assistant turns", String(summary.num_turns)],

@@ -16,6 +16,7 @@ import {
 
 const coreSummary: RunSummary = {
   mode: "review",
+  model: "claude-sonnet-4-6",
   model_ms: 34000,
   tokens_in: 500,
   tokens_out: 100,
@@ -84,6 +85,7 @@ describe("renderRunSummaryFooter", () => {
 
   test("formats durations as seconds and cost as USD", () => {
     const footer = renderRunSummaryFooter(coreSummary, reviewer);
+    expect(footer).toContain("| Model | claude-sonnet-4-6 |");
     expect(footer).toContain("| Model time | 34.0s |");
     expect(footer).toContain("| Cost (USD) | $0.35 |");
     expect(footer).toContain("| Tokens in / out | 500 / 100 |");
