@@ -1,0 +1,224 @@
+name: Perf report
+description: Build a target, measure bundle sizes and Lighthouse headlines, compare against a default-branch baseline, and post a sticky PR comment with classified deltas.
+
+inputs:
+  build-command:
+    description: Shell command that builds the measured artifact (e.g. `bun run --filter @org/app build`).
+    required: true
+  bundle-file:
+    description: Path to the built file whose raw/gzip/brotli sizes are reported. Also labels the bundle table in the comment.
+    required: true
+  bundle-analyze-command:
+    description: Optional shell command that generates bundle stats (e.g. a treemap). Runs after the build when set.
+    required: false
+    default: ""
+  bundle-stats-file:
+    description: Optional path to a stats HTML file copied into the snapshot artifact as `bundle-stats.html`.
+    required: false
+    default: ""
+  lighthouse-command:
+    description: |
+      Optional shell command that runs Lighthouse and writes the JSON report to the `lighthouse-report` path. A failing command degrades the comment's Lighthouse section to "measurement failed" instead of failing the job. When empty, Lighthouse is skipped and the comment reports bundle sizes only.
+    required: false
+    default: ""
+  lighthouse-report:
+    description: Path where the Lighthouse JSON report lands after `lighthouse-command` runs.
+    required: false
+    default: perf-reports/lighthouse-viewer.json
+  noise-bands:
+    description: |
+      Optional JSON object overriding the per-metric noise bands, e.g. `{"timing": {"absolute": 500, "relative": 0.2}}`. Keys: `bundle` (bytes), `score` (0-1 scale), `timing` (ms), `cls`. Each band takes `absolute` and optional `relative` thresholds; a delta must clear both to count as a regression. Defaults: bundle >= 1 KiB and >= 5%, score >= 3 pts, timing >= 200 ms and >= 10%, CLS >= 0.01.
+    required: false
+    default: ""
+  baseline-lookback:
+    description: How many recent successful default-branch runs of the calling workflow to probe for a baseline artifact.
+    required: false
+    default: "5"
+  comment-header:
+    description: Sticky-comment header key. Lets a repo post multiple independent perf comments.
+    required: false
+    default: Perf
+  github-token:
+    description: |
+      Token for baseline discovery (`gh run list` / `gh run download`, needs `actions: read`) and the sticky comment (needs `pull-requests: write`). The workflow's default token is sufficient; pass it explicitly when the calling job overrides permissions.
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  regression-count:
+    description: Number of metrics that crossed their noise band in the unfavorable direction. "0" when there is no baseline or the report degraded.
+    value: ${{ steps.report.outputs.regression-count }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: 1.x
+
+    - name: Install action dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: bun install --frozen-lockfile --filter @code-assistants/perf-report-action
+
+    - name: Build target
+      shell: bash
+      env:
+        BUILD_COMMAND: ${{ inputs.build-command }}
+        BUNDLE_ANALYZE_COMMAND: ${{ inputs.bundle-analyze-command }}
+      run: |
+        if [ -z "$BUILD_COMMAND" ]; then
+          echo "::error::build-command input is required"
+          exit 1
+        fi
+        bash -c "$BUILD_COMMAND"
+        if [ -n "$BUNDLE_ANALYZE_COMMAND" ]; then
+          bash -c "$BUNDLE_ANALYZE_COMMAND"
+        fi
+
+    # Lighthouse can flake on shared runners. Continue on error so a bad run
+    # degrades the comment to "measurement failed" instead of failing the job.
+    - name: Run Lighthouse
+      id: lighthouse
+      if: inputs.lighthouse-command != ''
+      shell: bash
+      continue-on-error: true
+      env:
+        LIGHTHOUSE_COMMAND: ${{ inputs.lighthouse-command }}
+      run: bash -c "$LIGHTHOUSE_COMMAND"
+
+    # head_ref is attacker-controllable on PRs (a fork can name its branch
+    # `foo"$(cmd)`). Route ref-derived values through env vars and build
+    # meta.json via jq so values are JSON-escaped and never re-evaluated by
+    # the shell.
+    - name: Snapshot head perf outputs
+      shell: bash
+      env:
+        BUNDLE_FILE: ${{ inputs.bundle-file }}
+        BUNDLE_STATS_FILE: ${{ inputs.bundle-stats-file }}
+        LIGHTHOUSE_REPORT: ${{ inputs.lighthouse-report }}
+        LIGHTHOUSE_CONFIGURED: ${{ inputs.lighthouse-command != '' }}
+        LH_OUTCOME: ${{ steps.lighthouse.outcome }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        HEAD_REF: ${{ github.head_ref || github.ref_name }}
+        HEAD_RUN_ID: ${{ github.run_id }}
+        HEAD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        set -eo pipefail
+        if [ ! -f "$BUNDLE_FILE" ]; then
+          echo "::error::bundle-file not found at $BUNDLE_FILE — check build-command and bundle-file inputs"
+          exit 1
+        fi
+        mkdir -p perf-snapshot
+        cp "$BUNDLE_FILE" perf-snapshot/index.html
+        if [ -n "$BUNDLE_STATS_FILE" ] && [ -f "$BUNDLE_STATS_FILE" ]; then
+          cp "$BUNDLE_STATS_FILE" perf-snapshot/bundle-stats.html
+        fi
+        LH_STATUS="failed"
+        if [ "$LIGHTHOUSE_CONFIGURED" != "true" ]; then
+          LH_STATUS="skipped"
+        elif [ "$LH_OUTCOME" = "success" ] && [ -f "$LIGHTHOUSE_REPORT" ]; then
+          cp "$LIGHTHOUSE_REPORT" perf-snapshot/lighthouse-viewer.json
+          LH_STATUS="success"
+        fi
+        jq -n \
+          --arg sha "$HEAD_SHA" \
+          --arg ref "$HEAD_REF" \
+          --arg runId "$HEAD_RUN_ID" \
+          --arg runUrl "$HEAD_RUN_URL" \
+          --arg lhStatus "$LH_STATUS" \
+          '{sha: $sha, ref: $ref, runId: $runId, runUrl: $runUrl, lhStatus: $lhStatus}' \
+          > perf-snapshot/meta.json
+
+    # Walk back through recent successful default-branch runs of the calling
+    # workflow and pull the first one that still has the artifact (older runs
+    # may have expired). Always exits 0 — a missing baseline must not fail the
+    # workflow. The workflow FILE name is derived from GITHUB_WORKFLOW_REF so
+    # renaming the workflow's display name does not orphan baseline history.
+    #
+    # Fork PR guard: `pull-requests: write` is not granted to fork
+    # `pull_request` runs, so the comment steps would fail with 403. Skip
+    # baseline-fetch + comment-generate + sticky-comment entirely on fork PRs.
+    - name: Find baseline
+      if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        WORKFLOW_REF: ${{ github.workflow_ref }}
+        BASELINE_LOOKBACK: ${{ inputs.baseline-lookback }}
+      run: |
+        set +e
+        mkdir -p perf-baseline
+        WORKFLOW_FILE="${WORKFLOW_REF#*/.github/workflows/}"
+        WORKFLOW_FILE="${WORKFLOW_FILE%@*}"
+        RUN_IDS=$(gh run list \
+          --branch "$DEFAULT_BRANCH" \
+          --workflow "$WORKFLOW_FILE" \
+          --status success \
+          --limit "$BASELINE_LOOKBACK" \
+          --json databaseId \
+          --jq '.[].databaseId' 2>/dev/null)
+        if [ -z "$RUN_IDS" ]; then
+          echo "No successful $DEFAULT_BRANCH runs of $WORKFLOW_FILE yet — head-only mode."
+          exit 0
+        fi
+        while IFS= read -r id; do
+          [ -z "$id" ] && continue
+          echo "Trying baseline from run $id..."
+          if gh run download "$id" --name perf-snapshot-main --dir perf-baseline/ 2>/dev/null; then
+            echo "Baseline downloaded from run $id."
+            exit 0
+          fi
+        done <<< "$RUN_IDS"
+        echo "All $BASELINE_LOOKBACK recent $DEFAULT_BRANCH runs had no usable artifact (expired or missing) — head-only mode."
+        rm -rf perf-baseline
+        mkdir -p perf-baseline
+        exit 0
+
+    # MUST exit 0 — the gate lives in a future follow-up; do not add
+    # --fail-on-regression here. The generator writes regression-count to
+    # GITHUB_OUTPUT itself.
+    - name: Generate comment
+      id: report
+      if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+      shell: bash
+      env:
+        BUNDLE_LABEL: ${{ inputs.bundle-file }}
+        NOISE_BANDS: ${{ inputs.noise-bands }}
+      run: |
+        bun "${{ github.action_path }}/src/perfReport.ts" \
+          --head perf-snapshot \
+          --base perf-baseline \
+          > perf-comment.md || true
+
+    # Sticky comment posts once per PR and updates in place on subsequent
+    # pushes. `continue-on-error` is a belt-and-suspenders safety net for
+    # token edge cases.
+    - name: Sticky perf comment
+      if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+      continue-on-error: true
+      uses: marocchino/sticky-pull-request-comment@v2
+      with:
+        header: ${{ inputs.comment-header }}
+        path: perf-comment.md
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+
+    # Only pull_request and default-branch push runs produce meaningfully
+    # named artifacts; other events (workflow_dispatch, feature-branch push)
+    # skip the upload instead of failing on if-no-files-found or poisoning
+    # the baseline name.
+    - name: Upload perf snapshot
+      if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref_name == github.event.repository.default_branch)
+      uses: actions/upload-artifact@v4
+      with:
+        name: >-
+          ${{
+            github.event_name == 'pull_request'
+              && format('perf-snapshot-pr-{0}', github.event.pull_request.number)
+              || 'perf-snapshot-main'
+          }}
+        path: perf-snapshot/
+        retention-days: 30
+        if-no-files-found: error

@@ -95,6 +95,17 @@
         "typescript": "6.0.3",
       },
     },
+    ".github/actions/perf-report-action": {
+      "name": "@code-assistants/perf-report-action",
+      "version": "0.1.0",
+      "dependencies": {
+        "zod": "4.4.3",
+      },
+      "devDependencies": {
+        "@types/bun": "1.3.14",
+        "typescript": "6.0.3",
+      },
+    },
     ".github/actions/release-action": {
       "name": "@code-assistants/release-action",
       "version": "1.1.1",
@@ -202,6 +213,8 @@
     "@code-assistants/code-review-cost-monitor-action": ["@code-assistants/code-review-cost-monitor-action@workspace:.github/actions/code-review-cost-monitor"],
 
     "@code-assistants/files-sync-action": ["@code-assistants/files-sync-action@workspace:.github/actions/files-sync"],
+
+    "@code-assistants/perf-report-action": ["@code-assistants/perf-report-action@workspace:.github/actions/perf-report-action"],
 
     "@code-assistants/release-action": ["@code-assistants/release-action@workspace:.github/actions/release-action"],
 
@@ -790,6 +803,8 @@
     "@code-assistants/code-review-cost-monitor-action/zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
 
     "@code-assistants/files-sync-action/zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
+
+    "@code-assistants/perf-report-action/zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
 
     "@code-assistants/validate-actions-action/zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
 

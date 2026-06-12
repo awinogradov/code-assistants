@@ -27,6 +27,7 @@
     ".github/actions/code-review-cost-monitor",
     ".github/actions/auto-label",
     ".github/actions/validate-actions",
+    ".github/actions/perf-report-action",
     "claude-plugins/*",
     "packages/*"
   ],
