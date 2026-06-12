@@ -1,0 +1,27 @@
+{
+  "name": "@code-assistants/perf-report-action",
+  "version": "0.1.0",
+  "description": "Composite GitHub Action that posts a sticky PR comment with bundle-size and Lighthouse deltas against a main-branch baseline.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "release": {
+    "type": "github-action"
+  },
+  "agents": {
+    "rules": "Bun",
+    "language": "typescript"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "clean": "rm -rf node_modules .turbo"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "typescript": "6.0.3"
+  }
+}
