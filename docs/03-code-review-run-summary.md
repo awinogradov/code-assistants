@@ -61,7 +61,7 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 
 ## Rendered footer
 
-`renderRunSummaryFooter` emits a visible `@<reviewer>` usage hint followed by the collapsible metrics block. The hint is stable text and sits **outside** the strip markers so it survives dedup stripping and stays in the comment; only the run-varying metrics are marker-bounded. Inside the block, the start marker sits directly above the `---` rule, and a blank line after `<br />` lets the GitHub-flavored markdown table render inside `<details>`.
+`renderRunSummaryFooter` emits a visible `@<reviewer>` usage hint followed by the collapsible metrics block. The hint is stable text and sits **outside** the strip markers so it survives dedup stripping and stays in the comment; only the run-varying metrics are marker-bounded. Inside the block, the start marker sits directly above the `---` rule, and a blank line after `<br />` lets the GitHub-flavored markdown table render inside `<details>`. Every table cell is wrapped in `<sub>` so the diagnostics render in GitHub's smaller font and stay visually secondary to the review findings — per cell, not around the table, because GFM stops parsing a pipe table wrapped in inline HTML, and the `| --- | --- |` delimiter row stays bare for the same reason (GitHub also strips `style`/`class`, so `<sub>` is the only sanctioned small-text treatment).
 
 ```text
 > 💡 `@review-bot <comment>` — Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.
@@ -72,15 +72,15 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 <summary>Review run summary 🤖</summary>
 <br />
 
-| Metric | Value |
+| <sub>Metric</sub> | <sub>Value</sub> |
 | --- | --- |
-| Mode | review |
-| Model time | 34.0s |
-| Tool round-trips | 10 |
-| Assistant turns | 3 |
-| Tokens in / out | 157825 / 36705 |
-| Cache read / write | 157000 / 800 |
-| Cost (USD) | $0.35 |
+| <sub>Mode</sub> | <sub>review</sub> |
+| <sub>Model time</sub> | <sub>34.0s</sub> |
+| <sub>Tool round-trips</sub> | <sub>10</sub> |
+| <sub>Assistant turns</sub> | <sub>3</sub> |
+| <sub>Tokens in / out</sub> | <sub>157825 / 36705</sub> |
+| <sub>Cache read / write</sub> | <sub>157000 / 800</sub> |
+| <sub>Cost (USD)</sub> | <sub>$0.35</sub> |
 
 </details>
 <!-- run-summary-end -->
