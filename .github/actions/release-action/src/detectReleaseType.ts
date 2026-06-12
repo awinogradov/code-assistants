@@ -5,7 +5,7 @@
  * `release` field via {@link readReleaseField}, and emits the result on the
  * `type` output channel (`$GITHUB_OUTPUT`).
  *
- * @see ../../../../docs/release-field.md
+ * @see ../../../../docs/06-release-field.md
  *
  * @example
  * ```bash
@@ -19,7 +19,7 @@ import { readReleaseField } from "@code-assistants/actions-core/releaseField";
 
 import { discoverMembers } from "./monorepo/discoverMembers.ts";
 
-const DOCS_LINK = "docs/release-field.md";
+const DOCS_LINK = "docs/06-release-field.md";
 const PACKAGE_JSON = "package.json";
 
 async function readPackageJson(): Promise<unknown> {

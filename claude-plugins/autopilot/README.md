@@ -105,7 +105,7 @@ All user-invocable entries are skills. Skills natively accept `$ARGUMENTS` and s
 
 ### Codebase context snapshot
 
-The skills that need whole-codebase context — `/autopilot:plan`, `/autopilot:run`, `/autopilot:issue-create`, `/autopilot:pr-review`, `/autopilot:pr-answer`, `/autopilot:pr-resolve` — read the committed `.repomix/pack.xml` snapshot first (via `attach_packed_output`) and fall back to a live `pack_codebase` when it is absent. The snapshot is refreshed by CI on every merge to `main`; see the consumer host repo's [Committed Repomix pack](../../docs/repomix-pack.md) doc for details.
+The skills that need whole-codebase context — `/autopilot:plan`, `/autopilot:run`, `/autopilot:issue-create`, `/autopilot:pr-review`, `/autopilot:pr-answer`, `/autopilot:pr-resolve` — read the committed `.repomix/pack.xml` snapshot first (via `attach_packed_output`) and fall back to a live `pack_codebase` when it is absent. The snapshot is refreshed by CI on every merge to `main`; see the consumer host repo's [Committed Repomix pack](../../docs/09-repomix-pack.md) doc for details.
 
 ### `/autopilot:branch-create`
 
@@ -184,7 +184,7 @@ Update an existing PR's title and description based on current branch commits.
 
 ### `/autopilot:plan`
 
-Perform deep analysis and create a validated implementation plan. Detects tech stack automatically. Uses the [codebase context snapshot](#codebase-context-snapshot). See [how the plan and run skills work](../../docs/plan-run-skills.md) for the full phase-by-phase flow.
+Perform deep analysis and create a validated implementation plan. Detects tech stack automatically. Uses the [codebase context snapshot](#codebase-context-snapshot). See [how the plan and run skills work](../../docs/05-plan-run-skills.md) for the full phase-by-phase flow.
 
 ```bash
 /autopilot:plan #42                                                      # From GitHub issue
@@ -196,7 +196,7 @@ Perform deep analysis and create a validated implementation plan. Detects tech s
 
 ### `/autopilot:run`
 
-Plan, implement, commit, create PR, and monitor until approved. Same as `/autopilot:plan` but after plan confirmation, automatically commits, creates a PR, and monitors for review approval. Uses the [codebase context snapshot](#codebase-context-snapshot). See [how the plan and run skills work](../../docs/plan-run-skills.md#how-run-differs-automated-post-implementation) for the automated post-implementation chain.
+Plan, implement, commit, create PR, and monitor until approved. Same as `/autopilot:plan` but after plan confirmation, automatically commits, creates a PR, and monitors for review approval. Uses the [codebase context snapshot](#codebase-context-snapshot). See [how the plan and run skills work](../../docs/05-plan-run-skills.md#how-run-differs-automated-post-implementation) for the automated post-implementation chain.
 
 ```bash
 /autopilot:run #42                                                      # From GitHub issue
