@@ -11755,13 +11755,13 @@ export function parseFooterMetrics(body: string | null | undefined): RunMetrics 
 /**
  * Tests for reportIssue.ts.
  * Covers create/comment/cooldown-skip paths, the closed-issue cooldown, the
- * pull_request filter on the issues listing, and attribution rendering —
- * all against a mocked Octokit.
+ * pull_request filter on the issues listing, attribution rendering, and the
+ * annotation message format — all against a mocked Octokit.
  */
 import { describe, expect, test } from "bun:test";
 import type { Octokit } from "@octokit/rest";
 
-import { buildIssueBody, parseAttribution, postReport, reportMarker } from "./reportIssue.ts";
+import { buildIssueBody, parseAttribution, postReport, reportAnnotation, reportMarker } from "./reportIssue.ts";
 
 const now = new Date("2026-06-12T00:00:00Z");
 
@@ -11979,6 +11979,20 @@ describe("parseAttribution()", () => {
     expect(parseAttribution(false, '{"narrative":"x"}')).toEqual({ requested: false });
   });
 });
+
+describe("reportAnnotation()", () => {
+  test("links the created issue", () => {
+    expect(reportAnnotation({ issueUrl: "https://github.com/o/r/issues/99", action: "created" })).toBe(
+      "Cost report created: https://github.com/o/r/issues/99",
+    );
+  });
+
+  test("links the existing issue on a cooldown skip", () => {
+    expect(reportAnnotation({ issueUrl: "https://github.com/o/r/issues/5", action: "skipped-cooldown" })).toBe(
+      "Cost report skipped-cooldown: https://github.com/o/r/issues/5",
+    );
+  });
+});
 </file>
 
 <file path=".github/actions/code-review-cost-monitor/src/reportIssue.ts">
@@ -11997,7 +12011,7 @@ describe("parseAttribution()", () => {
  * GH_TOKEN=… GITHUB_REPOSITORY=owner/repo REPORT_FILE=/tmp/report.md \
  *   ISSUE_LABEL=code-review-cost COOLDOWN_DAYS=7 bun src/reportIssue.ts
  */
-import { setOutput } from "@actions/core";
+import { notice, setOutput, summary } from "@actions/core";
 import type { Octokit } from "@octokit/rest";
 import { parseRepo } from "@code-assistants/actions-core/parseRepo";
 import { z } from "zod";
@@ -12149,6 +12163,11 @@ export function parseAttribution(requested: boolean, raw: string | undefined): A
   }
 }
 
+/** Annotation message linking the posted (or cooldown-suppressed) report issue. */
+export function reportAnnotation(result: PostReportResult): string {
+  return `Cost report ${result.action}: ${result.issueUrl}`;
+}
+
 async function run(): Promise<void> {
   const env = envSchema.parse(process.env);
   const { owner, repo } = parseRepo(env.GITHUB_REPOSITORY);
@@ -12165,7 +12184,8 @@ async function run(): Promise<void> {
     now: new Date(),
   });
 
-  console.log(`Cost report ${result.action}: ${result.issueUrl}`);
+  notice(reportAnnotation(result), { title: reportIssueTitle });
+  await summary.addRaw(`### [${reportIssueTitle}](${result.issueUrl})`).write();
   setOutput("issue_url", result.issueUrl);
 }
 
@@ -12423,6 +12443,7 @@ jobs:
 - **The report** mirrors the issue 287 analysis: coverage line, breached thresholds, daily trend table, top-5 notable runs with `$ / 1k output`, and the cost↔output-tokens correlation.
 - **Issue dedup** keys on the `code-review-cost` label plus an HTML marker, searched across open and closed issues: a breach comments on the open report issue, opens a new one when none exists, and a recently closed issue still honors `cooldown_days` — closing the issue without fixing the cost does not respawn it daily.
 - **Attribution** (gated on breach + `attribution: true` + a key) reuses the review action's `runClaude.ts` engine with a JSON schema, so cost comes from the SDK and no second Anthropic SDK or price map exists. The step is `continue-on-error`; when it fails, the report says "Attribution unavailable" instead of omitting the section.
+- **Run-page link** — the report step emits a `::notice` annotation and a step-summary link to the created or updated report issue (a cooldown-suppressed run links the existing issue), so the run page leads straight to the report.
 
 ## Local dry run
 
@@ -14782,7 +14803,7 @@ async function main(): Promise<void> {
   core.setOutput('pr-number', String(pr.number));
   core.setOutput('pr-url', pr.htmlUrl);
 
-  core.info(`Pull request ready: ${pr.htmlUrl}`);
+  core.notice(`Pull request ready: ${pr.htmlUrl}`, { title: env.title });
   await writePrReadySummary(pr, env.title, paths);
 }
 
@@ -14951,6 +14972,7 @@ See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/a
 ## Behavior
 
 - A single PR with all changed files is created (or reused if `branch` already has an open PR).
+- The PR link is surfaced on the run page as a `::notice` annotation (titled with the PR title) in addition to the step-summary link, so a scheduled sync run leads straight to its PR.
 - The head `branch` is force-updated on every run.
 - If no files differ between source and destination, no PR is created and the action exits cleanly.
 - A missing source path fails the run with `Source not found at <repo>:<path>`.
