@@ -47,6 +47,23 @@ export interface CollectParams {
   now: Date;
 }
 
+/**
+ * Thrown by the parser-drift tripwire: reviews were scanned but zero footers
+ * parsed. The message stays static (stable error-tracker grouping); the scan
+ * counts ride along as context properties.
+ */
+export class FooterDriftError extends Error {
+  constructor(
+    readonly scannedReviews: number,
+    readonly lookbackDays: number,
+  ) {
+    super(
+      "No run-summary footers parsed — the footer format may have changed (see runSummaryFooter.ts)",
+    );
+    this.name = "FooterDriftError";
+  }
+}
+
 /** Build an authenticated Octokit with transient-failure retries wired in. */
 export function createRetryingOctokit(token: string): Octokit {
   const RetryingOctokit = Octokit.plugin(retry);
@@ -108,10 +125,7 @@ export async function collectRuns(octokit: Octokit, params: CollectParams): Prom
   }
 
   if (scannedReviews > 0 && runs.length === 0) {
-    throw new Error(
-      `No run-summary footers parsed from ${scannedReviews} reviews in the last ` +
-        `${lookbackDays} days — the footer format may have changed (see runSummaryFooter.ts).`,
-    );
+    throw new FooterDriftError(scannedReviews, lookbackDays);
   }
 
   return { runs, scannedReviews };
