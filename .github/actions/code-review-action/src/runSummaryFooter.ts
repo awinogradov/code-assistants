@@ -68,18 +68,7 @@ function formatSeconds(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-/**
- * Render one table row with each cell wrapped in `<sub>` so GitHub draws the
- * run diagnostics in its smaller font, de-emphasizing them relative to the
- * review findings. The wrapping is per cell because GFM stops parsing a pipe
- * table that is wrapped in `<sub>` as a whole; cell values are trusted
- * internal metrics, so no HTML escaping is needed.
- */
-function formatSubRow(label: string, value: string): string {
-  return `| <sub>${label}</sub> | <sub>${value}</sub> |`;
-}
-
-/** Build the `<sub>`-wrapped markdown metric rows for the single-pass review run. */
+/** Build the markdown metric rows for the single-pass review run. */
 function buildRows(summary: RunSummary): string[] {
   const rows = [
     ["Mode", summary.mode],
@@ -91,15 +80,13 @@ function buildRows(summary: RunSummary): string[] {
     ["Cost (USD)", `$${summary.cost_usd.toFixed(2)}`],
   ];
 
-  return rows.map(([label, value]) => formatSubRow(label, value));
+  return rows.map(([label, value]) => `| ${label} | ${value} |`);
 }
 
 /**
  * Render the run-summary footer: a visible `@<reviewer>` usage hint followed by
  * the marker-wrapped, collapsible metrics block (built from the shared
- * {@link buildMarkedDetailsBlock} helper). The table cells render in `<sub>`
- * small text (see {@link formatSubRow}) so the diagnostics stay visually
- * secondary to the review content.
+ * {@link buildMarkedDetailsBlock} helper).
  *
  * The hint is stable text and sits *outside* the strip markers so it survives
  * {@link stripRunSummaryFooter} and stays in the comment after dedup; only the
@@ -118,8 +105,7 @@ export function renderRunSummaryFooter(summary: RunSummary, reviewer: string): s
       startMarker: footerStartMarker,
       endMarker: footerEndMarker,
       summary: "Review run summary 🤖",
-      // The delimiter row stays bare: wrapping it in <sub> breaks GFM table parsing.
-      bodyLines: [formatSubRow("Metric", "Value"), "| --- | --- |", ...buildRows(summary)],
+      bodyLines: ["| Metric | Value |", "| --- | --- |", ...buildRows(summary)],
     }),
   ].join("\n");
 }
