@@ -5,7 +5,7 @@
  * extracts AI-generated release notes, and posts a rich message with
  * version, notes, and a link to the GitHub release.
  *
- * @see ../../../../docs/release-field.md
+ * @see ../../../../docs/06-release-field.md
  *
  * @example
  * ```bash

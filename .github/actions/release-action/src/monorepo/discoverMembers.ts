@@ -12,7 +12,7 @@
  * the caller should fall back to standalone mode — discovery returns an empty
  * array in that case; the {@link detectMode} helper signals the mode.
  *
- * @see ../../../../docs/release-field.md
+ * @see ../../../../docs/06-release-field.md
  */
 import { join, relative } from "node:path";
 

@@ -10,7 +10,7 @@ difference. The synced set is:
 
 Together these are the full release pipeline: `release-create.yml` creates the release
 PR, `release-automerge.yml` merges it once it is approved and green, and
-`release-publish.yml` runs on the merge. See the [Release auto-merge flow](../../../docs/release-automerge.md)
+`release-publish.yml` runs on the merge. See the [Release auto-merge flow](../../../docs/07-release-automerge.md)
 doc for how the merge gate works. The actions these workflows invoke
 ([`release-action`](../release-action/README.md),
 [`release-automerge`](../release-automerge/README.md)) are **not** synced — downstream

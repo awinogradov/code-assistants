@@ -9,7 +9,7 @@ The synced set is:
 
 The workflow propagates the CI that commits a packed codebase snapshot to `.repomix/pack.xml`
 on every merge to the default branch; the config pins that pack's output for a deterministic,
-reviewable diff. See the [Committed Repomix pack](../../../docs/repomix-pack.md) doc for how the
+reviewable diff. See the [Committed Repomix pack](../../../docs/09-repomix-pack.md) doc for how the
 snapshot is produced and consumed. Each consumer repo packs its own codebase — there is no
 shared artifact.
 
