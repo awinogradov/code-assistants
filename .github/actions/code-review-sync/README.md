@@ -1,15 +1,17 @@
 # Code review sync
 
-Composite GitHub Action that syncs the canonical AI code-review workflow from an upstream
-repository into the current repository and opens a single pull request with the difference.
+Composite GitHub Action that syncs the canonical AI code-review workflows from an upstream
+repository into the current repository and opens a single pull request with the differences.
 The synced set is:
 
 - `.github/workflows/code-review.yml`
+- `.github/workflows/code-review-cost-monitor.yml`
 
-The workflow propagates the CI that runs the [`code-review-action`](../code-review-action/README.md)
-on every PR — the action itself stays in the upstream repository and is referenced from the
-synced workflow via `awinogradov/code-assistants/.github/actions/code-review-action@v1`, so
-consumers do not need a local copy.
+The workflows propagate the CI that runs the [`code-review-action`](../code-review-action/README.md)
+on every PR and the scheduled [`code-review-cost-monitor`](../code-review-cost-monitor/README.md)
+that watches its per-run cost — the actions themselves stay in the upstream repository and are
+referenced from the synced workflows via `awinogradov/code-assistants/.github/actions/<name>@main`,
+so consumers do not need a local copy.
 
 The action builds the sync list and delegates the diff and PR mechanics to the
 [`files-sync`](../files-sync/README.md) action. It does not require `actions/checkout` and
@@ -45,7 +47,7 @@ jobs:
 | -------------- | -------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `bot_token`    | yes      | —                             | PAT or GitHub App installation token with `contents: write` + `pull-requests: write` on this repo. The workflow's default `GITHUB_TOKEN` is **not** supported — see [Permissions](#permissions). |
 | `bot_username` | no       | `github-actions[bot]`         | Git author/committer login for the sync commit. Pass `${{ vars.BOT_USERNAME }}`. The PR itself is opened by the `bot_token` owner.                                                               |
-| `source-repo`  | no       | `awinogradov/code-assistants` | Source repository in `owner/name` form that hosts the canonical `.github/workflows/code-review.yml`.                                                                                             |
+| `source-repo`  | no       | `awinogradov/code-assistants` | Source repository in `owner/name` form that hosts the canonical code-review workflows (`code-review.yml`, `code-review-cost-monitor.yml`).                                                       |
 | `source-ref`   | no       | _(empty)_                     | Branch, tag, or SHA to read the source file from. Empty → source repository default branch.                                                                                                      |
 
 PR-shaping inputs (branch, title, body, commit message) are fixed by design — see
@@ -75,16 +77,16 @@ See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/a
 
 ## Behavior
 
-- Delegates to `files-sync` with a fixed sync list — `.github/workflows/code-review.yml` —
-  sourced from `source-repo` at `source-ref`.
+- Delegates to `files-sync` with a fixed sync list — `.github/workflows/code-review.yml` and
+  `.github/workflows/code-review-cost-monitor.yml` — sourced from `source-repo` at `source-ref`.
 - The PR is opened on the fixed branch `maintenance-sync-code-review` with the title
   `MAINTENANCE: Sync code-review workflow from upstream` and the commit message
   `chore: sync code-review workflow from upstream`. These values are not configurable so the
   action cannot collide with `files-sync`'s default branch and so every consumer gets the
   same one-line setup.
 - The head branch is force-updated on every run (inherited from `files-sync`); local edits
-  to the synced file will be overwritten when the upstream file changes.
-- If the destination file already matches upstream, no PR is created.
+  to the synced files will be overwritten when the upstream files change.
+- If the destination files already match upstream, no PR is created.
 - A missing source file fails the run with `Source not found at <repo>:<path>`.
 
 ## Versioning

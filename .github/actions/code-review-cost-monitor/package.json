@@ -1,0 +1,31 @@
+{
+  "name": "@code-assistants/code-review-cost-monitor-action",
+  "version": "0.0.0",
+  "description": "Composite GitHub Action that watches the code-review run-summary footers for cost regressions and opens (or updates) a deduplicated cost-report issue.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "release": {
+    "type": "github-action"
+  },
+  "agents": {
+    "rules": "Bun",
+    "language": "typescript"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "clean": "rm -rf node_modules .turbo"
+  },
+  "dependencies": {
+    "@actions/core": "3.0.1",
+    "@code-assistants/actions-core": "workspace:*",
+    "@octokit/plugin-retry": "8.1.0",
+    "@octokit/rest": "22.0.1",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "typescript": "6.0.3"
+  }
+}
