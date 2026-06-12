@@ -13,7 +13,7 @@
  * GH_TOKEN=… GITHUB_REPOSITORY=owner/repo REPORT_FILE=/tmp/report.md \
  *   ISSUE_LABEL=code-review-cost COOLDOWN_DAYS=7 bun src/reportIssue.ts
  */
-import { setOutput } from "@actions/core";
+import { notice, setOutput, summary } from "@actions/core";
 import type { Octokit } from "@octokit/rest";
 import { parseRepo } from "@code-assistants/actions-core/parseRepo";
 import { z } from "zod";
@@ -165,6 +165,11 @@ export function parseAttribution(requested: boolean, raw: string | undefined): A
   }
 }
 
+/** Annotation message linking the posted (or cooldown-suppressed) report issue. */
+export function reportAnnotation(result: PostReportResult): string {
+  return `Cost report ${result.action}: ${result.issueUrl}`;
+}
+
 async function run(): Promise<void> {
   const env = envSchema.parse(process.env);
   const { owner, repo } = parseRepo(env.GITHUB_REPOSITORY);
@@ -181,7 +186,8 @@ async function run(): Promise<void> {
     now: new Date(),
   });
 
-  console.log(`Cost report ${result.action}: ${result.issueUrl}`);
+  notice(reportAnnotation(result), { title: reportIssueTitle });
+  await summary.addRaw(`### [${reportIssueTitle}](${result.issueUrl})`).write();
   setOutput("issue_url", result.issueUrl);
 }
 
