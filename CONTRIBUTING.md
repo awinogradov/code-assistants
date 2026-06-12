@@ -574,6 +574,41 @@ Closes #400
 
 See [`CLAUDE.md`](./CLAUDE.md) for the full coding-standards matrix, and the Documentation section of [`README.md`](./README.md) for project-specific docs.
 
+### TODO Comments
+
+Deferred work is tracked with issue-linked `TODO`/`FIXME` comments so it never gets lost and stale comments can be retired.
+
+| Marker  | Meaning             |
+| ------- | ------------------- |
+| `TODO`  | Planned improvement |
+| `FIXME` | Known defect        |
+
+**Rules:**
+
+- Uppercase keyword, colon + single space: `// TODO: <description>`
+- Link the tracking issue with `// @see <issue-url>` on the line immediately below — use the full issue URL, never a bare `#123` in the description (scanners misread it as already linked)
+- Do not place a TODO directly above a JSDoc block containing an unrelated `@see` — scanners read the following lines for the issue link
+- Remove the comment and its `@see` line when the issue closes
+- Do not use `XXX`, `HACK`, or `NOTE` markers
+
+**Examples:**
+
+✅ Linked TODO:
+
+```typescript
+// TODO: validate env vars at startup
+// @see https://github.com/<owner>/<repo>/issues/<number>
+```
+
+❌ Untracked or unparseable:
+
+```typescript
+// HACK: works around #45
+// todo fix later
+```
+
+> TIP: Use the `/autopilot:todo-cleanup` slash command to scan TODOs, create issues, and link them automatically.
+
 ## Getting Help
 
 - **Questions** — open a [GitHub Discussion](https://github.com/awinogradov/code-assistants/discussions)
