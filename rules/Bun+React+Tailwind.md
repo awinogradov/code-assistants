@@ -299,6 +299,11 @@ Choose ONE backend based on the project's needs. Do not mix.
 - 👤 Avoid link to exact lines of code
 - 👤 Focus on "why" and "how to use", not "what"
 - 👤 Avoid duplicates comments — it means code must be refactored
+- 👤 Use only `TODO` (planned improvement) or `FIXME` (known defect) for deferred work — no XXX/HACK/NOTE markers
+- 👤 Format: `// TODO: <description>` / `// FIXME: <description>` — uppercase keyword, colon + single space
+- 👤 Link every TODO/FIXME with `// @see <issue-url>` on the line immediately below — full issue URL, not a bare `#123` in the description
+- 👤 Remove the TODO and its `@see` line when the linked issue closes
+- 👤 Use `Skill(autopilot:todo-cleanup)` to create, link, and clean up TODO issues. If the autopilot plugin is not installed, follow CONTRIBUTING.md
 
 ## 12. Performance
 
