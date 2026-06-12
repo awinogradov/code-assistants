@@ -79,15 +79,23 @@ describe("renderRunSummaryFooter", () => {
   });
 
   test("keeps the blank line after <br /> so the table renders inside <details>", () => {
-    expect(renderRunSummaryFooter(coreSummary, reviewer)).toContain("<br />\n\n| Metric | Value |");
+    expect(renderRunSummaryFooter(coreSummary, reviewer)).toContain(
+      "<br />\n\n| <sub>Metric</sub> | <sub>Value</sub> |",
+    );
   });
 
-  test("formats durations as seconds and cost as USD", () => {
+  test("keeps the delimiter row free of <sub> so the table parses", () => {
     const footer = renderRunSummaryFooter(coreSummary, reviewer);
-    expect(footer).toContain("| Model time | 34.0s |");
-    expect(footer).toContain("| Cost (USD) | $0.35 |");
-    expect(footer).toContain("| Tokens in / out | 500 / 100 |");
-    expect(footer).toContain("| Cache read / write | 400 / 20 |");
+    expect(footer).toContain("\n| --- | --- |\n");
+    expect(footer).not.toContain("<sub>---");
+  });
+
+  test("formats durations as seconds and cost as USD in <sub> cells", () => {
+    const footer = renderRunSummaryFooter(coreSummary, reviewer);
+    expect(footer).toContain("| <sub>Model time</sub> | <sub>34.0s</sub> |");
+    expect(footer).toContain("| <sub>Cost (USD)</sub> | <sub>$0.35</sub> |");
+    expect(footer).toContain("| <sub>Tokens in / out</sub> | <sub>500 / 100</sub> |");
+    expect(footer).toContain("| <sub>Cache read / write</sub> | <sub>400 / 20</sub> |");
   });
 
   test("renders no fan-out rows (single-pass review)", () => {
