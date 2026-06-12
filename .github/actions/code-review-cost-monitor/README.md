@@ -81,6 +81,7 @@ jobs:
 - **The report** mirrors the issue 287 analysis: coverage line, breached thresholds, daily trend table, top-5 notable runs with `$ / 1k output`, and the cost↔output-tokens correlation.
 - **Issue dedup** keys on the `code-review-cost` label plus an HTML marker, searched across open and closed issues: a breach comments on the open report issue, opens a new one when none exists, and a recently closed issue still honors `cooldown_days` — closing the issue without fixing the cost does not respawn it daily.
 - **Attribution** (gated on breach + `attribution: true` + a key) reuses the review action's `runClaude.ts` engine with a JSON schema, so cost comes from the SDK and no second Anthropic SDK or price map exists. The step is `continue-on-error`; when it fails, the report says "Attribution unavailable" instead of omitting the section.
+- **Run-page link** — the report step emits a `::notice` annotation and a step-summary link to the created or updated report issue (a cooldown-suppressed run links the existing issue), so the run page leads straight to the report.
 
 ## Local dry run
 
