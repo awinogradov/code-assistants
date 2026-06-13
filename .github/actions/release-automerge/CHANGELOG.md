@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [0.2.1](https://github.com/awinogradov/code-assistants/compare/release-automerge@v0.2.0...release-automerge@v0.2.1) (2026-06-13)
+
+## Release Notes
+
+The documentation references in release-automerge have been updated to match the new numbered chapter structure.
+
+## 🐛 Bug Fixes
+
+### Updated documentation links
+The release-automerge action now correctly points to the renamed documentation chapters when displaying error messages and skip notifications. This ensures your team can quickly find the right documentation when troubleshooting configuration issues or understanding why a release PR wasn't automatically merged.
+
+<details><summary>Related issues</summary>
+
+- [#295: MAINTENANCE: Restructure docs into numbered book chapters](https://github.com/awinogradov/code-assistants/pull/295)
+</details>
+
+
+### Bug Fixes
+
+* renumber docs and update shipped links ([4b77286](https://github.com/awinogradov/code-assistants/commit/4b77286ff4fa59ea51a25ca051e36e6898df4f06))
 ## [0.2.0](https://github.com/awinogradov/code-assistants/compare/release-automerge@v0.1.0...release-automerge@v0.2.0) (2026-06-08)
 
 ## Release Notes
