@@ -49,6 +49,7 @@ The content is organized as follows:
         1.0.0.md
         2.0.0.md
         2.0.1.md
+        2.0.2.md
       docs/
         sync-flow.md
       src/
@@ -216,6 +217,7 @@ The content is organized as follows:
         1.0.2.md
         1.1.0.md
         1.1.1.md
+        1.1.2.md
       src/
         migrations/
           migratingAppend.test.ts
@@ -679,6 +681,29 @@ Error messages in the agents-rules-sync action could fail when special character
 ### Tests
 
 * **agents-rules-sync:** match error by substring ([9e28609](https://github.com/awinogradov/code-assistants/commit/9e28609fd1b65b58bed3c9982617c1e74e6d07d2))
+</file>
+
+<file path=".github/actions/agents-rules-sync/.release_notes/2.0.2.md">
+## [2.0.2](https://github.com/awinogradov/code-assistants/compare/agents-rules-sync-action@v2.0.1...agents-rules-sync-action@v2.0.2) (2026-06-13)
+
+## Release Notes
+
+Repository documentation chapters have been reorganized into a numbered book format, making it easier to find the information you need. All links within the service, including error messages and automated release skip notifications, have been updated to point to the correct chapters.
+
+## 📚 Documentation & Settings Updates
+
+### Documentation reorganization into numbered chapters
+The service documentation has been restructured into clearly numbered book chapters with an annotated table of contents. This makes it easier to navigate and find specific configuration or integration guidance. All internal service links, including those in error messages and automated notifications, now correctly reference these new chapter numbers.
+
+<details><summary>Related issues</summary>
+
+- [#295: MAINTENANCE: Restructure docs into numbered book chapters](https://github.com/awinogradov/code-assistants/pull/295)
+</details>
+
+
+### Bug Fixes
+
+* renumber docs and update shipped links ([4b77286](https://github.com/awinogradov/code-assistants/commit/4b77286ff4fa59ea51a25ca051e36e6898df4f06))
 </file>
 
 <file path=".github/actions/agents-rules-sync/docs/sync-flow.md">
@@ -1320,6 +1345,26 @@ await main().catch((error: unknown) => {
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [2.0.2](https://github.com/awinogradov/code-assistants/compare/agents-rules-sync-action@v2.0.1...agents-rules-sync-action@v2.0.2) (2026-06-13)
+
+## Release Notes
+
+Repository documentation chapters have been reorganized into a numbered book format, making it easier to find the information you need. All links within the service, including error messages and automated release skip notifications, have been updated to point to the correct chapters.
+
+## 📚 Documentation & Settings Updates
+
+### Documentation reorganization into numbered chapters
+The service documentation has been restructured into clearly numbered book chapters with an annotated table of contents. This makes it easier to navigate and find specific configuration or integration guidance. All internal service links, including those in error messages and automated notifications, now correctly reference these new chapter numbers.
+
+<details><summary>Related issues</summary>
+
+- [#295: MAINTENANCE: Restructure docs into numbered book chapters](https://github.com/awinogradov/code-assistants/pull/295)
+</details>
+
+
+### Bug Fixes
+
+* renumber docs and update shipped links ([4b77286](https://github.com/awinogradov/code-assistants/commit/4b77286ff4fa59ea51a25ca051e36e6898df4f06))
 ## [2.0.1](https://github.com/awinogradov/code-assistants/compare/agents-rules-sync-action@v2.0.0...agents-rules-sync-action@v2.0.1) (2026-06-04)
 
 ## Release Notes
@@ -1542,7 +1587,7 @@ If you're currently using a pinned version tag, you can continue using it withou
 <file path=".github/actions/agents-rules-sync/package.json">
 {
   "name": "@code-assistants/agents-rules-sync-action",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Composite GitHub Action that syncs the stack-appropriate agent rules file into CLAUDE.md.",
   "private": true,
   "type": "module",
@@ -1577,7 +1622,7 @@ If you're currently using a pinned version tag, you can continue using it withou
 <file path=".github/actions/agents-rules-sync/README.md">
 # Agents rules sync
 
-[![GitHub Release](https://img.shields.io/badge/release-v2.0.1-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v2.0.2-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that syncs the stack-appropriate agent rules file from an upstream
@@ -1715,7 +1760,7 @@ uses: awinogradov/code-assistants/.github/actions/agents-rules-sync@v1
 </file>
 
 <file path=".github/actions/agents-rules-sync/version">
-2.0.1
+2.0.2
 </file>
 
 <file path=".github/actions/auto-label/.release_notes/0.2.0.md">
@@ -17403,6 +17448,29 @@ The reference formatting standard now clarifies how to link sections within the 
 * **rfc:** allow same-document section anchors ([0cebbb6](https://github.com/awinogradov/code-assistants/commit/0cebbb6092e4a09a8412d485644bf99d9c683562))
 </file>
 
+<file path=".github/actions/release-action/.release_notes/1.1.2.md">
+## [1.1.2](https://github.com/awinogradov/code-assistants/compare/release-action@v1.1.1...release-action@v1.1.2) (2026-06-13)
+
+## Release Notes
+
+Release action now links to the correct documentation after the repository's doc restructuring.
+
+## 📚 Documentation & Settings Updates
+
+### Documentation links updated throughout release action
+All documentation links have been updated to match the new numbered chapter structure. Error messages, automated release comments, and README references now point to the correct locations after the repository documentation was reorganized into numbered book chapters.
+
+<details><summary>Related issues</summary>
+
+- [#295: MAINTENANCE: Restructure docs into numbered book chapters](https://github.com/awinogradov/code-assistants/pull/295)
+</details>
+
+
+### Documentation
+
+* update doc links in readmes and jsdoc ([8e468d2](https://github.com/awinogradov/code-assistants/commit/8e468d230fa333803a85665f0d26757c13e1350d))
+</file>
+
 <file path=".github/actions/release-action/src/migrations/migratingAppend.test.ts">
 /**
  * Tests for MIGRATING.md section rendering and append.
@@ -27515,6 +27583,26 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.1.2](https://github.com/awinogradov/code-assistants/compare/release-action@v1.1.1...release-action@v1.1.2) (2026-06-13)
+
+## Release Notes
+
+Release action now links to the correct documentation after the repository's doc restructuring.
+
+## 📚 Documentation & Settings Updates
+
+### Documentation links updated throughout release action
+All documentation links have been updated to match the new numbered chapter structure. Error messages, automated release comments, and README references now point to the correct locations after the repository documentation was reorganized into numbered book chapters.
+
+<details><summary>Related issues</summary>
+
+- [#295: MAINTENANCE: Restructure docs into numbered book chapters](https://github.com/awinogradov/code-assistants/pull/295)
+</details>
+
+
+### Documentation
+
+* update doc links in readmes and jsdoc ([8e468d2](https://github.com/awinogradov/code-assistants/commit/8e468d230fa333803a85665f0d26757c13e1350d))
 ## [1.1.1](https://github.com/awinogradov/code-assistants/compare/release-action@v1.1.0...release-action@v1.1.1) (2026-06-08)
 
 ## Release Notes
@@ -27829,7 +27917,7 @@ Add a `release` field to your package.json to configure release behavior. See th
 <file path=".github/actions/release-action/package.json">
 {
   "name": "@code-assistants/release-action",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Composite GitHub Action that automates conventional-commit releases for npm packages, GitHub Actions, and Claude plugins.",
   "private": true,
   "type": "module",
@@ -27868,7 +27956,7 @@ Add a `release` field to your package.json to configure release behavior. See th
 <file path=".github/actions/release-action/README.md">
 # Release action
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.1.1-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.1.2-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that automates the release pipeline for npm packages, GitHub Actions, and Claude plugins.
@@ -28143,7 +28231,7 @@ uses: awinogradov/code-assistants/.github/actions/release-action@v1
 </file>
 
 <file path=".github/actions/release-action/version">
-1.1.1
+1.1.2
 </file>
 
 <file path=".github/actions/release-automerge/.release_notes/0.1.0.md">
