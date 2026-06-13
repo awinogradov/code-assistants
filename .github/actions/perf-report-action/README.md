@@ -1,5 +1,8 @@
 # Perf report
 
+[![GitHub Release](https://img.shields.io/badge/release-v0.2.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
+
 Composite GitHub Action that builds a target, measures bundle sizes (raw / gzip / brotli) and Lighthouse headlines (Performance, Accessibility, LCP, TBT, CLS, TTI), compares them against a baseline from the default branch, and posts a single sticky PR comment with the deltas classified against per-metric noise bands.
 
 Reporting-only by design: the job never fails on a regression. Regressions surface as commentary (and the `regression-count` output); a hard-fail gate is a deliberate follow-up.
