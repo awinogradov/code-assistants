@@ -152,6 +152,7 @@ The content is organized as follows:
         evaluateThresholds.ts
         footerMetrics.test.ts
         footerMetrics.ts
+        footerRoundTrip.test.ts
         reportIssue.test.ts
         reportIssue.ts
       action.yml
@@ -8188,6 +8189,18 @@ describe("renderRunSummaryFooter", () => {
     expect(renderRunSummaryFooter(coreSummary, reviewer)).toContain("<br />\n\n| Metric | Value |");
   });
 
+  test("embeds the machine-readable data comment inside the strip markers", () => {
+    const footer = renderRunSummaryFooter(coreSummary, reviewer);
+    expect(footer).toContain('<!-- run-summary-data: {"mode":"review"');
+    expect(footer).toContain('"costUsd":0.35');
+    expect(footer).toContain('"modelMs":34000');
+    const startAt = footer.indexOf("<!-- run-summary-start -->");
+    const endAt = footer.indexOf("<!-- run-summary-end -->");
+    const dataAt = footer.indexOf("<!-- run-summary-data:");
+    expect(dataAt).toBeGreaterThan(startAt);
+    expect(dataAt).toBeLessThan(endAt);
+  });
+
   test("formats durations as seconds and cost as USD", () => {
     const footer = renderRunSummaryFooter(coreSummary, reviewer);
     expect(footer).toContain("| Model | claude-sonnet-4-6 |");
@@ -8280,6 +8293,11 @@ describe("buildReviewBody", () => {
  * wrapped in HTML-comment markers so the duplicate-suppression guard can strip
  * the run-varying numbers before comparing review bodies.
  *
+ * Inside those markers the footer also embeds the metrics as a machine-readable
+ * JSON comment (`<!-- run-summary-data: … -->`). That comment — not the visible
+ * `<details>` table — is the contract `code-review-cost-monitor` parses, so the
+ * table stays purely cosmetic and can be restyled without breaking the monitor.
+ *
  * @example
  * const summary = parseRunSummary(process.env.RUN_SUMMARY);
  * const footer = summary ? renderRunSummaryFooter(summary, reviewer) : "";
@@ -8358,6 +8376,31 @@ function buildRows(summary: RunSummary): string[] {
   return rows.map(([label, value]) => `| ${label} | ${value} |`);
 }
 
+/** Opening delimiter of the machine-readable run-summary data comment. */
+const footerDataPrefix = "<!-- run-summary-data:";
+
+/**
+ * Render the run metrics as a single machine-readable HTML comment, keyed to
+ * mirror `code-review-cost-monitor`'s `runMetricsSchema` so the monitor can
+ * validate the JSON directly instead of scraping the human-facing table. This
+ * is the durable cost-monitoring contract; the visible table is cosmetic.
+ * `model_ms` is rounded to whole milliseconds to satisfy the integer contract.
+ */
+function renderDataComment(summary: RunSummary): string {
+  const data = {
+    mode: summary.mode,
+    modelMs: Math.round(summary.model_ms),
+    toolRoundTrips: summary.tool_round_trips,
+    numTurns: summary.num_turns,
+    tokensIn: summary.tokens_in,
+    tokensOut: summary.tokens_out,
+    cacheReadTokens: summary.cache_read_tokens,
+    cacheCreationTokens: summary.cache_creation_tokens,
+    costUsd: summary.cost_usd,
+  };
+  return `${footerDataPrefix} ${JSON.stringify(data)} -->`;
+}
+
 /**
  * Render the run-summary footer: a visible `@<reviewer>` usage hint followed by
  * the marker-wrapped, collapsible metrics block (built from the shared
@@ -8365,8 +8408,9 @@ function buildRows(summary: RunSummary): string[] {
  *
  * The hint is stable text and sits *outside* the strip markers so it survives
  * {@link stripRunSummaryFooter} and stays in the comment after dedup; only the
- * run-varying metrics are marker-bounded. The two leading blank lines separate
- * the footer from the preceding review body.
+ * run-varying metrics are marker-bounded — including the machine-readable
+ * {@link renderDataComment} block appended after the table. The two leading
+ * blank lines separate the footer from the preceding review body.
  */
 export function renderRunSummaryFooter(summary: RunSummary, reviewer: string): string {
   const usageHint = `> 💡 \`@${reviewer} <comment>\` — Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.`;
@@ -8380,7 +8424,13 @@ export function renderRunSummaryFooter(summary: RunSummary, reviewer: string): s
       startMarker: footerStartMarker,
       endMarker: footerEndMarker,
       summary: "Review run summary 🤖",
-      bodyLines: ["| Metric | Value |", "| --- | --- |", ...buildRows(summary)],
+      bodyLines: [
+        "| Metric | Value |",
+        "| --- | --- |",
+        ...buildRows(summary),
+        "",
+        renderDataComment(summary),
+      ],
     }),
   ].join("\n");
 }
@@ -10764,8 +10814,9 @@ export function buildAttributionPrompt(
 /**
  * Tests for collectRuns.ts.
  * Covers the updated-desc pagination cutoff via done(), footer filtering and
- * window bounds on reviews, the throw-on-API-error path, and the zero-parsed
- * parser-drift tripwire — all against a mocked Octokit.
+ * window bounds on reviews, the throw-on-API-error path, and the drift tripwire
+ * — which now arms only when at least minRuns reviews carry a data comment yet
+ * none parse, and degrades gracefully below that — all against a mocked Octokit.
  */
 import { describe, expect, test } from "bun:test";
 import type { Octokit } from "@octokit/rest";
@@ -10774,22 +10825,25 @@ import { collectRuns, FooterDriftError } from "./collectRuns.ts";
 
 const now = new Date("2026-06-12T00:00:00Z");
 
-/** Minimal footer body the parser accepts, with a configurable cost. */
-function footer(costUsd: string): string {
-  return [
-    "Review prose.",
-    "<!-- run-summary-start -->",
-    "| Metric | Value |",
-    "| --- | --- |",
-    "| Mode | review |",
-    "| Model time | 34.0s |",
-    "| Tool round-trips | 10 |",
-    "| Assistant turns | 3 |",
-    "| Tokens in / out | 157825 / 36705 |",
-    "| Cache read / write | 157000 / 800 |",
-    `| Cost (USD) | $${costUsd} |`,
-    "<!-- run-summary-end -->",
-  ].join("\n");
+/** A review body carrying a parseable run-summary data comment with `costUsd`. */
+function footer(costUsd: number): string {
+  const data = {
+    mode: "review",
+    modelMs: 34000,
+    toolRoundTrips: 10,
+    numTurns: 3,
+    tokensIn: 157825,
+    tokensOut: 36705,
+    cacheReadTokens: 157000,
+    cacheCreationTokens: 800,
+    costUsd,
+  };
+  return `Review prose.\n<!-- run-summary-data: ${JSON.stringify(data)} -->`;
+}
+
+/** A body that carries the data marker (so it is data-bearing) but never parses. */
+function brokenFooter(): string {
+  return "Review prose.\n<!-- run-summary-data: {drifted -->";
 }
 
 interface MockData {
@@ -10850,15 +10904,21 @@ describe("collectRuns()", () => {
       prPages: [[{ number: 7, updated_at: "2026-06-10T00:00:00Z" }]],
       reviewsByPr: {
         7: [
-          { body: footer("0.35"), submitted_at: "2026-06-09T00:00:00Z" },
+          { body: footer(0.35), submitted_at: "2026-06-09T00:00:00Z" },
           { body: "human review, no footer", submitted_at: "2026-06-09T01:00:00Z" },
-          { body: footer("9.99"), submitted_at: "2026-04-01T00:00:00Z" },
+          { body: footer(9.99), submitted_at: "2026-04-01T00:00:00Z" },
         ],
       },
       detailsByPr: { 7: { additions: 120, deletions: 8 } },
     });
 
-    const result = await collectRuns(octokit, { owner: "o", repo: "r", lookbackDays: 30, now });
+    const result = await collectRuns(octokit, {
+      owner: "o",
+      repo: "r",
+      lookbackDays: 30,
+      now,
+      minRuns: 8,
+    });
 
     expect(result.scannedReviews).toBe(3);
     expect(result.runs).toHaveLength(1);
@@ -10880,10 +10940,16 @@ describe("collectRuns()", () => {
         ],
         [{ number: 3, updated_at: "2025-12-01T00:00:00Z" }],
       ],
-      reviewsByPr: { 1: [{ body: footer("0.20"), submitted_at: "2026-06-11T00:00:00Z" }] },
+      reviewsByPr: { 1: [{ body: footer(0.2), submitted_at: "2026-06-11T00:00:00Z" }] },
     });
 
-    const result = await collectRuns(octokit, { owner: "o", repo: "r", lookbackDays: 30, now });
+    const result = await collectRuns(octokit, {
+      owner: "o",
+      repo: "r",
+      lookbackDays: 30,
+      now,
+      minRuns: 8,
+    });
 
     expect(reviewCalls).toEqual([1]);
     expect(result.runs).toHaveLength(1);
@@ -10894,14 +10960,18 @@ describe("collectRuns()", () => {
     octokit.paginate = (() => Promise.reject(new Error("boom"))) as unknown as Octokit["paginate"];
 
     expect(
-      collectRuns(octokit, { owner: "o", repo: "r", lookbackDays: 30, now }),
+      collectRuns(octokit, { owner: "o", repo: "r", lookbackDays: 30, now, minRuns: 8 }),
     ).rejects.toThrow("boom");
   });
 
-  test("throws the parser-drift tripwire when reviews exist but none parse", async () => {
+  test("throws drift when at least minRuns data-bearing reviews fail to parse", async () => {
+    const brokenReviews = Array.from({ length: 8 }, () => ({
+      body: brokenFooter(),
+      submitted_at: "2026-06-10T00:00:00Z",
+    }));
     const { octokit } = makeOctokit({
       prPages: [[{ number: 5, updated_at: "2026-06-11T00:00:00Z" }]],
-      reviewsByPr: { 5: [{ body: "no footer here", submitted_at: "2026-06-11T00:00:00Z" }] },
+      reviewsByPr: { 5: brokenReviews },
     });
 
     const error: unknown = await collectRuns(octokit, {
@@ -10909,20 +10979,68 @@ describe("collectRuns()", () => {
       repo: "r",
       lookbackDays: 30,
       now,
+      minRuns: 8,
     }).catch((thrown: unknown) => thrown);
 
     expect(error).toBeInstanceOf(FooterDriftError);
     expect(error).toMatchObject({
       message: expect.stringContaining("footer format may have changed"),
-      scannedReviews: 1,
+      dataBearingReviews: 8,
       lookbackDays: 30,
     });
+  });
+
+  test("stays graceful when data-bearing reviews are below minRuns (insufficient history)", async () => {
+    const { octokit } = makeOctokit({
+      prPages: [[{ number: 5, updated_at: "2026-06-11T00:00:00Z" }]],
+      reviewsByPr: {
+        5: [
+          { body: brokenFooter(), submitted_at: "2026-06-10T00:00:00Z" },
+          { body: brokenFooter(), submitted_at: "2026-06-10T01:00:00Z" },
+        ],
+      },
+    });
+
+    const result = await collectRuns(octokit, {
+      owner: "o",
+      repo: "r",
+      lookbackDays: 30,
+      now,
+      minRuns: 8,
+    });
+
+    expect(result).toEqual({ runs: [], scannedReviews: 2 });
+  });
+
+  test("does not throw when scanned reviews carry no data comment", async () => {
+    const { octokit } = makeOctokit({
+      prPages: [[{ number: 5, updated_at: "2026-06-11T00:00:00Z" }]],
+      reviewsByPr: {
+        5: [{ body: "no footer here", submitted_at: "2026-06-11T00:00:00Z" }],
+      },
+    });
+
+    const result = await collectRuns(octokit, {
+      owner: "o",
+      repo: "r",
+      lookbackDays: 30,
+      now,
+      minRuns: 8,
+    });
+
+    expect(result).toEqual({ runs: [], scannedReviews: 1 });
   });
 
   test("returns empty without throwing when no reviews were scanned", async () => {
     const { octokit } = makeOctokit({ prPages: [], reviewsByPr: {} });
 
-    const result = await collectRuns(octokit, { owner: "o", repo: "r", lookbackDays: 30, now });
+    const result = await collectRuns(octokit, {
+      owner: "o",
+      repo: "r",
+      lookbackDays: 30,
+      now,
+      minRuns: 8,
+    });
 
     expect(result).toEqual({ runs: [], scannedReviews: 0 });
   });
@@ -10939,21 +11057,23 @@ describe("collectRuns()", () => {
  * `parseFooterMetrics`. The Octokit instance is injected so tests mock it;
  * `createRetryingOctokit` wires `@octokit/plugin-retry` so a transient 5xx or
  * secondary rate limit doesn't redden a scheduled run. Failure semantics are
- * deliberate: an API error (after retries) throws, and so does a scan that
- * found reviews but parsed zero footers — a silently-empty dataset would read
- * as "no regression".
+ * deliberate: an API error (after retries) throws, and so does a scan where at
+ * least `minRuns` reviews carry a run-summary data comment yet none parse —
+ * genuine format drift. A window with too few footers to judge degrades to an
+ * empty result instead, mirroring the `minRuns` gate, so a newly-adopting or
+ * quiet repo never reddens its scheduled run.
  *
  * @example
  * const octokit = createRetryingOctokit(token);
  * const { runs, scannedReviews } = await collectRuns(octokit, {
- *   owner, repo, lookbackDays: 30, now: new Date(),
+ *   owner, repo, lookbackDays: 30, now: new Date(), minRuns: 8,
  * });
  */
 import { retry } from "@octokit/plugin-retry";
 import { Octokit } from "@octokit/rest";
 
 import type { RunMetrics } from "./footerMetrics.ts";
-import { parseFooterMetrics } from "./footerMetrics.ts";
+import { hasRunSummaryData, parseFooterMetrics } from "./footerMetrics.ts";
 
 /** One parsed review run, anchored to its PR and submission time. */
 export interface RunRecord extends RunMetrics {
@@ -10977,16 +11097,23 @@ export interface CollectParams {
   lookbackDays: number;
   /** Injected clock so the window cutoff is testable. */
   now: Date;
+  /**
+   * Minimum data-bearing reviews before the drift tripwire arms; below it a
+   * zero-parse scan reads as insufficient footer history, not drift. Mirrors
+   * the monitor's `minRuns` threshold.
+   */
+  minRuns: number;
 }
 
 /**
- * Thrown by the parser-drift tripwire: reviews were scanned but zero footers
- * parsed. The message stays static (stable error-tracker grouping); the scan
- * counts ride along as context properties.
+ * Thrown by the parser-drift tripwire: at least `minRuns` reviews carried a
+ * run-summary data comment yet none parsed — genuine format drift. The message
+ * stays static (stable error-tracker grouping); the data-bearing count rides
+ * along as a context property.
  */
 export class FooterDriftError extends Error {
   constructor(
-    readonly scannedReviews: number,
+    readonly dataBearingReviews: number,
     readonly lookbackDays: number,
   ) {
     super(
@@ -11004,11 +11131,11 @@ export function createRetryingOctokit(token: string): Octokit {
 
 /**
  * Scrape the run-summary footers of all reviews submitted inside the lookback
- * window. Throws on API failure and on the parser-drift tripwire (reviews
- * scanned, zero footers parsed).
+ * window. Throws on API failure and on the parser-drift tripwire (at least
+ * `minRuns` reviews carry a data comment, yet none parse).
  */
 export async function collectRuns(octokit: Octokit, params: CollectParams): Promise<CollectedRuns> {
-  const { owner, repo, lookbackDays, now } = params;
+  const { owner, repo, lookbackDays, now, minRuns } = params;
   const cutoffMs = now.getTime() - lookbackDays * 24 * 60 * 60 * 1000;
 
   // sort: "updated" descending lets done() stop as soon as a page falls fully
@@ -11025,6 +11152,7 @@ export async function collectRuns(octokit: Octokit, params: CollectParams): Prom
 
   const runs: RunRecord[] = [];
   let scannedReviews = 0;
+  let dataBearingReviews = 0;
 
   for (const pr of prs) {
     const reviews = await octokit.paginate(octokit.rest.pulls.listReviews, {
@@ -11034,6 +11162,12 @@ export async function collectRuns(octokit: Octokit, params: CollectParams): Prom
       per_page: 100,
     });
     scannedReviews += reviews.length;
+    dataBearingReviews += reviews.filter(
+      (review) =>
+        review.submitted_at &&
+        Date.parse(review.submitted_at) >= cutoffMs &&
+        hasRunSummaryData(review.body),
+    ).length;
 
     const parsed = reviews.flatMap((review) => {
       if (!review.submitted_at || Date.parse(review.submitted_at) < cutoffMs) return [];
@@ -11056,8 +11190,8 @@ export async function collectRuns(octokit: Octokit, params: CollectParams): Prom
     }
   }
 
-  if (scannedReviews > 0 && runs.length === 0) {
-    throw new FooterDriftError(scannedReviews, lookbackDays);
+  if (dataBearingReviews >= minRuns && runs.length === 0) {
+    throw new FooterDriftError(dataBearingReviews, lookbackDays);
   }
 
   return { runs, scannedReviews };
@@ -11222,6 +11356,7 @@ async function run(): Promise<void> {
     repo: config.repo,
     lookbackDays: config.lookbackDays,
     now,
+    minRuns: config.thresholds.minRuns,
   });
   const verdict = evaluateThresholds(collected.runs, config.thresholds);
   const report = buildReport({
@@ -11544,74 +11679,69 @@ export function evaluateThresholds(runs: RunRecord[], config: ThresholdConfig): 
 <file path=".github/actions/code-review-cost-monitor/src/footerMetrics.test.ts">
 /**
  * Tests for footerMetrics.ts.
- * Covers the documented footer example, fail-open behavior on absent markers
- * and malformed cells, and non-review modes (preflight skip comments).
+ * Covers the data-comment happy path, fail-open behavior (absent marker,
+ * unclosed comment, malformed JSON, schema-invalid payload), non-review modes,
+ * independence from the visible table, and the hasRunSummaryData predicate.
  */
 import { describe, expect, test } from "bun:test";
 
-import { parseFooterMetrics } from "./footerMetrics.ts";
+import { hasRunSummaryData, parseFooterMetrics, type RunMetrics } from "./footerMetrics.ts";
 
-/** Build a footer body matching the format rendered by runSummaryFooter.ts. */
-function footerBody(overrides: Partial<Record<string, string>> = {}): string {
-  const rows: Record<string, string> = {
-    Mode: "review",
-    "Model time": "34.0s",
-    "Tool round-trips": "10",
-    "Assistant turns": "3",
-    "Tokens in / out": "157825 / 36705",
-    "Cache read / write": "157000 / 800",
-    "Cost (USD)": "$0.35",
-    ...overrides,
-  };
-  const table = Object.entries(rows)
-    .map(([label, value]) => `| ${label} | ${value} |`)
-    .join("\n");
+const metrics: RunMetrics = {
+  mode: "review",
+  modelMs: 34000,
+  toolRoundTrips: 10,
+  numTurns: 3,
+  tokensIn: 157825,
+  tokensOut: 36705,
+  cacheReadTokens: 157000,
+  cacheCreationTokens: 800,
+  costUsd: 0.35,
+};
 
+/** Build a review body carrying the run-summary data comment for `payload`. */
+function bodyWithData(payload: unknown): string {
   return [
     "Review prose above the footer.",
     "",
-    "> 💡 `@review-bot <comment>` — Ask the AI reviewer a question.",
-    "",
     "<!-- run-summary-start -->",
-    "---",
-    "<details>",
-    "<summary>Review run summary 🤖</summary>",
-    "<br />",
-    "",
     "| Metric | Value |",
     "| --- | --- |",
-    table,
+    "| Mode | review |",
     "",
-    "</details>",
+    `<!-- run-summary-data: ${JSON.stringify(payload)} -->`,
     "<!-- run-summary-end -->",
   ].join("\n");
 }
 
 describe("parseFooterMetrics()", () => {
-  test("parses the documented footer example", () => {
-    expect(parseFooterMetrics(footerBody())).toEqual({
-      mode: "review",
-      modelMs: 34000,
-      toolRoundTrips: 10,
-      numTurns: 3,
-      tokensIn: 157825,
-      tokensOut: 36705,
-      cacheReadTokens: 157000,
-      cacheCreationTokens: 800,
-      costUsd: 0.35,
-    });
+  test("recovers the metrics from the data comment", () => {
+    expect(parseFooterMetrics(bodyWithData(metrics))).toEqual(metrics);
+  });
+
+  test("reads only the comment, ignoring the visible table format", () => {
+    // A table whose labels are <sub>-wrapped (the historical drift) still parses,
+    // because the parser never looks at the table.
+    const body = [
+      "<!-- run-summary-start -->",
+      "| <sub>Mode</sub> | <sub>review</sub> |",
+      "| <sub>Cost (USD)</sub> | <sub>$9.99</sub> |",
+      `<!-- run-summary-data: ${JSON.stringify(metrics)} -->`,
+      "<!-- run-summary-end -->",
+    ].join("\n");
+    expect(parseFooterMetrics(body)?.costUsd).toBe(0.35);
   });
 
   test("parses non-review modes (preflight skip comment)", () => {
-    expect(parseFooterMetrics(footerBody({ Mode: "preflight" }))?.mode).toBe("preflight");
+    expect(parseFooterMetrics(bodyWithData({ ...metrics, mode: "preflight" }))?.mode).toBe(
+      "preflight",
+    );
   });
 
-  test("parses zero-valued cells", () => {
-    const metrics = parseFooterMetrics(
-      footerBody({ "Cache read / write": "0 / 0", "Cost (USD)": "$0.00" }),
-    );
-    expect(metrics?.cacheReadTokens).toBe(0);
-    expect(metrics?.costUsd).toBe(0);
+  test("parses zero-valued fields", () => {
+    const parsed = parseFooterMetrics(bodyWithData({ ...metrics, cacheReadTokens: 0, costUsd: 0 }));
+    expect(parsed?.cacheReadTokens).toBe(0);
+    expect(parsed?.costUsd).toBe(0);
   });
 
   test("returns undefined for empty or marker-less bodies", () => {
@@ -11621,22 +11751,39 @@ describe("parseFooterMetrics()", () => {
     expect(parseFooterMetrics("A plain review comment with no footer.")).toBeUndefined();
   });
 
-  test("returns undefined when the end marker is missing", () => {
-    const truncated = footerBody().replace("<!-- run-summary-end -->", "");
-    expect(parseFooterMetrics(truncated)).toBeUndefined();
+  test("returns undefined when the data comment is not closed", () => {
+    expect(parseFooterMetrics(`prose <!-- run-summary-data: ${JSON.stringify(metrics)}`)).toBeUndefined();
   });
 
-  test("returns undefined for a malformed cost cell", () => {
-    expect(parseFooterMetrics(footerBody({ "Cost (USD)": "0.35 USD" }))).toBeUndefined();
+  test("returns undefined for malformed JSON", () => {
+    expect(parseFooterMetrics("<!-- run-summary-data: {not json -->")).toBeUndefined();
   });
 
-  test("returns undefined when a row label was renamed upstream", () => {
-    const renamed = footerBody().replace("| Cost (USD) |", "| Total cost |");
-    expect(parseFooterMetrics(renamed)).toBeUndefined();
+  test("returns undefined when a field is missing", () => {
+    const { costUsd: _omitted, ...partial } = metrics;
+    expect(parseFooterMetrics(bodyWithData(partial))).toBeUndefined();
   });
 
-  test("returns undefined for a malformed token pair", () => {
-    expect(parseFooterMetrics(footerBody({ "Tokens in / out": "157825/36705" }))).toBeUndefined();
+  test("returns undefined for a negative metric (schema rejects)", () => {
+    expect(parseFooterMetrics(bodyWithData({ ...metrics, costUsd: -1 }))).toBeUndefined();
+  });
+
+  test("returns undefined for a non-numeric metric (no coercion)", () => {
+    expect(parseFooterMetrics(bodyWithData({ ...metrics, costUsd: "0.35" }))).toBeUndefined();
+  });
+});
+
+describe("hasRunSummaryData()", () => {
+  test("true when the data comment is present", () => {
+    expect(hasRunSummaryData(bodyWithData(metrics))).toBe(true);
+  });
+
+  test("false for empty, null, or comment-less bodies", () => {
+    expect(hasRunSummaryData(undefined)).toBe(false);
+    expect(hasRunSummaryData(null)).toBe(false);
+    expect(hasRunSummaryData("")).toBe(false);
+    expect(hasRunSummaryData("A plain review comment, no footer.")).toBe(false);
+    expect(hasRunSummaryData("<!-- run-summary-start -->\n| Mode | review |")).toBe(false);
   });
 });
 </file>
@@ -11646,12 +11793,15 @@ describe("parseFooterMetrics()", () => {
  * Parse the "Review run summary" footer that `code-review-action` appends to
  * its review comments into structured, numeric run metrics.
  *
- * The footer is the durable per-run record this monitor is built on: a
- * markdown `| Metric | Value |` table wrapped in HTML-comment markers (see
- * `runSummaryFooter.ts` in `code-review-action` — the row labels and markers
- * are a compatibility contract). Parsing fails open per body: a comment
- * without markers or with malformed rows yields `undefined`, never an error —
- * the caller decides when zero parses across a whole scan is suspicious.
+ * The footer carries the metrics twice: a human-facing markdown table and a
+ * machine-readable JSON HTML comment (`<!-- run-summary-data: … -->`). This
+ * parser reads only the comment, so a cosmetic change to the visible table
+ * (relabeling, `<sub>`-wrapping, reordering) never breaks it — the JSON shape
+ * is the compatibility contract (see `runSummaryFooter.ts` in
+ * `code-review-action`). Parsing fails open per body: a comment without the
+ * data marker, with malformed JSON, or with a schema-invalid payload yields
+ * `undefined`, never an error — the caller decides when zero parses across a
+ * whole scan is suspicious.
  *
  * @example
  * const metrics = parseFooterMetrics(review.body);
@@ -11659,16 +11809,16 @@ describe("parseFooterMetrics()", () => {
  */
 import { z } from "zod";
 
-/** Opening marker bounding the run-summary footer (mirrors `runSummaryFooter.ts`). */
-const footerStartMarker = "<!-- run-summary-start -->";
+/** Opening delimiter of the run-summary data comment (mirrors `runSummaryFooter.ts`). */
+const footerDataPrefix = "<!-- run-summary-data:";
 
-/** Closing marker bounding the run-summary footer (mirrors `runSummaryFooter.ts`). */
-const footerEndMarker = "<!-- run-summary-end -->";
+/** Closing delimiter of the HTML comment carrying the data payload. */
+const footerDataSuffix = "-->";
 
 /**
- * Validated metrics of a single review run recovered from one footer.
- * Strict numerics: a row that fails to parse back to a finite non-negative
- * number rejects the whole footer rather than feeding NaN into a baseline.
+ * Validated metrics of a single review run recovered from one footer's data
+ * comment. Strict numerics: a field that is not a finite non-negative number
+ * rejects the whole payload rather than feeding NaN into a baseline.
  */
 export const runMetricsSchema = z.object({
   mode: z.string().min(1),
@@ -11682,73 +11832,107 @@ export const runMetricsSchema = z.object({
   costUsd: z.number().nonnegative(),
 });
 
-/** Metrics of one review run, as rendered in the footer table. */
+/** Metrics of one review run, as serialized in the footer data comment. */
 export type RunMetrics = z.infer<typeof runMetricsSchema>;
 
-/** Parse a `34.0s` duration cell back to integer milliseconds. */
-function parseSeconds(value: string | undefined): number | undefined {
-  const match = value?.match(/^(\d+(?:\.\d+)?)s$/);
-  if (!match?.[1]) return undefined;
-  return Math.round(Number(match[1]) * 1000);
-}
-
-/** Parse a `157825 / 36705` pair cell into its two integers. */
-function parsePair(value: string | undefined): [number, number] | undefined {
-  const match = value?.match(/^(\d+) \/ (\d+)$/);
-  if (!match?.[1] || match[2] === undefined) return undefined;
-  return [Number(match[1]), Number(match[2])];
-}
-
-/** Parse a `$0.35` cost cell back to a number of USD. */
-function parseUsd(value: string | undefined): number | undefined {
-  const match = value?.match(/^\$(\d+(?:\.\d+)?)$/);
-  if (!match?.[1]) return undefined;
-  return Number(match[1]);
-}
-
-/** Parse a bare integer cell (`10`). */
-function parseCount(value: string | undefined): number | undefined {
-  if (value === undefined || !/^\d+$/.test(value)) return undefined;
-  return Number(value);
+/**
+ * True when a body carries a run-summary data comment — i.e. a review that
+ * *should* parse. Lets the collector tell a footer-format drift (data comments
+ * present but none parse) from a review window that simply holds too few
+ * footers to judge.
+ */
+export function hasRunSummaryData(body: string | null | undefined): boolean {
+  if (!body) return false;
+  return body.includes(footerDataPrefix);
 }
 
 /**
  * Extract the run metrics from a review/comment body, or `undefined` when the
- * body carries no parseable footer (absent markers, renamed labels, malformed
- * cells). The footer's table rows are matched by their exact labels, so a
- * format change upstream surfaces as a parse miss — not as wrong numbers.
+ * body carries no parseable data comment (absent marker, malformed JSON, or a
+ * payload that fails the schema). Only the machine-readable comment is read, so
+ * the visible table's format is irrelevant.
  */
 export function parseFooterMetrics(body: string | null | undefined): RunMetrics | undefined {
   if (!body) return undefined;
 
-  const start = body.indexOf(footerStartMarker);
+  const start = body.indexOf(footerDataPrefix);
   if (start === -1) return undefined;
-  const end = body.indexOf(footerEndMarker, start);
+  const end = body.indexOf(footerDataSuffix, start + footerDataPrefix.length);
   if (end === -1) return undefined;
 
-  const rows = new Map<string, string>();
-  for (const line of body.slice(start, end).split("\n")) {
-    const match = line.match(/^\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*$/);
-    if (match?.[1] && match[2] !== undefined) rows.set(match[1], match[2]);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body.slice(start + footerDataPrefix.length, end).trim());
+  } catch {
+    return undefined;
   }
 
-  const tokens = parsePair(rows.get("Tokens in / out"));
-  const cache = parsePair(rows.get("Cache read / write"));
-
-  const result = runMetricsSchema.safeParse({
-    mode: rows.get("Mode"),
-    modelMs: parseSeconds(rows.get("Model time")),
-    toolRoundTrips: parseCount(rows.get("Tool round-trips")),
-    numTurns: parseCount(rows.get("Assistant turns")),
-    tokensIn: tokens?.[0],
-    tokensOut: tokens?.[1],
-    cacheReadTokens: cache?.[0],
-    cacheCreationTokens: cache?.[1],
-    costUsd: parseUsd(rows.get("Cost (USD)")),
-  });
-
+  const result = runMetricsSchema.safeParse(parsed);
   return result.success ? result.data : undefined;
 }
+</file>
+
+<file path=".github/actions/code-review-cost-monitor/src/footerRoundTrip.test.ts">
+/**
+ * Contract test: the writer (code-review-action) and the parser (this action)
+ * agree on the run-summary data comment. Renders a footer with the real
+ * `renderRunSummaryFooter` and asserts `parseFooterMetrics` recovers the
+ * metrics — so a writer-side format change (dropping or renaming the data
+ * comment, changing a key) fails here at authoring time instead of silently
+ * zeroing the cost monitor on a downstream scheduled run.
+ *
+ * The relative cross-action import mirrors the existing reach in this action's
+ * `action.yml` (the attribution step runs `../code-review-action/src/runClaude.ts`),
+ * so it introduces no new coupling.
+ */
+import { describe, expect, test } from "bun:test";
+
+import {
+  renderRunSummaryFooter,
+  type RunSummary,
+} from "../../code-review-action/src/runSummaryFooter.ts";
+import { parseFooterMetrics } from "./footerMetrics.ts";
+
+const summary: RunSummary = {
+  mode: "review",
+  model: "claude-opus-4-8",
+  model_ms: 34000,
+  tokens_in: 157825,
+  tokens_out: 36705,
+  cache_read_tokens: 157000,
+  cache_creation_tokens: 800,
+  cost_usd: 0.35,
+  num_turns: 3,
+  tool_round_trips: 10,
+};
+
+describe("run-summary writer ↔ parser contract", () => {
+  test("parseFooterMetrics recovers what renderRunSummaryFooter wrote", () => {
+    const body = `### Review\n\nLGTM${renderRunSummaryFooter(summary, "review-bot")}`;
+    expect(parseFooterMetrics(body)).toEqual({
+      mode: "review",
+      modelMs: 34000,
+      toolRoundTrips: 10,
+      numTurns: 3,
+      tokensIn: 157825,
+      tokensOut: 36705,
+      cacheReadTokens: 157000,
+      cacheCreationTokens: 800,
+      costUsd: 0.35,
+    });
+  });
+
+  test("a cosmetic change to the visible table does not affect parsing", () => {
+    // Simulate a future restyle: <sub>-wrap every rendered table cell (the
+    // historical drift). The data comment carries no pipes, so it is untouched
+    // and the monitor still recovers the metrics.
+    const restyled = renderRunSummaryFooter(summary, "review-bot").replace(
+      /\| ([^|]+) \| ([^|]+) \|/g,
+      "| <sub>$1</sub> | <sub>$2</sub> |",
+    );
+    expect(parseFooterMetrics(restyled)?.costUsd).toBe(0.35);
+  });
+});
 </file>
 
 <file path=".github/actions/code-review-cost-monitor/src/reportIssue.test.ts">
@@ -12381,7 +12565,7 @@ Windowed triggers require both windows to hold at least `min_runs` review runs (
 
 Defaults (`$1.50` ceiling, 25% thresholds, 14-run windows) trace to the cost analysis in issue 287, where a process regression doubled output tokens while per-PR costs ranged $0.17–$1.54.
 
-**Caveats.** A rolling baseline absorbs a sustained drift after one window — the ceiling and the normalized trigger are the anchors against that. If the scheduled run fails loudly, that is by design: an API error or a scan that found reviews but parsed zero footers (footer-format drift upstream) must not read as "no regression". GitHub also auto-disables cron workflows after 60 days of repository inactivity.
+**Caveats.** A rolling baseline absorbs a sustained drift after one window — the ceiling and the normalized trigger are the anchors against that. If the scheduled run fails loudly, that is by design: an API error, or a scan where at least `min_runs` reviews carry a run-summary data comment yet none parse (genuine footer-format drift upstream), must not read as "no regression". A window with too few footers to judge degrades to "insufficient data" instead, so a newly-adopting or quiet repo never reddens its first scheduled run. GitHub also auto-disables cron workflows after 60 days of repository inactivity.
 
 ## Usage
 
@@ -12439,7 +12623,7 @@ jobs:
 
 ## Behavior
 
-- **Collection** walks PRs by `updated` descending and stops paginating past the lookback window, then parses every review body between the `<!-- run-summary-start -->` / `<!-- run-summary-end -->` markers. One `pulls.get` per matched PR attaches the diff size. Transient API failures are retried (`@octokit/plugin-retry`); a persistent failure fails the run.
+- **Collection** walks PRs by `updated` descending and stops paginating past the lookback window, then reads the machine-readable `<!-- run-summary-data: … -->` comment from each review body (independent of the visible table's format). One `pulls.get` per matched PR attaches the diff size. Transient API failures are retried (`@octokit/plugin-retry`); a persistent failure fails the run.
 - **The report** mirrors the issue 287 analysis: coverage line, breached thresholds, daily trend table, top-5 notable runs with `$ / 1k output`, and the cost↔output-tokens correlation.
 - **Issue dedup** keys on the `code-review-cost` label plus an HTML marker, searched across open and closed issues: a breach comments on the open report issue, opens a new one when none exists, and a recently closed issue still honors `cooldown_days` — closing the issue without fixing the cost does not respawn it daily.
 - **Attribution** (gated on breach + `attribution: true` + a key) reuses the review action's `runClaude.ts` engine with a JSON schema, so cost comes from the SDK and no second Anthropic SDK or price map exists. The step is `continue-on-error`; when it fails, the report says "Attribution unavailable" instead of omitting the section.
@@ -41881,7 +42065,7 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 
 ## Rendered footer
 
-`renderRunSummaryFooter` emits a visible `@<reviewer>` usage hint followed by the collapsible metrics block. The hint is stable text and sits **outside** the strip markers so it survives dedup stripping and stays in the comment; only the run-varying metrics are marker-bounded. Inside the block, the start marker sits directly above the `---` rule, and a blank line after `<br />` lets the GitHub-flavored markdown table render inside `<details>`.
+`renderRunSummaryFooter` emits a visible `@<reviewer>` usage hint followed by the collapsible metrics block. The hint is stable text and sits **outside** the strip markers so it survives dedup stripping and stays in the comment; only the run-varying metrics are marker-bounded. Inside the block, the start marker sits directly above the `---` rule, and a blank line after `<br />` lets the GitHub-flavored markdown table render inside `<details>`. Below the table — still inside the strip markers — the footer embeds the metrics a second time as a machine-readable JSON comment; that comment, not the table, is what the cost monitor parses (see below).
 
 ```text
 > 💡 `@review-bot <comment>` — Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.
@@ -41903,13 +42087,15 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 | Cache read / write | 157000 / 800 |
 | Cost (USD) | $0.35 |
 
+<!-- run-summary-data: {"mode":"review","modelMs":34000,"toolRoundTrips":10,"numTurns":3,"tokensIn":157825,"tokensOut":36705,"cacheReadTokens":157000,"cacheCreationTokens":800,"costUsd":0.35} -->
+
 </details>
 <!-- run-summary-end -->
 ```
 
 **Model** is the model that actually served the run — read from the SDK's `system`/`init` message, falling back to the action's `model` input when the stream ends before init. **Tokens in** is the total input the model consumed — fresh input plus cache reads plus cache creation — so it stays plausible under heavy prompt caching (reading only the uncached `input_tokens` reports a misleading near-zero residual). **Cache read / write** is the breakdown of that total.
 
-**The footer is machine-consumed.** The scheduled [`code-review-cost-monitor`](../.github/actions/code-review-cost-monitor/README.md) action parses these tables back out of recent PR reviews to detect cost regressions, so the markers and the exact row labels above are a compatibility contract — renaming a label or restructuring the table breaks the monitor's parser (it fails loudly when a scan parses zero footers). The monitor's optional attribution step also reuses `runClaude.ts` as its model engine.
+**The footer is machine-consumed.** After the visible table — still inside the strip markers — the footer embeds the same metrics as a machine-readable JSON comment (`<!-- run-summary-data: … -->`), keyed to mirror the monitor's `runMetricsSchema`. The scheduled [`code-review-cost-monitor`](../.github/actions/code-review-cost-monitor/README.md) action reads **that comment**, not the table, back out of recent PR reviews to detect cost regressions, so the data-comment payload is the compatibility contract; the table is purely presentational and can be relabeled, reordered, or restyled (e.g. `<sub>`-wrapped) without touching the monitor. Dropping or renaming a payload key breaks the parser, which fails loudly only when at least `min_runs` reviews carry the comment yet none parse — a sparse or newly-adopting window degrades to "insufficient data" instead, never a red scheduled run. The monitor's optional attribution step also reuses `runClaude.ts` as its model engine.
 
 ## Clean approvals
 
