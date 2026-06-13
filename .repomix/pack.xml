@@ -102,6 +102,7 @@ The content is organized as follows:
         1.1.0.md
         1.2.0.md
         1.3.0.md
+        1.4.0.md
       src/
         github/
           githubReview.test.ts
@@ -142,6 +143,8 @@ The content is organized as follows:
       tsconfig.json
       version
     code-review-cost-monitor/
+      .release_notes/
+        0.1.0.md
       src/
         buildReport.test.ts
         buildReport.ts
@@ -157,9 +160,11 @@ The content is organized as follows:
         reportIssue.test.ts
         reportIssue.ts
       action.yml
+      CHANGELOG.md
       package.json
       README.md
       tsconfig.json
+      version
     code-review-sync/
       action.yml
       README.md
@@ -279,6 +284,7 @@ The content is organized as follows:
       .release_notes/
         0.1.0.md
         0.2.0.md
+        0.2.1.md
       src/
         automerge.test.ts
         automerge.ts
@@ -3888,6 +3894,62 @@ The review bot now properly approves PRs when an author confirms they've address
 * **code-review-action:** cover reused-engine skip flow ([fb3ded5](https://github.com/awinogradov/code-assistants/commit/fb3ded59b50abcb4147b8c9845938e0163ac1aeb))
 * **code-review-action:** guard reply formatting ([1559a23](https://github.com/awinogradov/code-assistants/commit/1559a234f6a9ac0e6fbc97cc3843662edf9381c9))
 * **code-review:** guard pr body reference formatting ([eada5e0](https://github.com/awinogradov/code-assistants/commit/eada5e0ff592428077d8244ad58b9439c555881e))
+</file>
+
+<file path=".github/actions/code-review-action/.release_notes/1.4.0.md">
+## [1.4.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.3.0...code-review-action@v1.4.0) (2026-06-13)
+
+## Release Notes
+
+Review run metrics now travel in machine-readable comments, making cost monitoring resilient to format changes while footers show model details in cleaner, smaller text.
+
+## ✨ What's New
+
+### Review Cost Monitoring Protection
+The code review cost monitor no longer breaks when repositories have few reviews or when footer formats change. Instead of parsing visible footers, it now reads metrics from dedicated machine-readable comments that survive any visual redesign. This ensures your cost monitoring stays operational regardless of how review footers evolve.
+
+<details><summary>Related issues</summary>
+
+- [#305: Cost-monitor can't distinguish footer drift from insufficient footer history](https://github.com/awinogradov/code-assistants/issues/305)
+</details>
+
+### Model Transparency in Review Summaries
+Each code review now displays which Claude model served the request in the run summary table. This helps teams track model usage patterns and understand performance variations between different AI models.
+
+### Cleaner Review Footer Design
+Review run summaries now render in smaller text, keeping the visual focus on the actual review findings while still providing all the metrics your team needs. The table remains fully parseable for automated monitoring tools.
+
+<details><summary>Related issues</summary>
+
+- [#281: Use smaller text for the review run summary footer](https://github.com/awinogradov/code-assistants/issues/281)
+</details>
+
+## 📚 Documentation & Settings Updates
+
+### Updated Documentation Links
+All documentation links throughout the codebase have been updated to reflect the new chapter-based documentation structure. This affects README files and inline code documentation (JSDoc comments), ensuring all references point to the correct locations.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #305 | [#306](https://github.com/awinogradov/code-assistants/pull/306) | @awinogradov |
+| #281 | [#298](https://github.com/awinogradov/code-assistants/pull/298) | @awinogradov |
+
+### Features
+
+* add model row to the run-summary table ([4f62199](https://github.com/awinogradov/code-assistants/commit/4f62199589049647bf9bc078039c671a2d080615))
+* **code-review:** add run-summary data comment ([18d9e3e](https://github.com/awinogradov/code-assistants/commit/18d9e3e42774130901b2cc63c216f69824b5c05c))
+* wrap run-summary table cells in <sub> ([3f56272](https://github.com/awinogradov/code-assistants/commit/3f562722e63348091a0520464e11c85173a0a0ca))
+
+### Reverts
+
+* wrap run-summary table cells in <sub> ([21475ee](https://github.com/awinogradov/code-assistants/commit/21475ee21219061dd1d6a76f4bb248864cde1915))
+
+### Documentation
+
+* update doc links in readmes and jsdoc ([8e468d2](https://github.com/awinogradov/code-assistants/commit/8e468d230fa333803a85665f0d26757c13e1350d))
 </file>
 
 <file path=".github/actions/code-review-action/src/github/githubReview.test.ts">
@@ -9856,6 +9918,59 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.4.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.3.0...code-review-action@v1.4.0) (2026-06-13)
+
+## Release Notes
+
+Review run metrics now travel in machine-readable comments, making cost monitoring resilient to format changes while footers show model details in cleaner, smaller text.
+
+## ✨ What's New
+
+### Review Cost Monitoring Protection
+The code review cost monitor no longer breaks when repositories have few reviews or when footer formats change. Instead of parsing visible footers, it now reads metrics from dedicated machine-readable comments that survive any visual redesign. This ensures your cost monitoring stays operational regardless of how review footers evolve.
+
+<details><summary>Related issues</summary>
+
+- [#305: Cost-monitor can't distinguish footer drift from insufficient footer history](https://github.com/awinogradov/code-assistants/issues/305)
+</details>
+
+### Model Transparency in Review Summaries
+Each code review now displays which Claude model served the request in the run summary table. This helps teams track model usage patterns and understand performance variations between different AI models.
+
+### Cleaner Review Footer Design
+Review run summaries now render in smaller text, keeping the visual focus on the actual review findings while still providing all the metrics your team needs. The table remains fully parseable for automated monitoring tools.
+
+<details><summary>Related issues</summary>
+
+- [#281: Use smaller text for the review run summary footer](https://github.com/awinogradov/code-assistants/issues/281)
+</details>
+
+## 📚 Documentation & Settings Updates
+
+### Updated Documentation Links
+All documentation links throughout the codebase have been updated to reflect the new chapter-based documentation structure. This affects README files and inline code documentation (JSDoc comments), ensuring all references point to the correct locations.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #305 | [#306](https://github.com/awinogradov/code-assistants/pull/306) | @awinogradov |
+| #281 | [#298](https://github.com/awinogradov/code-assistants/pull/298) | @awinogradov |
+
+### Features
+
+* add model row to the run-summary table ([4f62199](https://github.com/awinogradov/code-assistants/commit/4f62199589049647bf9bc078039c671a2d080615))
+* **code-review:** add run-summary data comment ([18d9e3e](https://github.com/awinogradov/code-assistants/commit/18d9e3e42774130901b2cc63c216f69824b5c05c))
+* wrap run-summary table cells in <sub> ([3f56272](https://github.com/awinogradov/code-assistants/commit/3f562722e63348091a0520464e11c85173a0a0ca))
+
+### Reverts
+
+* wrap run-summary table cells in <sub> ([21475ee](https://github.com/awinogradov/code-assistants/commit/21475ee21219061dd1d6a76f4bb248864cde1915))
+
+### Documentation
+
+* update doc links in readmes and jsdoc ([8e468d2](https://github.com/awinogradov/code-assistants/commit/8e468d230fa333803a85665f0d26757c13e1350d))
 ## [1.3.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.2.0...code-review-action@v1.3.0) (2026-06-08)
 
 ## Release Notes
@@ -10396,7 +10511,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/package.json">
 {
   "name": "@code-assistants/code-review-action",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Composite GitHub Action that runs AI code review on pull requests via Claude Code.",
   "private": true,
   "type": "module",
@@ -10430,7 +10545,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/README.md">
 # Code review action
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.3.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.4.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that runs AI code review on pull requests using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Has two modes:
@@ -10564,7 +10679,90 @@ uses: awinogradov/code-assistants/.github/actions/code-review-action@v1
 </file>
 
 <file path=".github/actions/code-review-action/version">
-1.3.0
+1.4.0
+</file>
+
+<file path=".github/actions/code-review-cost-monitor/.release_notes/0.1.0.md">
+## 0.1.0 (2026-06-13)
+
+## Release Notes
+
+Initial release of the code review cost monitor — a scheduled action that automatically detects and reports when your AI code review costs increase unexpectedly.
+
+## ✨ What's New
+
+### Automated Cost Regression Monitoring
+Your repository can now track code review costs over time and automatically open a GitHub issue when costs spike. The monitor analyzes cost data from review comments (no extra instrumentation needed) and uses smart thresholds to avoid false alarms from normal PR-to-PR variation. It watches for sustained increases, efficiency drops, and catastrophic single runs.
+
+<details><summary>Related issues</summary>
+
+- [#287: Reduce AI code-review cost driven up ~2.4x by checklist expansion](https://github.com/awinogradov/code-assistants/issues/287)
+- [#288: Add an action that auto-reports code-review cost regressions as a GitHub issue](https://github.com/awinogradov/code-assistants/issues/288)
+</details>
+
+### Cost Report Issue Notifications
+When the monitor detects a cost regression, it creates or updates a single deduplicated GitHub issue with detailed cost tables and trend analysis. The workflow run page now shows a direct link to this report issue, making it easy to investigate cost spikes right from your Actions tab.
+
+<details><summary>Related issues</summary>
+
+- [#300: Code review cost regression report](https://github.com/awinogradov/code-assistants/issues/300)
+</details>
+
+### Optional Root Cause Analysis
+Enable the `attribution` input to get AI-powered analysis of what changed to drive costs up. When a cost breach occurs, the monitor can identify the specific process changes or configuration updates that likely caused the increase, making issues immediately actionable.
+
+## 🐛 Bug Fixes
+
+### Resilient Footer Parsing
+The monitor no longer fails when review comment footers change format or when your repository has limited review history. Cost metrics are now stored in machine-readable data comments alongside the visible footer, ensuring monitoring continues working even as the footer layout evolves.
+
+<details><summary>Related issues</summary>
+
+- [#305: Cost-monitor can't distinguish footer drift from insufficient footer history](https://github.com/awinogradov/code-assistants/issues/305)
+</details>
+
+## ⚙️ Configuration Required
+
+### Default Thresholds
+The monitor works out-of-the-box with sensible defaults: $1.50 per-run ceiling, 25% increase threshold, 14-run comparison windows. These values come from real cost analysis where a process regression doubled output tokens while normal per-PR costs ranged $0.17–$1.54.
+
+### Optional Attribution Analysis
+To enable root cause analysis when costs breach, set `attribution: true` in your workflow. This requires an Anthropic API key in your `ANTHROPIC_API_KEY` secret. Without this, the monitor still detects and reports regressions but won't analyze what caused them.
+
+### Upstream Sync Integration
+If you're using the code-review upstream sync, the cost monitor workflow (`code-review-cost-monitor.yml`) is now included automatically. Downstream repositories need only the existing `BOT_TOKEN` secret — no additional setup required.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #305 | [#306](https://github.com/awinogradov/code-assistants/pull/306) | @awinogradov |
+| #300 | [#304](https://github.com/awinogradov/code-assistants/pull/304) | @awinogradov |
+| #287 | [#299](https://github.com/awinogradov/code-assistants/pull/299) | @awinogradov |
+| #288 | [#299](https://github.com/awinogradov/code-assistants/pull/299) | @awinogradov |
+
+### Features
+
+* **cost-monitor:** add cost regression monitor ([46e2cee](https://github.com/awinogradov/code-assistants/commit/46e2ceed2834425a83edfbf77ecff6aa74f7084f))
+
+### Bug Fixes
+
+* **cost-monitor:** link report issue on run page ([00e16ae](https://github.com/awinogradov/code-assistants/commit/00e16ae3fc2b1db5b7fa1aca150a8ef82c173ec3))
+* **cost-monitor:** read metrics from data comment ([b394872](https://github.com/awinogradov/code-assistants/commit/b394872f21c4a21ad9e32825bdf8451112f2e540))
+
+### Documentation
+
+* document run-page link annotations ([a3b0197](https://github.com/awinogradov/code-assistants/commit/a3b0197753dfb84d48887adf34f18999c6b9896b))
+* document run-summary footer data comment ([b7ddbf0](https://github.com/awinogradov/code-assistants/commit/b7ddbf03c1dfb1deeda7c7501f4f7b4b29ccf75e))
+
+### Refactoring
+
+* **cost-monitor:** dedupe median helpers ([4ff5916](https://github.com/awinogradov/code-assistants/commit/4ff59168ca23afb3198ee693dca5baa659a0726a))
+
+### Tests
+
+* **cost-monitor:** pin report annotation format ([63fdf46](https://github.com/awinogradov/code-assistants/commit/63fdf465dea478f45001f421eedf5df7aa965f9f))
 </file>
 
 <file path=".github/actions/code-review-cost-monitor/src/buildReport.test.ts">
@@ -12555,10 +12753,97 @@ runs:
       run: bun "${{ github.action_path }}/src/reportIssue.ts"
 </file>
 
+<file path=".github/actions/code-review-cost-monitor/CHANGELOG.md">
+# Changelog
+
+All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
+
+## 0.1.0 (2026-06-13)
+
+## Release Notes
+
+Initial release of the code review cost monitor — a scheduled action that automatically detects and reports when your AI code review costs increase unexpectedly.
+
+## ✨ What's New
+
+### Automated Cost Regression Monitoring
+Your repository can now track code review costs over time and automatically open a GitHub issue when costs spike. The monitor analyzes cost data from review comments (no extra instrumentation needed) and uses smart thresholds to avoid false alarms from normal PR-to-PR variation. It watches for sustained increases, efficiency drops, and catastrophic single runs.
+
+<details><summary>Related issues</summary>
+
+- [#287: Reduce AI code-review cost driven up ~2.4x by checklist expansion](https://github.com/awinogradov/code-assistants/issues/287)
+- [#288: Add an action that auto-reports code-review cost regressions as a GitHub issue](https://github.com/awinogradov/code-assistants/issues/288)
+</details>
+
+### Cost Report Issue Notifications
+When the monitor detects a cost regression, it creates or updates a single deduplicated GitHub issue with detailed cost tables and trend analysis. The workflow run page now shows a direct link to this report issue, making it easy to investigate cost spikes right from your Actions tab.
+
+<details><summary>Related issues</summary>
+
+- [#300: Code review cost regression report](https://github.com/awinogradov/code-assistants/issues/300)
+</details>
+
+### Optional Root Cause Analysis
+Enable the `attribution` input to get AI-powered analysis of what changed to drive costs up. When a cost breach occurs, the monitor can identify the specific process changes or configuration updates that likely caused the increase, making issues immediately actionable.
+
+## 🐛 Bug Fixes
+
+### Resilient Footer Parsing
+The monitor no longer fails when review comment footers change format or when your repository has limited review history. Cost metrics are now stored in machine-readable data comments alongside the visible footer, ensuring monitoring continues working even as the footer layout evolves.
+
+<details><summary>Related issues</summary>
+
+- [#305: Cost-monitor can't distinguish footer drift from insufficient footer history](https://github.com/awinogradov/code-assistants/issues/305)
+</details>
+
+## ⚙️ Configuration Required
+
+### Default Thresholds
+The monitor works out-of-the-box with sensible defaults: $1.50 per-run ceiling, 25% increase threshold, 14-run comparison windows. These values come from real cost analysis where a process regression doubled output tokens while normal per-PR costs ranged $0.17–$1.54.
+
+### Optional Attribution Analysis
+To enable root cause analysis when costs breach, set `attribution: true` in your workflow. This requires an Anthropic API key in your `ANTHROPIC_API_KEY` secret. Without this, the monitor still detects and reports regressions but won't analyze what caused them.
+
+### Upstream Sync Integration
+If you're using the code-review upstream sync, the cost monitor workflow (`code-review-cost-monitor.yml`) is now included automatically. Downstream repositories need only the existing `BOT_TOKEN` secret — no additional setup required.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #305 | [#306](https://github.com/awinogradov/code-assistants/pull/306) | @awinogradov |
+| #300 | [#304](https://github.com/awinogradov/code-assistants/pull/304) | @awinogradov |
+| #287 | [#299](https://github.com/awinogradov/code-assistants/pull/299) | @awinogradov |
+| #288 | [#299](https://github.com/awinogradov/code-assistants/pull/299) | @awinogradov |
+
+### Features
+
+* **cost-monitor:** add cost regression monitor ([46e2cee](https://github.com/awinogradov/code-assistants/commit/46e2ceed2834425a83edfbf77ecff6aa74f7084f))
+
+### Bug Fixes
+
+* **cost-monitor:** link report issue on run page ([00e16ae](https://github.com/awinogradov/code-assistants/commit/00e16ae3fc2b1db5b7fa1aca150a8ef82c173ec3))
+* **cost-monitor:** read metrics from data comment ([b394872](https://github.com/awinogradov/code-assistants/commit/b394872f21c4a21ad9e32825bdf8451112f2e540))
+
+### Documentation
+
+* document run-page link annotations ([a3b0197](https://github.com/awinogradov/code-assistants/commit/a3b0197753dfb84d48887adf34f18999c6b9896b))
+* document run-summary footer data comment ([b7ddbf0](https://github.com/awinogradov/code-assistants/commit/b7ddbf03c1dfb1deeda7c7501f4f7b4b29ccf75e))
+
+### Refactoring
+
+* **cost-monitor:** dedupe median helpers ([4ff5916](https://github.com/awinogradov/code-assistants/commit/4ff59168ca23afb3198ee693dca5baa659a0726a))
+
+### Tests
+
+* **cost-monitor:** pin report annotation format ([63fdf46](https://github.com/awinogradov/code-assistants/commit/63fdf465dea478f45001f421eedf5df7aa965f9f))
+</file>
+
 <file path=".github/actions/code-review-cost-monitor/package.json">
 {
   "name": "@code-assistants/code-review-cost-monitor-action",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Composite GitHub Action that watches the code-review run-summary footers for cost regressions and opens (or updates) a deduplicated cost-report issue.",
   "private": true,
   "type": "module",
@@ -12591,6 +12876,9 @@ runs:
 
 <file path=".github/actions/code-review-cost-monitor/README.md">
 # Code review cost monitor
+
+[![GitHub Release](https://img.shields.io/badge/release-v0.1.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that watches the per-run cost of [`code-review-action`](../code-review-action/README.md) and opens (or updates) a single deduplicated cost-report issue when it regresses. The data source is the "Review run summary" footer the review action appends to every review comment — a durable, per-run record of cost, tokens, and round-trips — so the monitor needs no extra instrumentation and no time-series store.
 
@@ -12699,6 +12987,10 @@ GH_TOKEN=$(gh auth token) GITHUB_REPOSITORY=owner/repo \
   },
   "include": ["*.ts", "src/**/*.ts"]
 }
+</file>
+
+<file path=".github/actions/code-review-cost-monitor/version">
+0.1.0
 </file>
 
 <file path=".github/actions/code-review-sync/action.yml">
@@ -28371,6 +28663,29 @@ When the code review action skips a review due to failing checks, it now posts a
 * **code-review-action:** reuse review engine for skip reasons ([f62cc9c](https://github.com/awinogradov/code-assistants/commit/f62cc9cad7b2f78a188904712a1beb273bf0dbeb))
 </file>
 
+<file path=".github/actions/release-automerge/.release_notes/0.2.1.md">
+## [0.2.1](https://github.com/awinogradov/code-assistants/compare/release-automerge@v0.2.0...release-automerge@v0.2.1) (2026-06-13)
+
+## Release Notes
+
+The documentation references in release-automerge have been updated to match the new numbered chapter structure.
+
+## 🐛 Bug Fixes
+
+### Updated documentation links
+The release-automerge action now correctly points to the renamed documentation chapters when displaying error messages and skip notifications. This ensures your team can quickly find the right documentation when troubleshooting configuration issues or understanding why a release PR wasn't automatically merged.
+
+<details><summary>Related issues</summary>
+
+- [#295: MAINTENANCE: Restructure docs into numbered book chapters](https://github.com/awinogradov/code-assistants/pull/295)
+</details>
+
+
+### Bug Fixes
+
+* renumber docs and update shipped links ([4b77286](https://github.com/awinogradov/code-assistants/commit/4b77286ff4fa59ea51a25ca051e36e6898df4f06))
+</file>
+
 <file path=".github/actions/release-automerge/src/automerge.test.ts">
 /**
  * Tests for automerge.ts pure helpers.
@@ -28957,6 +29272,26 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [0.2.1](https://github.com/awinogradov/code-assistants/compare/release-automerge@v0.2.0...release-automerge@v0.2.1) (2026-06-13)
+
+## Release Notes
+
+The documentation references in release-automerge have been updated to match the new numbered chapter structure.
+
+## 🐛 Bug Fixes
+
+### Updated documentation links
+The release-automerge action now correctly points to the renamed documentation chapters when displaying error messages and skip notifications. This ensures your team can quickly find the right documentation when troubleshooting configuration issues or understanding why a release PR wasn't automatically merged.
+
+<details><summary>Related issues</summary>
+
+- [#295: MAINTENANCE: Restructure docs into numbered book chapters](https://github.com/awinogradov/code-assistants/pull/295)
+</details>
+
+
+### Bug Fixes
+
+* renumber docs and update shipped links ([4b77286](https://github.com/awinogradov/code-assistants/commit/4b77286ff4fa59ea51a25ca051e36e6898df4f06))
 ## [0.2.0](https://github.com/awinogradov/code-assistants/compare/release-automerge@v0.1.0...release-automerge@v0.2.0) (2026-06-08)
 
 ## Release Notes
@@ -29093,7 +29428,7 @@ The release creation workflow documentation now explains why release PRs must be
 <file path=".github/actions/release-automerge/package.json">
 {
   "name": "@code-assistants/release-automerge",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Composite GitHub Action that merges an approved, all-green release PR.",
   "private": true,
   "type": "module",
@@ -29124,7 +29459,7 @@ The release creation workflow documentation now explains why release PRs must be
 <file path=".github/actions/release-automerge/README.md">
 # Release auto-merge
 
-[![GitHub Release](https://img.shields.io/badge/release-v0.2.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v0.2.1-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that merges a release PR once it is fully green and
@@ -29279,7 +29614,7 @@ uses: awinogradov/code-assistants/.github/actions/release-automerge@v1
 </file>
 
 <file path=".github/actions/release-automerge/version">
-0.2.0
+0.2.1
 </file>
 
 <file path=".github/actions/release-sync/action.yml">
