@@ -83,6 +83,18 @@ describe("renderRunSummaryFooter", () => {
     expect(renderRunSummaryFooter(coreSummary, reviewer)).toContain("<br />\n\n| Metric | Value |");
   });
 
+  test("embeds the machine-readable data comment inside the strip markers", () => {
+    const footer = renderRunSummaryFooter(coreSummary, reviewer);
+    expect(footer).toContain('<!-- run-summary-data: {"mode":"review"');
+    expect(footer).toContain('"costUsd":0.35');
+    expect(footer).toContain('"modelMs":34000');
+    const startAt = footer.indexOf("<!-- run-summary-start -->");
+    const endAt = footer.indexOf("<!-- run-summary-end -->");
+    const dataAt = footer.indexOf("<!-- run-summary-data:");
+    expect(dataAt).toBeGreaterThan(startAt);
+    expect(dataAt).toBeLessThan(endAt);
+  });
+
   test("formats durations as seconds and cost as USD", () => {
     const footer = renderRunSummaryFooter(coreSummary, reviewer);
     expect(footer).toContain("| Model | claude-sonnet-4-6 |");

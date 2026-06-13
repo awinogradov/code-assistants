@@ -8,6 +8,11 @@
  * wrapped in HTML-comment markers so the duplicate-suppression guard can strip
  * the run-varying numbers before comparing review bodies.
  *
+ * Inside those markers the footer also embeds the metrics as a machine-readable
+ * JSON comment (`<!-- run-summary-data: … -->`). That comment — not the visible
+ * `<details>` table — is the contract `code-review-cost-monitor` parses, so the
+ * table stays purely cosmetic and can be restyled without breaking the monitor.
+ *
  * @example
  * const summary = parseRunSummary(process.env.RUN_SUMMARY);
  * const footer = summary ? renderRunSummaryFooter(summary, reviewer) : "";
@@ -86,6 +91,31 @@ function buildRows(summary: RunSummary): string[] {
   return rows.map(([label, value]) => `| ${label} | ${value} |`);
 }
 
+/** Opening delimiter of the machine-readable run-summary data comment. */
+const footerDataPrefix = "<!-- run-summary-data:";
+
+/**
+ * Render the run metrics as a single machine-readable HTML comment, keyed to
+ * mirror `code-review-cost-monitor`'s `runMetricsSchema` so the monitor can
+ * validate the JSON directly instead of scraping the human-facing table. This
+ * is the durable cost-monitoring contract; the visible table is cosmetic.
+ * `model_ms` is rounded to whole milliseconds to satisfy the integer contract.
+ */
+function renderDataComment(summary: RunSummary): string {
+  const data = {
+    mode: summary.mode,
+    modelMs: Math.round(summary.model_ms),
+    toolRoundTrips: summary.tool_round_trips,
+    numTurns: summary.num_turns,
+    tokensIn: summary.tokens_in,
+    tokensOut: summary.tokens_out,
+    cacheReadTokens: summary.cache_read_tokens,
+    cacheCreationTokens: summary.cache_creation_tokens,
+    costUsd: summary.cost_usd,
+  };
+  return `${footerDataPrefix} ${JSON.stringify(data)} -->`;
+}
+
 /**
  * Render the run-summary footer: a visible `@<reviewer>` usage hint followed by
  * the marker-wrapped, collapsible metrics block (built from the shared
@@ -93,8 +123,9 @@ function buildRows(summary: RunSummary): string[] {
  *
  * The hint is stable text and sits *outside* the strip markers so it survives
  * {@link stripRunSummaryFooter} and stays in the comment after dedup; only the
- * run-varying metrics are marker-bounded. The two leading blank lines separate
- * the footer from the preceding review body.
+ * run-varying metrics are marker-bounded — including the machine-readable
+ * {@link renderDataComment} block appended after the table. The two leading
+ * blank lines separate the footer from the preceding review body.
  */
 export function renderRunSummaryFooter(summary: RunSummary, reviewer: string): string {
   const usageHint = `> 💡 \`@${reviewer} <comment>\` — Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.`;
@@ -108,7 +139,13 @@ export function renderRunSummaryFooter(summary: RunSummary, reviewer: string): s
       startMarker: footerStartMarker,
       endMarker: footerEndMarker,
       summary: "Review run summary 🤖",
-      bodyLines: ["| Metric | Value |", "| --- | --- |", ...buildRows(summary)],
+      bodyLines: [
+        "| Metric | Value |",
+        "| --- | --- |",
+        ...buildRows(summary),
+        "",
+        renderDataComment(summary),
+      ],
     }),
   ].join("\n");
 }
