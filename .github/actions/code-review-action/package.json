@@ -1,6 +1,6 @@
 {
   "name": "@code-assistants/code-review-action",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Composite GitHub Action that runs AI code review on pull requests via Claude Code.",
   "private": true,
   "type": "module",
