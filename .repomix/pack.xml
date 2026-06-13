@@ -200,6 +200,8 @@ The content is organized as follows:
       action.yml
       README.md
     perf-report-action/
+      .release_notes/
+        0.2.0.md
       src/
         classifyDeltas.test.ts
         classifyDeltas.ts
@@ -211,9 +213,11 @@ The content is organized as follows:
         snapshotLoad.test.ts
         snapshotLoad.ts
       action.yml
+      CHANGELOG.md
       package.json
       README.md
       tsconfig.json
+      version
     release-action/
       .release_notes/
         0.1.0.md
@@ -15877,6 +15881,49 @@ The synced `licenses.yml` workflow references the action via `@main` so consumer
 up the latest audit logic. Pin to a tag if you want explicit control.
 </file>
 
+<file path=".github/actions/perf-report-action/.release_notes/0.2.0.md">
+## 0.2.0 (2026-06-13)
+
+## Release Notes
+
+Performance reporting now available for your builds with automatic PR comments showing bundle size and Lighthouse metric changes.
+
+## ✨ What's New
+
+### Performance Report Action
+A new GitHub Action automatically tracks your app's performance health on every pull request. After building your target, it measures bundle sizes (raw, gzip, and brotli) plus key Lighthouse metrics like Performance score, Accessibility, and Core Web Vitals. The action compares these against your main branch baseline and posts a sticky comment on the PR showing what changed. This helps your team catch performance regressions before they reach production without adding friction — the action never fails your build, just provides visibility.
+
+<details><summary>Related issues</summary>
+
+- [#64: Add perf-report composite action and adopt it in symbiot](https://github.com/awinogradov/code-assistants/issues/64)
+</details>
+
+## 🐛 Bug Fixes
+
+### CLS Delta Display
+Small layout shift changes now display correctly as "≈ 0" instead of showing confusing tiny decimal values. This makes the performance report cleaner and focuses attention on meaningful changes rather than measurement noise.
+
+## ⚙️ Configuration Required
+
+### GitHub Workflow Setup
+To use the performance reporting in your project, update your GitHub workflow with the action configuration. You'll need to specify your build command, bundle output location, and optionally any bundle analysis commands. The action requires permissions for reading contents and actions, plus writing pull request comments.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #64 | [#301](https://github.com/awinogradov/code-assistants/pull/301) | @awinogradov |
+
+### Features
+
+* **perf-report:** add sticky perf comment action ([2941670](https://github.com/awinogradov/code-assistants/commit/2941670fdaec91bd99592bcc3d41794c1f22d055))
+
+### Bug Fixes
+
+* **perf-report:** render in-band cls delta as ≈ 0 ([e66dcad](https://github.com/awinogradov/code-assistants/commit/e66dcad0315295f44666c2540b90f7c0e96ae746))
+</file>
+
 <file path=".github/actions/perf-report-action/src/classifyDeltas.test.ts">
 import { describe, expect, test } from "bun:test";
 
@@ -17258,10 +17305,57 @@ runs:
         if-no-files-found: error
 </file>
 
+<file path=".github/actions/perf-report-action/CHANGELOG.md">
+# Changelog
+
+All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
+
+## 0.2.0 (2026-06-13)
+
+## Release Notes
+
+Performance reporting now available for your builds with automatic PR comments showing bundle size and Lighthouse metric changes.
+
+## ✨ What's New
+
+### Performance Report Action
+A new GitHub Action automatically tracks your app's performance health on every pull request. After building your target, it measures bundle sizes (raw, gzip, and brotli) plus key Lighthouse metrics like Performance score, Accessibility, and Core Web Vitals. The action compares these against your main branch baseline and posts a sticky comment on the PR showing what changed. This helps your team catch performance regressions before they reach production without adding friction — the action never fails your build, just provides visibility.
+
+<details><summary>Related issues</summary>
+
+- [#64: Add perf-report composite action and adopt it in symbiot](https://github.com/awinogradov/code-assistants/issues/64)
+</details>
+
+## 🐛 Bug Fixes
+
+### CLS Delta Display
+Small layout shift changes now display correctly as "≈ 0" instead of showing confusing tiny decimal values. This makes the performance report cleaner and focuses attention on meaningful changes rather than measurement noise.
+
+## ⚙️ Configuration Required
+
+### GitHub Workflow Setup
+To use the performance reporting in your project, update your GitHub workflow with the action configuration. You'll need to specify your build command, bundle output location, and optionally any bundle analysis commands. The action requires permissions for reading contents and actions, plus writing pull request comments.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #64 | [#301](https://github.com/awinogradov/code-assistants/pull/301) | @awinogradov |
+
+### Features
+
+* **perf-report:** add sticky perf comment action ([2941670](https://github.com/awinogradov/code-assistants/commit/2941670fdaec91bd99592bcc3d41794c1f22d055))
+
+### Bug Fixes
+
+* **perf-report:** render in-band cls delta as ≈ 0 ([e66dcad](https://github.com/awinogradov/code-assistants/commit/e66dcad0315295f44666c2540b90f7c0e96ae746))
+</file>
+
 <file path=".github/actions/perf-report-action/package.json">
 {
   "name": "@code-assistants/perf-report-action",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Composite GitHub Action that posts a sticky PR comment with bundle-size and Lighthouse deltas against a main-branch baseline.",
   "private": true,
   "type": "module",
@@ -17290,6 +17384,9 @@ runs:
 
 <file path=".github/actions/perf-report-action/README.md">
 # Perf report
+
+[![GitHub Release](https://img.shields.io/badge/release-v0.2.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that builds a target, measures bundle sizes (raw / gzip / brotli) and Lighthouse headlines (Performance, Accessibility, LCP, TBT, CLS, TTI), compares them against a baseline from the default branch, and posts a single sticky PR comment with the deltas classified against per-metric noise bands.
 
@@ -17421,6 +17518,10 @@ Pin to a tag for explicit control, or use `@main` to always pick up the latest b
   },
   "include": ["*.ts", "src/**/*.ts"]
 }
+</file>
+
+<file path=".github/actions/perf-report-action/version">
+0.2.0
 </file>
 
 <file path=".github/actions/release-action/.release_notes/0.1.0.md">
