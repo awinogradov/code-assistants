@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.3.1](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.3.0...autopilot@v1.3.1) (2026-06-13)
+
+## Release Notes
+
+Documentation references updated to new chapter-based structure
+
+## ✨ What's New
+
+### Improved Documentation Links
+All documentation references throughout the plugin now point to the newly restructured chapter-based documentation system. This means clearer navigation when you're referenced to setup guides, migration instructions, or troubleshooting docs.
+
+<details><summary>Related issues</summary>
+
+- [#295: MAINTENANCE: Restructure docs into numbered book chapters](https://github.com/awinogradov/code-assistants/pull/295)
+</details>
+
+## 📚 Documentation & Settings Updates
+
+### Chapter-Based Documentation Structure
+The repository documentation has been reorganized into numbered book chapters with a clear five-part table of contents. This makes it easier to find the specific information you need when configuring or troubleshooting the plugin.
+
+
+### Documentation
+
+* update doc links in readmes and jsdoc ([8e468d2](https://github.com/awinogradov/code-assistants/commit/8e468d230fa333803a85665f0d26757c13e1350d))
 ## [1.3.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.2.0...autopilot@v1.3.0) (2026-06-08)
 
 ## Release Notes
