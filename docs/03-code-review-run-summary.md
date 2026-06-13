@@ -61,7 +61,7 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 
 ## Rendered footer
 
-`renderRunSummaryFooter` emits a visible `@<reviewer>` usage hint followed by the collapsible metrics block. The hint is stable text and sits **outside** the strip markers so it survives dedup stripping and stays in the comment; only the run-varying metrics are marker-bounded. Inside the block, the start marker sits directly above the `---` rule, and a blank line after `<br />` lets the GitHub-flavored markdown table render inside `<details>`.
+`renderRunSummaryFooter` emits a visible `@<reviewer>` usage hint followed by the collapsible metrics block. The hint is stable text and sits **outside** the strip markers so it survives dedup stripping and stays in the comment; only the run-varying metrics are marker-bounded. Inside the block, the start marker sits directly above the `---` rule, and a blank line after `<br />` lets the GitHub-flavored markdown table render inside `<details>`. Below the table — still inside the strip markers — the footer embeds the metrics a second time as a machine-readable JSON comment; that comment, not the table, is what the cost monitor parses (see below).
 
 ```text
 > 💡 `@review-bot <comment>` — Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.
@@ -83,13 +83,15 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 | Cache read / write | 157000 / 800 |
 | Cost (USD) | $0.35 |
 
+<!-- run-summary-data: {"mode":"review","modelMs":34000,"toolRoundTrips":10,"numTurns":3,"tokensIn":157825,"tokensOut":36705,"cacheReadTokens":157000,"cacheCreationTokens":800,"costUsd":0.35} -->
+
 </details>
 <!-- run-summary-end -->
 ```
 
 **Model** is the model that actually served the run — read from the SDK's `system`/`init` message, falling back to the action's `model` input when the stream ends before init. **Tokens in** is the total input the model consumed — fresh input plus cache reads plus cache creation — so it stays plausible under heavy prompt caching (reading only the uncached `input_tokens` reports a misleading near-zero residual). **Cache read / write** is the breakdown of that total.
 
-**The footer is machine-consumed.** The scheduled [`code-review-cost-monitor`](../.github/actions/code-review-cost-monitor/README.md) action parses these tables back out of recent PR reviews to detect cost regressions, so the markers and the exact row labels above are a compatibility contract — renaming a label or restructuring the table breaks the monitor's parser (it fails loudly when a scan parses zero footers). The monitor's optional attribution step also reuses `runClaude.ts` as its model engine.
+**The footer is machine-consumed.** After the visible table — still inside the strip markers — the footer embeds the same metrics as a machine-readable JSON comment (`<!-- run-summary-data: … -->`), keyed to mirror the monitor's `runMetricsSchema`. The scheduled [`code-review-cost-monitor`](../.github/actions/code-review-cost-monitor/README.md) action reads **that comment**, not the table, back out of recent PR reviews to detect cost regressions, so the data-comment payload is the compatibility contract; the table is purely presentational and can be relabeled, reordered, or restyled (e.g. `<sub>`-wrapped) without touching the monitor. Dropping or renaming a payload key breaks the parser, which fails loudly only when at least `min_runs` reviews carry the comment yet none parse — a sparse or newly-adopting window degrades to "insufficient data" instead, never a red scheduled run. The monitor's optional attribution step also reuses `runClaude.ts` as its model engine.
 
 ## Clean approvals
 
