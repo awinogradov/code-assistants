@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [2.0.1](https://github.com/awinogradov/code-assistants/compare/files-sync-action@v2.0.0...files-sync-action@v2.0.1) (2026-06-13)
+
+## Release Notes
+
+The files-sync action now shows a direct link to the sync pull request in your GitHub Actions run page, making it easier to find and review file synchronization changes.
+
+## ✨ What's New
+
+### Sync PR links in action runs
+When the files-sync action runs, it now adds a clickable notice in the GitHub Actions run page that takes you directly to the pull request it created. This saves time hunting through PRs to find which one contains your synchronized files.
+
+<details><summary>Related issues</summary>
+
+- [#300: Code review cost regression report](https://github.com/awinogradov/code-assistants/issues/300)
+</details>
+
+## 📚 Documentation & Settings Updates
+
+### Run page link annotations
+The documentation now explains how actions create helpful link annotations in GitHub's run pages, including the new sync PR links and cost-monitor issue links. This helps teams understand what information appears where when actions execute.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #300 | [#304](https://github.com/awinogradov/code-assistants/pull/304) | @awinogradov |
+
+### Bug Fixes
+
+* **files-sync:** emit notice with sync pr url ([51ee2af](https://github.com/awinogradov/code-assistants/commit/51ee2affebe74d384040adb2933122dab55163ab))
+
+### Documentation
+
+* document run-page link annotations ([a3b0197](https://github.com/awinogradov/code-assistants/commit/a3b0197753dfb84d48887adf34f18999c6b9896b))
 ## [2.0.0](https://github.com/awinogradov/code-assistants/compare/files-sync-action@v1.0.0...files-sync-action@v2.0.0) (2026-05-29)
 
 ## Release Notes
