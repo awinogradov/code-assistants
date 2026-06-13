@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [2.0.2](https://github.com/awinogradov/code-assistants/compare/agents-rules-sync-action@v2.0.1...agents-rules-sync-action@v2.0.2) (2026-06-13)
+
+## Release Notes
+
+Repository documentation chapters have been reorganized into a numbered book format, making it easier to find the information you need. All links within the service, including error messages and automated release skip notifications, have been updated to point to the correct chapters.
+
+## 📚 Documentation & Settings Updates
+
+### Documentation reorganization into numbered chapters
+The service documentation has been restructured into clearly numbered book chapters with an annotated table of contents. This makes it easier to navigate and find specific configuration or integration guidance. All internal service links, including those in error messages and automated notifications, now correctly reference these new chapter numbers.
+
+<details><summary>Related issues</summary>
+
+- [#295: MAINTENANCE: Restructure docs into numbered book chapters](https://github.com/awinogradov/code-assistants/pull/295)
+</details>
+
+
+### Bug Fixes
+
+* renumber docs and update shipped links ([4b77286](https://github.com/awinogradov/code-assistants/commit/4b77286ff4fa59ea51a25ca051e36e6898df4f06))
 ## [2.0.1](https://github.com/awinogradov/code-assistants/compare/agents-rules-sync-action@v2.0.0...agents-rules-sync-action@v2.0.1) (2026-06-04)
 
 ## Release Notes
