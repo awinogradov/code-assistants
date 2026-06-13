@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.1.2](https://github.com/awinogradov/code-assistants/compare/release-action@v1.1.1...release-action@v1.1.2) (2026-06-13)
+
+## Release Notes
+
+Release action now links to the correct documentation after the repository's doc restructuring.
+
+## 📚 Documentation & Settings Updates
+
+### Documentation links updated throughout release action
+All documentation links have been updated to match the new numbered chapter structure. Error messages, automated release comments, and README references now point to the correct locations after the repository documentation was reorganized into numbered book chapters.
+
+<details><summary>Related issues</summary>
+
+- [#295: MAINTENANCE: Restructure docs into numbered book chapters](https://github.com/awinogradov/code-assistants/pull/295)
+</details>
+
+
+### Documentation
+
+* update doc links in readmes and jsdoc ([8e468d2](https://github.com/awinogradov/code-assistants/commit/8e468d230fa333803a85665f0d26757c13e1350d))
 ## [1.1.1](https://github.com/awinogradov/code-assistants/compare/release-action@v1.1.0...release-action@v1.1.1) (2026-06-08)
 
 ## Release Notes
