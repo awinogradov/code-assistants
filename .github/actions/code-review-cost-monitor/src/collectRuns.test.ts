@@ -1,8 +1,9 @@
 /**
  * Tests for collectRuns.ts.
  * Covers the updated-desc pagination cutoff via done(), footer filtering and
- * window bounds on reviews, the throw-on-API-error path, and the zero-parsed
- * parser-drift tripwire — all against a mocked Octokit.
+ * window bounds on reviews, the throw-on-API-error path, and the drift tripwire
+ * — which now arms only when at least minRuns reviews carry a data comment yet
+ * none parse, and degrades gracefully below that — all against a mocked Octokit.
  */
 import { describe, expect, test } from "bun:test";
 import type { Octokit } from "@octokit/rest";
@@ -11,22 +12,25 @@ import { collectRuns, FooterDriftError } from "./collectRuns.ts";
 
 const now = new Date("2026-06-12T00:00:00Z");
 
-/** Minimal footer body the parser accepts, with a configurable cost. */
-function footer(costUsd: string): string {
-  return [
-    "Review prose.",
-    "<!-- run-summary-start -->",
-    "| Metric | Value |",
-    "| --- | --- |",
-    "| Mode | review |",
-    "| Model time | 34.0s |",
-    "| Tool round-trips | 10 |",
-    "| Assistant turns | 3 |",
-    "| Tokens in / out | 157825 / 36705 |",
-    "| Cache read / write | 157000 / 800 |",
-    `| Cost (USD) | $${costUsd} |`,
-    "<!-- run-summary-end -->",
-  ].join("\n");
+/** A review body carrying a parseable run-summary data comment with `costUsd`. */
+function footer(costUsd: number): string {
+  const data = {
+    mode: "review",
+    modelMs: 34000,
+    toolRoundTrips: 10,
+    numTurns: 3,
+    tokensIn: 157825,
+    tokensOut: 36705,
+    cacheReadTokens: 157000,
+    cacheCreationTokens: 800,
+    costUsd,
+  };
+  return `Review prose.\n<!-- run-summary-data: ${JSON.stringify(data)} -->`;
+}
+
+/** A body that carries the data marker (so it is data-bearing) but never parses. */
+function brokenFooter(): string {
+  return "Review prose.\n<!-- run-summary-data: {drifted -->";
 }
 
 interface MockData {
@@ -87,15 +91,21 @@ describe("collectRuns()", () => {
       prPages: [[{ number: 7, updated_at: "2026-06-10T00:00:00Z" }]],
       reviewsByPr: {
         7: [
-          { body: footer("0.35"), submitted_at: "2026-06-09T00:00:00Z" },
+          { body: footer(0.35), submitted_at: "2026-06-09T00:00:00Z" },
           { body: "human review, no footer", submitted_at: "2026-06-09T01:00:00Z" },
-          { body: footer("9.99"), submitted_at: "2026-04-01T00:00:00Z" },
+          { body: footer(9.99), submitted_at: "2026-04-01T00:00:00Z" },
         ],
       },
       detailsByPr: { 7: { additions: 120, deletions: 8 } },
     });
 
-    const result = await collectRuns(octokit, { owner: "o", repo: "r", lookbackDays: 30, now });
+    const result = await collectRuns(octokit, {
+      owner: "o",
+      repo: "r",
+      lookbackDays: 30,
+      now,
+      minRuns: 8,
+    });
 
     expect(result.scannedReviews).toBe(3);
     expect(result.runs).toHaveLength(1);
@@ -117,10 +127,16 @@ describe("collectRuns()", () => {
         ],
         [{ number: 3, updated_at: "2025-12-01T00:00:00Z" }],
       ],
-      reviewsByPr: { 1: [{ body: footer("0.20"), submitted_at: "2026-06-11T00:00:00Z" }] },
+      reviewsByPr: { 1: [{ body: footer(0.2), submitted_at: "2026-06-11T00:00:00Z" }] },
     });
 
-    const result = await collectRuns(octokit, { owner: "o", repo: "r", lookbackDays: 30, now });
+    const result = await collectRuns(octokit, {
+      owner: "o",
+      repo: "r",
+      lookbackDays: 30,
+      now,
+      minRuns: 8,
+    });
 
     expect(reviewCalls).toEqual([1]);
     expect(result.runs).toHaveLength(1);
@@ -131,14 +147,18 @@ describe("collectRuns()", () => {
     octokit.paginate = (() => Promise.reject(new Error("boom"))) as unknown as Octokit["paginate"];
 
     expect(
-      collectRuns(octokit, { owner: "o", repo: "r", lookbackDays: 30, now }),
+      collectRuns(octokit, { owner: "o", repo: "r", lookbackDays: 30, now, minRuns: 8 }),
     ).rejects.toThrow("boom");
   });
 
-  test("throws the parser-drift tripwire when reviews exist but none parse", async () => {
+  test("throws drift when at least minRuns data-bearing reviews fail to parse", async () => {
+    const brokenReviews = Array.from({ length: 8 }, () => ({
+      body: brokenFooter(),
+      submitted_at: "2026-06-10T00:00:00Z",
+    }));
     const { octokit } = makeOctokit({
       prPages: [[{ number: 5, updated_at: "2026-06-11T00:00:00Z" }]],
-      reviewsByPr: { 5: [{ body: "no footer here", submitted_at: "2026-06-11T00:00:00Z" }] },
+      reviewsByPr: { 5: brokenReviews },
     });
 
     const error: unknown = await collectRuns(octokit, {
@@ -146,20 +166,68 @@ describe("collectRuns()", () => {
       repo: "r",
       lookbackDays: 30,
       now,
+      minRuns: 8,
     }).catch((thrown: unknown) => thrown);
 
     expect(error).toBeInstanceOf(FooterDriftError);
     expect(error).toMatchObject({
       message: expect.stringContaining("footer format may have changed"),
-      scannedReviews: 1,
+      dataBearingReviews: 8,
       lookbackDays: 30,
     });
+  });
+
+  test("stays graceful when data-bearing reviews are below minRuns (insufficient history)", async () => {
+    const { octokit } = makeOctokit({
+      prPages: [[{ number: 5, updated_at: "2026-06-11T00:00:00Z" }]],
+      reviewsByPr: {
+        5: [
+          { body: brokenFooter(), submitted_at: "2026-06-10T00:00:00Z" },
+          { body: brokenFooter(), submitted_at: "2026-06-10T01:00:00Z" },
+        ],
+      },
+    });
+
+    const result = await collectRuns(octokit, {
+      owner: "o",
+      repo: "r",
+      lookbackDays: 30,
+      now,
+      minRuns: 8,
+    });
+
+    expect(result).toEqual({ runs: [], scannedReviews: 2 });
+  });
+
+  test("does not throw when scanned reviews carry no data comment", async () => {
+    const { octokit } = makeOctokit({
+      prPages: [[{ number: 5, updated_at: "2026-06-11T00:00:00Z" }]],
+      reviewsByPr: {
+        5: [{ body: "no footer here", submitted_at: "2026-06-11T00:00:00Z" }],
+      },
+    });
+
+    const result = await collectRuns(octokit, {
+      owner: "o",
+      repo: "r",
+      lookbackDays: 30,
+      now,
+      minRuns: 8,
+    });
+
+    expect(result).toEqual({ runs: [], scannedReviews: 1 });
   });
 
   test("returns empty without throwing when no reviews were scanned", async () => {
     const { octokit } = makeOctokit({ prPages: [], reviewsByPr: {} });
 
-    const result = await collectRuns(octokit, { owner: "o", repo: "r", lookbackDays: 30, now });
+    const result = await collectRuns(octokit, {
+      owner: "o",
+      repo: "r",
+      lookbackDays: 30,
+      now,
+      minRuns: 8,
+    });
 
     expect(result).toEqual({ runs: [], scannedReviews: 0 });
   });

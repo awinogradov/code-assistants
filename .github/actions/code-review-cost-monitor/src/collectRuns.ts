@@ -7,21 +7,23 @@
  * `parseFooterMetrics`. The Octokit instance is injected so tests mock it;
  * `createRetryingOctokit` wires `@octokit/plugin-retry` so a transient 5xx or
  * secondary rate limit doesn't redden a scheduled run. Failure semantics are
- * deliberate: an API error (after retries) throws, and so does a scan that
- * found reviews but parsed zero footers — a silently-empty dataset would read
- * as "no regression".
+ * deliberate: an API error (after retries) throws, and so does a scan where at
+ * least `minRuns` reviews carry a run-summary data comment yet none parse —
+ * genuine format drift. A window with too few footers to judge degrades to an
+ * empty result instead, mirroring the `minRuns` gate, so a newly-adopting or
+ * quiet repo never reddens its scheduled run.
  *
  * @example
  * const octokit = createRetryingOctokit(token);
  * const { runs, scannedReviews } = await collectRuns(octokit, {
- *   owner, repo, lookbackDays: 30, now: new Date(),
+ *   owner, repo, lookbackDays: 30, now: new Date(), minRuns: 8,
  * });
  */
 import { retry } from "@octokit/plugin-retry";
 import { Octokit } from "@octokit/rest";
 
 import type { RunMetrics } from "./footerMetrics.ts";
-import { parseFooterMetrics } from "./footerMetrics.ts";
+import { hasRunSummaryData, parseFooterMetrics } from "./footerMetrics.ts";
 
 /** One parsed review run, anchored to its PR and submission time. */
 export interface RunRecord extends RunMetrics {
@@ -45,16 +47,23 @@ export interface CollectParams {
   lookbackDays: number;
   /** Injected clock so the window cutoff is testable. */
   now: Date;
+  /**
+   * Minimum data-bearing reviews before the drift tripwire arms; below it a
+   * zero-parse scan reads as insufficient footer history, not drift. Mirrors
+   * the monitor's `minRuns` threshold.
+   */
+  minRuns: number;
 }
 
 /**
- * Thrown by the parser-drift tripwire: reviews were scanned but zero footers
- * parsed. The message stays static (stable error-tracker grouping); the scan
- * counts ride along as context properties.
+ * Thrown by the parser-drift tripwire: at least `minRuns` reviews carried a
+ * run-summary data comment yet none parsed — genuine format drift. The message
+ * stays static (stable error-tracker grouping); the data-bearing count rides
+ * along as a context property.
  */
 export class FooterDriftError extends Error {
   constructor(
-    readonly scannedReviews: number,
+    readonly dataBearingReviews: number,
     readonly lookbackDays: number,
   ) {
     super(
@@ -72,11 +81,11 @@ export function createRetryingOctokit(token: string): Octokit {
 
 /**
  * Scrape the run-summary footers of all reviews submitted inside the lookback
- * window. Throws on API failure and on the parser-drift tripwire (reviews
- * scanned, zero footers parsed).
+ * window. Throws on API failure and on the parser-drift tripwire (at least
+ * `minRuns` reviews carry a data comment, yet none parse).
  */
 export async function collectRuns(octokit: Octokit, params: CollectParams): Promise<CollectedRuns> {
-  const { owner, repo, lookbackDays, now } = params;
+  const { owner, repo, lookbackDays, now, minRuns } = params;
   const cutoffMs = now.getTime() - lookbackDays * 24 * 60 * 60 * 1000;
 
   // sort: "updated" descending lets done() stop as soon as a page falls fully
@@ -93,6 +102,7 @@ export async function collectRuns(octokit: Octokit, params: CollectParams): Prom
 
   const runs: RunRecord[] = [];
   let scannedReviews = 0;
+  let dataBearingReviews = 0;
 
   for (const pr of prs) {
     const reviews = await octokit.paginate(octokit.rest.pulls.listReviews, {
@@ -102,6 +112,12 @@ export async function collectRuns(octokit: Octokit, params: CollectParams): Prom
       per_page: 100,
     });
     scannedReviews += reviews.length;
+    dataBearingReviews += reviews.filter(
+      (review) =>
+        review.submitted_at &&
+        Date.parse(review.submitted_at) >= cutoffMs &&
+        hasRunSummaryData(review.body),
+    ).length;
 
     const parsed = reviews.flatMap((review) => {
       if (!review.submitted_at || Date.parse(review.submitted_at) < cutoffMs) return [];
@@ -124,8 +140,8 @@ export async function collectRuns(octokit: Octokit, params: CollectParams): Prom
     }
   }
 
-  if (scannedReviews > 0 && runs.length === 0) {
-    throw new FooterDriftError(scannedReviews, lookbackDays);
+  if (dataBearingReviews >= minRuns && runs.length === 0) {
+    throw new FooterDriftError(dataBearingReviews, lookbackDays);
   }
 
   return { runs, scannedReviews };

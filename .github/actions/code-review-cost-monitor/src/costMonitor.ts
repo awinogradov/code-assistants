@@ -92,6 +92,7 @@ async function run(): Promise<void> {
     repo: config.repo,
     lookbackDays: config.lookbackDays,
     now,
+    minRuns: config.thresholds.minRuns,
   });
   const verdict = evaluateThresholds(collected.runs, config.thresholds);
   const report = buildReport({
