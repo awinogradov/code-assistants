@@ -2,12 +2,15 @@
  * Parse the "Review run summary" footer that `code-review-action` appends to
  * its review comments into structured, numeric run metrics.
  *
- * The footer is the durable per-run record this monitor is built on: a
- * markdown `| Metric | Value |` table wrapped in HTML-comment markers (see
- * `runSummaryFooter.ts` in `code-review-action` — the row labels and markers
- * are a compatibility contract). Parsing fails open per body: a comment
- * without markers or with malformed rows yields `undefined`, never an error —
- * the caller decides when zero parses across a whole scan is suspicious.
+ * The footer carries the metrics twice: a human-facing markdown table and a
+ * machine-readable JSON HTML comment (`<!-- run-summary-data: … -->`). This
+ * parser reads only the comment, so a cosmetic change to the visible table
+ * (relabeling, `<sub>`-wrapping, reordering) never breaks it — the JSON shape
+ * is the compatibility contract (see `runSummaryFooter.ts` in
+ * `code-review-action`). Parsing fails open per body: a comment without the
+ * data marker, with malformed JSON, or with a schema-invalid payload yields
+ * `undefined`, never an error — the caller decides when zero parses across a
+ * whole scan is suspicious.
  *
  * @example
  * const metrics = parseFooterMetrics(review.body);
@@ -15,16 +18,16 @@
  */
 import { z } from "zod";
 
-/** Opening marker bounding the run-summary footer (mirrors `runSummaryFooter.ts`). */
-const footerStartMarker = "<!-- run-summary-start -->";
+/** Opening delimiter of the run-summary data comment (mirrors `runSummaryFooter.ts`). */
+const footerDataPrefix = "<!-- run-summary-data:";
 
-/** Closing marker bounding the run-summary footer (mirrors `runSummaryFooter.ts`). */
-const footerEndMarker = "<!-- run-summary-end -->";
+/** Closing delimiter of the HTML comment carrying the data payload. */
+const footerDataSuffix = "-->";
 
 /**
- * Validated metrics of a single review run recovered from one footer.
- * Strict numerics: a row that fails to parse back to a finite non-negative
- * number rejects the whole footer rather than feeding NaN into a baseline.
+ * Validated metrics of a single review run recovered from one footer's data
+ * comment. Strict numerics: a field that is not a finite non-negative number
+ * rejects the whole payload rather than feeding NaN into a baseline.
  */
 export const runMetricsSchema = z.object({
   mode: z.string().min(1),
@@ -38,70 +41,41 @@ export const runMetricsSchema = z.object({
   costUsd: z.number().nonnegative(),
 });
 
-/** Metrics of one review run, as rendered in the footer table. */
+/** Metrics of one review run, as serialized in the footer data comment. */
 export type RunMetrics = z.infer<typeof runMetricsSchema>;
 
-/** Parse a `34.0s` duration cell back to integer milliseconds. */
-function parseSeconds(value: string | undefined): number | undefined {
-  const match = value?.match(/^(\d+(?:\.\d+)?)s$/);
-  if (!match?.[1]) return undefined;
-  return Math.round(Number(match[1]) * 1000);
-}
-
-/** Parse a `157825 / 36705` pair cell into its two integers. */
-function parsePair(value: string | undefined): [number, number] | undefined {
-  const match = value?.match(/^(\d+) \/ (\d+)$/);
-  if (!match?.[1] || match[2] === undefined) return undefined;
-  return [Number(match[1]), Number(match[2])];
-}
-
-/** Parse a `$0.35` cost cell back to a number of USD. */
-function parseUsd(value: string | undefined): number | undefined {
-  const match = value?.match(/^\$(\d+(?:\.\d+)?)$/);
-  if (!match?.[1]) return undefined;
-  return Number(match[1]);
-}
-
-/** Parse a bare integer cell (`10`). */
-function parseCount(value: string | undefined): number | undefined {
-  if (value === undefined || !/^\d+$/.test(value)) return undefined;
-  return Number(value);
+/**
+ * True when a body carries a run-summary data comment — i.e. a review that
+ * *should* parse. Lets the collector tell a footer-format drift (data comments
+ * present but none parse) from a review window that simply holds too few
+ * footers to judge.
+ */
+export function hasRunSummaryData(body: string | null | undefined): boolean {
+  if (!body) return false;
+  return body.includes(footerDataPrefix);
 }
 
 /**
  * Extract the run metrics from a review/comment body, or `undefined` when the
- * body carries no parseable footer (absent markers, renamed labels, malformed
- * cells). The footer's table rows are matched by their exact labels, so a
- * format change upstream surfaces as a parse miss — not as wrong numbers.
+ * body carries no parseable data comment (absent marker, malformed JSON, or a
+ * payload that fails the schema). Only the machine-readable comment is read, so
+ * the visible table's format is irrelevant.
  */
 export function parseFooterMetrics(body: string | null | undefined): RunMetrics | undefined {
   if (!body) return undefined;
 
-  const start = body.indexOf(footerStartMarker);
+  const start = body.indexOf(footerDataPrefix);
   if (start === -1) return undefined;
-  const end = body.indexOf(footerEndMarker, start);
+  const end = body.indexOf(footerDataSuffix, start + footerDataPrefix.length);
   if (end === -1) return undefined;
 
-  const rows = new Map<string, string>();
-  for (const line of body.slice(start, end).split("\n")) {
-    const match = line.match(/^\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*$/);
-    if (match?.[1] && match[2] !== undefined) rows.set(match[1], match[2]);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body.slice(start + footerDataPrefix.length, end).trim());
+  } catch {
+    return undefined;
   }
 
-  const tokens = parsePair(rows.get("Tokens in / out"));
-  const cache = parsePair(rows.get("Cache read / write"));
-
-  const result = runMetricsSchema.safeParse({
-    mode: rows.get("Mode"),
-    modelMs: parseSeconds(rows.get("Model time")),
-    toolRoundTrips: parseCount(rows.get("Tool round-trips")),
-    numTurns: parseCount(rows.get("Assistant turns")),
-    tokensIn: tokens?.[0],
-    tokensOut: tokens?.[1],
-    cacheReadTokens: cache?.[0],
-    cacheCreationTokens: cache?.[1],
-    costUsd: parseUsd(rows.get("Cost (USD)")),
-  });
-
+  const result = runMetricsSchema.safeParse(parsed);
   return result.success ? result.data : undefined;
 }
