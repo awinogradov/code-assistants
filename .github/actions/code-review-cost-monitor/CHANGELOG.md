@@ -1,0 +1,84 @@
+# Changelog
+
+All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
+
+## 0.1.0 (2026-06-13)
+
+## Release Notes
+
+Initial release of the code review cost monitor — a scheduled action that automatically detects and reports when your AI code review costs increase unexpectedly.
+
+## ✨ What's New
+
+### Automated Cost Regression Monitoring
+Your repository can now track code review costs over time and automatically open a GitHub issue when costs spike. The monitor analyzes cost data from review comments (no extra instrumentation needed) and uses smart thresholds to avoid false alarms from normal PR-to-PR variation. It watches for sustained increases, efficiency drops, and catastrophic single runs.
+
+<details><summary>Related issues</summary>
+
+- [#287: Reduce AI code-review cost driven up ~2.4x by checklist expansion](https://github.com/awinogradov/code-assistants/issues/287)
+- [#288: Add an action that auto-reports code-review cost regressions as a GitHub issue](https://github.com/awinogradov/code-assistants/issues/288)
+</details>
+
+### Cost Report Issue Notifications
+When the monitor detects a cost regression, it creates or updates a single deduplicated GitHub issue with detailed cost tables and trend analysis. The workflow run page now shows a direct link to this report issue, making it easy to investigate cost spikes right from your Actions tab.
+
+<details><summary>Related issues</summary>
+
+- [#300: Code review cost regression report](https://github.com/awinogradov/code-assistants/issues/300)
+</details>
+
+### Optional Root Cause Analysis
+Enable the `attribution` input to get AI-powered analysis of what changed to drive costs up. When a cost breach occurs, the monitor can identify the specific process changes or configuration updates that likely caused the increase, making issues immediately actionable.
+
+## 🐛 Bug Fixes
+
+### Resilient Footer Parsing
+The monitor no longer fails when review comment footers change format or when your repository has limited review history. Cost metrics are now stored in machine-readable data comments alongside the visible footer, ensuring monitoring continues working even as the footer layout evolves.
+
+<details><summary>Related issues</summary>
+
+- [#305: Cost-monitor can't distinguish footer drift from insufficient footer history](https://github.com/awinogradov/code-assistants/issues/305)
+</details>
+
+## ⚙️ Configuration Required
+
+### Default Thresholds
+The monitor works out-of-the-box with sensible defaults: $1.50 per-run ceiling, 25% increase threshold, 14-run comparison windows. These values come from real cost analysis where a process regression doubled output tokens while normal per-PR costs ranged $0.17–$1.54.
+
+### Optional Attribution Analysis
+To enable root cause analysis when costs breach, set `attribution: true` in your workflow. This requires an Anthropic API key in your `ANTHROPIC_API_KEY` secret. Without this, the monitor still detects and reports regressions but won't analyze what caused them.
+
+### Upstream Sync Integration
+If you're using the code-review upstream sync, the cost monitor workflow (`code-review-cost-monitor.yml`) is now included automatically. Downstream repositories need only the existing `BOT_TOKEN` secret — no additional setup required.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #305 | [#306](https://github.com/awinogradov/code-assistants/pull/306) | @awinogradov |
+| #300 | [#304](https://github.com/awinogradov/code-assistants/pull/304) | @awinogradov |
+| #287 | [#299](https://github.com/awinogradov/code-assistants/pull/299) | @awinogradov |
+| #288 | [#299](https://github.com/awinogradov/code-assistants/pull/299) | @awinogradov |
+
+### Features
+
+* **cost-monitor:** add cost regression monitor ([46e2cee](https://github.com/awinogradov/code-assistants/commit/46e2ceed2834425a83edfbf77ecff6aa74f7084f))
+
+### Bug Fixes
+
+* **cost-monitor:** link report issue on run page ([00e16ae](https://github.com/awinogradov/code-assistants/commit/00e16ae3fc2b1db5b7fa1aca150a8ef82c173ec3))
+* **cost-monitor:** read metrics from data comment ([b394872](https://github.com/awinogradov/code-assistants/commit/b394872f21c4a21ad9e32825bdf8451112f2e540))
+
+### Documentation
+
+* document run-page link annotations ([a3b0197](https://github.com/awinogradov/code-assistants/commit/a3b0197753dfb84d48887adf34f18999c6b9896b))
+* document run-summary footer data comment ([b7ddbf0](https://github.com/awinogradov/code-assistants/commit/b7ddbf03c1dfb1deeda7c7501f4f7b4b29ccf75e))
+
+### Refactoring
+
+* **cost-monitor:** dedupe median helpers ([4ff5916](https://github.com/awinogradov/code-assistants/commit/4ff59168ca23afb3198ee693dca5baa659a0726a))
+
+### Tests
+
+* **cost-monitor:** pin report annotation format ([63fdf46](https://github.com/awinogradov/code-assistants/commit/63fdf465dea478f45001f421eedf5df7aa965f9f))
