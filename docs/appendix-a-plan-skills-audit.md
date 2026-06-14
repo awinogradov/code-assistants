@@ -2,6 +2,7 @@
 
 > Appendix A of the [repository docs](../README.md#repository-docs).
 
+> [!NOTE]
 > **Status: Historical — largely implemented.** This is a point-in-time audit; its file:line citations describe the skills as they were when it was written, and most of its recommendations have since shipped:
 > finding 1.1 in [e4b9f48](https://github.com/awinogradov/code-assistants/commit/e4b9f48), 1.2 in [1835f85](https://github.com/awinogradov/code-assistants/commit/1835f85), 3.4 in [162791e](https://github.com/awinogradov/code-assistants/commit/162791e), 4.1 in [4825b20](https://github.com/awinogradov/code-assistants/commit/4825b20), 5.1 in [65fc291](https://github.com/awinogradov/code-assistants/commit/65fc291), and 7.1 in [8734148](https://github.com/awinogradov/code-assistants/commit/8734148).
 > Read it for the audit method and the rationale behind the current skill structure — not as actionable guidance.

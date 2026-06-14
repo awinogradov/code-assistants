@@ -27,7 +27,8 @@ All contributors must adhere to our [Code of Conduct](./CODE_OF_CONDUCT.md). Ple
 
 ## Quick Start
 
-💡 If you are using Claude as code assistant, please use the `autopilot` plugin to get the best experience. It contains all the tools and knowledge to help you follow the standards and guidelines. Read original plugin documentation [here](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/README.md).
+> [!TIP]
+> If you are using Claude as code assistant, please use the `autopilot` plugin to get the best experience. It contains all the tools and knowledge to help you follow the standards and guidelines. Read original plugin documentation [here](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/README.md).
 
 ### Prerequisites
 
@@ -112,9 +113,11 @@ Some changes don't require an issue (see [Special PR Prefixes](#special-pr-prefi
 - ✅ `proposal-add-vim-keybindings`
 - ✅ `security-tainted-format-string`
 
-⚠️ Enforced locally by the `pre-push` git hook and in CI by [`deepakputhraya/action-branch-name`](https://github.com/deepakputhraya/action-branch-name). Invalid branch names block PR merge.
+> [!IMPORTANT]
+> Enforced locally by the `pre-push` git hook and in CI by [`deepakputhraya/action-branch-name`](https://github.com/deepakputhraya/action-branch-name). Invalid branch names block PR merge.
 
-> TIP: Use the `/autopilot:branch-create` slash command to generate a branch name.
+> [!TIP]
+> Use the `/autopilot:branch-create` slash command to generate a branch name.
 
 **Release Branches:**
 
@@ -134,7 +137,8 @@ release-<version>
 - ❌ `release-v1.2.0` — no `v` prefix
 - ❌ `release` — missing version
 
-⚠️ Release branches are created automatically by release workflows. Do not create them manually.
+> [!WARNING]
+> Release branches are created automatically by release workflows. Do not create them manually.
 
 ### Commits
 
@@ -257,7 +261,8 @@ feat(api): add retry with exponential backoff to fetchUser
 fix(validator): handle null and empty-string inputs
 ```
 
-⚠️ Enforced locally by [`commitlint`](./commitlint.config.mjs) on the `commit-msg` hook and in CI by [`wagoid/commitlint-github-action`](https://github.com/wagoid/commitlint-github-action). Invalid commits block PR merge.
+> [!IMPORTANT]
+> Enforced locally by [`commitlint`](./commitlint.config.mjs) on the `commit-msg` hook and in CI by [`wagoid/commitlint-github-action`](https://github.com/wagoid/commitlint-github-action). Invalid commits block PR merge.
 
 #### Atomic Commits
 
@@ -288,7 +293,8 @@ test(auth): add jwt validation tests
 docs(auth): add jwt validation documentation
 ```
 
-> TIP: Use the `/autopilot:commits-create` slash command to generate commit messages.
+> [!TIP]
+> Use the `/autopilot:commits-create` slash command to generate commit messages.
 
 ## PR Guidelines
 
@@ -334,7 +340,8 @@ docs(auth): add jwt validation documentation
 - ❌ `feat(editor): add theme routing`
 - ❌ `Added theme options`
 
-⚠️ Enforced in CI by [`amannn/action-semantic-pull-request`](https://github.com/amannn/action-semantic-pull-request), configured to allow the special prefixes below. Invalid PR titles block PR merge.
+> [!IMPORTANT]
+> Enforced in CI by [`amannn/action-semantic-pull-request`](https://github.com/amannn/action-semantic-pull-request), configured to allow the special prefixes below. Invalid PR titles block PR merge.
 
 ### Special PR Prefixes
 
@@ -423,6 +430,7 @@ Users can now pick an editor theme per workspace. This makes long review session
 Closes #123
 ```
 
+> [!NOTE]
 > **Format note:** The release notes heading in PR bodies must be `**Release notes:**` (bold, lowercase "notes", colon). Do not use `## Release Notes` — that format is for `.release_notes/*.md` files used in GitHub Releases.
 
 #### Magic Words
@@ -447,7 +455,8 @@ Closes #124
 Part of #100
 ```
 
-> TIP: Use the `/autopilot:pr-create` slash command to generate a PR title and description.
+> [!TIP]
+> Use the `/autopilot:pr-create` slash command to generate a PR title and description.
 
 ### Working with Draft PRs
 
@@ -458,7 +467,8 @@ If you need to work on a PR but it's not ready for human review, mark it as a dr
 - They let you experiment with changes before review
 - They let you structure commits and the PR before review
 
-⚠️ Mark the PR as ready for review only after all changes are complete and the PR is valid and fully tested.
+> [!WARNING]
+> Mark the PR as ready for review only after all changes are complete and the PR is valid and fully tested.
 
 ### Merging Strategies
 
@@ -473,7 +483,8 @@ Only one strategy is used per repository. Reasons:
 - Predictable and stable release process
 - Predictable changelog and release notes
 
-💡 The available strategy is shown in the GitHub UI on the merge button dropdown.
+> [!TIP]
+> The available strategy is shown in the GitHub UI on the merge button dropdown.
 
 ### PR Checklist
 
@@ -607,7 +618,8 @@ Deferred work is tracked with issue-linked `TODO`/`FIXME` comments so it never g
 // todo fix later
 ```
 
-> TIP: Use the `/autopilot:todo-cleanup` slash command to scan TODOs, create issues, and link them automatically.
+> [!TIP]
+> Use the `/autopilot:todo-cleanup` slash command to scan TODOs, create issues, and link them automatically.
 
 ## Getting Help
 

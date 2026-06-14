@@ -105,6 +105,7 @@ installation token), **not** the default `GITHUB_TOKEN`. A merge performed with
 the release would not publish. The upstream auto-approval is posted with the same
 token for the same reason.
 
+> [!IMPORTANT]
 > **Ruleset bypass for protected `main`.** If `main` is governed by a ruleset
 > (`pull_request` / required-status-checks / linear-history / signed-commits
 > rules), the `BOT_TOKEN` identity must be a **bypass actor** on it, and the

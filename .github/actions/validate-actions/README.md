@@ -77,4 +77,5 @@ None.
 
 Reference the action by tag, e.g. `…/validate-actions@v1`, for explicit control, or `@main` to always pick up the latest logic.
 
+> [!NOTE]
 > This action's workflow is distributed to downstream repositories via the [`contributing-sync`](../contributing-sync/README.md) action; the synced `validate-actions.yml` carries the standard "distributed downstream" source header and references this action via `@main`.
