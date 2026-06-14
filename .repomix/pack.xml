@@ -8290,9 +8290,10 @@ describe("renderRunSummaryFooter", () => {
     expect(footer).toContain("<summary>Review run summary 🤖</summary>");
   });
 
-  test("includes the @reviewer usage hint as a visible line before the strip markers", () => {
+  test("includes the @reviewer usage hint as a visible TIP alert before the strip markers", () => {
     const footer = renderRunSummaryFooter(coreSummary, reviewer);
-    expect(footer).toContain(`> 💡 \`@${reviewer} <comment>\``);
+    expect(footer).toContain("> [!TIP]");
+    expect(footer).toContain(`> \`@${reviewer} <comment>\``);
     expect(footer.indexOf(`@${reviewer} <comment>`)).toBeLessThan(
       footer.indexOf("<!-- run-summary-start -->"),
     );
@@ -8526,7 +8527,7 @@ function renderDataComment(summary: RunSummary): string {
  * blank lines separate the footer from the preceding review body.
  */
 export function renderRunSummaryFooter(summary: RunSummary, reviewer: string): string {
-  const usageHint = `> 💡 \`@${reviewer} <comment>\` — Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.`;
+  const usageHint = `> [!TIP]\n> \`@${reviewer} <comment>\` — Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.`;
 
   return [
     "",
@@ -10653,6 +10654,7 @@ PRs authored by the configured `bot_username` (or `reviewer` if `bot_username` i
 
 The action always **skips AI review** for `release-*` / `delivery-*` branch PRs. When `release_pr_authors` is set and the PR author is in that trusted list, it additionally posts an **auto-approval** so the PR is not blocked on the requested-reviewer slot — this is what unblocks [`release-automerge`](../release-automerge/README.md).
 
+> [!IMPORTANT]
 > **The author must differ from the reviewer.** The approval is posted with `bot_token` as the `reviewer` identity, and GitHub forbids approving your own PR. If the release PR is authored by that same identity, the `APPROVE` call fails with `422 Can not approve your own pull request`. Author release PRs with a separate identity (e.g. `release-create.yml` uses a `GH_TOKEN` distinct from the reviewer's `BOT_TOKEN`) and list that author in `release_pr_authors`. A failed approval is surfaced as a workflow `::error::`, never silently skipped.
 
 The branch-name match alone is **not** a security boundary — anyone with push access could open a `release-pwn-1.0.0` branch — which is why auto-approval is gated on the explicit `release_pr_authors` trust list.
@@ -28526,6 +28528,7 @@ Store the token as a secret (e.g. `BOT_TOKEN`) and pass it via `bot_token: ${{ s
 
 The Configure Git step inside the action commits as the `bot_username` input, defaulting to `github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>`. Pass `bot_username: ${{ vars.BOT_USERNAME }}` to author releases as a dedicated bot identity.
 
+> [!IMPORTANT]
 > **Distinct identity when auto-approval is enabled.** If release PRs are auto-approved by [`code-review-action`](../code-review-action/README.md) (to feed [`release-automerge`](../release-automerge/README.md)), the `bot_token` identity that opens the PR must **differ** from the reviewer identity that approves it — GitHub forbids approving your own PR. In this repo, `release-create.yml` opens PRs with `GH_TOKEN` while the reviewer/merge token is `BOT_TOKEN`. See [Author and approver must be distinct identities](../../../docs/07-release-automerge.md#author-and-approver-must-be-distinct-identities).
 
 ## Monorepo mode
@@ -29583,8 +29586,10 @@ false`, read at the PR head SHA,
   (15s interval, 8-minute cap inside the 10-minute job) rather than skipped; a
   failed check skips, as does one still pending after the cap.
 
+> [!IMPORTANT]
 > **The `APPROVED` decision comes from auto-approval.** [`code-review-action`](../code-review-action/README.md) posts it for trusted release-PR authors. That requires the release PR to be authored by an identity **distinct** from the reviewer (GitHub forbids approving your own PR); see [Author and approver must be distinct identities](../../../docs/07-release-automerge.md#author-and-approver-must-be-distinct-identities). Without a recorded approval this action never merges.
 
+> [!NOTE]
 > **Opt-in (default off).** Auto-merge is disabled unless `release.automerge`
 > resolves to `true` (see the [`release` field spec](../../../docs/06-release-field.md)).
 > A monorepo opens one release PR per member (`release-<member>-<version>`), so the
@@ -29663,6 +29668,7 @@ release would not publish. Pass one of:
 Store the token in a secret (e.g., `BOT_TOKEN`) and pass it via
 `bot_token: ${{ secrets.BOT_TOKEN }}`.
 
+> [!IMPORTANT]
 > **Ruleset bypass for protected `main`.** If `main` is governed by a ruleset
 > (`pull_request` / required-status-checks / linear-history / signed-commits rules),
 > the `BOT_TOKEN` identity must be a **bypass actor** on it, and the ruleset's
@@ -30057,6 +30063,7 @@ Pass one of the following:
 
 Store the token in a secret (e.g., `BOT_TOKEN`) and pass it via `bot_token: ${{ secrets.BOT_TOKEN }}`. Optionally set a `BOT_USERNAME` repository variable to control the commit author identity.
 
+> [!IMPORTANT]
 > **Ruleset bypass for the synced workflow.** This action syncs `repomix-pack.yml`, which pushes the regenerated pack **directly** to your default branch on every merge. If that branch is governed by a ruleset (`pull_request` / `non_fast_forward` push rules), the `BOT_TOKEN` identity must be a **bypass actor** on it — otherwise the pack-on-merge run fails with `GH013` ("Changes must be made through a pull request"), even though the token has `contents: write`. Add the bot to the ruleset's bypass list (Settings → Rules → the branch ruleset → Bypass list).
 
 See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token) and [GitHub App installation tokens](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-an-installation-access-token-for-a-github-app).
@@ -31414,6 +31421,7 @@ None.
 
 Reference the action by tag, e.g. `…/validate-actions@v1`, for explicit control, or `@main` to always pick up the latest logic.
 
+> [!NOTE]
 > This action's workflow is distributed to downstream repositories via the [`contributing-sync`](../contributing-sync/README.md) action; the synced `validate-actions.yml` carries the standard "distributed downstream" source header and references this action via `@main`.
 </file>
 
@@ -42720,7 +42728,8 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 `renderRunSummaryFooter` emits a visible `@<reviewer>` usage hint followed by the collapsible metrics block. The hint is stable text and sits **outside** the strip markers so it survives dedup stripping and stays in the comment; only the run-varying metrics are marker-bounded. Inside the block, the start marker sits directly above the `---` rule, and a blank line after `<br />` lets the GitHub-flavored markdown table render inside `<details>`. Below the table — still inside the strip markers — the footer embeds the metrics a second time as a machine-readable JSON comment; that comment, not the table, is what the cost monitor parses (see below).
 
 ```text
-> 💡 `@review-bot <comment>` — Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.
+> [!TIP]
+> `@review-bot <comment>` — Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.
 
 <!-- run-summary-start -->
 ---
@@ -43466,6 +43475,7 @@ installation token), **not** the default `GITHUB_TOKEN`. A merge performed with
 the release would not publish. The upstream auto-approval is posted with the same
 token for the same reason.
 
+> [!IMPORTANT]
 > **Ruleset bypass for protected `main`.** If `main` is governed by a ruleset
 > (`pull_request` / required-status-checks / linear-history / signed-commits
 > rules), the `BOT_TOKEN` identity must be a **bypass actor** on it, and the
@@ -43688,6 +43698,7 @@ Either path yields an `outputId`; the downstream flow (`grep_repomix_output` / `
 
 > Appendix A of the [repository docs](../README.md#repository-docs).
 
+> [!NOTE]
 > **Status: Historical — largely implemented.** This is a point-in-time audit; its file:line citations describe the skills as they were when it was written, and most of its recommendations have since shipped:
 > finding 1.1 in [e4b9f48](https://github.com/awinogradov/code-assistants/commit/e4b9f48), 1.2 in [1835f85](https://github.com/awinogradov/code-assistants/commit/1835f85), 3.4 in [162791e](https://github.com/awinogradov/code-assistants/commit/162791e), 4.1 in [4825b20](https://github.com/awinogradov/code-assistants/commit/4825b20), 5.1 in [65fc291](https://github.com/awinogradov/code-assistants/commit/65fc291), and 7.1 in [8734148](https://github.com/awinogradov/code-assistants/commit/8734148).
 > Read it for the audit method and the rationale behind the current skill structure — not as actionable guidance.
@@ -46853,7 +46864,8 @@ All contributors must adhere to our [Code of Conduct](./CODE_OF_CONDUCT.md). Ple
 
 ## Quick Start
 
-💡 If you are using Claude as code assistant, please use the `autopilot` plugin to get the best experience. It contains all the tools and knowledge to help you follow the standards and guidelines. Read original plugin documentation [here](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/README.md).
+> [!TIP]
+> If you are using Claude as code assistant, please use the `autopilot` plugin to get the best experience. It contains all the tools and knowledge to help you follow the standards and guidelines. Read original plugin documentation [here](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/README.md).
 
 ### Prerequisites
 
@@ -46938,9 +46950,11 @@ Some changes don't require an issue (see [Special PR Prefixes](#special-pr-prefi
 - ✅ `proposal-add-vim-keybindings`
 - ✅ `security-tainted-format-string`
 
-⚠️ Enforced locally by the `pre-push` git hook and in CI by [`deepakputhraya/action-branch-name`](https://github.com/deepakputhraya/action-branch-name). Invalid branch names block PR merge.
+> [!IMPORTANT]
+> Enforced locally by the `pre-push` git hook and in CI by [`deepakputhraya/action-branch-name`](https://github.com/deepakputhraya/action-branch-name). Invalid branch names block PR merge.
 
-> TIP: Use the `/autopilot:branch-create` slash command to generate a branch name.
+> [!TIP]
+> Use the `/autopilot:branch-create` slash command to generate a branch name.
 
 **Release Branches:**
 
@@ -46960,7 +46974,8 @@ release-<version>
 - ❌ `release-v1.2.0` — no `v` prefix
 - ❌ `release` — missing version
 
-⚠️ Release branches are created automatically by release workflows. Do not create them manually.
+> [!WARNING]
+> Release branches are created automatically by release workflows. Do not create them manually.
 
 ### Commits
 
@@ -47083,7 +47098,8 @@ feat(api): add retry with exponential backoff to fetchUser
 fix(validator): handle null and empty-string inputs
 ```
 
-⚠️ Enforced locally by [`commitlint`](./commitlint.config.mjs) on the `commit-msg` hook and in CI by [`wagoid/commitlint-github-action`](https://github.com/wagoid/commitlint-github-action). Invalid commits block PR merge.
+> [!IMPORTANT]
+> Enforced locally by [`commitlint`](./commitlint.config.mjs) on the `commit-msg` hook and in CI by [`wagoid/commitlint-github-action`](https://github.com/wagoid/commitlint-github-action). Invalid commits block PR merge.
 
 #### Atomic Commits
 
@@ -47114,7 +47130,8 @@ test(auth): add jwt validation tests
 docs(auth): add jwt validation documentation
 ```
 
-> TIP: Use the `/autopilot:commits-create` slash command to generate commit messages.
+> [!TIP]
+> Use the `/autopilot:commits-create` slash command to generate commit messages.
 
 ## PR Guidelines
 
@@ -47160,7 +47177,8 @@ docs(auth): add jwt validation documentation
 - ❌ `feat(editor): add theme routing`
 - ❌ `Added theme options`
 
-⚠️ Enforced in CI by [`amannn/action-semantic-pull-request`](https://github.com/amannn/action-semantic-pull-request), configured to allow the special prefixes below. Invalid PR titles block PR merge.
+> [!IMPORTANT]
+> Enforced in CI by [`amannn/action-semantic-pull-request`](https://github.com/amannn/action-semantic-pull-request), configured to allow the special prefixes below. Invalid PR titles block PR merge.
 
 ### Special PR Prefixes
 
@@ -47249,6 +47267,7 @@ Users can now pick an editor theme per workspace. This makes long review session
 Closes #123
 ```
 
+> [!NOTE]
 > **Format note:** The release notes heading in PR bodies must be `**Release notes:**` (bold, lowercase "notes", colon). Do not use `## Release Notes` — that format is for `.release_notes/*.md` files used in GitHub Releases.
 
 #### Magic Words
@@ -47273,7 +47292,8 @@ Closes #124
 Part of #100
 ```
 
-> TIP: Use the `/autopilot:pr-create` slash command to generate a PR title and description.
+> [!TIP]
+> Use the `/autopilot:pr-create` slash command to generate a PR title and description.
 
 ### Working with Draft PRs
 
@@ -47284,7 +47304,8 @@ If you need to work on a PR but it's not ready for human review, mark it as a dr
 - They let you experiment with changes before review
 - They let you structure commits and the PR before review
 
-⚠️ Mark the PR as ready for review only after all changes are complete and the PR is valid and fully tested.
+> [!WARNING]
+> Mark the PR as ready for review only after all changes are complete and the PR is valid and fully tested.
 
 ### Merging Strategies
 
@@ -47299,7 +47320,8 @@ Only one strategy is used per repository. Reasons:
 - Predictable and stable release process
 - Predictable changelog and release notes
 
-💡 The available strategy is shown in the GitHub UI on the merge button dropdown.
+> [!TIP]
+> The available strategy is shown in the GitHub UI on the merge button dropdown.
 
 ### PR Checklist
 
@@ -47433,7 +47455,8 @@ Deferred work is tracked with issue-linked `TODO`/`FIXME` comments so it never g
 // todo fix later
 ```
 
-> TIP: Use the `/autopilot:todo-cleanup` slash command to scan TODOs, create issues, and link them automatically.
+> [!TIP]
+> Use the `/autopilot:todo-cleanup` slash command to scan TODOs, create issues, and link them automatically.
 
 ## Getting Help
 
