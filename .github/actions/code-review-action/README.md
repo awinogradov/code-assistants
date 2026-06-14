@@ -103,6 +103,7 @@ PRs authored by the configured `bot_username` (or `reviewer` if `bot_username` i
 
 The action always **skips AI review** for `release-*` / `delivery-*` branch PRs. When `release_pr_authors` is set and the PR author is in that trusted list, it additionally posts an **auto-approval** so the PR is not blocked on the requested-reviewer slot — this is what unblocks [`release-automerge`](../release-automerge/README.md).
 
+> [!IMPORTANT]
 > **The author must differ from the reviewer.** The approval is posted with `bot_token` as the `reviewer` identity, and GitHub forbids approving your own PR. If the release PR is authored by that same identity, the `APPROVE` call fails with `422 Can not approve your own pull request`. Author release PRs with a separate identity (e.g. `release-create.yml` uses a `GH_TOKEN` distinct from the reviewer's `BOT_TOKEN`) and list that author in `release_pr_authors`. A failed approval is surfaced as a workflow `::error::`, never silently skipped.
 
 The branch-name match alone is **not** a security boundary — anyone with push access could open a `release-pwn-1.0.0` branch — which is why auto-approval is gated on the explicit `release_pr_authors` trust list.

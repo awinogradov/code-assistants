@@ -22,8 +22,10 @@ false`, read at the PR head SHA,
   (15s interval, 8-minute cap inside the 10-minute job) rather than skipped; a
   failed check skips, as does one still pending after the cap.
 
+> [!IMPORTANT]
 > **The `APPROVED` decision comes from auto-approval.** [`code-review-action`](../code-review-action/README.md) posts it for trusted release-PR authors. That requires the release PR to be authored by an identity **distinct** from the reviewer (GitHub forbids approving your own PR); see [Author and approver must be distinct identities](../../../docs/07-release-automerge.md#author-and-approver-must-be-distinct-identities). Without a recorded approval this action never merges.
 
+> [!NOTE]
 > **Opt-in (default off).** Auto-merge is disabled unless `release.automerge`
 > resolves to `true` (see the [`release` field spec](../../../docs/06-release-field.md)).
 > A monorepo opens one release PR per member (`release-<member>-<version>`), so the
@@ -102,6 +104,7 @@ release would not publish. Pass one of:
 Store the token in a secret (e.g., `BOT_TOKEN`) and pass it via
 `bot_token: ${{ secrets.BOT_TOKEN }}`.
 
+> [!IMPORTANT]
 > **Ruleset bypass for protected `main`.** If `main` is governed by a ruleset
 > (`pull_request` / required-status-checks / linear-history / signed-commits rules),
 > the `BOT_TOKEN` identity must be a **bypass actor** on it, and the ruleset's
