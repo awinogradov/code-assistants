@@ -71,9 +71,10 @@ describe("renderRunSummaryFooter", () => {
     expect(footer).toContain("<summary>Review run summary 🤖</summary>");
   });
 
-  test("includes the @reviewer usage hint as a visible line before the strip markers", () => {
+  test("includes the @reviewer usage hint as a visible TIP alert before the strip markers", () => {
     const footer = renderRunSummaryFooter(coreSummary, reviewer);
-    expect(footer).toContain(`> 💡 \`@${reviewer} <comment>\``);
+    expect(footer).toContain("> [!TIP]");
+    expect(footer).toContain(`> \`@${reviewer} <comment>\``);
     expect(footer.indexOf(`@${reviewer} <comment>`)).toBeLessThan(
       footer.indexOf("<!-- run-summary-start -->"),
     );

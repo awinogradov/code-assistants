@@ -128,7 +128,7 @@ function renderDataComment(summary: RunSummary): string {
  * blank lines separate the footer from the preceding review body.
  */
 export function renderRunSummaryFooter(summary: RunSummary, reviewer: string): string {
-  const usageHint = `> 💡 \`@${reviewer} <comment>\` — Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.`;
+  const usageHint = `> [!TIP]\n> \`@${reviewer} <comment>\` — Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.`;
 
   return [
     "",
