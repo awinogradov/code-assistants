@@ -1,5 +1,5 @@
 name: Contributing sync
-description: Sync CONTRIBUTING.md, CODE_OF_CONDUCT.md, LICENSE.md, the contributing workflow, the auto-label workflow, the licenses workflow, and the validate-actions workflow from an upstream repository into the current repository.
+description: Sync CONTRIBUTING.md, CODE_OF_CONDUCT.md, LICENSE.md, SECURITY.md, the contributing workflow, the auto-label workflow, the licenses workflow, and the validate-actions workflow from an upstream repository into the current repository.
 
 inputs:
   bot_token:
@@ -11,7 +11,7 @@ inputs:
       Git author/committer login for the sync commit. Defaults to `github-actions[bot]` when unset. Pass the `vars.BOT_USERNAME` repository variable to attribute commits to a dedicated bot identity.
     required: false
   source-repo:
-    description: Source repository in `owner/name` form that hosts the canonical `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, and `LICENSE.md`.
+    description: Source repository in `owner/name` form that hosts the canonical `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, and `SECURITY.md`.
     required: false
     default: awinogradov/code-assistants
   source-ref:
@@ -45,6 +45,7 @@ runs:
           CONTRIBUTING.md
           CODE_OF_CONDUCT.md
           LICENSE.md
+          SECURITY.md
           .github/workflows/contributing.yml
           .github/workflows/auto-label.yml
           .github/workflows/licenses.yml
