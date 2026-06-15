@@ -8,7 +8,7 @@ by default and is disabled by setting its input to `false`. The kinds are:
 - `code-review` → [`code-review-sync`](../code-review-sync/README.md) — sync the AI code-review workflow.
 - `repomix` → [`repomix-sync`](../repomix-sync/README.md) — sync the `repomix-pack` workflow and `repomix.config.json`.
 - `release` → [`release-sync`](../release-sync/README.md) — sync the release pipeline workflows (create, publish, auto-merge).
-- `contributing` → [`contributing-sync`](../contributing-sync/README.md) — sync `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, and the contributing + auto-label workflows.
+- `contributing` → [`contributing-sync`](../contributing-sync/README.md) — sync `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, `SECURITY.md`, and the contributing + auto-label workflows.
 
 Each kind is a gated step that delegates to its child `*-sync` action, which in turn delegates the
 diff and PR mechanics to [`files-sync`](../files-sync/README.md). New sync kinds added upstream

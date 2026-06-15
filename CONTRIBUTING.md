@@ -626,6 +626,7 @@ Deferred work is tracked with issue-linked `TODO`/`FIXME` comments so it never g
 - **Questions** — open a [GitHub Discussion](https://github.com/awinogradov/code-assistants/discussions)
 - **Bugs / feature requests** — open a [GitHub Issue](https://github.com/awinogradov/code-assistants/issues)
 - **Code of Conduct issues** — see [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md)
+- **Security issues** — see [`SECURITY.md`](./SECURITY.md); report privately, never open a public issue
 
 ## FAQ
 
