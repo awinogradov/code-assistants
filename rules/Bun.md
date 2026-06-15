@@ -15,7 +15,7 @@ To change it, open a pull request against the source file above.
 
 Before making any changes:
 
-1. Read the root `README.md` — its Documentation section lists every doc with a link and description
+1. Read the root `README.md` — its Documentation section lists every doc in reading order, as a Markdown table (or an equivalent linked list), each with a link and a description
 2. Inspect all file names under `docs/` and subfolders in the current repository — some files may be missing from the README
 3. Read files that appear relevant to the current task
 4. Treat `docs/` as the source of truth for project-specific conventions and follow those documents over this file when they conflict
@@ -60,8 +60,15 @@ Before making any changes:
 
 ### 3.1 File Organization
 
-- 👤 Single module file only → no directory. Example: `example.ts`
-- 👤 Multiple module files → create directory, NO index.ts. Example: `example/example.ts`, `example/example.test.ts`, `example/example.types.ts`, `example/example.module.css`.
+```
+example.ts     # single module: a file, no directory
+
+example/       # multiple modules: a directory, no index.ts barrel
+├── example.ts
+├── example.test.ts
+├── example.types.ts
+└── example.module.css
+```
 
 ### 3.2 Import Rules
 
@@ -178,6 +185,10 @@ Before making any changes:
 - 👤 Link every TODO/FIXME with `// @see <issue-url>` on the line immediately below — full issue URL, not a bare `#123` in the description
 - 👤 Remove the TODO and its `@see` line when the linked issue closes
 - 👤 Use `Skill(autopilot:todo-cleanup)` to create, link, and clean up TODO issues. If the autopilot plugin is not installed, follow CONTRIBUTING.md
+
+### 11.3 docs/ structure
+
+- 👤 Organize `docs/` as numbered chapters in reading order (`NN-topic.md`, plus `appendix-X-topic.md` for non-sequential references), matching the README Documentation order
 
 ## 12. Performance
 

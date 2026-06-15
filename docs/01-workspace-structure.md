@@ -203,8 +203,14 @@ None of these are required. Use them when a member has enough surface area to ne
 
 ### CLAUDE.md §3.1 file organization
 
-- Single module → flat file (`foo.ts`).
-- Multiple related files → directory with NO `index.ts` (`foo/foo.ts`, `foo/foo.test.ts`, `foo/foo.types.ts`).
+```
+foo.ts          # single module: a file, no directory
+
+foo/            # multiple modules: a directory, no index.ts barrel
+├── foo.ts
+├── foo.test.ts
+└── foo.types.ts
+```
 
 These rules are inherited from CLAUDE.md (a symlink to `rules/Bun.md`); not duplicated here.
 
