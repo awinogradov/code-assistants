@@ -33,10 +33,50 @@ export interface AnthropicMessages {
   }): Promise<{ content: Array<{ type: string; text?: string }> }>;
 }
 
+/** Anthropic client auth/host options resolved from the environment. */
+export interface AnthropicClientOptions {
+  /** API key for `x-api-key` auth. */
+  apiKey?: string;
+  /** Bearer token for `Authorization: Bearer` auth (custom hosts/gateways). */
+  authToken?: string;
+  /** Custom API base URL (gateway/proxy/compatible endpoint). */
+  baseURL?: string;
+}
+
+/**
+ * Resolve Anthropic client options from the environment.
+ *
+ * Trims values and treats blanks as unset: GitHub renders an unset optional action
+ * input as `""`, and a blank base URL would override the SDK default with a blank
+ * host. `apiKey` (x-api-key) and `authToken` (bearer) are mutually exclusive, so
+ * setting both is rejected fast rather than as a downstream API 400.
+ *
+ * @param env - Source environment, typically `process.env`.
+ * @returns Only the options that are actually set.
+ * @throws If both `ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN` are non-blank.
+ */
+export function resolveAnthropicClientOptions(
+  env: Record<string, string | undefined>
+): AnthropicClientOptions {
+  const apiKey = env.ANTHROPIC_API_KEY?.trim() || undefined;
+  const authToken = env.ANTHROPIC_AUTH_TOKEN?.trim() || undefined;
+  const baseURL = env.ANTHROPIC_BASE_URL?.trim() || undefined;
+  if (apiKey && authToken) {
+    throw new Error(
+      "Set ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN, not both — the Anthropic API rejects requests carrying both."
+    );
+  }
+  return {
+    ...(apiKey ? { apiKey } : {}),
+    ...(authToken ? { authToken } : {}),
+    ...(baseURL ? { baseURL } : {}),
+  };
+}
+
 /**
  * Call the Anthropic Messages API to generate release notes.
  *
- * @param apiKey - Anthropic API key
+ * @param clientOptions - Resolved Anthropic client auth/host options
  * @param userMessage - User message with changelog and context
  * @param system - System prompt with stable instructions
  * @param messages - Optional messages client (for testing)
@@ -44,12 +84,12 @@ export interface AnthropicMessages {
  * @throws On API error or timeout
  */
 export async function callAnthropicApi(
-  apiKey: string,
+  clientOptions: AnthropicClientOptions,
   userMessage: string,
   system: string,
   messages?: AnthropicMessages
 ): Promise<string> {
-  const client = messages ?? new Anthropic({ apiKey, timeout: 120_000 }).messages;
+  const client = messages ?? new Anthropic({ ...clientOptions, timeout: 120_000 }).messages;
 
   const message = await client.create({
     model: anthropicModel,
@@ -105,7 +145,7 @@ export async function verifyReleaseNotes(notesPath: string, bodyPath: string): P
 }
 
 export async function generateWithApi(
-  apiKey: string,
+  clientOptions: AnthropicClientOptions,
   notesPath: string,
   bodyPath: string,
   cwd = process.cwd(),
@@ -128,7 +168,7 @@ export async function generateWithApi(
 
     const filtered = filterChangelogForAi(changelog);
     const userMessage = buildUserMessage(filtered, serviceContext, tickets, prDescriptions);
-    const notes = await callAnthropicApi(apiKey, userMessage, systemPrompt, messages);
+    const notes = await callAnthropicApi(clientOptions, userMessage, systemPrompt, messages);
 
     await Bun.write(notesPath, notes, { createPath: true });
     console.log("Release notes generated");
@@ -151,12 +191,16 @@ export async function runReleaseNotes(
   cwd = process.cwd(),
   messages?: AnthropicMessages,
 ): Promise<void> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const clientOptions = resolveAnthropicClientOptions(process.env);
+  // GitHub renders an unset optional action input as ""; strip a blank host/token so
+  // the SDK's own env fallback cannot read it as a configured (blank) host.
+  if (!process.env.ANTHROPIC_BASE_URL?.trim()) delete process.env.ANTHROPIC_BASE_URL;
+  if (!process.env.ANTHROPIC_AUTH_TOKEN?.trim()) delete process.env.ANTHROPIC_AUTH_TOKEN;
   const notesPath = join(cwd, ".release_bot/release_notes.md");
   const bodyPath = join(cwd, ".release_bot/body");
 
-  if (apiKey) {
-    await generateWithApi(apiKey, notesPath, bodyPath, cwd, messages);
+  if (clientOptions.apiKey || clientOptions.authToken) {
+    await generateWithApi(clientOptions, notesPath, bodyPath, cwd, messages);
   }
 
   await verifyReleaseNotes(notesPath, bodyPath);

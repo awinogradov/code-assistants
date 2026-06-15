@@ -11,6 +11,16 @@ inputs:
       Anthropic API key for the optional attribution step. Only used when `attribution` is `true` and a breach fired; leave empty to keep the monitor fully deterministic and free.
     required: false
     default: ""
+  anthropic_base_url:
+    description: |
+      Custom Anthropic API base URL for the attribution step (gateway/proxy/compatible endpoint, full URL including scheme). When unset, the SDK uses the default api.anthropic.com host.
+    required: false
+    default: ""
+  anthropic_auth_token:
+    description: |
+      Bearer auth token for a custom Anthropic host (sent as Authorization: Bearer). Alternative to anthropic_api_key — set one, not both.
+    required: false
+    default: ""
   model:
     description: Claude model for the attribution narrative.
     required: false
@@ -112,6 +122,8 @@ runs:
         CLAUDE_TIMEOUT_MINUTES: "10"
         CLAUDE_JSON_SCHEMA: '{"type":"object","properties":{"narrative":{"type":"string"}},"required":["narrative"]}'
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        ANTHROPIC_AUTH_TOKEN: ${{ inputs.anthropic_auth_token }}
+        ANTHROPIC_BASE_URL: ${{ inputs.anthropic_base_url }}
       run: CLAUDE_PROMPT="$(cat "$PROMPT_FILE")" bun "${{ github.action_path }}/../code-review-action/src/runClaude.ts"
 
     - name: Post cost-report issue

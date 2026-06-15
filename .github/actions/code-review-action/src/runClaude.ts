@@ -261,6 +261,48 @@ export async function resolveClaudeBinary(
   return undefined;
 }
 
+/**
+ * Build the environment handed to the Agent SDK's spawned Claude Code process.
+ *
+ * Pins the auth vars to strings (the SDK's `env` is `Record<string, string>`) and
+ * makes a custom Anthropic host opt-in. GitHub renders an unset optional action
+ * input as `""`, and a blank `ANTHROPIC_BASE_URL` would override the SDK default
+ * with a blank host — so blank `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` are
+ * dropped here rather than forwarded, and set values are trimmed. `ANTHROPIC_API_KEY`
+ * (x-api-key) and `ANTHROPIC_AUTH_TOKEN` (bearer) are mutually exclusive, so setting
+ * both fails fast here instead of as a downstream API 400.
+ *
+ * @param env - Source environment, typically `process.env`.
+ * @returns The env object for `query({ options: { env } })`.
+ * @throws If both `ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN` are non-blank.
+ */
+export function buildSdkEnv(env: Record<string, string | undefined>): Record<string, string> {
+  const baseUrl = env.ANTHROPIC_BASE_URL?.trim() ?? "";
+  const authToken = env.ANTHROPIC_AUTH_TOKEN?.trim() ?? "";
+  if ((env.ANTHROPIC_API_KEY ?? "").trim() !== "" && authToken !== "") {
+    throw new Error(
+      "Set ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN, not both — the Anthropic API rejects requests carrying both."
+    );
+  }
+
+  // Re-add the host/token below only when non-blank, so an unset optional input
+  // (rendered as "") never reaches the SDK as a host override.
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (value === undefined) continue;
+    if (key === "ANTHROPIC_BASE_URL" || key === "ANTHROPIC_AUTH_TOKEN") continue;
+    result[key] = value;
+  }
+
+  result.ANTHROPIC_API_KEY = env.ANTHROPIC_API_KEY ?? "";
+  result.CLAUDE_CODE_OAUTH_TOKEN = env.CLAUDE_CODE_OAUTH_TOKEN ?? "";
+  result.GH_TOKEN = env.GH_TOKEN ?? "";
+  if (baseUrl !== "") result.ANTHROPIC_BASE_URL = baseUrl;
+  if (authToken !== "") result.ANTHROPIC_AUTH_TOKEN = authToken;
+
+  return result;
+}
+
 let log: pino.Logger | undefined;
 
 /** Run Claude Code and write outputs. Exported for visibility, called from main guard. */
@@ -305,12 +347,7 @@ async function run(): Promise<void> {
       systemPrompt: { type: "preset" as const, preset: "claude_code" as const },
       pathToClaudeCodeExecutable,
       abortController,
-      env: {
-        ...(process.env as Record<string, string>),
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? "",
-        CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN ?? "",
-        GH_TOKEN: process.env.GH_TOKEN ?? "",
-      },
+      env: buildSdkEnv(process.env),
     },
   });
 
