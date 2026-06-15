@@ -55,21 +55,23 @@ jobs:
 
 ## Inputs
 
-| Input                       | Required | Default             | Description                                                                                                        |
-| --------------------------- | -------- | ------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `bot_token`                 | yes      | —                   | PAT or App token with `contents: read` + `issues: write`. The report issue is attributed to this token's identity. |
-| `anthropic_api_key`         | no       | _(empty)_           | Anthropic API key for the attribution step. Unused unless `attribution` is `true` and a breach fired.              |
-| `model`                     | no       | `claude-sonnet-4-6` | Claude model for the attribution narrative.                                                                        |
-| `comparison_mode`           | no       | `rolling-baseline`  | `rolling-baseline` or `previous-run` (see [How it decides](#how-it-decides)).                                      |
-| `baseline_window`           | no       | `14`                | Review runs per comparison window.                                                                                 |
-| `increase_pct`              | no       | `25`                | Percent increase of the compared cost metric that fires.                                                           |
-| `single_run_ceiling_usd`    | no       | `1.50`              | Absolute per-run ceiling (USD).                                                                                    |
-| `normalized_regression_pct` | no       | `25`                | Percent increase of median cost per output token that fires.                                                       |
-| `min_runs`                  | no       | `8`                 | Minimum review runs (overall and per window) before windowed thresholds are evaluated.                             |
-| `lookback_days`             | no       | `30`                | Days of PR reviews to scrape. Months are expressed as days (e.g. `90`).                                            |
-| `attribution`               | no       | `false`             | Run one model pass on a breach to attribute the regression. Requires `anthropic_api_key`.                          |
-| `issue_label`               | no       | `code-review-cost`  | Label identifying the cost-report issue for dedup.                                                                 |
-| `cooldown_days`             | no       | `7`                 | Minimum days between posted reports — a sustained breach comments at most once per cooldown.                       |
+| Input                       | Required | Default             | Description                                                                                                                                                   |
+| --------------------------- | -------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bot_token`                 | yes      | —                   | PAT or App token with `contents: read` + `issues: write`. The report issue is attributed to this token's identity.                                            |
+| `anthropic_api_key`         | no       | _(empty)_           | Anthropic API key for the attribution step. Unused unless `attribution` is `true` and a breach fired.                                                         |
+| `anthropic_base_url`        | no       | _(empty)_           | Custom Anthropic API base URL for the attribution step (gateway/proxy/compatible endpoint, full URL with scheme). Unset uses the default `api.anthropic.com`. |
+| `anthropic_auth_token`      | no       | _(empty)_           | Bearer token for a custom Anthropic host (`Authorization: Bearer`). Alternative to `anthropic_api_key` — set one, not both.                                   |
+| `model`                     | no       | `claude-sonnet-4-6` | Claude model for the attribution narrative.                                                                                                                   |
+| `comparison_mode`           | no       | `rolling-baseline`  | `rolling-baseline` or `previous-run` (see [How it decides](#how-it-decides)).                                                                                 |
+| `baseline_window`           | no       | `14`                | Review runs per comparison window.                                                                                                                            |
+| `increase_pct`              | no       | `25`                | Percent increase of the compared cost metric that fires.                                                                                                      |
+| `single_run_ceiling_usd`    | no       | `1.50`              | Absolute per-run ceiling (USD).                                                                                                                               |
+| `normalized_regression_pct` | no       | `25`                | Percent increase of median cost per output token that fires.                                                                                                  |
+| `min_runs`                  | no       | `8`                 | Minimum review runs (overall and per window) before windowed thresholds are evaluated.                                                                        |
+| `lookback_days`             | no       | `30`                | Days of PR reviews to scrape. Months are expressed as days (e.g. `90`).                                                                                       |
+| `attribution`               | no       | `false`             | Run one model pass on a breach to attribute the regression. Requires `anthropic_api_key`.                                                                     |
+| `issue_label`               | no       | `code-review-cost`  | Label identifying the cost-report issue for dedup.                                                                                                            |
+| `cooldown_days`             | no       | `7`                 | Minimum days between posted reports — a sustained breach comments at most once per cooldown.                                                                  |
 
 ## Outputs
 
