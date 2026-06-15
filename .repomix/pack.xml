@@ -466,6 +466,7 @@ package.json
 prettier.config.ts
 README.md
 repomix.config.json
+SECURITY.md
 turbo.json
 </directory_structure>
 
@@ -13405,7 +13406,7 @@ The synced `contributing.yml` workflow references the action via `@main` so cons
 
 <file path=".github/actions/contributing-sync/action.yml">
 name: Contributing sync
-description: Sync CONTRIBUTING.md, CODE_OF_CONDUCT.md, LICENSE.md, the contributing workflow, the auto-label workflow, the licenses workflow, and the validate-actions workflow from an upstream repository into the current repository.
+description: Sync CONTRIBUTING.md, CODE_OF_CONDUCT.md, LICENSE.md, SECURITY.md, the contributing workflow, the auto-label workflow, the licenses workflow, and the validate-actions workflow from an upstream repository into the current repository.
 
 inputs:
   bot_token:
@@ -13417,7 +13418,7 @@ inputs:
       Git author/committer login for the sync commit. Defaults to `github-actions[bot]` when unset. Pass the `vars.BOT_USERNAME` repository variable to attribute commits to a dedicated bot identity.
     required: false
   source-repo:
-    description: Source repository in `owner/name` form that hosts the canonical `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, and `LICENSE.md`.
+    description: Source repository in `owner/name` form that hosts the canonical `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, and `SECURITY.md`.
     required: false
     default: awinogradov/code-assistants
   source-ref:
@@ -13451,6 +13452,7 @@ runs:
           CONTRIBUTING.md
           CODE_OF_CONDUCT.md
           LICENSE.md
+          SECURITY.md
           .github/workflows/contributing.yml
           .github/workflows/auto-label.yml
           .github/workflows/licenses.yml
@@ -13492,12 +13494,13 @@ The synced set is:
 - `CONTRIBUTING.md`
 - `CODE_OF_CONDUCT.md`
 - `LICENSE.md`
+- `SECURITY.md`
 - `.github/workflows/contributing.yml`
 - `.github/workflows/auto-label.yml`
 - `.github/workflows/licenses.yml`
 - `.github/workflows/validate-actions.yml`
 
-The first three are the contributor-facing documentation. The four workflows propagate CI that
+The first four are the contributor-facing documentation. The four workflows propagate CI that
 references upstream actions on every run — the actions themselves stay in the upstream
 repository, so consumers do not need a local copy:
 
@@ -13544,7 +13547,7 @@ jobs:
 | -------------- | -------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `bot_token`    | yes      | —                             | PAT or GitHub App installation token with `contents: write` + `pull-requests: write` on this repo. The workflow's default `GITHUB_TOKEN` is **not** supported — see [Permissions](#permissions). |
 | `bot_username` | no       | `github-actions[bot]`         | Git author/committer login for the sync commit. Pass `${{ vars.BOT_USERNAME }}`. The PR itself is opened by the `bot_token` owner.                                                               |
-| `source-repo`  | no       | `awinogradov/code-assistants` | Source repository in `owner/name` form that hosts the canonical `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, and `LICENSE.md`.                                                                       |
+| `source-repo`  | no       | `awinogradov/code-assistants` | Source repository in `owner/name` form that hosts the canonical `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, and `SECURITY.md`.                                                        |
 | `source-ref`   | no       | _(empty)_                     | Branch, tag, or SHA to read the source files from. Empty → source repository default branch.                                                                                                     |
 
 PR-shaping inputs (branch, title, body, commit message) are fixed by design — see
@@ -13575,7 +13578,7 @@ See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/a
 ## Behavior
 
 - Delegates to `files-sync` with a fixed sync list — `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`,
-  `LICENSE.md`, `.github/workflows/contributing.yml`, `.github/workflows/auto-label.yml`,
+  `LICENSE.md`, `SECURITY.md`, `.github/workflows/contributing.yml`, `.github/workflows/auto-label.yml`,
   `.github/workflows/licenses.yml`, and `.github/workflows/validate-actions.yml` — sourced from
   `source-repo` at `source-ref`.
 - The PR is opened on the fixed branch `maintenance-sync-contributing` with the title
@@ -30318,7 +30321,7 @@ inputs:
     required: false
     default: "true"
   contributing:
-    description: Sync CONTRIBUTING.md, CODE_OF_CONDUCT.md, LICENSE.md, and the contributing + auto-label workflows. Default on; set to `false` to opt out.
+    description: Sync CONTRIBUTING.md, CODE_OF_CONDUCT.md, LICENSE.md, SECURITY.md, and the contributing + auto-label workflows. Default on; set to `false` to opt out.
     required: false
     default: "true"
 
@@ -30407,7 +30410,7 @@ by default and is disabled by setting its input to `false`. The kinds are:
 - `code-review` → [`code-review-sync`](../code-review-sync/README.md) — sync the AI code-review workflow.
 - `repomix` → [`repomix-sync`](../repomix-sync/README.md) — sync the `repomix-pack` workflow and `repomix.config.json`.
 - `release` → [`release-sync`](../release-sync/README.md) — sync the release pipeline workflows (create, publish, auto-merge).
-- `contributing` → [`contributing-sync`](../contributing-sync/README.md) — sync `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, and the contributing + auto-label workflows.
+- `contributing` → [`contributing-sync`](../contributing-sync/README.md) — sync `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, `SECURITY.md`, and the contributing + auto-label workflows.
 
 Each kind is a gated step that delegates to its child `*-sync` action, which in turn delegates the
 diff and PR mechanics to [`files-sync`](../files-sync/README.md). New sync kinds added upstream
@@ -43805,13 +43808,13 @@ every consumer automatically, with no consumer workflow edit.
 
 ## Sync kinds
 
-| Kind           | Files synced into the consumer                                                                                                                                                                              | Maintenance branch              | Action                                                                |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------- |
-| `agents-rules` | `rules/<stack>.md` → `CLAUDE.md`                                                                                                                                                                            | `maintenance-sync-agents-rules` | [`agents-rules-sync`](../.github/actions/agents-rules-sync/README.md) |
-| `code-review`  | `.github/workflows/code-review.yml`, `.github/workflows/code-review-cost-monitor.yml`                                                                                                                       | `maintenance-sync-code-review`  | [`code-review-sync`](../.github/actions/code-review-sync/README.md)   |
-| `repomix`      | `.github/workflows/repomix-pack.yml`, `repomix.config.json`                                                                                                                                                 | `maintenance-sync-repomix`      | [`repomix-sync`](../.github/actions/repomix-sync/README.md)           |
-| `release`      | `.github/workflows/release-create.yml`, `release-publish.yml`, `release-automerge.yml`                                                                                                                      | `maintenance-sync-release`      | [`release-sync`](../.github/actions/release-sync/README.md)           |
-| `contributing` | `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, `.github/workflows/contributing.yml`, `.github/workflows/auto-label.yml`, `.github/workflows/licenses.yml`, `.github/workflows/validate-actions.yml` | `maintenance-sync-contributing` | [`contributing-sync`](../.github/actions/contributing-sync/README.md) |
+| Kind           | Files synced into the consumer                                                                                                                                                                                             | Maintenance branch              | Action                                                                |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------- |
+| `agents-rules` | `rules/<stack>.md` → `CLAUDE.md`                                                                                                                                                                                           | `maintenance-sync-agents-rules` | [`agents-rules-sync`](../.github/actions/agents-rules-sync/README.md) |
+| `code-review`  | `.github/workflows/code-review.yml`, `.github/workflows/code-review-cost-monitor.yml`                                                                                                                                      | `maintenance-sync-code-review`  | [`code-review-sync`](../.github/actions/code-review-sync/README.md)   |
+| `repomix`      | `.github/workflows/repomix-pack.yml`, `repomix.config.json`                                                                                                                                                                | `maintenance-sync-repomix`      | [`repomix-sync`](../.github/actions/repomix-sync/README.md)           |
+| `release`      | `.github/workflows/release-create.yml`, `release-publish.yml`, `release-automerge.yml`                                                                                                                                     | `maintenance-sync-release`      | [`release-sync`](../.github/actions/release-sync/README.md)           |
+| `contributing` | `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, `SECURITY.md`, `.github/workflows/contributing.yml`, `.github/workflows/auto-label.yml`, `.github/workflows/licenses.yml`, `.github/workflows/validate-actions.yml` | `maintenance-sync-contributing` | [`contributing-sync`](../.github/actions/contributing-sync/README.md) |
 
 Each kind delegates to its `*-sync` action, which delegates the diff and PR mechanics to
 [`files-sync`](../.github/actions/files-sync/README.md). The action directories these synced
@@ -47715,6 +47718,7 @@ Deferred work is tracked with issue-linked `TODO`/`FIXME` comments so it never g
 - **Questions** — open a [GitHub Discussion](https://github.com/awinogradov/code-assistants/discussions)
 - **Bugs / feature requests** — open a [GitHub Issue](https://github.com/awinogradov/code-assistants/issues)
 - **Code of Conduct issues** — see [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md)
+- **Security issues** — see [`SECURITY.md`](./SECURITY.md); report privately, never open a public issue
 
 ## FAQ
 
@@ -47902,7 +47906,7 @@ The `docs/` guides are numbered chapters in reading order — newcomers start at
 - [`upstream-sync`](./.github/actions/upstream-sync/README.md) — aggregate the five upstream maintenance syncs behind one action; every kind on by default, opt out per kind
 - [`agents-rules-sync`](./.github/actions/agents-rules-sync/README.md) — sync the stack-appropriate `rules/<stack>.md` into `CLAUDE.md` based on `package.json` `agents.rules`
 - [`contributing-check`](./.github/actions/contributing-check/README.md) — validate branch name, commit messages, and PR title against `CONTRIBUTING.md`
-- [`contributing-sync`](./.github/actions/contributing-sync/README.md) — sync `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, and the contributing workflow from upstream
+- [`contributing-sync`](./.github/actions/contributing-sync/README.md) — sync `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, `SECURITY.md`, and the contributing workflow from upstream
 - [`ban-patterns`](./.github/actions/ban-patterns/README.md) — fail the job when forbidden regex patterns match files in the working tree
 - [`licenses-audit`](./.github/actions/licenses-audit/README.md) — regenerate the license report on dependency-changing PRs, auto-commit drift on same-repo PRs, and fail fork PRs that ship stale license data
 - [`release-action`](./.github/actions/release-action/README.md) — conventional-commit-driven release pipeline for npm packages, GitHub Actions, and Claude plugins
@@ -47920,6 +47924,7 @@ The `docs/` guides are numbered chapters in reading order — newcomers start at
 
 - [Contributing guide](./CONTRIBUTING.md)
 - [Code of Conduct](./CODE_OF_CONDUCT.md)
+- [Security Policy](./SECURITY.md)
 
 ## License
 
@@ -47939,6 +47944,58 @@ The `docs/` guides are numbered chapters in reading order — newcomers start at
     "customPatterns": [".repomix/**"]
   }
 }
+</file>
+
+<file path="SECURITY.md">
+<!--
+Source: https://github.com/awinogradov/code-assistants/blob/main/SECURITY.md
+This file is distributed to downstream repositories by an automated sync.
+Edits made downstream are overwritten on the next run.
+To change it, open a pull request against the source file above.
+-->
+
+# Security Policy
+
+We take the security of this project and the people who use it seriously. Thank you for helping keep it and its users safe.
+
+## Supported Versions
+
+Security fixes are applied to the latest released version and the default branch. Before reporting, please update to the latest version and confirm the issue still reproduces. Older releases are not back-patched — upgrading is the supported remediation.
+
+## Reporting a Vulnerability
+
+Please report security vulnerabilities privately. Do not open a public issue, pull request, or discussion for a suspected vulnerability — public disclosure before a fix is available puts every user at risk.
+
+Use GitHub's Private Vulnerability Reporting:
+
+1. Open the repository's **Security** tab.
+2. Click **Report a vulnerability** to open a private draft advisory visible only to you and the repository's security maintainers.
+3. Fill in the report (see _What to Include_ below) and submit.
+
+If you do not see a **Report a vulnerability** button, Private Vulnerability Reporting is not enabled on this repository — a copied or forked repository does not inherit it from upstream. In that case, contact the repository owner or organization privately through a channel listed on their GitHub profile or repository homepage, rather than opening a public issue, pull request, or discussion.
+
+## What to Include
+
+A good report helps us triage quickly. Where possible, include:
+
+- A description of the vulnerability and its impact.
+- The affected component, file, or version.
+- Step-by-step instructions to reproduce, including any proof-of-concept.
+- Any known mitigations or workarounds.
+
+## Response Expectations
+
+This is a maintainer-run project, so triage is best-effort rather than bound by a formal SLA. You can expect:
+
+- An acknowledgement of your report, typically within a few business days.
+- An assessment of validity and severity, and follow-up questions if we need more detail.
+- Progress updates as we work toward a fix, and credit for your report once a fix ships (unless you prefer to remain anonymous).
+
+## Disclosure Policy & Scope
+
+We follow coordinated disclosure: please give us a reasonable window to release a fix before any public disclosure, and we will work with you on timing.
+
+In scope: the source code in this repository and the artifacts it publishes. Out of scope: vulnerabilities in third-party dependencies (report those upstream) and findings that require privileged access or social engineering. There is currently no paid bug-bounty program.
 </file>
 
 <file path="turbo.json">
