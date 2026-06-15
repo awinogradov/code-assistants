@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [0.2.2](https://github.com/awinogradov/code-assistants/compare/release-automerge@v0.2.1...release-automerge@v0.2.2) (2026-06-15)
+
+## Release Notes
+
+This update improves documentation readability across all action docs and the AI code review output.
+
+## 📚 Documentation & Settings Updates
+
+### GitHub-style alert formatting
+Documentation callouts and tips now render with GitHub's native alert styling, making important information stand out better. The AI code review footer hint also uses this new format for clearer guidance.
+
+<details><summary>Related issues</summary>
+
+- [#315: Use GitHub tip formatting](https://github.com/awinogradov/code-assistants/issues/315)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #315 | [#316](https://github.com/awinogradov/code-assistants/pull/316) | @awinogradov |
+
+### Documentation
+
+* adopt github alert syntax for callouts ([151e57b](https://github.com/awinogradov/code-assistants/commit/151e57bd2694b5df626833d3243cdded6f77eef9))
 ## [0.2.1](https://github.com/awinogradov/code-assistants/compare/release-automerge@v0.2.0...release-automerge@v0.2.1) (2026-06-13)
 
 ## Release Notes

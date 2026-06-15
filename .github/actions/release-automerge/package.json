@@ -1,6 +1,6 @@
 {
   "name": "@code-assistants/release-automerge",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Composite GitHub Action that merges an approved, all-green release PR.",
   "private": true,
   "type": "module",
