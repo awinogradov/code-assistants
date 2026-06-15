@@ -47,6 +47,12 @@ inputs:
   claude_oauth_token:
     description: "Claude Code OAuth token (alternative to anthropic_api_key)"
     required: false
+  anthropic_base_url:
+    description: "Custom Anthropic API base URL for routing through a gateway/proxy/compatible endpoint (full URL including scheme, e.g. https://gateway.example.com). When unset, the SDK uses the default api.anthropic.com host."
+    required: false
+  anthropic_auth_token:
+    description: "Bearer auth token for a custom Anthropic host (sent as Authorization: Bearer). Alternative to anthropic_api_key — set one, not both."
+    required: false
   settings:
     description: "Claude Code settings JSON (use env to pass API keys for MCP servers)"
     required: false
@@ -88,10 +94,12 @@ runs:
       env:
         BOT_TOKEN: ${{ inputs.bot_token }}
         ANTHROPIC_KEY: ${{ inputs.anthropic_api_key }}
+        AUTH_TOKEN: ${{ inputs.anthropic_auth_token }}
         CLAUDE_TOKEN: ${{ inputs.claude_oauth_token }}
       run: |
         echo "bot_token: ${#BOT_TOKEN} chars"
         echo "anthropic_api_key: ${#ANTHROPIC_KEY} chars"
+        echo "anthropic_auth_token: ${#AUTH_TOKEN} chars"
         echo "claude_oauth_token: ${#CLAUDE_TOKEN} chars"
 
         if [[ -z "$BOT_TOKEN" ]]; then
@@ -99,8 +107,13 @@ runs:
           exit 1
         fi
 
-        if [[ -z "$ANTHROPIC_KEY" && -z "$CLAUDE_TOKEN" ]]; then
-          echo "::error::Either anthropic_api_key or claude_oauth_token must be provided"
+        if [[ -z "$ANTHROPIC_KEY" && -z "$CLAUDE_TOKEN" && -z "$AUTH_TOKEN" ]]; then
+          echo "::error::Provide one of anthropic_api_key, anthropic_auth_token, or claude_oauth_token"
+          exit 1
+        fi
+
+        if [[ -n "$ANTHROPIC_KEY" && -n "$AUTH_TOKEN" ]]; then
+          echo "::error::Set anthropic_api_key or anthropic_auth_token, not both"
           exit 1
         fi
 
@@ -477,6 +490,8 @@ runs:
       shell: bash
       env:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        ANTHROPIC_AUTH_TOKEN: ${{ inputs.anthropic_auth_token }}
+        ANTHROPIC_BASE_URL: ${{ inputs.anthropic_base_url }}
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude_oauth_token }}
         CLAUDE_MODEL: ${{ inputs.model }}
         CLAUDE_RUN_MODE: preflight
@@ -510,6 +525,8 @@ runs:
       shell: bash
       env:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        ANTHROPIC_AUTH_TOKEN: ${{ inputs.anthropic_auth_token }}
+        ANTHROPIC_BASE_URL: ${{ inputs.anthropic_base_url }}
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude_oauth_token }}
         GH_TOKEN: ${{ inputs.bot_token }}
         CLAUDE_PROMPT: |
@@ -575,6 +592,8 @@ runs:
       shell: bash
       env:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        ANTHROPIC_AUTH_TOKEN: ${{ inputs.anthropic_auth_token }}
+        ANTHROPIC_BASE_URL: ${{ inputs.anthropic_base_url }}
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude_oauth_token }}
         GH_TOKEN: ${{ inputs.bot_token }}
         CLAUDE_PROMPT: |
