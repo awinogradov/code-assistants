@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import {
   buildRunSummary,
+  buildSdkEnv,
   countToolRoundTrips,
   deriveMode,
   detectLinuxLibc,
@@ -418,5 +419,42 @@ describe("resolveClaudeBinary", () => {
     for (const binary of [darwinArm64, darwinX64]) {
       if (binary !== undefined) expect(binary).toMatch(/claude$/);
     }
+  });
+});
+
+describe("buildSdkEnv", () => {
+  test("defaults auth vars and passes through unrelated keys", () => {
+    const env = buildSdkEnv({ PATH: "/usr/bin", FOO: "bar" });
+    expect(env.PATH).toBe("/usr/bin");
+    expect(env.FOO).toBe("bar");
+    expect(env.ANTHROPIC_API_KEY).toBe("");
+    expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe("");
+    expect(env.GH_TOKEN).toBe("");
+  });
+
+  test("forwards a trimmed ANTHROPIC_BASE_URL when set", () => {
+    const env = buildSdkEnv({ ANTHROPIC_BASE_URL: "  https://gateway.example  " });
+    expect(env.ANTHROPIC_BASE_URL).toBe("https://gateway.example");
+  });
+
+  test("omits a blank ANTHROPIC_BASE_URL so it cannot override the SDK default", () => {
+    expect("ANTHROPIC_BASE_URL" in buildSdkEnv({ ANTHROPIC_BASE_URL: "" })).toBe(false);
+  });
+
+  test("omits a whitespace-only ANTHROPIC_AUTH_TOKEN and forwards a trimmed one", () => {
+    expect("ANTHROPIC_AUTH_TOKEN" in buildSdkEnv({ ANTHROPIC_AUTH_TOKEN: "   " })).toBe(false);
+    expect(buildSdkEnv({ ANTHROPIC_AUTH_TOKEN: " tok " }).ANTHROPIC_AUTH_TOKEN).toBe("tok");
+  });
+
+  test("throws when both ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN are set", () => {
+    expect(() => buildSdkEnv({ ANTHROPIC_API_KEY: "k", ANTHROPIC_AUTH_TOKEN: "t" })).toThrow(
+      "not both"
+    );
+  });
+
+  test("allows ANTHROPIC_API_KEY alone", () => {
+    const env = buildSdkEnv({ ANTHROPIC_API_KEY: "k" });
+    expect(env.ANTHROPIC_API_KEY).toBe("k");
+    expect("ANTHROPIC_AUTH_TOKEN" in env).toBe(false);
   });
 });

@@ -11,6 +11,7 @@ import {
   type AnthropicMessages,
   callAnthropicApi,
   generateWithApi,
+  resolveAnthropicClientOptions,
   runReleaseNotes,
   verifyReleaseNotes,
 } from "./generateReleaseNotes.ts";
@@ -337,7 +338,12 @@ describe("callAnthropicApi", () => {
       }),
     };
 
-    const result = await callAnthropicApi("test-key", "test prompt", "system prompt", mockMessages);
+    const result = await callAnthropicApi(
+      { apiKey: "test-key" },
+      "test prompt",
+      "system prompt",
+      mockMessages
+    );
 
     expect(result).toBe("Generated notes");
   });
@@ -353,7 +359,7 @@ describe("callAnthropicApi", () => {
       },
     };
 
-    await callAnthropicApi("test-key", "user msg", "my system prompt", mockMessages);
+    await callAnthropicApi({ apiKey: "test-key" }, "user msg", "my system prompt", mockMessages);
 
     expect(capturedSystem).toBe("my system prompt");
     expect(capturedUserContent).toBe("user msg");
@@ -367,7 +373,7 @@ describe("callAnthropicApi", () => {
     };
 
     await expect(
-      callAnthropicApi("test-key", "test prompt", "system", mockMessages)
+      callAnthropicApi({ apiKey: "test-key" }, "test prompt", "system", mockMessages)
     ).rejects.toThrow("Anthropic API returned no text content");
   });
 });
@@ -452,7 +458,7 @@ describe("generateWithApi", () => {
       const notesPath = join(dir, "release_notes.md");
       const bodyPath = join(dir, "missing-body");
 
-      await generateWithApi("fake-key", notesPath, bodyPath, dir);
+      await generateWithApi({ apiKey: "fake-key" }, notesPath, bodyPath, dir);
 
       expect(await Bun.file(notesPath).exists()).toBe(false);
     }));
@@ -467,7 +473,7 @@ describe("generateWithApi", () => {
         create: async () => ({ content: [{ type: "text", text: "Summary" }] }),
       };
 
-      await generateWithApi("test-key", notesPath, bodyPath, dir, mockMessages);
+      await generateWithApi({ apiKey: "test-key" }, notesPath, bodyPath, dir, mockMessages);
 
       const notes = await Bun.file(notesPath).text();
       expect(notes).toBe("Summary");
@@ -488,7 +494,7 @@ describe("generateWithApi", () => {
       };
 
       await generateWithApi(
-        "test-key",
+        { apiKey: "test-key" },
         join(dir, "notes.md"),
         join(dir, "body.md"),
         dir,
@@ -497,5 +503,56 @@ describe("generateWithApi", () => {
 
       expect(captured).toContain("first ticket");
       expect(captured).toContain("pr1: described");
+    }));
+});
+
+describe("resolveAnthropicClientOptions", () => {
+  test("returns only the options that are set, trimmed", () => {
+    const options = resolveAnthropicClientOptions({
+      ANTHROPIC_API_KEY: " sk-key ",
+      ANTHROPIC_BASE_URL: " https://gateway.example ",
+    });
+    expect(options).toEqual({ apiKey: "sk-key", baseURL: "https://gateway.example" });
+  });
+
+  test("treats blank values as unset", () => {
+    expect(
+      resolveAnthropicClientOptions({ ANTHROPIC_BASE_URL: "", ANTHROPIC_AUTH_TOKEN: "   " })
+    ).toEqual({});
+  });
+
+  test("resolves a bearer auth token without an api key", () => {
+    expect(resolveAnthropicClientOptions({ ANTHROPIC_AUTH_TOKEN: "tok" })).toEqual({
+      authToken: "tok",
+    });
+  });
+
+  test("throws when both api key and auth token are set", () => {
+    expect(() =>
+      resolveAnthropicClientOptions({ ANTHROPIC_API_KEY: "k", ANTHROPIC_AUTH_TOKEN: "t" })
+    ).toThrow("not both");
+  });
+});
+
+describe("runReleaseNotes blank-host coercion", () => {
+  test("removes a blank ANTHROPIC_BASE_URL from process.env before SDK use", () =>
+    withTempDir(async (dir) => {
+      const savedKey = process.env.ANTHROPIC_API_KEY;
+      const savedBase = process.env.ANTHROPIC_BASE_URL;
+      process.env.ANTHROPIC_API_KEY = "test-key";
+      process.env.ANTHROPIC_BASE_URL = "";
+      await Bun.write(join(dir, ".release_bot/body"), "### Features\n\n- x");
+      const mockMessages: AnthropicMessages = {
+        create: async () => ({ content: [{ type: "text", text: "notes" }] }),
+      };
+      try {
+        await runReleaseNotes(dir, mockMessages);
+        expect("ANTHROPIC_BASE_URL" in process.env).toBe(false);
+      } finally {
+        if (savedKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+        else process.env.ANTHROPIC_API_KEY = savedKey;
+        if (savedBase === undefined) delete process.env.ANTHROPIC_BASE_URL;
+        else process.env.ANTHROPIC_BASE_URL = savedBase;
+      }
     }));
 });
