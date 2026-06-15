@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [0.2.2](https://github.com/awinogradov/code-assistants/compare/validate-actions-action@v0.2.1...validate-actions-action@v0.2.2) (2026-06-15)
+
+## Release Notes
+
+Documentation now renders with GitHub's native alert styling for better visual consistency.
+
+## 📚 Documentation & Settings Updates
+
+### GitHub alert syntax for callouts
+All documentation callouts now use GitHub's native alert syntax instead of HTML/Markdown formatting. This provides consistent styling across the codebase with GitHub's built-in tip, note, warning, and caution styles. The change affects contributing guides, documentation pages, and action READMEs throughout the project.
+
+<details><summary>Related issues</summary>
+
+- [#315: Use GitHub tip formatting](https://github.com/awinogradov/code-assistants/issues/315)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #315 | [#316](https://github.com/awinogradov/code-assistants/pull/316) | @awinogradov |
+
+### Documentation
+
+* adopt github alert syntax for callouts ([151e57b](https://github.com/awinogradov/code-assistants/commit/151e57bd2694b5df626833d3243cdded6f77eef9))
 ## [0.2.1](https://github.com/awinogradov/code-assistants/compare/validate-actions-action@v0.2.0...validate-actions-action@v0.2.1) (2026-06-08)
 
 ## Release Notes
