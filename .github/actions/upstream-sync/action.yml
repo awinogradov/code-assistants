@@ -27,7 +27,7 @@ inputs:
     required: false
     default: "true"
   contributing:
-    description: Sync CONTRIBUTING.md, CODE_OF_CONDUCT.md, LICENSE.md, and the contributing + auto-label workflows. Default on; set to `false` to opt out.
+    description: Sync CONTRIBUTING.md, CODE_OF_CONDUCT.md, LICENSE.md, SECURITY.md, and the contributing + auto-label workflows. Default on; set to `false` to opt out.
     required: false
     default: "true"
 

@@ -7,12 +7,13 @@ The synced set is:
 - `CONTRIBUTING.md`
 - `CODE_OF_CONDUCT.md`
 - `LICENSE.md`
+- `SECURITY.md`
 - `.github/workflows/contributing.yml`
 - `.github/workflows/auto-label.yml`
 - `.github/workflows/licenses.yml`
 - `.github/workflows/validate-actions.yml`
 
-The first three are the contributor-facing documentation. The four workflows propagate CI that
+The first four are the contributor-facing documentation. The four workflows propagate CI that
 references upstream actions on every run — the actions themselves stay in the upstream
 repository, so consumers do not need a local copy:
 
@@ -59,7 +60,7 @@ jobs:
 | -------------- | -------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `bot_token`    | yes      | —                             | PAT or GitHub App installation token with `contents: write` + `pull-requests: write` on this repo. The workflow's default `GITHUB_TOKEN` is **not** supported — see [Permissions](#permissions). |
 | `bot_username` | no       | `github-actions[bot]`         | Git author/committer login for the sync commit. Pass `${{ vars.BOT_USERNAME }}`. The PR itself is opened by the `bot_token` owner.                                                               |
-| `source-repo`  | no       | `awinogradov/code-assistants` | Source repository in `owner/name` form that hosts the canonical `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, and `LICENSE.md`.                                                                       |
+| `source-repo`  | no       | `awinogradov/code-assistants` | Source repository in `owner/name` form that hosts the canonical `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, and `SECURITY.md`.                                                        |
 | `source-ref`   | no       | _(empty)_                     | Branch, tag, or SHA to read the source files from. Empty → source repository default branch.                                                                                                     |
 
 PR-shaping inputs (branch, title, body, commit message) are fixed by design — see
@@ -90,7 +91,7 @@ See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/a
 ## Behavior
 
 - Delegates to `files-sync` with a fixed sync list — `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`,
-  `LICENSE.md`, `.github/workflows/contributing.yml`, `.github/workflows/auto-label.yml`,
+  `LICENSE.md`, `SECURITY.md`, `.github/workflows/contributing.yml`, `.github/workflows/auto-label.yml`,
   `.github/workflows/licenses.yml`, and `.github/workflows/validate-actions.yml` — sourced from
   `source-repo` at `source-ref`.
 - The PR is opened on the fixed branch `maintenance-sync-contributing` with the title
