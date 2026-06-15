@@ -49,30 +49,42 @@ The `if` condition prevents runner provisioning for non-PR issue comments. All o
 
 ## Inputs
 
-| Input                | Required | Default                  | Description                                                                                                                                                         |
-| -------------------- | -------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `reviewer`           | yes      | —                        | GitHub username added as reviewer and used for `@mention` triggering.                                                                                               |
-| `bot_token`          | yes      | —                        | GitHub token for bot operations (`contents: read`, `pull-requests: write`).                                                                                         |
-| `anthropic_api_key`  | no       | —                        | Anthropic API key. One of `anthropic_api_key` or `claude_oauth_token` is required.                                                                                  |
-| `claude_oauth_token` | no       | —                        | Claude Code OAuth token. Alternative to `anthropic_api_key`.                                                                                                        |
-| `mode`               | no       | `review`                 | Action mode: `review` or `react`. Auto-detected when `react_to_comments` is `true`.                                                                                 |
-| `react_to_comments`  | no       | `true`                   | Auto-detect comment events and route to `react` mode.                                                                                                               |
-| `bot_username`       | no       | falls back to `reviewer` | Username for skipping CI-author PRs labeled `ci-skip-review`.                                                                                                       |
-| `release_pr_authors` | no       | —                        | Comma-separated trusted authors whose `release-*`/`delivery-*` PRs are auto-approved. Empty disables it. See [Release PR auto-approval](#release-pr-auto-approval). |
-| `model`              | no       | `claude-sonnet-4-6`      | Claude model to use.                                                                                                                                                |
-| `settings`           | no       | —                        | Claude Code settings JSON (e.g., env vars for MCP servers).                                                                                                         |
-| `mcp_config`         | no       | —                        | Additional MCP server configuration JSON, merged with repo `.mcp.json`.                                                                                             |
-| `preflight_checks`   | no       | `true`                   | Wait for PR checks to pass before running review (review mode only).                                                                                                |
-| `poll_interval`      | no       | `10`                     | Seconds between check status polls.                                                                                                                                 |
-| `checks_timeout`     | no       | `600`                    | Maximum seconds to wait for checks.                                                                                                                                 |
-| `rules_doc_url`      | no       | see `action.yml`         | Canonical blob URL of the `pr:review` SKILL.md (literal default in `action.yml`); skills build `CHECK-*` links from it. Override only for forks.                    |
-| `debug_logs`         | no       | `false`                  | Enable DEBUG-level Claude trace logging and always upload the execution artifact.                                                                                   |
-| `pr_number`          | no       | event context            | Override auto-detected PR number.                                                                                                                                   |
-| `pr_head_sha`        | no       | event context            | Override auto-detected PR head SHA.                                                                                                                                 |
-| `comment_id`         | no       | event context            | Comment ID (react mode, explicit-input setups).                                                                                                                     |
-| `comment_body`       | no       | event context            | Comment body (react mode, explicit-input setups).                                                                                                                   |
-| `comment_path`       | no       | event context            | File path for review-thread comments.                                                                                                                               |
-| `comment_line`       | no       | event context            | Line number for review-thread comments.                                                                                                                             |
+| Input                  | Required | Default                  | Description                                                                                                                                                                   |
+| ---------------------- | -------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `reviewer`             | yes      | —                        | GitHub username added as reviewer and used for `@mention` triggering.                                                                                                         |
+| `bot_token`            | yes      | —                        | GitHub token for bot operations (`contents: read`, `pull-requests: write`).                                                                                                   |
+| `anthropic_api_key`    | no       | —                        | Anthropic API key. One of `anthropic_api_key`, `anthropic_auth_token`, or `claude_oauth_token` is required.                                                                   |
+| `claude_oauth_token`   | no       | —                        | Claude Code OAuth token. Alternative to `anthropic_api_key`.                                                                                                                  |
+| `anthropic_base_url`   | no       | —                        | Custom Anthropic API base URL for a gateway/proxy/compatible endpoint (full URL with scheme, e.g. `https://gateway.example.com`). Unset uses the default `api.anthropic.com`. |
+| `anthropic_auth_token` | no       | —                        | Bearer token for a custom Anthropic host (sent as `Authorization: Bearer`). Alternative to `anthropic_api_key` — set one, not both.                                           |
+| `mode`                 | no       | `review`                 | Action mode: `review` or `react`. Auto-detected when `react_to_comments` is `true`.                                                                                           |
+| `react_to_comments`    | no       | `true`                   | Auto-detect comment events and route to `react` mode.                                                                                                                         |
+| `bot_username`         | no       | falls back to `reviewer` | Username for skipping CI-author PRs labeled `ci-skip-review`.                                                                                                                 |
+| `release_pr_authors`   | no       | —                        | Comma-separated trusted authors whose `release-*`/`delivery-*` PRs are auto-approved. Empty disables it. See [Release PR auto-approval](#release-pr-auto-approval).           |
+| `model`                | no       | `claude-sonnet-4-6`      | Claude model to use.                                                                                                                                                          |
+| `settings`             | no       | —                        | Claude Code settings JSON (e.g., env vars for MCP servers).                                                                                                                   |
+| `mcp_config`           | no       | —                        | Additional MCP server configuration JSON, merged with repo `.mcp.json`.                                                                                                       |
+| `preflight_checks`     | no       | `true`                   | Wait for PR checks to pass before running review (review mode only).                                                                                                          |
+| `poll_interval`        | no       | `10`                     | Seconds between check status polls.                                                                                                                                           |
+| `checks_timeout`       | no       | `600`                    | Maximum seconds to wait for checks.                                                                                                                                           |
+| `rules_doc_url`        | no       | see `action.yml`         | Canonical blob URL of the `pr:review` SKILL.md (literal default in `action.yml`); skills build `CHECK-*` links from it. Override only for forks.                              |
+| `debug_logs`           | no       | `false`                  | Enable DEBUG-level Claude trace logging and always upload the execution artifact.                                                                                             |
+| `pr_number`            | no       | event context            | Override auto-detected PR number.                                                                                                                                             |
+| `pr_head_sha`          | no       | event context            | Override auto-detected PR head SHA.                                                                                                                                           |
+| `comment_id`           | no       | event context            | Comment ID (react mode, explicit-input setups).                                                                                                                               |
+| `comment_body`         | no       | event context            | Comment body (react mode, explicit-input setups).                                                                                                                             |
+| `comment_path`         | no       | event context            | File path for review-thread comments.                                                                                                                                         |
+| `comment_line`         | no       | event context            | Line number for review-thread comments.                                                                                                                                       |
+
+## Custom Anthropic host
+
+To route requests through a gateway, proxy, or compatible endpoint, set `anthropic_base_url` to a full URL including scheme. When unset, the default `api.anthropic.com` host is used. Gateways that authenticate with a bearer token instead of `x-api-key` can supply `anthropic_auth_token` in place of `anthropic_api_key` — set one, not both (the action fails fast if both are provided).
+
+```yaml
+with:
+  anthropic_base_url: https://gateway.example.com
+  anthropic_auth_token: ${{ secrets.ANTHROPIC_GATEWAY_TOKEN }}
+```
 
 ## Skills consumed
 
