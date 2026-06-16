@@ -304,7 +304,7 @@ Map each planned change to project rules defined in CLAUDE.md.
 
 ### Visualize with ASCII Schemas
 
-When the planned change is structural or visual, invoke `Skill(autopilot:ascii-schemas)` to generate diagrams and embed them in the plan's `## Diagrams` section (see the stack skill's plan output template).
+When the planned change is structural or visual, invoke `Skill(autopilot:ascii-schemas)` to generate diagrams and embed each one inline in the plan section it explains — beside the relevant implementation step, file entry, or data-flow description — rather than collecting them in a standalone section.
 
 **Trigger** — invoke the skill when the change touches any of:
 
@@ -498,9 +498,7 @@ The template below starts with `# <Title>` — see the canonical "Plan File Head
 Steelmanned intent: [verbatim from Phase 0 Steelmanned Intent block]
 Score: [filled in Phase 5 — leave as a placeholder in the draft]
 
-<!-- Include the ## Diagrams section only if the change is architectural/visual/UI/flow-related. Generate diagrams via Skill(autopilot:ascii-schemas) per the plan skill's "Visualize with ASCII Schemas" guidance. -->
-## Diagrams
-[ASCII diagram(s) generated via Skill(autopilot:ascii-schemas) — architecture, data flow, sequence, topology, UI layout, or component interaction. Omit this section entirely for pure logic/refactor changes.]
+<!-- For architectural/visual/UI/flow changes, embed each ASCII diagram from Skill(autopilot:ascii-schemas) inline in the section it explains — beside the relevant implementation step, file entry, or data-flow line — per the "Visualize with ASCII Schemas" guidance. Do not add a standalone diagrams section; omit diagrams entirely for pure logic/refactor changes. -->
 
 ## Implementation Steps
 

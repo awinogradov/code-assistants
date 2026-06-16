@@ -124,7 +124,7 @@ Declared once and applied throughout — both the orchestrator phases and the sh
 - **Repository Documentation** — read the root `README.md` and the relevant files under `docs/` as the project's source of truth; the generated plan must keep them current after implementation.
 - **Plan File Header** — every plan file begins with a single `# <Title>` line and a fixed section order.
 - **CLAUDE.md Compliance** — map each planned change to the project's rules.
-- **Visualize with ASCII Schemas** — for structural/visual changes, generate diagrams via `Skill(autopilot:ascii-schemas)` and embed them verbatim.
+- **Visualize with ASCII Schemas** — for structural/visual changes, generate diagrams via `Skill(autopilot:ascii-schemas)` and embed them verbatim, inline in the section each explains.
 
 ## Phase 1 — Detect stack and delegate
 
@@ -160,7 +160,7 @@ A synthesis step, not a second crawl: reason over the **Context Map** from Phase
 
 ### Phase 3 · Draft Plan
 
-Assemble a complete plan draft **now** — before scoring and review — so both operate on a concrete artifact, not an imagined one. The draft follows a fixed template: `## Summary` (with steelmanned intent and a `Score:` placeholder), an optional `## Diagrams` section (ASCII via `ascii-schemas`), `## Implementation Steps` (each with an observable `verify:` line patterned on the stack's verify-examples delta), `## Files`, and `## Post-Implementation`.
+Assemble a complete plan draft **now** — before scoring and review — so both operate on a concrete artifact, not an imagined one. The draft follows a fixed template: `## Summary` (with steelmanned intent and a `Score:` placeholder), `## Implementation Steps` (each with an observable `verify:` line patterned on the stack's verify-examples delta), `## Files`, and `## Post-Implementation`. For structural or visual changes, ASCII diagrams (via `ascii-schemas`) are embedded inline in the section each explains rather than collected in a standalone section.
 
 ### Phase 4 · Dynamic Expert Review
 
