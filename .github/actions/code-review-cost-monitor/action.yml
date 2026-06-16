@@ -54,7 +54,7 @@ inputs:
     required: false
     default: "30"
   attribution:
-    description: Set to `true` to run one model pass on a breach that attributes the regression to the change that caused it. Requires `anthropic_api_key`.
+    description: Set to `true` to run one model pass on a breach that attributes the regression to the change that caused it. Requires `anthropic_api_key` or `anthropic_auth_token`.
     required: false
     default: "false"
   issue_label:
@@ -102,14 +102,14 @@ runs:
       run: bun "${{ github.action_path }}/src/costMonitor.ts"
 
     - name: Install attribution dependencies
-      if: steps.monitor.outputs.breach == 'true' && inputs.attribution == 'true' && inputs.anthropic_api_key != ''
+      if: steps.monitor.outputs.breach == 'true' && inputs.attribution == 'true' && (inputs.anthropic_api_key != '' || inputs.anthropic_auth_token != '')
       shell: bash
       working-directory: ${{ github.action_path }}/../../..
       run: bun install --frozen-lockfile --filter @code-assistants/code-review-action
 
     - name: Attribute regression
       id: attribute
-      if: steps.monitor.outputs.breach == 'true' && inputs.attribution == 'true' && inputs.anthropic_api_key != ''
+      if: steps.monitor.outputs.breach == 'true' && inputs.attribution == 'true' && (inputs.anthropic_api_key != '' || inputs.anthropic_auth_token != '')
       continue-on-error: true
       shell: bash
       # Default working directory on purpose: the script lives in the _actions
