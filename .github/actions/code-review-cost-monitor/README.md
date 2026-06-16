@@ -69,7 +69,7 @@ jobs:
 | `normalized_regression_pct` | no       | `25`                | Percent increase of median cost per output token that fires.                                                                                                  |
 | `min_runs`                  | no       | `8`                 | Minimum review runs (overall and per window) before windowed thresholds are evaluated.                                                                        |
 | `lookback_days`             | no       | `30`                | Days of PR reviews to scrape. Months are expressed as days (e.g. `90`).                                                                                       |
-| `attribution`               | no       | `false`             | Run one model pass on a breach to attribute the regression. Requires `anthropic_api_key`.                                                                     |
+| `attribution`               | no       | `false`             | Run one model pass on a breach to attribute the regression. Requires `anthropic_api_key` or `anthropic_auth_token`.                                           |
 | `issue_label`               | no       | `code-review-cost`  | Label identifying the cost-report issue for dedup.                                                                                                            |
 | `cooldown_days`             | no       | `7`                 | Minimum days between posted reports — a sustained breach comments at most once per cooldown.                                                                  |
 
