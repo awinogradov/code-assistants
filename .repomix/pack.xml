@@ -47477,10 +47477,6 @@ All contributors must adhere to our [Code of Conduct](./CODE_OF_CONDUCT.md). Ple
 
 ### Prerequisites
 
-| Stack          | Requirements                                                     |
-| -------------- | ---------------------------------------------------------------- |
-| **TypeScript** | [Bun](https://bun.sh/) 1.x, [NodeJS](https://nodejs.org/) 22 LTS |
-
 Use [README.md](./README.md) for development setup instructions.
 
 ## How to Contribute
