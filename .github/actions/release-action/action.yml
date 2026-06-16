@@ -269,7 +269,7 @@ runs:
         if [ "$MODE" = "publish" ] && [ -n "$PUBLISH_VERSION" ]; then
           VERSION="$PUBLISH_VERSION"
         else
-          [ -f version ] && VERSION=$(cat version | tr -d '[:space:]')
+          [ -f version ] && VERSION=$(tr -d '[:space:]' < version)
         fi
         if [ -n "$VERSION" ]; then
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
@@ -283,7 +283,7 @@ runs:
       if: inputs.mode == 'publish' && steps.detect-type.outputs.mode == 'standalone'
       shell: bash
       run: |
-        VERSION=$(cat version | tr -d '[:space:]')
+        VERSION=$(tr -d '[:space:]' < version)
         echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
         echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
         echo "Determined version: ${VERSION} (tag: v${VERSION})"
