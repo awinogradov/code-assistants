@@ -14,6 +14,8 @@ import { join } from "node:path";
 
 import Anthropic from "@anthropic-ai/sdk";
 
+import { assertExclusiveAnthropicAuth } from "@code-assistants/actions-core/anthropicAuth";
+
 import {
   anthropicModel,
   buildUserMessage,
@@ -61,11 +63,7 @@ export function resolveAnthropicClientOptions(
   const apiKey = env.ANTHROPIC_API_KEY?.trim() || undefined;
   const authToken = env.ANTHROPIC_AUTH_TOKEN?.trim() || undefined;
   const baseURL = env.ANTHROPIC_BASE_URL?.trim() || undefined;
-  if (apiKey && authToken) {
-    throw new Error(
-      "Set ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN, not both — the Anthropic API rejects requests carrying both."
-    );
-  }
+  assertExclusiveAnthropicAuth(apiKey, authToken);
   return {
     ...(apiKey ? { apiKey } : {}),
     ...(authToken ? { authToken } : {}),
