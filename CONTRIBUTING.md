@@ -490,6 +490,7 @@ Only one strategy is used per repository. Reasons:
 
 **Before submitting:**
 
+```markdown
 - [ ] Branch name starts with `issue-<number>-` or one of the special prefixes (`hotfix-`, `trivial-`, `maintenance-`, `proposal-`, `security-`)
 - [ ] PR title is a business-valuable description (no `#<n>:` prefix) or uses a recognized special prefix
 - [ ] PR description links the issue via `Closes #<n>` / `Fixes #<n>` / `Resolves #<n>` (when applicable)
@@ -499,6 +500,7 @@ Only one strategy is used per repository. Reasons:
 - [ ] Tests pass locally
 - [ ] If release notes included, uses `**Release notes:**` format (not `## Release Notes`)
 - [ ] Code follows standards
+```
 
 ### Good PR examples
 
