@@ -433,6 +433,8 @@ docs/
 packages/
   actions-core/
     src/
+      anthropicAuth.test.ts
+      anthropicAuth.ts
       checkStatus.test.ts
       checkStatus.ts
       fetchRawContent.ts
@@ -7299,6 +7301,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import {
   buildRunSummary,
+  buildSdkEnv,
   countToolRoundTrips,
   deriveMode,
   detectLinuxLibc,
@@ -7709,6 +7712,43 @@ describe("resolveClaudeBinary", () => {
     }
   });
 });
+
+describe("buildSdkEnv", () => {
+  test("defaults auth vars and passes through unrelated keys", () => {
+    const env = buildSdkEnv({ PATH: "/usr/bin", FOO: "bar" });
+    expect(env.PATH).toBe("/usr/bin");
+    expect(env.FOO).toBe("bar");
+    expect(env.ANTHROPIC_API_KEY).toBe("");
+    expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe("");
+    expect(env.GH_TOKEN).toBe("");
+  });
+
+  test("forwards a trimmed ANTHROPIC_BASE_URL when set", () => {
+    const env = buildSdkEnv({ ANTHROPIC_BASE_URL: "  https://gateway.example  " });
+    expect(env.ANTHROPIC_BASE_URL).toBe("https://gateway.example");
+  });
+
+  test("omits a blank ANTHROPIC_BASE_URL so it cannot override the SDK default", () => {
+    expect("ANTHROPIC_BASE_URL" in buildSdkEnv({ ANTHROPIC_BASE_URL: "" })).toBe(false);
+  });
+
+  test("omits a whitespace-only ANTHROPIC_AUTH_TOKEN and forwards a trimmed one", () => {
+    expect("ANTHROPIC_AUTH_TOKEN" in buildSdkEnv({ ANTHROPIC_AUTH_TOKEN: "   " })).toBe(false);
+    expect(buildSdkEnv({ ANTHROPIC_AUTH_TOKEN: " tok " }).ANTHROPIC_AUTH_TOKEN).toBe("tok");
+  });
+
+  test("throws when both ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN are set", () => {
+    expect(() => buildSdkEnv({ ANTHROPIC_API_KEY: "k", ANTHROPIC_AUTH_TOKEN: "t" })).toThrow(
+      "not both"
+    );
+  });
+
+  test("allows ANTHROPIC_API_KEY alone", () => {
+    const env = buildSdkEnv({ ANTHROPIC_API_KEY: "k" });
+    expect(env.ANTHROPIC_API_KEY).toBe("k");
+    expect("ANTHROPIC_AUTH_TOKEN" in env).toBe(false);
+  });
+});
 </file>
 
 <file path=".github/actions/code-review-action/src/runClaude.ts">
@@ -7732,6 +7772,8 @@ import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import pino from "pino";
 import { z } from "zod";
+
+import { assertExclusiveAnthropicAuth } from "@code-assistants/actions-core/anthropicAuth";
 
 import { setOutput } from "./actionsOutput.ts";
 import { logMessage } from "./logClaudeMessage.ts";
@@ -7975,6 +8017,44 @@ export async function resolveClaudeBinary(
   return undefined;
 }
 
+/**
+ * Build the environment handed to the Agent SDK's spawned Claude Code process.
+ *
+ * Pins the auth vars to strings (the SDK's `env` is `Record<string, string>`) and
+ * makes a custom Anthropic host opt-in. GitHub renders an unset optional action
+ * input as `""`, and a blank `ANTHROPIC_BASE_URL` would override the SDK default
+ * with a blank host — so blank `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` are
+ * dropped here rather than forwarded, and set values are trimmed. `ANTHROPIC_API_KEY`
+ * (x-api-key) and `ANTHROPIC_AUTH_TOKEN` (bearer) are mutually exclusive, so setting
+ * both fails fast here instead of as a downstream API 400.
+ *
+ * @param env - Source environment, typically `process.env`.
+ * @returns The env object for `query({ options: { env } })`.
+ * @throws If both `ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN` are non-blank.
+ */
+export function buildSdkEnv(env: Record<string, string | undefined>): Record<string, string> {
+  const baseUrl = env.ANTHROPIC_BASE_URL?.trim() ?? "";
+  const authToken = env.ANTHROPIC_AUTH_TOKEN?.trim() ?? "";
+  assertExclusiveAnthropicAuth(env.ANTHROPIC_API_KEY, env.ANTHROPIC_AUTH_TOKEN);
+
+  // Re-add the host/token below only when non-blank, so an unset optional input
+  // (rendered as "") never reaches the SDK as a host override.
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (value === undefined) continue;
+    if (key === "ANTHROPIC_BASE_URL" || key === "ANTHROPIC_AUTH_TOKEN") continue;
+    result[key] = value;
+  }
+
+  result.ANTHROPIC_API_KEY = env.ANTHROPIC_API_KEY ?? "";
+  result.CLAUDE_CODE_OAUTH_TOKEN = env.CLAUDE_CODE_OAUTH_TOKEN ?? "";
+  result.GH_TOKEN = env.GH_TOKEN ?? "";
+  if (baseUrl !== "") result.ANTHROPIC_BASE_URL = baseUrl;
+  if (authToken !== "") result.ANTHROPIC_AUTH_TOKEN = authToken;
+
+  return result;
+}
+
 let log: pino.Logger | undefined;
 
 /** Run Claude Code and write outputs. Exported for visibility, called from main guard. */
@@ -8019,12 +8099,7 @@ async function run(): Promise<void> {
       systemPrompt: { type: "preset" as const, preset: "claude_code" as const },
       pathToClaudeCodeExecutable,
       abortController,
-      env: {
-        ...(process.env as Record<string, string>),
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? "",
-        CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN ?? "",
-        GH_TOKEN: process.env.GH_TOKEN ?? "",
-      },
+      env: buildSdkEnv(process.env),
     },
   });
 
@@ -9393,6 +9468,12 @@ inputs:
   claude_oauth_token:
     description: "Claude Code OAuth token (alternative to anthropic_api_key)"
     required: false
+  anthropic_base_url:
+    description: "Custom Anthropic API base URL for routing through a gateway/proxy/compatible endpoint (full URL including scheme, e.g. https://gateway.example.com). When unset, the SDK uses the default api.anthropic.com host."
+    required: false
+  anthropic_auth_token:
+    description: "Bearer auth token for a custom Anthropic host (sent as Authorization: Bearer). Alternative to anthropic_api_key — set one, not both."
+    required: false
   settings:
     description: "Claude Code settings JSON (use env to pass API keys for MCP servers)"
     required: false
@@ -9434,10 +9515,12 @@ runs:
       env:
         BOT_TOKEN: ${{ inputs.bot_token }}
         ANTHROPIC_KEY: ${{ inputs.anthropic_api_key }}
+        AUTH_TOKEN: ${{ inputs.anthropic_auth_token }}
         CLAUDE_TOKEN: ${{ inputs.claude_oauth_token }}
       run: |
         echo "bot_token: ${#BOT_TOKEN} chars"
         echo "anthropic_api_key: ${#ANTHROPIC_KEY} chars"
+        echo "anthropic_auth_token: ${#AUTH_TOKEN} chars"
         echo "claude_oauth_token: ${#CLAUDE_TOKEN} chars"
 
         if [[ -z "$BOT_TOKEN" ]]; then
@@ -9445,8 +9528,13 @@ runs:
           exit 1
         fi
 
-        if [[ -z "$ANTHROPIC_KEY" && -z "$CLAUDE_TOKEN" ]]; then
-          echo "::error::Either anthropic_api_key or claude_oauth_token must be provided"
+        if [[ -z "$ANTHROPIC_KEY" && -z "$CLAUDE_TOKEN" && -z "$AUTH_TOKEN" ]]; then
+          echo "::error::Provide one of anthropic_api_key, anthropic_auth_token, or claude_oauth_token"
+          exit 1
+        fi
+
+        if [[ -n "$ANTHROPIC_KEY" && -n "$AUTH_TOKEN" ]]; then
+          echo "::error::Set anthropic_api_key or anthropic_auth_token, not both"
           exit 1
         fi
 
@@ -9823,6 +9911,8 @@ runs:
       shell: bash
       env:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        ANTHROPIC_AUTH_TOKEN: ${{ inputs.anthropic_auth_token }}
+        ANTHROPIC_BASE_URL: ${{ inputs.anthropic_base_url }}
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude_oauth_token }}
         CLAUDE_MODEL: ${{ inputs.model }}
         CLAUDE_RUN_MODE: preflight
@@ -9856,6 +9946,8 @@ runs:
       shell: bash
       env:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        ANTHROPIC_AUTH_TOKEN: ${{ inputs.anthropic_auth_token }}
+        ANTHROPIC_BASE_URL: ${{ inputs.anthropic_base_url }}
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude_oauth_token }}
         GH_TOKEN: ${{ inputs.bot_token }}
         CLAUDE_PROMPT: |
@@ -9921,6 +10013,8 @@ runs:
       shell: bash
       env:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        ANTHROPIC_AUTH_TOKEN: ${{ inputs.anthropic_auth_token }}
+        ANTHROPIC_BASE_URL: ${{ inputs.anthropic_base_url }}
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude_oauth_token }}
         GH_TOKEN: ${{ inputs.bot_token }}
         CLAUDE_PROMPT: |
@@ -10688,30 +10782,42 @@ The `if` condition prevents runner provisioning for non-PR issue comments. All o
 
 ## Inputs
 
-| Input                | Required | Default                  | Description                                                                                                                                                         |
-| -------------------- | -------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `reviewer`           | yes      | —                        | GitHub username added as reviewer and used for `@mention` triggering.                                                                                               |
-| `bot_token`          | yes      | —                        | GitHub token for bot operations (`contents: read`, `pull-requests: write`).                                                                                         |
-| `anthropic_api_key`  | no       | —                        | Anthropic API key. One of `anthropic_api_key` or `claude_oauth_token` is required.                                                                                  |
-| `claude_oauth_token` | no       | —                        | Claude Code OAuth token. Alternative to `anthropic_api_key`.                                                                                                        |
-| `mode`               | no       | `review`                 | Action mode: `review` or `react`. Auto-detected when `react_to_comments` is `true`.                                                                                 |
-| `react_to_comments`  | no       | `true`                   | Auto-detect comment events and route to `react` mode.                                                                                                               |
-| `bot_username`       | no       | falls back to `reviewer` | Username for skipping CI-author PRs labeled `ci-skip-review`.                                                                                                       |
-| `release_pr_authors` | no       | —                        | Comma-separated trusted authors whose `release-*`/`delivery-*` PRs are auto-approved. Empty disables it. See [Release PR auto-approval](#release-pr-auto-approval). |
-| `model`              | no       | `claude-sonnet-4-6`      | Claude model to use.                                                                                                                                                |
-| `settings`           | no       | —                        | Claude Code settings JSON (e.g., env vars for MCP servers).                                                                                                         |
-| `mcp_config`         | no       | —                        | Additional MCP server configuration JSON, merged with repo `.mcp.json`.                                                                                             |
-| `preflight_checks`   | no       | `true`                   | Wait for PR checks to pass before running review (review mode only).                                                                                                |
-| `poll_interval`      | no       | `10`                     | Seconds between check status polls.                                                                                                                                 |
-| `checks_timeout`     | no       | `600`                    | Maximum seconds to wait for checks.                                                                                                                                 |
-| `rules_doc_url`      | no       | see `action.yml`         | Canonical blob URL of the `pr:review` SKILL.md (literal default in `action.yml`); skills build `CHECK-*` links from it. Override only for forks.                    |
-| `debug_logs`         | no       | `false`                  | Enable DEBUG-level Claude trace logging and always upload the execution artifact.                                                                                   |
-| `pr_number`          | no       | event context            | Override auto-detected PR number.                                                                                                                                   |
-| `pr_head_sha`        | no       | event context            | Override auto-detected PR head SHA.                                                                                                                                 |
-| `comment_id`         | no       | event context            | Comment ID (react mode, explicit-input setups).                                                                                                                     |
-| `comment_body`       | no       | event context            | Comment body (react mode, explicit-input setups).                                                                                                                   |
-| `comment_path`       | no       | event context            | File path for review-thread comments.                                                                                                                               |
-| `comment_line`       | no       | event context            | Line number for review-thread comments.                                                                                                                             |
+| Input                  | Required | Default                  | Description                                                                                                                                                                   |
+| ---------------------- | -------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `reviewer`             | yes      | —                        | GitHub username added as reviewer and used for `@mention` triggering.                                                                                                         |
+| `bot_token`            | yes      | —                        | GitHub token for bot operations (`contents: read`, `pull-requests: write`).                                                                                                   |
+| `anthropic_api_key`    | no       | —                        | Anthropic API key. One of `anthropic_api_key`, `anthropic_auth_token`, or `claude_oauth_token` is required.                                                                   |
+| `claude_oauth_token`   | no       | —                        | Claude Code OAuth token. Alternative to `anthropic_api_key`.                                                                                                                  |
+| `anthropic_base_url`   | no       | —                        | Custom Anthropic API base URL for a gateway/proxy/compatible endpoint (full URL with scheme, e.g. `https://gateway.example.com`). Unset uses the default `api.anthropic.com`. |
+| `anthropic_auth_token` | no       | —                        | Bearer token for a custom Anthropic host (sent as `Authorization: Bearer`). Alternative to `anthropic_api_key` — set one, not both.                                           |
+| `mode`                 | no       | `review`                 | Action mode: `review` or `react`. Auto-detected when `react_to_comments` is `true`.                                                                                           |
+| `react_to_comments`    | no       | `true`                   | Auto-detect comment events and route to `react` mode.                                                                                                                         |
+| `bot_username`         | no       | falls back to `reviewer` | Username for skipping CI-author PRs labeled `ci-skip-review`.                                                                                                                 |
+| `release_pr_authors`   | no       | —                        | Comma-separated trusted authors whose `release-*`/`delivery-*` PRs are auto-approved. Empty disables it. See [Release PR auto-approval](#release-pr-auto-approval).           |
+| `model`                | no       | `claude-sonnet-4-6`      | Claude model to use.                                                                                                                                                          |
+| `settings`             | no       | —                        | Claude Code settings JSON (e.g., env vars for MCP servers).                                                                                                                   |
+| `mcp_config`           | no       | —                        | Additional MCP server configuration JSON, merged with repo `.mcp.json`.                                                                                                       |
+| `preflight_checks`     | no       | `true`                   | Wait for PR checks to pass before running review (review mode only).                                                                                                          |
+| `poll_interval`        | no       | `10`                     | Seconds between check status polls.                                                                                                                                           |
+| `checks_timeout`       | no       | `600`                    | Maximum seconds to wait for checks.                                                                                                                                           |
+| `rules_doc_url`        | no       | see `action.yml`         | Canonical blob URL of the `pr:review` SKILL.md (literal default in `action.yml`); skills build `CHECK-*` links from it. Override only for forks.                              |
+| `debug_logs`           | no       | `false`                  | Enable DEBUG-level Claude trace logging and always upload the execution artifact.                                                                                             |
+| `pr_number`            | no       | event context            | Override auto-detected PR number.                                                                                                                                             |
+| `pr_head_sha`          | no       | event context            | Override auto-detected PR head SHA.                                                                                                                                           |
+| `comment_id`           | no       | event context            | Comment ID (react mode, explicit-input setups).                                                                                                                               |
+| `comment_body`         | no       | event context            | Comment body (react mode, explicit-input setups).                                                                                                                             |
+| `comment_path`         | no       | event context            | File path for review-thread comments.                                                                                                                                         |
+| `comment_line`         | no       | event context            | Line number for review-thread comments.                                                                                                                                       |
+
+## Custom Anthropic host
+
+To route requests through a gateway, proxy, or compatible endpoint, set `anthropic_base_url` to a full URL including scheme. When unset, the default `api.anthropic.com` host is used. Gateways that authenticate with a bearer token instead of `x-api-key` can supply `anthropic_auth_token` in place of `anthropic_api_key` — set one, not both (the action fails fast if both are provided).
+
+```yaml
+with:
+  anthropic_base_url: https://gateway.example.com
+  anthropic_auth_token: ${{ secrets.ANTHROPIC_GATEWAY_TOKEN }}
+```
 
 ## Skills consumed
 
@@ -12731,6 +12837,16 @@ inputs:
       Anthropic API key for the optional attribution step. Only used when `attribution` is `true` and a breach fired; leave empty to keep the monitor fully deterministic and free.
     required: false
     default: ""
+  anthropic_base_url:
+    description: |
+      Custom Anthropic API base URL for the attribution step (gateway/proxy/compatible endpoint, full URL including scheme). When unset, the SDK uses the default api.anthropic.com host.
+    required: false
+    default: ""
+  anthropic_auth_token:
+    description: |
+      Bearer auth token for a custom Anthropic host (sent as Authorization: Bearer). Alternative to anthropic_api_key — set one, not both.
+    required: false
+    default: ""
   model:
     description: Claude model for the attribution narrative.
     required: false
@@ -12764,7 +12880,7 @@ inputs:
     required: false
     default: "30"
   attribution:
-    description: Set to `true` to run one model pass on a breach that attributes the regression to the change that caused it. Requires `anthropic_api_key`.
+    description: Set to `true` to run one model pass on a breach that attributes the regression to the change that caused it. Requires `anthropic_api_key` or `anthropic_auth_token`.
     required: false
     default: "false"
   issue_label:
@@ -12812,14 +12928,14 @@ runs:
       run: bun "${{ github.action_path }}/src/costMonitor.ts"
 
     - name: Install attribution dependencies
-      if: steps.monitor.outputs.breach == 'true' && inputs.attribution == 'true' && inputs.anthropic_api_key != ''
+      if: steps.monitor.outputs.breach == 'true' && inputs.attribution == 'true' && (inputs.anthropic_api_key != '' || inputs.anthropic_auth_token != '')
       shell: bash
       working-directory: ${{ github.action_path }}/../../..
       run: bun install --frozen-lockfile --filter @code-assistants/code-review-action
 
     - name: Attribute regression
       id: attribute
-      if: steps.monitor.outputs.breach == 'true' && inputs.attribution == 'true' && inputs.anthropic_api_key != ''
+      if: steps.monitor.outputs.breach == 'true' && inputs.attribution == 'true' && (inputs.anthropic_api_key != '' || inputs.anthropic_auth_token != '')
       continue-on-error: true
       shell: bash
       # Default working directory on purpose: the script lives in the _actions
@@ -12832,6 +12948,8 @@ runs:
         CLAUDE_TIMEOUT_MINUTES: "10"
         CLAUDE_JSON_SCHEMA: '{"type":"object","properties":{"narrative":{"type":"string"}},"required":["narrative"]}'
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        ANTHROPIC_AUTH_TOKEN: ${{ inputs.anthropic_auth_token }}
+        ANTHROPIC_BASE_URL: ${{ inputs.anthropic_base_url }}
       run: CLAUDE_PROMPT="$(cat "$PROMPT_FILE")" bun "${{ github.action_path }}/../code-review-action/src/runClaude.ts"
 
     - name: Post cost-report issue
@@ -13027,21 +13145,23 @@ jobs:
 
 ## Inputs
 
-| Input                       | Required | Default             | Description                                                                                                        |
-| --------------------------- | -------- | ------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `bot_token`                 | yes      | —                   | PAT or App token with `contents: read` + `issues: write`. The report issue is attributed to this token's identity. |
-| `anthropic_api_key`         | no       | _(empty)_           | Anthropic API key for the attribution step. Unused unless `attribution` is `true` and a breach fired.              |
-| `model`                     | no       | `claude-sonnet-4-6` | Claude model for the attribution narrative.                                                                        |
-| `comparison_mode`           | no       | `rolling-baseline`  | `rolling-baseline` or `previous-run` (see [How it decides](#how-it-decides)).                                      |
-| `baseline_window`           | no       | `14`                | Review runs per comparison window.                                                                                 |
-| `increase_pct`              | no       | `25`                | Percent increase of the compared cost metric that fires.                                                           |
-| `single_run_ceiling_usd`    | no       | `1.50`              | Absolute per-run ceiling (USD).                                                                                    |
-| `normalized_regression_pct` | no       | `25`                | Percent increase of median cost per output token that fires.                                                       |
-| `min_runs`                  | no       | `8`                 | Minimum review runs (overall and per window) before windowed thresholds are evaluated.                             |
-| `lookback_days`             | no       | `30`                | Days of PR reviews to scrape. Months are expressed as days (e.g. `90`).                                            |
-| `attribution`               | no       | `false`             | Run one model pass on a breach to attribute the regression. Requires `anthropic_api_key`.                          |
-| `issue_label`               | no       | `code-review-cost`  | Label identifying the cost-report issue for dedup.                                                                 |
-| `cooldown_days`             | no       | `7`                 | Minimum days between posted reports — a sustained breach comments at most once per cooldown.                       |
+| Input                       | Required | Default             | Description                                                                                                                                                   |
+| --------------------------- | -------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bot_token`                 | yes      | —                   | PAT or App token with `contents: read` + `issues: write`. The report issue is attributed to this token's identity.                                            |
+| `anthropic_api_key`         | no       | _(empty)_           | Anthropic API key for the attribution step. Unused unless `attribution` is `true` and a breach fired.                                                         |
+| `anthropic_base_url`        | no       | _(empty)_           | Custom Anthropic API base URL for the attribution step (gateway/proxy/compatible endpoint, full URL with scheme). Unset uses the default `api.anthropic.com`. |
+| `anthropic_auth_token`      | no       | _(empty)_           | Bearer token for a custom Anthropic host (`Authorization: Bearer`). Alternative to `anthropic_api_key` — set one, not both.                                   |
+| `model`                     | no       | `claude-sonnet-4-6` | Claude model for the attribution narrative.                                                                                                                   |
+| `comparison_mode`           | no       | `rolling-baseline`  | `rolling-baseline` or `previous-run` (see [How it decides](#how-it-decides)).                                                                                 |
+| `baseline_window`           | no       | `14`                | Review runs per comparison window.                                                                                                                            |
+| `increase_pct`              | no       | `25`                | Percent increase of the compared cost metric that fires.                                                                                                      |
+| `single_run_ceiling_usd`    | no       | `1.50`              | Absolute per-run ceiling (USD).                                                                                                                               |
+| `normalized_regression_pct` | no       | `25`                | Percent increase of median cost per output token that fires.                                                                                                  |
+| `min_runs`                  | no       | `8`                 | Minimum review runs (overall and per window) before windowed thresholds are evaluated.                                                                        |
+| `lookback_days`             | no       | `30`                | Days of PR reviews to scrape. Months are expressed as days (e.g. `90`).                                                                                       |
+| `attribution`               | no       | `false`             | Run one model pass on a breach to attribute the regression. Requires `anthropic_api_key` or `anthropic_auth_token`.                                           |
+| `issue_label`               | no       | `code-review-cost`  | Label identifying the cost-report issue for dedup.                                                                                                            |
+| `cooldown_days`             | no       | `7`                 | Minimum days between posted reports — a sustained breach comments at most once per cooldown.                                                                  |
 
 ## Outputs
 
@@ -23661,6 +23781,7 @@ import {
   type AnthropicMessages,
   callAnthropicApi,
   generateWithApi,
+  resolveAnthropicClientOptions,
   runReleaseNotes,
   verifyReleaseNotes,
 } from "./generateReleaseNotes.ts";
@@ -23987,7 +24108,12 @@ describe("callAnthropicApi", () => {
       }),
     };
 
-    const result = await callAnthropicApi("test-key", "test prompt", "system prompt", mockMessages);
+    const result = await callAnthropicApi(
+      { apiKey: "test-key" },
+      "test prompt",
+      "system prompt",
+      mockMessages
+    );
 
     expect(result).toBe("Generated notes");
   });
@@ -24003,7 +24129,7 @@ describe("callAnthropicApi", () => {
       },
     };
 
-    await callAnthropicApi("test-key", "user msg", "my system prompt", mockMessages);
+    await callAnthropicApi({ apiKey: "test-key" }, "user msg", "my system prompt", mockMessages);
 
     expect(capturedSystem).toBe("my system prompt");
     expect(capturedUserContent).toBe("user msg");
@@ -24017,7 +24143,7 @@ describe("callAnthropicApi", () => {
     };
 
     await expect(
-      callAnthropicApi("test-key", "test prompt", "system", mockMessages)
+      callAnthropicApi({ apiKey: "test-key" }, "test prompt", "system", mockMessages)
     ).rejects.toThrow("Anthropic API returned no text content");
   });
 });
@@ -24102,7 +24228,7 @@ describe("generateWithApi", () => {
       const notesPath = join(dir, "release_notes.md");
       const bodyPath = join(dir, "missing-body");
 
-      await generateWithApi("fake-key", notesPath, bodyPath, dir);
+      await generateWithApi({ apiKey: "fake-key" }, notesPath, bodyPath, dir);
 
       expect(await Bun.file(notesPath).exists()).toBe(false);
     }));
@@ -24117,7 +24243,7 @@ describe("generateWithApi", () => {
         create: async () => ({ content: [{ type: "text", text: "Summary" }] }),
       };
 
-      await generateWithApi("test-key", notesPath, bodyPath, dir, mockMessages);
+      await generateWithApi({ apiKey: "test-key" }, notesPath, bodyPath, dir, mockMessages);
 
       const notes = await Bun.file(notesPath).text();
       expect(notes).toBe("Summary");
@@ -24138,7 +24264,7 @@ describe("generateWithApi", () => {
       };
 
       await generateWithApi(
-        "test-key",
+        { apiKey: "test-key" },
         join(dir, "notes.md"),
         join(dir, "body.md"),
         dir,
@@ -24147,6 +24273,57 @@ describe("generateWithApi", () => {
 
       expect(captured).toContain("first ticket");
       expect(captured).toContain("pr1: described");
+    }));
+});
+
+describe("resolveAnthropicClientOptions", () => {
+  test("returns only the options that are set, trimmed", () => {
+    const options = resolveAnthropicClientOptions({
+      ANTHROPIC_API_KEY: " sk-key ",
+      ANTHROPIC_BASE_URL: " https://gateway.example ",
+    });
+    expect(options).toEqual({ apiKey: "sk-key", baseURL: "https://gateway.example" });
+  });
+
+  test("treats blank values as unset", () => {
+    expect(
+      resolveAnthropicClientOptions({ ANTHROPIC_BASE_URL: "", ANTHROPIC_AUTH_TOKEN: "   " })
+    ).toEqual({});
+  });
+
+  test("resolves a bearer auth token without an api key", () => {
+    expect(resolveAnthropicClientOptions({ ANTHROPIC_AUTH_TOKEN: "tok" })).toEqual({
+      authToken: "tok",
+    });
+  });
+
+  test("throws when both api key and auth token are set", () => {
+    expect(() =>
+      resolveAnthropicClientOptions({ ANTHROPIC_API_KEY: "k", ANTHROPIC_AUTH_TOKEN: "t" })
+    ).toThrow("not both");
+  });
+});
+
+describe("runReleaseNotes blank-host coercion", () => {
+  test("removes a blank ANTHROPIC_BASE_URL from process.env before SDK use", () =>
+    withTempDir(async (dir) => {
+      const savedKey = process.env.ANTHROPIC_API_KEY;
+      const savedBase = process.env.ANTHROPIC_BASE_URL;
+      process.env.ANTHROPIC_API_KEY = "test-key";
+      process.env.ANTHROPIC_BASE_URL = "";
+      await Bun.write(join(dir, ".release_bot/body"), "### Features\n\n- x");
+      const mockMessages: AnthropicMessages = {
+        create: async () => ({ content: [{ type: "text", text: "notes" }] }),
+      };
+      try {
+        await runReleaseNotes(dir, mockMessages);
+        expect("ANTHROPIC_BASE_URL" in process.env).toBe(false);
+      } finally {
+        if (savedKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+        else process.env.ANTHROPIC_API_KEY = savedKey;
+        if (savedBase === undefined) delete process.env.ANTHROPIC_BASE_URL;
+        else process.env.ANTHROPIC_BASE_URL = savedBase;
+      }
     }));
 });
 </file>
@@ -24168,6 +24345,8 @@ import { join } from "node:path";
 
 import Anthropic from "@anthropic-ai/sdk";
 
+import { assertExclusiveAnthropicAuth } from "@code-assistants/actions-core/anthropicAuth";
+
 import {
   anthropicModel,
   buildUserMessage,
@@ -24187,10 +24366,46 @@ export interface AnthropicMessages {
   }): Promise<{ content: Array<{ type: string; text?: string }> }>;
 }
 
+/** Anthropic client auth/host options resolved from the environment. */
+export interface AnthropicClientOptions {
+  /** API key for `x-api-key` auth. */
+  apiKey?: string;
+  /** Bearer token for `Authorization: Bearer` auth (custom hosts/gateways). */
+  authToken?: string;
+  /** Custom API base URL (gateway/proxy/compatible endpoint). */
+  baseURL?: string;
+}
+
+/**
+ * Resolve Anthropic client options from the environment.
+ *
+ * Trims values and treats blanks as unset: GitHub renders an unset optional action
+ * input as `""`, and a blank base URL would override the SDK default with a blank
+ * host. `apiKey` (x-api-key) and `authToken` (bearer) are mutually exclusive, so
+ * setting both is rejected fast rather than as a downstream API 400.
+ *
+ * @param env - Source environment, typically `process.env`.
+ * @returns Only the options that are actually set.
+ * @throws If both `ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN` are non-blank.
+ */
+export function resolveAnthropicClientOptions(
+  env: Record<string, string | undefined>
+): AnthropicClientOptions {
+  const apiKey = env.ANTHROPIC_API_KEY?.trim() || undefined;
+  const authToken = env.ANTHROPIC_AUTH_TOKEN?.trim() || undefined;
+  const baseURL = env.ANTHROPIC_BASE_URL?.trim() || undefined;
+  assertExclusiveAnthropicAuth(apiKey, authToken);
+  return {
+    ...(apiKey ? { apiKey } : {}),
+    ...(authToken ? { authToken } : {}),
+    ...(baseURL ? { baseURL } : {}),
+  };
+}
+
 /**
  * Call the Anthropic Messages API to generate release notes.
  *
- * @param apiKey - Anthropic API key
+ * @param clientOptions - Resolved Anthropic client auth/host options
  * @param userMessage - User message with changelog and context
  * @param system - System prompt with stable instructions
  * @param messages - Optional messages client (for testing)
@@ -24198,12 +24413,12 @@ export interface AnthropicMessages {
  * @throws On API error or timeout
  */
 export async function callAnthropicApi(
-  apiKey: string,
+  clientOptions: AnthropicClientOptions,
   userMessage: string,
   system: string,
   messages?: AnthropicMessages
 ): Promise<string> {
-  const client = messages ?? new Anthropic({ apiKey, timeout: 120_000 }).messages;
+  const client = messages ?? new Anthropic({ ...clientOptions, timeout: 120_000 }).messages;
 
   const message = await client.create({
     model: anthropicModel,
@@ -24259,7 +24474,7 @@ export async function verifyReleaseNotes(notesPath: string, bodyPath: string): P
 }
 
 export async function generateWithApi(
-  apiKey: string,
+  clientOptions: AnthropicClientOptions,
   notesPath: string,
   bodyPath: string,
   cwd = process.cwd(),
@@ -24282,7 +24497,7 @@ export async function generateWithApi(
 
     const filtered = filterChangelogForAi(changelog);
     const userMessage = buildUserMessage(filtered, serviceContext, tickets, prDescriptions);
-    const notes = await callAnthropicApi(apiKey, userMessage, systemPrompt, messages);
+    const notes = await callAnthropicApi(clientOptions, userMessage, systemPrompt, messages);
 
     await Bun.write(notesPath, notes, { createPath: true });
     console.log("Release notes generated");
@@ -24305,12 +24520,16 @@ export async function runReleaseNotes(
   cwd = process.cwd(),
   messages?: AnthropicMessages,
 ): Promise<void> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const clientOptions = resolveAnthropicClientOptions(process.env);
+  // GitHub renders an unset optional action input as ""; strip a blank host/token so
+  // the SDK's own env fallback cannot read it as a configured (blank) host.
+  if (!process.env.ANTHROPIC_BASE_URL?.trim()) delete process.env.ANTHROPIC_BASE_URL;
+  if (!process.env.ANTHROPIC_AUTH_TOKEN?.trim()) delete process.env.ANTHROPIC_AUTH_TOKEN;
   const notesPath = join(cwd, ".release_bot/release_notes.md");
   const bodyPath = join(cwd, ".release_bot/body");
 
-  if (apiKey) {
-    await generateWithApi(apiKey, notesPath, bodyPath, cwd, messages);
+  if (clientOptions.apiKey || clientOptions.authToken) {
+    await generateWithApi(clientOptions, notesPath, bodyPath, cwd, messages);
   }
 
   await verifyReleaseNotes(notesPath, bodyPath);
@@ -27789,6 +28008,14 @@ inputs:
       Anthropic API key for AI-generated release notes.
       When provided, generates human-readable summaries from the changelog.
     required: false
+  anthropic_base_url:
+    description: |
+      Custom Anthropic API base URL for routing through a gateway/proxy/compatible endpoint (full URL including scheme, e.g. https://gateway.example.com). When unset, the SDK uses the default api.anthropic.com host.
+    required: false
+  anthropic_auth_token:
+    description: |
+      Bearer auth token for a custom Anthropic host (sent as Authorization: Bearer). Alternative to anthropic_api_key — set one, not both.
+    required: false
   name:
     description: |
       Service or library name for PR titles.
@@ -27893,6 +28120,8 @@ runs:
       shell: bash
       env:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        ANTHROPIC_AUTH_TOKEN: ${{ inputs.anthropic_auth_token }}
+        ANTHROPIC_BASE_URL: ${{ inputs.anthropic_base_url }}
         GH_TOKEN: ${{ inputs.bot_token }}
         LINEAR_API_KEY: ${{ inputs.linear_api_key }}
         LINEAR_KEYS: ${{ inputs.linear_keys }}
@@ -27942,6 +28171,8 @@ runs:
       shell: bash
       env:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        ANTHROPIC_AUTH_TOKEN: ${{ inputs.anthropic_auth_token }}
+        ANTHROPIC_BASE_URL: ${{ inputs.anthropic_base_url }}
       run: bun "${{ github.action_path }}/src/generateReleaseNotes.ts"
 
     - name: Update Release Notes File
@@ -28019,7 +28250,7 @@ runs:
         if [ "$MODE" = "publish" ] && [ -n "$PUBLISH_VERSION" ]; then
           VERSION="$PUBLISH_VERSION"
         else
-          [ -f version ] && VERSION=$(cat version | tr -d '[:space:]')
+          [ -f version ] && VERSION=$(tr -d '[:space:]' < version)
         fi
         if [ -n "$VERSION" ]; then
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
@@ -28033,7 +28264,7 @@ runs:
       if: inputs.mode == 'publish' && steps.detect-type.outputs.mode == 'standalone'
       shell: bash
       run: |
-        VERSION=$(cat version | tr -d '[:space:]')
+        VERSION=$(tr -d '[:space:]' < version)
         echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
         echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
         echo "Determined version: ${VERSION} (tag: v${VERSION})"
@@ -28049,7 +28280,7 @@ runs:
       env:
         NPM_TOKEN: ${{ inputs.npm_token }}
       run: |
-        npm config set //registry.npmjs.org/:_authToken $NPM_TOKEN
+        npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
         npm publish
 
     - name: Release Tag
@@ -28575,22 +28806,34 @@ jobs:
 
 ## Inputs
 
-| Input               | Required | Default               | Description                                                                                                     |
-| ------------------- | -------- | --------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `mode`              | yes      | —                     | `create` or `publish`.                                                                                          |
-| `bot_token`         | yes      | —                     | PAT or App installation token with `contents: write` + `pull-requests: write`. See [Permissions](#permissions). |
-| `bot_username`      | no       | `github-actions[bot]` | Git author/committer login for release commits, tags, and PRs. Pass `${{ vars.BOT_USERNAME }}`.                 |
-| `npm_token`         | no       | —                     | NPM token. Required for `publish` with `lib-nodejs` or `lib-bun` release types.                                 |
-| `anthropic_api_key` | no       | —                     | Anthropic API key. When set, generates human-readable release-note summaries.                                   |
-| `name`              | no       | —                     | Service or library name for PR titles (e.g. `Dialog Manager` → `Release Dialog Manager 1.2.0`).                 |
-| `branch`            | no       | `release-{version}`   | Release branch template. `{version}` is substituted. `create` mode only.                                        |
-| `linear_api_key`    | no       | —                     | Linear API key for ticket integration.                                                                          |
-| `linear_keys`       | no       | —                     | Comma-separated Linear key prefixes (e.g. `TEAM,PROJ`).                                                         |
-| `jira_base_url`     | no       | —                     | Jira instance base URL (used with `jira_email` + `jira_api_token`).                                             |
-| `jira_email`        | no       | —                     | Jira authentication email.                                                                                      |
-| `jira_api_token`    | no       | —                     | Jira API token.                                                                                                 |
-| `jira_keys`         | no       | —                     | Comma-separated Jira key prefixes.                                                                              |
-| `slack_token`       | no       | —                     | Slack bot token. Required to post release notifications.                                                        |
+| Input                  | Required | Default               | Description                                                                                                                               |
+| ---------------------- | -------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `mode`                 | yes      | —                     | `create` or `publish`.                                                                                                                    |
+| `bot_token`            | yes      | —                     | PAT or App installation token with `contents: write` + `pull-requests: write`. See [Permissions](#permissions).                           |
+| `bot_username`         | no       | `github-actions[bot]` | Git author/committer login for release commits, tags, and PRs. Pass `${{ vars.BOT_USERNAME }}`.                                           |
+| `npm_token`            | no       | —                     | NPM token. Required for `publish` with `lib-nodejs` or `lib-bun` release types.                                                           |
+| `anthropic_api_key`    | no       | —                     | Anthropic API key. When set, generates human-readable release-note summaries.                                                             |
+| `anthropic_base_url`   | no       | —                     | Custom Anthropic API base URL for a gateway/proxy/compatible endpoint (full URL with scheme). Unset uses the default `api.anthropic.com`. |
+| `anthropic_auth_token` | no       | —                     | Bearer token for a custom Anthropic host (`Authorization: Bearer`). Alternative to `anthropic_api_key` — set one, not both.               |
+| `name`                 | no       | —                     | Service or library name for PR titles (e.g. `Dialog Manager` → `Release Dialog Manager 1.2.0`).                                           |
+| `branch`               | no       | `release-{version}`   | Release branch template. `{version}` is substituted. `create` mode only.                                                                  |
+| `linear_api_key`       | no       | —                     | Linear API key for ticket integration.                                                                                                    |
+| `linear_keys`          | no       | —                     | Comma-separated Linear key prefixes (e.g. `TEAM,PROJ`).                                                                                   |
+| `jira_base_url`        | no       | —                     | Jira instance base URL (used with `jira_email` + `jira_api_token`).                                                                       |
+| `jira_email`           | no       | —                     | Jira authentication email.                                                                                                                |
+| `jira_api_token`       | no       | —                     | Jira API token.                                                                                                                           |
+| `jira_keys`            | no       | —                     | Comma-separated Jira key prefixes.                                                                                                        |
+| `slack_token`          | no       | —                     | Slack bot token. Required to post release notifications.                                                                                  |
+
+## Custom Anthropic host
+
+To generate release notes through a gateway, proxy, or compatible endpoint, set `anthropic_base_url` to a full URL including scheme. When unset, the default `api.anthropic.com` host is used. Gateways that authenticate with a bearer token instead of `x-api-key` can supply `anthropic_auth_token` in place of `anthropic_api_key` — set one, not both (the step fails fast if both are provided).
+
+```yaml
+with:
+  anthropic_base_url: https://gateway.example.com
+  anthropic_auth_token: ${{ secrets.ANTHROPIC_GATEWAY_TOKEN }}
+```
 
 ## Outputs
 
@@ -44080,6 +44323,66 @@ Corrections produced by the independent re-verification pass, recorded so future
 - **`TaskCreate` grant line.** In `plan-bun`, `TaskCreate` is at `:8` (`TaskList` `:6`, `TaskUpdate` `:7`). This is the todo tool, distinct from the absent sub-agent launcher `Task` discussed in 4.1.
 </file>
 
+<file path="packages/actions-core/src/anthropicAuth.test.ts">
+import { describe, expect, test } from "bun:test";
+
+import { assertExclusiveAnthropicAuth, exclusiveAnthropicAuthError } from "./anthropicAuth.ts";
+
+describe("assertExclusiveAnthropicAuth", () => {
+  test("throws when both api key and auth token are non-blank", () => {
+    expect(() => assertExclusiveAnthropicAuth("k", "t")).toThrow(exclusiveAnthropicAuthError);
+  });
+
+  test("allows exactly one auth method, or none", () => {
+    expect(() => assertExclusiveAnthropicAuth("k", undefined)).not.toThrow();
+    expect(() => assertExclusiveAnthropicAuth(undefined, "t")).not.toThrow();
+    expect(() => assertExclusiveAnthropicAuth(undefined, undefined)).not.toThrow();
+  });
+
+  test("treats blank or whitespace-only values as unset", () => {
+    expect(() => assertExclusiveAnthropicAuth("k", "   ")).not.toThrow();
+    expect(() => assertExclusiveAnthropicAuth("", "t")).not.toThrow();
+  });
+});
+</file>
+
+<file path="packages/actions-core/src/anthropicAuth.ts">
+/**
+ * Guard against setting both Anthropic authentication methods at once.
+ *
+ * The Anthropic API rejects a request that carries both `ANTHROPIC_API_KEY`
+ * (x-api-key) and `ANTHROPIC_AUTH_TOKEN` (bearer). Actions that accept both as
+ * optional inputs call this at the boundary to fail fast with a clear message
+ * instead of surfacing an opaque downstream API error.
+ *
+ * @example
+ *   assertExclusiveAnthropicAuth(process.env.ANTHROPIC_API_KEY, process.env.ANTHROPIC_AUTH_TOKEN);
+ */
+
+/** Message thrown when both Anthropic auth methods are non-blank. */
+export const exclusiveAnthropicAuthError =
+  "Set ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN, not both — the Anthropic API rejects requests carrying both.";
+
+/**
+ * Throw when both `apiKey` (x-api-key) and `authToken` (bearer) are non-blank.
+ *
+ * Blank or whitespace-only values count as unset, matching how an omitted GitHub
+ * Actions input renders.
+ *
+ * @param apiKey - Candidate `ANTHROPIC_API_KEY` value.
+ * @param authToken - Candidate `ANTHROPIC_AUTH_TOKEN` value.
+ * @throws If both are non-blank.
+ */
+export function assertExclusiveAnthropicAuth(
+  apiKey: string | undefined,
+  authToken: string | undefined,
+): void {
+  if (apiKey?.trim() && authToken?.trim()) {
+    throw new Error(exclusiveAnthropicAuthError);
+  }
+}
+</file>
+
 <file path="packages/actions-core/src/checkStatus.test.ts">
 /**
  * Contract tests for the shared check-status aggregation.
@@ -45189,7 +45492,8 @@ export function readRootRelease(packageJson: unknown): RootReleaseConfig {
     "./fetchRawContent": "./src/fetchRawContent.ts",
     "./checkStatus": "./src/checkStatus.ts",
     "./parseRepo": "./src/parseRepo.ts",
-    "./releaseField": "./src/releaseField.ts"
+    "./releaseField": "./src/releaseField.ts",
+    "./anthropicAuth": "./src/anthropicAuth.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -47960,9 +48264,9 @@ The `docs/` guides are numbered chapters in reading order — newcomers start at
 - [`contributing-sync`](./.github/actions/contributing-sync/README.md) — sync `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, `SECURITY.md`, and the contributing workflow from upstream
 - [`ban-patterns`](./.github/actions/ban-patterns/README.md) — fail the job when forbidden regex patterns match files in the working tree
 - [`licenses-audit`](./.github/actions/licenses-audit/README.md) — regenerate the license report on dependency-changing PRs, auto-commit drift on same-repo PRs, and fail fork PRs that ship stale license data
-- [`release-action`](./.github/actions/release-action/README.md) — conventional-commit-driven release pipeline for npm packages, GitHub Actions, and Claude plugins
+- [`release-action`](./.github/actions/release-action/README.md) — conventional-commit-driven release pipeline for npm packages, GitHub Actions, and Claude plugins; supports a custom Anthropic host (gateway/proxy) via `anthropic_base_url`
 - [`release-automerge`](./.github/actions/release-automerge/README.md) — merge an approved, all-green release PR (`^release-`), driven by an event-based workflow so `release-publish.yml` runs without a manual click
-- [`code-review-action`](./.github/actions/code-review-action/README.md) — AI code review for pull requests via Claude Code, with a react mode for replying to bot mentions
+- [`code-review-action`](./.github/actions/code-review-action/README.md) — AI code review for pull requests via Claude Code, with a react mode for replying to bot mentions; supports a custom Anthropic host (gateway/proxy) via `anthropic_base_url`
 - [`code-review-cost-monitor`](./.github/actions/code-review-cost-monitor/README.md) — watch the review run-summary footers for cost regressions on a schedule and open (or update) a deduplicated cost-report issue
 - [`code-review-sync`](./.github/actions/code-review-sync/README.md) — sync the canonical AI code-review workflows (`code-review.yml`, `code-review-cost-monitor.yml`) from upstream and open one PR with the differences
 - [`auto-label`](./.github/actions/auto-label/README.md) — label PRs with `<scope>/<workspace-member>` labels for the workspace members a diff touches, and prune orphan labels on merge
