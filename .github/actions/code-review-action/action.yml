@@ -63,6 +63,14 @@ inputs:
     description: "Claude model to use for AI operations"
     required: false
     default: "claude-sonnet-4-6"
+  model_tiering:
+    description: "Route small, low-risk PRs to a cheaper model tier. 'auto' enables tiering; 'off' (default) always uses `model`."
+    required: false
+    default: "off"
+  tier_model:
+    description: "Cheaper model used for small, low-risk PRs when model_tiering is 'auto'."
+    required: false
+    default: "claude-haiku-4-5"
   debug_logs:
     description: "Enable verbose DEBUG-level Claude trace logging and force execution artifact upload. When false, artifacts upload only on failure or when a run exceeds 5 minutes."
     required: false
@@ -464,6 +472,20 @@ runs:
       run: |
         echo "author=$(gh pr view ${{ steps.ctx.outputs.pr_number }} --json author --jq '.author.login')" >> "$GITHUB_OUTPUT"
 
+    - name: Select model tier
+      id: tier
+      if: steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.mode == 'review'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.bot_token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ steps.ctx.outputs.pr_number }}
+        REVIEWER: ${{ inputs.reviewer }}
+        MODEL_TIERING: ${{ inputs.model_tiering }}
+        CLAUDE_MODEL: ${{ inputs.model }}
+        TIER_MODEL: ${{ inputs.tier_model }}
+      run: bun run "${{ github.action_path }}/src/modelTier.ts"
+
     - name: Preflight PR checks
       id: preflight
       if: >-
@@ -493,7 +515,7 @@ runs:
         ANTHROPIC_AUTH_TOKEN: ${{ inputs.anthropic_auth_token }}
         ANTHROPIC_BASE_URL: ${{ inputs.anthropic_base_url }}
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude_oauth_token }}
-        CLAUDE_MODEL: ${{ inputs.model }}
+        CLAUDE_MODEL: ${{ steps.tier.outputs.model || inputs.model }}
         CLAUDE_RUN_MODE: preflight
         CLAUDE_JSON_SCHEMA: '{"type":"object","properties":{"reasons":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"reason":{"type":"string"}},"required":["name","reason"]}}},"required":["reasons"]}'
         EXECUTION_OUTPUT_FILE: ${{ runner.temp }}/claude-explain-output.json
@@ -531,7 +553,7 @@ runs:
         GH_TOKEN: ${{ inputs.bot_token }}
         CLAUDE_PROMPT: |
           /autopilot:pr-review REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} PR_AUTHOR: ${{ steps.pr.outputs.author }} RULES_DOC_URL: ${{ inputs.rules_doc_url }}
-        CLAUDE_MODEL: ${{ inputs.model }}
+        CLAUDE_MODEL: ${{ steps.tier.outputs.model || inputs.model }}
         CLAUDE_ALLOWED_TOOLS: "Bash(gh:*),mcp__repomix__*,mcp__context7__*,mcp__Ref__*,mcp__exa__*,mcp__perplexity__*,Read,Glob,Grep"
         CLAUDE_DISALLOWED_TOOLS: "Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh issue comment:*),Bash(gh api * -X *:*),Bash(gh api * --method *:*),Bash(gh api * -f *:*),Bash(gh api * -F *:*),Bash(gh api * --field *:*),Bash(gh api * --raw-field *:*),Bash(gh api * --input *:*),Bash(gh api graphql:*)"
         CLAUDE_JSON_SCHEMA: '{"type":"object","properties":{"verdict":{"type":"string","enum":["approve","requestChanges","comment"]},"reviewComment":{"type":"string"},"inlineComments":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"},"body":{"type":"string"},"startLine":{"type":"integer"},"suggestion":{"type":"string"}},"required":["path","line","body"]}}},"required":["verdict","reviewComment"]}'
