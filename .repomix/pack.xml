@@ -36963,7 +36963,7 @@ Map each planned change to project rules defined in CLAUDE.md.
 
 ### Visualize with ASCII Schemas
 
-When the planned change is structural or visual, invoke `Skill(autopilot:ascii-schemas)` to generate diagrams and embed them in the plan's `## Diagrams` section (see the stack skill's plan output template).
+When the planned change is structural or visual, invoke `Skill(autopilot:ascii-schemas)` to generate diagrams and embed each one inline in the plan section it explains — beside the relevant implementation step, file entry, or data-flow description — rather than collecting them in a standalone section.
 
 **Trigger** — invoke the skill when the change touches any of:
 
@@ -37157,9 +37157,7 @@ The template below starts with `# <Title>` — see the canonical "Plan File Head
 Steelmanned intent: [verbatim from Phase 0 Steelmanned Intent block]
 Score: [filled in Phase 5 — leave as a placeholder in the draft]
 
-<!-- Include the ## Diagrams section only if the change is architectural/visual/UI/flow-related. Generate diagrams via Skill(autopilot:ascii-schemas) per the plan skill's "Visualize with ASCII Schemas" guidance. -->
-## Diagrams
-[ASCII diagram(s) generated via Skill(autopilot:ascii-schemas) — architecture, data flow, sequence, topology, UI layout, or component interaction. Omit this section entirely for pure logic/refactor changes.]
+<!-- For architectural/visual/UI/flow changes, embed each ASCII diagram from Skill(autopilot:ascii-schemas) inline in the section it explains — beside the relevant implementation step, file entry, or data-flow line — per the "Visualize with ASCII Schemas" guidance. Do not add a standalone diagrams section; omit diagrams entirely for pure logic/refactor changes. -->
 
 ## Implementation Steps
 
@@ -43560,7 +43558,7 @@ Declared once and applied throughout — both the orchestrator phases and the sh
 - **Repository Documentation** — read the root `README.md` and the relevant files under `docs/` as the project's source of truth; the generated plan must keep them current after implementation.
 - **Plan File Header** — every plan file begins with a single `# <Title>` line and a fixed section order.
 - **CLAUDE.md Compliance** — map each planned change to the project's rules.
-- **Visualize with ASCII Schemas** — for structural/visual changes, generate diagrams via `Skill(autopilot:ascii-schemas)` and embed them verbatim.
+- **Visualize with ASCII Schemas** — for structural/visual changes, generate diagrams via `Skill(autopilot:ascii-schemas)` and embed them verbatim, inline in the section each explains.
 
 ## Phase 1 — Detect stack and delegate
 
@@ -43596,7 +43594,7 @@ A synthesis step, not a second crawl: reason over the **Context Map** from Phase
 
 ### Phase 3 · Draft Plan
 
-Assemble a complete plan draft **now** — before scoring and review — so both operate on a concrete artifact, not an imagined one. The draft follows a fixed template: `## Summary` (with steelmanned intent and a `Score:` placeholder), an optional `## Diagrams` section (ASCII via `ascii-schemas`), `## Implementation Steps` (each with an observable `verify:` line patterned on the stack's verify-examples delta), `## Files`, and `## Post-Implementation`.
+Assemble a complete plan draft **now** — before scoring and review — so both operate on a concrete artifact, not an imagined one. The draft follows a fixed template: `## Summary` (with steelmanned intent and a `Score:` placeholder), `## Implementation Steps` (each with an observable `verify:` line patterned on the stack's verify-examples delta), `## Files`, and `## Post-Implementation`. For structural or visual changes, ASCII diagrams (via `ascii-schemas`) are embedded inline in the section each explains rather than collected in a standalone section.
 
 ### Phase 4 · Dynamic Expert Review
 
