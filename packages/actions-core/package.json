@@ -13,7 +13,8 @@
     "./fetchRawContent": "./src/fetchRawContent.ts",
     "./checkStatus": "./src/checkStatus.ts",
     "./parseRepo": "./src/parseRepo.ts",
-    "./releaseField": "./src/releaseField.ts"
+    "./releaseField": "./src/releaseField.ts",
+    "./anthropicAuth": "./src/anthropicAuth.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

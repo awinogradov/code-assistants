@@ -19,6 +19,8 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import pino from "pino";
 import { z } from "zod";
 
+import { assertExclusiveAnthropicAuth } from "@code-assistants/actions-core/anthropicAuth";
+
 import { setOutput } from "./actionsOutput.ts";
 import { logMessage } from "./logClaudeMessage.ts";
 
@@ -279,11 +281,7 @@ export async function resolveClaudeBinary(
 export function buildSdkEnv(env: Record<string, string | undefined>): Record<string, string> {
   const baseUrl = env.ANTHROPIC_BASE_URL?.trim() ?? "";
   const authToken = env.ANTHROPIC_AUTH_TOKEN?.trim() ?? "";
-  if ((env.ANTHROPIC_API_KEY ?? "").trim() !== "" && authToken !== "") {
-    throw new Error(
-      "Set ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN, not both — the Anthropic API rejects requests carrying both."
-    );
-  }
+  assertExclusiveAnthropicAuth(env.ANTHROPIC_API_KEY, env.ANTHROPIC_AUTH_TOKEN);
 
   // Re-add the host/token below only when non-blank, so an unset optional input
   // (rendered as "") never reaches the SDK as a host override.
