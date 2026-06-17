@@ -117,6 +117,7 @@ The content is organized as follows:
         actionsOutput.ts
         classifyReaction.test.ts
         classifyReaction.ts
+        linkResolution.test.ts
         logClaudeMessage.test.ts
         logClaudeMessage.ts
         markedDetailsBlock.test.ts
@@ -5895,6 +5896,161 @@ if (import.meta.main) {
 }
 </file>
 
+<file path=".github/actions/code-review-action/src/linkResolution.test.ts">
+/**
+ * Guards RFC-0001 v3: every local markdown reference must resolve. For each link
+ * in the autopilot skills/agents, docs/, rfc/, README.md, and CONTRIBUTING.md whose
+ * target is repo-local (a relative path or a bare `#anchor`, not an external URL or a
+ * `<placeholder>`), this asserts the target file exists and — when the link carries a
+ * heading anchor into a markdown file — that the anchor matches a real heading (using
+ * GitHub's slug algorithm). Fenced code blocks and the inlined `ref-format` block are
+ * excluded: the links inside them are illustrative specimens, not references.
+ */
+import { existsSync, statSync } from "node:fs";
+import { readdir, readFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
+
+import { describe, expect, test } from "bun:test";
+
+const actionDir = join(import.meta.dirname, "..");
+const repoRoot = join(actionDir, "..", "..", "..");
+
+const sourceDirs = [
+  "claude-plugins/autopilot/skills",
+  "claude-plugins/autopilot/agents",
+  "docs",
+  "rfc",
+];
+const sourceRootFiles = ["README.md", "CONTRIBUTING.md"];
+
+async function walkMarkdown(dir: string): Promise<string[]> {
+  let entries: Awaited<ReturnType<typeof readdir>>;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const out: string[] = [];
+  for (const entry of entries) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...(await walkMarkdown(full)));
+    else if (entry.isFile() && entry.name.endsWith(".md")) out.push(full);
+  }
+  return out;
+}
+
+/** Drop fenced code blocks, honouring CommonMark fences of any length (3+ ` or ~). */
+function stripFences(s: string): string {
+  const out: string[] = [];
+  let fence: { char: string; len: number } | null = null;
+  for (const line of s.split("\n")) {
+    const open = /^\s*(`{3,}|~{3,})/.exec(line);
+    const isBareFence = /^\s*(`{3,}|~{3,})\s*$/.test(line);
+    if (!fence) {
+      if (open) fence = { char: open[1][0], len: open[1].length };
+      else out.push(line);
+    } else if (open && isBareFence && open[1][0] === fence.char && open[1].length >= fence.len) {
+      fence = null;
+    }
+  }
+  return out.join("\n");
+}
+
+const stripRefBlock = (s: string): string =>
+  s.replace(/<!-- ref-format:start -->[\s\S]*?<!-- ref-format:end -->/g, "");
+
+/** Drop inline-code spans so a whole link rendered as a code specimen is not treated as a reference. */
+const stripInlineCode = (s: string): string => s.replace(/`[^`\n]*`/g, "");
+
+const linkPattern = /\[[^\]]*\]\(([^)\s]+)\)/g;
+
+/** Repo-local link targets only: skip external schemes, `<placeholders>`, empty anchors. */
+function isLocalTarget(target: string): boolean {
+  if (!target || target === "#") return false;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(target)) return false;
+  if (target.includes("<") || target.includes(">")) return false;
+  return true;
+}
+
+/** GitHub heading-anchor slug: lowercase, drop punctuation/emoji, spaces → hyphens, de-dupe. */
+function slugify(headingText: string, seen: Map<string, number>): string {
+  let s = headingText.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1");
+  s = s.replace(/[`*_~]/g, "");
+  s = s.trim().toLowerCase();
+  s = s.replace(/[^\p{L}\p{N}\s-]/gu, "");
+  s = s.replace(/\s/g, "-");
+  const count = seen.get(s) ?? 0;
+  seen.set(s, count + 1);
+  return count === 0 ? s : `${s}-${count}`;
+}
+
+const anchorCache = new Map<string, Set<string>>();
+async function anchorsFor(file: string): Promise<Set<string>> {
+  const cached = anchorCache.get(file);
+  if (cached) return cached;
+  const anchors = new Set<string>();
+  const seen = new Map<string, number>();
+  let content: string;
+  try {
+    content = await readFile(file, "utf8");
+  } catch {
+    anchorCache.set(file, anchors);
+    return anchors;
+  }
+  for (const line of stripFences(content).split("\n")) {
+    const heading = /^#{1,6}\s+(.*?)\s*#*\s*$/.exec(line);
+    if (heading) anchors.add(slugify(heading[1], seen));
+    for (const id of line.matchAll(/<a\s+id="([^"]+)"/g)) {
+      anchors.add(id[1]);
+      anchors.add(id[1].toLowerCase());
+    }
+  }
+  anchorCache.set(file, anchors);
+  return anchors;
+}
+
+interface Reference {
+  label: string;
+  sourceFile: string;
+  filePath: string;
+  anchor: string | null;
+}
+
+const sourceFiles = [
+  ...(await Promise.all(sourceDirs.map((d) => walkMarkdown(join(repoRoot, d))))).flat(),
+  ...sourceRootFiles.map((f) => join(repoRoot, f)).filter((f) => existsSync(f)),
+];
+
+const references: Reference[] = [];
+for (const sourceFile of sourceFiles) {
+  const body = stripInlineCode(stripRefBlock(stripFences(await readFile(sourceFile, "utf8"))));
+  for (const match of body.matchAll(linkPattern)) {
+    const target = match[1];
+    if (!isLocalTarget(target)) continue;
+    const hashIndex = target.indexOf("#");
+    const pathPart = hashIndex === -1 ? target : target.slice(0, hashIndex);
+    const anchor = hashIndex === -1 ? null : target.slice(hashIndex + 1);
+    const filePath = pathPart === "" ? sourceFile : resolve(dirname(sourceFile), pathPart);
+    const rel = sourceFile.slice(repoRoot.length + 1);
+    references.push({ label: `${rel} → ${target}`, sourceFile, filePath, anchor });
+  }
+}
+
+describe("link resolution (RFC-0001 v3)", () => {
+  test("found a meaningful number of local references to validate", () => {
+    expect(references.length).toBeGreaterThan(50);
+  });
+
+  test.each(references)("$label", async ({ filePath, anchor }) => {
+    expect(existsSync(filePath)).toBe(true);
+    if (anchor && filePath.endsWith(".md") && statSync(filePath).isFile()) {
+      const anchors = await anchorsFor(filePath);
+      expect(anchors.has(anchor) || anchors.has(anchor.toLowerCase())).toBe(true);
+    }
+  });
+});
+</file>
+
 <file path=".github/actions/code-review-action/src/logClaudeMessage.test.ts">
 /**
  * Tests for scripts/logClaudeMessage.ts — truncation and per-message dispatch.
@@ -6550,12 +6706,12 @@ export function buildMarkedDetailsBlock({
 
 <file path=".github/actions/code-review-action/src/prBodyReferenceFormatting.test.ts">
 /**
- * Guards that the body-generation phases of the pr:create and pr:update autopilot
- * skills explicitly instruct the model to apply the inlined reference-formatting
- * rules (RFC-0001). Both skills already inline the canonical block — the
- * referenceFormattingSync test guards that copy stays byte-identical — but inlining
- * alone never made the generators apply it, so generated PR bodies escaped the
- * standard (issue #279).
+ * Guards that the output-generating autopilot skills explicitly instruct the model to
+ * apply the inlined reference-formatting rules (RFC-0001): pr:create and pr:update (PR
+ * bodies, issue #279) plus plan, plan-bun, plan-nodejs-react, run, and issue:create
+ * (plan files and issue bodies, issue #334). Each already inlines the canonical block —
+ * the referenceFormattingSync test guards that copy stays byte-identical — but inlining
+ * alone never made the generators apply it, so generated output escaped the standard.
  *
  * This is a presence-guard: it asserts the apply-instruction survives in the
  * instructions ABOVE the inlined block, so the wiring cannot be silently dropped. It
@@ -6580,9 +6736,9 @@ const startSentinel = "<!-- ref-format:start -->";
 // generation phase. Reword it only alongside this test.
 const applyInstruction = "reference-formatting rules inlined at the end";
 
-const skills = ["pr:create", "pr:update"];
+const skills = ["pr:create", "pr:update", "plan", "plan-bun", "plan-nodejs-react", "run", "issue:create"];
 
-describe("PR body reference-formatting wiring", () => {
+describe("output reference-formatting wiring", () => {
   test.each(skills)("%s instructs the body generator to apply RFC-0001", async (skill) => {
     const content = await readFile(join(skillsDir, skill, "SKILL.md"), "utf8");
     const blockStart = content.indexOf(startSentinel);
@@ -7219,14 +7375,14 @@ describe("reference-formatting block sync", () => {
 
 <file path=".github/actions/code-review-action/src/replyReferenceFormatting.test.ts">
 /**
- * Structural guard for issue #259: asserts the reply-composition steps of the
- * pr:resolve and pr:answer skills carry the reference-formatting instruction, so
- * review-thread replies and PR comments render references per the standard — most
- * visibly, commit SHAs as links rather than bare text. The canonical standard lives
- * in docs/output-formatting.md and is inlined verbatim into every skill (guarded by
- * referenceFormattingSync); this test checks only that the actionable instruction is
- * PRESENT — the distinctive phrase "render the SHA as a markdown link" — not that the
- * model applies it at runtime, which CI cannot verify.
+ * Structural guard (issues #259, #334): asserts the reply-composition steps of the
+ * pr:resolve and pr:answer skills carry the reference-formatting instructions, so
+ * review-thread replies and PR comments render references per RFC-0001 v3 — commit
+ * SHAs AND any file/doc/skill/agent/section they cite as links rather than bare text.
+ * The canonical standard lives in rfc/0001-reference-formatting.md and is inlined
+ * verbatim into every skill (guarded by referenceFormattingSync); this test checks only
+ * that the actionable instructions are PRESENT — the distinctive phrases below — not that
+ * the model applies them at runtime, which CI cannot verify.
  */
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -7246,6 +7402,11 @@ describe("reply reference-formatting wiring", () => {
   test.each(replySkillFiles)("%s instructs replies to link commit SHAs", async (file) => {
     const content = await readFile(file, "utf8");
     expect(content).toContain("render the SHA as a markdown link");
+  });
+
+  test.each(replySkillFiles)("%s instructs replies to link doc and section references", async (file) => {
+    const content = await readFile(file, "utf8");
+    expect(content).toContain("link any file, doc, skill, agent, or section you cite");
   });
 });
 </file>
@@ -26595,12 +26756,12 @@ REFERENCE FORMATTING (apply to every link, path, and reference in the notes you 
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. \`buildReviewComments\`, \`reviewOutput.ts\`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. \`buildReviewComments\`, \`reviewOutput.ts\`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. \`[release field spec](<repo-blob-url>/docs/06-release-field.md)\`. Use a repo-relative path in repository files and the absolute \`<repo-blob-url>\` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. \`[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)\`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. \`[Phase 6](#phase-6-reply-to-review-threads)\`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare \`#anchor\`, e.g. \`[Phase 6](#phase-6-reply-to-review-threads)\`. Another document: \`path#anchor\` — a repo-relative path in repository files, the absolute \`<repo-blob-url>/path#anchor\` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. \`[0328a61](<repo-commit-url>/0328a61)\`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -33376,10 +33537,10 @@ Output ONLY a single JSON object matching the schema below — no preamble, no s
 | Field        | Type                               | Constraint                                                                                  |
 | ------------ | ---------------------------------- | ------------------------------------------------------------------------------------------- |
 | `expertRole` | string                             | Your expert role, verbatim from the prompt                                                  |
-| `score`      | integer                            | 0–100; the final score after any Phase 3 iteration                                          |
+| `score`      | integer                            | 0–100; the final score after any [Phase 3](#phase-3-auto-iterate) iteration                                          |
 | `verdict`    | `"approved"` \| `"needs-revision"` | `"approved"` when `score` meets the target, otherwise `"needs-revision"`                    |
 | `findings`   | string[]                           | 3–5 entries, strongest first; stack minor objections together rather than listing each      |
-| `revision`   | object \| null                     | `null` when no Phase 3 iteration ran; otherwise `{ "changed": string, "rescore": integer }` |
+| `revision`   | object \| null                     | `null` when no [Phase 3](#phase-3-auto-iterate) iteration ran; otherwise `{ "changed": string, "rescore": integer }` |
 
 Example (illustrative — emit the raw object, not this fenced form):
 
@@ -33547,7 +33708,7 @@ The invoking skill provides in the prompt:
 
 ## Phase 1: Fetch Alert
 
-Store the full JSON so Phase 2 can read every field without another API call:
+Store the full JSON so [Phase 2](#phase-2-degradation) can read every field without another API call:
 
 ```bash
 ALERT_JSON=$(gh api "repos/$REPO/code-scanning/alerts/$NUMBER" 2>/dev/null)
@@ -33557,7 +33718,7 @@ Extract (with `jq`): `.number`, `.state`, `.rule.id`, `.rule.severity` (fall bac
 
 ## Phase 2: Degradation
 
-The code-scanning API fails in predictable ways. On ANY failure, do not crash — return the Phase 3 object with `state: "unresolved"` and a `resolveError` string so the parent can surface it and STOP rather than misroute. Emit exactly one of:
+The code-scanning API fails in predictable ways. On ANY failure, do not crash — return the [Phase 3](#phase-3-output) object with `state: "unresolved"` and a `resolveError` string so the parent can surface it and STOP rather than misroute. Emit exactly one of:
 
 - `unresolved — gh not authenticated` — `gh api user` returns empty.
 - `unresolved — security_events scope required` — the alerts call returns 403 (token lacks `security_events`).
@@ -33581,7 +33742,7 @@ Output ONLY a single JSON object matching the schema below.
 | `line`         | integer \| null | `most_recent_instance.location.start_line`; `null` when unresolved |
 | `message`      | string \| null  | `most_recent_instance.message.text`; `null` when unresolved        |
 | `htmlUrl`      | string \| null  | The API's canonical `html_url`; `null` when unresolved             |
-| `resolveError` | string \| null  | One of the Phase 2 status strings on failure; `null` on success    |
+| `resolveError` | string \| null  | One of the [Phase 2](#phase-2-degradation) status strings on failure; `null` on success    |
 
 Example (success):
 
@@ -33624,11 +33785,11 @@ The invoking skill provides in the prompt:
 
 - **Issue number** (e.g., `42`)
 - **Repository name** (e.g., `awinogradov/code-assistants`)
-- **Auto-assign current user** (optional, default `false`) — when the prompt contains `Auto-assign current user: true`, run Phase 2 and include the `**Assignee:**` line in the Phase 3 output. Otherwise skip Phase 2 entirely and omit the line. Read-only callers (e.g. `pr:review`) must NOT pass the flag.
+- **Auto-assign current user** (optional, default `false`) — when the prompt contains `Auto-assign current user: true`, run [Phase 2](#phase-2-auto-assign-current-user-opt-in) and include the `**Assignee:**` line in the [Phase 3](#phase-3-output) output. Otherwise skip [Phase 2](#phase-2-auto-assign-current-user-opt-in) entirely and omit the line. Read-only callers (e.g. `pr:review`) must NOT pass the flag.
 
 ## Phase 1: Fetch Issue
 
-Store the full JSON in `ISSUE_JSON` so Phase 2 can re-read it without another API call:
+Store the full JSON in `ISSUE_JSON` so [Phase 2](#phase-2-auto-assign-current-user-opt-in) can re-read it without another API call:
 
 ```bash
 ISSUE_JSON=$(gh issue view "$NUMBER" -R "$REPO" --json title,body,comments,labels,state,author,createdAt,assignees)
@@ -33636,11 +33797,11 @@ ISSUE_JSON=$(gh issue view "$NUMBER" -R "$REPO" --json title,body,comments,label
 
 ## Phase 2: Auto-Assign Current User (opt-in)
 
-<!-- Canonical self-assign logic. Mirrored in skills/branch:create/SKILL.md Phase 2. Keep in sync. -->
+<!-- Canonical self-assign logic. Mirrored in [skills/branch:create/SKILL.md Phase 2](../skills/branch:create/SKILL.md#phase-2-fetch-github-issue). Keep in sync. -->
 
-Run this phase ONLY when the caller's prompt contains `Auto-assign current user: true`. Otherwise skip directly to Phase 3 and omit the `**Assignee:**` line from the output.
+Run this phase ONLY when the caller's prompt contains `Auto-assign current user: true`. Otherwise skip directly to [Phase 3](#phase-3-output) and omit the `**Assignee:**` line from the output.
 
-The agent emits exactly one of the status strings below into the Phase 3 `**Assignee:**` line:
+The agent emits exactly one of the status strings below into the [Phase 3](#phase-3-output) `**Assignee:**` line:
 
 - `@<login> (just assigned)`
 - `@<login> (already assigned)`
@@ -33657,17 +33818,17 @@ Resolve the status with these steps:
    LOGIN=$(gh api user --cache 5m --jq .login 2>/dev/null)
    ```
 
-   If `LOGIN` is empty, set status to `unassigned — gh not authenticated` and skip to Phase 3. Do NOT attempt an email-based fallback — `gh api search/users` requires `gh` to be working anyway, can match unrelated accounts that expose the same public email, and shares the same auth/rate-limit failure modes.
+   If `LOGIN` is empty, set status to `unassigned — gh not authenticated` and skip to [Phase 3](#phase-3-output). Do NOT attempt an email-based fallback — `gh api search/users` requires `gh` to be working anyway, can match unrelated accounts that expose the same public email, and shares the same auth/rate-limit failure modes.
 
-2. If the Phase 1 issue `state` is `CLOSED`, set status to `unassigned — issue closed` and skip to Phase 3. Planning work on a closed issue is almost always a mistake; surface it instead of silently mutating.
+2. If the [Phase 1](#phase-1-fetch-issue) issue `state` is `CLOSED`, set status to `unassigned — issue closed` and skip to [Phase 3](#phase-3-output). Planning work on a closed issue is almost always a mistake; surface it instead of silently mutating.
 
-3. Check whether `LOGIN` is already in the assignees array from Phase 1, with an explicit `jq` variable binding:
+3. Check whether `LOGIN` is already in the assignees array from [Phase 1](#phase-1-fetch-issue), with an explicit `jq` variable binding:
 
    ```bash
    ALREADY=$(printf '%s' "$ISSUE_JSON" | jq -r --arg login "$LOGIN" 'any(.assignees[]?; .login == $login)')
    ```
 
-   If `ALREADY == "true"`, set status to `@<LOGIN> (already assigned)` and skip to Phase 3.
+   If `ALREADY == "true"`, set status to `@<LOGIN> (already assigned)` and skip to [Phase 3](#phase-3-output).
 
 4. Otherwise attempt the assignment with explicit stderr capture:
 
@@ -33697,7 +33858,7 @@ Output ONLY a single JSON object matching the schema below — no preamble, no s
 | `title`       | string         | Issue title                                                                           |
 | `status`      | string         | Issue state (e.g. `"OPEN"`, `"CLOSED"`)                                               |
 | `labels`      | string[]       | Label names; empty array when none                                                    |
-| `assignee`    | string \| null | The Phase 2 status string when Phase 2 ran; `null` for read-only callers that skip it |
+| `assignee`    | string \| null | The [Phase 2](#phase-2-auto-assign-current-user-opt-in) status string when [Phase 2](#phase-2-auto-assign-current-user-opt-in) ran; `null` for read-only callers that skip it |
 | `description` | string         | Issue body                                                                            |
 | `comments`    | object[]       | `{ "author": string, "date": string, "body": string }` per comment; empty when none   |
 
@@ -33716,7 +33877,7 @@ Example:
 }
 ```
 
-Emit the raw object, not the fenced form. Set `assignee` to `null` (not the string `"null"`) when Phase 2 did not run.
+Emit the raw object, not the fenced form. Set `assignee` to `null` (not the string `"null"`) when [Phase 2](#phase-2-auto-assign-current-user-opt-in) did not run.
 </file>
 
 <file path="claude-plugins/autopilot/agents/scan-and-analyze-todos.md">
@@ -34380,12 +34541,12 @@ For boxes with headers (tables, cards with title bars):
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -34484,12 +34645,12 @@ echo "This is Claude (<your current model name>) following up. I disagree with [
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -34589,12 +34750,12 @@ gemini -r "latest" "This is Claude (<your current model name>) following up. I d
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -34638,21 +34799,21 @@ Expected forms:
 - `<ISSUE-NUMBER>` — GitHub issue number (e.g., `123` or `#123`). Used to fetch the issue and to build the branch name `issue-<number>-<slug>`.
 - `<ISSUE-NUMBER> "<description>"` — issue number plus custom branch slug description
 - `--hotfix "<description>"` / `--trivial "<description>"` / `--maintenance "<description>"` / `--proposal "<description>"` / `--security "<description>"` — special prefix branches without a GitHub issue (use `--security` for code-scanning alert fixes → `security-<slug>`)
-- `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips the Phase 5 confirmation prompt and creates the branch directly with the auto-generated name. Conflict resolution (Phase 4) and validation errors still surface.
+- `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips the [Phase 5](#phase-5-verify-with-user) confirmation prompt and creates the branch directly with the auto-generated name. Conflict resolution ([Phase 4](#phase-4-check-for-conflicts)) and validation errors still surface.
 
 ## Input resolution
 
 Arguments are optional. When `$ARGUMENTS` is empty OR a field is missing, resolve from context in this order:
 
 - **Issue number** — `$ARGUMENTS` → parse current branch name for `^issue-([0-9]+)` → prompt user only if none found and no special prefix flag is present.
-- **Description** — `$ARGUMENTS` → generate from GitHub issue title via Phase 3 rules → no user prompt (auto-generate always succeeds).
+- **Description** — `$ARGUMENTS` → generate from GitHub issue title via [Phase 3](#phase-3-generate-branch-slug) rules → no user prompt (auto-generate always succeeds).
 - **Special prefix flags** (`--hotfix` / `--trivial` / `--maintenance` / `--proposal` / `--security`) — `$ARGUMENTS` only. Never inferred. Default: none.
 - **`--autopilot`** — `$ARGUMENTS` only. Never inferred. Default: `false` (interactive mode).
 - **Repository conventions** — read `CONTRIBUTING.md` directly from the repository root.
 
 ## Phase 0: Preflight Check
 
-Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversation context. The skill validates current branch state, detects stale merged branches, and ensures main is up to date before a new branch is created. If it outputs a "cancelled" message, stop immediately — do not proceed to Phase 1.
+Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversation context. The skill validates current branch state, detects stale merged branches, and ensures main is up to date before a new branch is created. If it outputs a "cancelled" message, stop immediately — do not proceed to [Phase 1](#phase-1-input-validation).
 
 ## Phase 1: Input Validation
 
@@ -34667,7 +34828,7 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
    - Try to extract description from the conversation history
    - Description is REQUIRED — error if missing: `Description is required for special prefix branches (e.g., /autopilot:branch-create --trivial "fix typo")`
    - Multiple prefix flags not allowed — error: `Only one special prefix flag allowed`
-   - Skip Phase 2 (no GitHub issue to fetch)
+   - Skip [Phase 2](#phase-2-fetch-github-issue) (no GitHub issue to fetch)
 
 3. **If no flag, validate as issue number:**
    - Accept patterns: `^#?[0-9]+$` (strip a leading `#` if present)
@@ -34701,7 +34862,7 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
 
    <!-- Mirrors resolve-issue-context.md Phase 2 (canonical). Keep in sync. -->
 
-   Assigning the issue the moment work starts keeps "who is working on what" accurate. This runs on every issue branch (special-prefix branches skip Phase 2, so they never assign). On ANY failure, emit the status line and continue to Phase 3 — the branch is the deliverable; assignment is a side effect.
+   Assigning the issue the moment work starts keeps "who is working on what" accurate. This runs on every issue branch (special-prefix branches skip [Phase 2](#phase-2-fetch-github-issue), so they never assign). On ANY failure, emit the status line and continue to [Phase 3](#phase-3-generate-branch-slug) — the branch is the deliverable; assignment is a side effect.
 
    Emit exactly one status (same vocabulary as the canonical agent):
    - `@<login> (just assigned)`
@@ -34718,9 +34879,9 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
       LOGIN=$(gh api user --cache 5m --jq .login 2>/dev/null)
       ```
 
-      If `LOGIN` is empty → `unassigned — gh not authenticated`; continue to Phase 3.
+      If `LOGIN` is empty → `unassigned — gh not authenticated`; continue to [Phase 3](#phase-3-generate-branch-slug).
 
-   2. If the issue `state` from step 2 is `CLOSED` → `unassigned — issue closed`; continue to Phase 3.
+   2. If the issue `state` from step 2 is `CLOSED` → `unassigned — issue closed`; continue to [Phase 3](#phase-3-generate-branch-slug).
 
    3. Check whether `LOGIN` is already assigned. GitHub logins are `[A-Za-z0-9-]`, so the login is safe to interpolate into a single `gh --jq` expression (gh's `--jq` cannot take `--arg`); `.assignees[]?` tolerates a null or absent array:
 
@@ -34728,7 +34889,7 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
       ALREADY=$(gh issue view <ISSUE-NUMBER> -R "$REPO" --json assignees --jq "any(.assignees[]?; .login==\"$LOGIN\")" 2>/dev/null)
       ```
 
-      If `ALREADY == "true"` → `@<LOGIN> (already assigned)`; continue to Phase 3.
+      If `ALREADY == "true"` → `@<LOGIN> (already assigned)`; continue to [Phase 3](#phase-3-generate-branch-slug).
 
    4. Otherwise attempt the assignment, capturing stderr and exit code (keep this order; read `$?` on the very next line):
 
@@ -34747,7 +34908,7 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
       - `EDIT_EXIT == 0` AND `VERIFIED != "true"` → `unassigned — permission denied or assignee limit reached`
       - `EDIT_EXIT != 0` → `unassigned — gh edit error: <first line of $STDERR>`
 
-   In all cases, continue to Phase 3.
+   In all cases, continue to [Phase 3](#phase-3-generate-branch-slug).
 
 ## Phase 3: Generate Branch Slug
 
@@ -34823,7 +34984,7 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
 
 ## Phase 5: Verify with User
 
-**Autopilot bypass:** If `autopilotMode` is true (from Phase 1), skip this entire phase and proceed directly to Phase 6 with the resolved branch name. Do NOT call AskUserQuestion.
+**Autopilot bypass:** If `autopilotMode` is true (from [Phase 1](#phase-1-input-validation)), skip this entire phase and proceed directly to [Phase 6](#phase-6-execute) with the resolved branch name. Do NOT call AskUserQuestion.
 
 Present branch details and confirm using **AskUserQuestion tool**.
 
@@ -34857,7 +35018,7 @@ Tool parameters:
 
 Both options use the same `preview` content since the user is choosing an action, not content.
 
-Only proceed to Phase 6 after user selects "Create branch". If "Edit slug" selected, ask for new slug and regenerate branch name.
+Only proceed to [Phase 6](#phase-6-execute) after user selects "Create branch". If "Edit slug" selected, ask for new slug and regenerate branch name.
 
 ## Phase 6: Execute
 
@@ -35025,12 +35186,12 @@ User selects "Checkout existing".
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -35082,13 +35243,13 @@ Arguments are optional. When `$ARGUMENTS` is empty:
 - **Commit context** — skip; rely on the diff itself (`git diff --staged`) plus recent conversation history (skill analyses, user instructions) to generate the message. Do NOT prompt.
 - **`--autopilot`** — `$ARGUMENTS` only. Never inferred. Default: `false` (interactive mode). Strip from `$ARGUMENTS` before parsing the remainder as commit context.
 - **Repository conventions** — read `CONTRIBUTING.md` directly from the repository root.
-- **Existing PR** — detect via `gh pr view --json number,url 2>/dev/null` at Phase 5. No user prompt needed.
+- **Existing PR** — detect via `gh pr view --json number,url 2>/dev/null` at [Phase 5](#phase-5-offer-pr-update). No user prompt needed.
 
 ## AskUserQuestion Contract (MANDATORY)
 
-**Autopilot bypass:** When `autopilotMode` is true (from Phase 1), this entire contract is moot — every AskUserQuestion call in Phases 3, 4, and 5 is skipped. Generate the commit message(s), commit directly, and exit without prompting.
+**Autopilot bypass:** When `autopilotMode` is true (from [Phase 1](#phase-1-check-for-changes)), this entire contract is moot — every AskUserQuestion call in Phases 3, 4, and 5 is skipped. Generate the commit message(s), commit directly, and exit without prompting.
 
-Every AskUserQuestion call that presents content for review (commit messages) MUST follow these exact rules. Simple choice dialogs (Phase 3 commit strategy, Phase 5 PR update offer) are exempt from the preview requirement.
+Every AskUserQuestion call that presents content for review (commit messages) MUST follow these exact rules. Simple choice dialogs ([Phase 3](#phase-3-choose-commit-strategy) commit strategy, [Phase 5](#phase-5-offer-pr-update) PR update offer) are exempt from the preview requirement.
 
 1. **`question` is FIXED TEXT** — use the EXACT string specified in each phase. NEVER add commit messages, file names, diffs, metadata, or any other content to the question field.
 2. **`header` is FIXED TEXT** — use the EXACT string specified in each phase.
@@ -35154,7 +35315,7 @@ AskUserQuestion({
 
 ## Phase 0: Preflight Check
 
-Invoke `Skill(autopilot:preflight-check)` with `mode: commits` from this conversation context. The skill verifies the current branch is appropriate for committing and warns if you are on `main`. If it outputs a "cancelled" message, stop immediately — do not proceed to Phase 1.
+Invoke `Skill(autopilot:preflight-check)` with `mode: commits` from this conversation context. The skill verifies the current branch is appropriate for committing and warns if you are on `main`. If it outputs a "cancelled" message, stop immediately — do not proceed to [Phase 1](#phase-1-check-for-changes).
 
 ## Phase 1: Check for Changes
 
@@ -35181,11 +35342,11 @@ After the agent completes, store the structured results (categories, file lists,
 
 ## Phase 3: Choose Commit Strategy
 
-**Autopilot bypass:** If `autopilotMode` is true, do NOT call AskUserQuestion. Use single commit flow when `singleCommitRecommended: true`; otherwise use grouped commit flow. Proceed to Phase 4.
+**Autopilot bypass:** If `autopilotMode` is true, do NOT call AskUserQuestion. Use single commit flow when `singleCommitRecommended: true`; otherwise use grouped commit flow. Proceed to [Phase 4](#phase-4-execute-commits).
 
 Use the agent's analysis to decide the commit flow:
 
-- **If agent recommends `singleCommitRecommended: true`:** single commit flow (Phase 4)
+- **If agent recommends `singleCommitRecommended: true`:** single commit flow ([Phase 4](#phase-4-execute-commits))
 - **If agent recommends `singleCommitRecommended: false`:** the changeset is large enough to consider splitting. Evaluate whether the changes represent genuinely distinct areas. If a single coherent commit message can describe all changes, use single commit flow. Otherwise, ask the user:
 
   **Formatting Note:** Do not use markdown formatting (bold, italic, headers) in the `question` parameter — it renders as raw text. Use plain text with line breaks and simple labels instead.
@@ -35199,8 +35360,8 @@ Use the agent's analysis to decide the commit flow:
     ]
   - `multiSelect`: false
 
-- **If user chooses "Separate commits":** Continue to Phase 4 with grouped flow
-- **If user chooses "Single commit":** Continue to Phase 4 with single commit flow
+- **If user chooses "Separate commits":** Continue to [Phase 4](#phase-4-execute-commits) with grouped flow
+- **If user chooses "Single commit":** Continue to [Phase 4](#phase-4-execute-commits) with single commit flow
 
 ## Phase 4: Execute Commits
 
@@ -35214,7 +35375,7 @@ Use the agent's analysis to decide the commit flow:
 4. **WHAT-not-WHY validation**: Check the generated title against the WHY signal words and vague signal words listed in the WHAT-not-WHY Rule section below. If the title contains any of those words followed by abstract goals (not technical specifics), or contains the words "review", "feedback", "comments", or "suggestions", regenerate the title using only concrete technical details from the diff. Repeat up to 3 times. If the title still fails, present it to the user with a note that it may need manual rewording.
 5. Verify the title is at most 72 characters: run `printf '%s' "<title>" | wc -m`. If the count exceeds 72, regenerate a shorter title and re-run the check. Do not present a title to the user that exceeds 72 characters.
 
-**Autopilot bypass:** If `autopilotMode` is true, skip steps 6–9 below. Run `git commit -m "<message>"` directly with the generated message and continue to Phase 5.
+**Autopilot bypass:** If `autopilotMode` is true, skip steps 6–9 below. Run `git commit -m "<message>"` directly with the generated message and continue to [Phase 5](#phase-5-offer-pr-update).
 
 6. Present using **AskUserQuestion tool** with preview:
 
@@ -35566,12 +35727,12 @@ User selects "Update PR". Invokes `Skill(autopilot:pr-update)`.
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -35664,7 +35825,7 @@ Tool parameters:
 - `multiSelect`: false
 
 - **If "Cancel" selected:** Abort with message "Operation cancelled."
-- **If "Restructure commits" selected:** Continue to Phase 5
+- **If "Restructure commits" selected:** Continue to [Phase 5](#phase-5-soft-reset)
 
 ## Phase 5: Soft Reset
 
@@ -35709,7 +35870,7 @@ After the commits:create skill completes, output summary:
 
 ## Phase 8: Force Push (conditional)
 
-**Only execute this phase if `remoteBranchExists` is true** (detected in Phase 3). If false, skip to Phase 9.
+**Only execute this phase if `remoteBranchExists` is true** (detected in [Phase 3](#phase-3-analyze-branch-commits)). If false, skip to [Phase 9](#phase-9-offer-pr-update).
 
 The original commits were on the remote before the soft reset. The new restructured commits have different SHAs, so a regular push will be rejected.
 
@@ -35789,12 +35950,12 @@ Run `git fetch origin` and try again.
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -35825,7 +35986,7 @@ No arguments are expected. Any supplied arguments are ignored.
 ## Input resolution
 
 - **Repository** — `gh repo view --json nameWithOwner --jq .nameWithOwner` on the current directory. Do NOT prompt.
-- **Open dependabot PRs** — discovered dynamically in Phase 1.
+- **Open dependabot PRs** — discovered dynamically in [Phase 1](#phase-1-discovery).
 
 ## Phase 1: Discovery
 
@@ -35972,12 +36133,12 @@ Wait 2-3 seconds before next PR to allow CI to update base branch.
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -36032,11 +36193,11 @@ Expected form:
 
 ## Completion Requirement
 
-This workflow is not complete until Phase 8 executes `gh issue create` and outputs the issue URL. Generating a title, generating a body, or running label selection does not constitute completion. Execute all eight phases in sequence.
+This workflow is not complete until [Phase 8](#phase-8-create-issue) executes `gh issue create` and outputs the issue URL. Generating a title, generating a body, or running label selection does not constitute completion. Execute all eight phases in sequence.
 
 ## AskUserQuestion Contract (MANDATORY)
 
-Every AskUserQuestion call that presents content for review (the issue preview in Phase 7) MUST follow these exact rules.
+Every AskUserQuestion call that presents content for review (the issue preview in [Phase 7](#phase-7-verify-with-user)) MUST follow these exact rules.
 
 1. **`question` is FIXED TEXT** — use the EXACT string specified in each phase. NEVER add the issue title, body, metadata, or any other content to the question field.
 2. **`header` is FIXED TEXT** — use the EXACT string specified.
@@ -36087,7 +36248,7 @@ Mirror the codebase-packing approach used by `/autopilot:plan` so the generated 
    - **Code-pattern / "how do projects do X" / migration examples** → `mcp__exa__web_search_exa` for API patterns, changelogs, migration guides, and real-world usage.
    - **Recency / news / "is X deprecated" / general web Q&A** → `mcp__perplexity__perplexity_search` for factual lookups; `mcp__perplexity__perplexity_reason` for trade-off / architectural reasoning.
 
-   Each MCP provides different information; use as many as the hint warrants. Feed the collected snippets into the body generated by Phase 5 (Context and Solution sections in particular).
+   Each MCP provides different information; use as many as the hint warrants. Feed the collected snippets into the body generated by [Phase 5](#phase-5-generate-body) (Context and Solution sections in particular).
 
 **Fallback:** if any MCP server (repomix, context7, Ref, exa, perplexity) is unavailable or returns no results, continue with whatever the remaining sources produced. Use `Grep` and `Read` directly on the repository when repomix is down. Do not block the skill on MCP availability — the generated body should still ship, just with less external context.
 
@@ -36097,15 +36258,15 @@ Mirror the codebase-packing approach used by `/autopilot:plan` so the generated 
 gh label list -R <repo> --limit 100 --json name,description,color
 ```
 
-- On success with non-empty output: store the label list for Phase 6 (suggestion matching).
-- On success with empty output (`[]`): continue with no label suggestions. Phase 7 preview will show `Labels: (none)`.
+- On success with non-empty output: store the label list for [Phase 6](#phase-6-suggest-labels) (suggestion matching).
+- On success with empty output (`[]`): continue with no label suggestions. [Phase 7](#phase-7-verify-with-user) preview will show `Labels: (none)`.
 - On error (non-zero exit, network failure): log a warning and continue with no labels. Do not block the skill.
 
 ## Phase 3: Find Related Issues and PRs
 
 Search the repository for related work in both directions (open + closed) so the new issue can reference duplicates, prior art, and in-flight work.
 
-1. Extract 3-5 keyword phrases from `$ARGUMENTS` + Phase 1 context. Example: for `"users cannot reset password via email"` → `password reset`, `email reset`, `reset password`.
+1. Extract 3-5 keyword phrases from `$ARGUMENTS` + [Phase 1](#phase-1-gather-context) context. Example: for `"users cannot reset password via email"` → `password reset`, `email reset`, `reset password`.
 2. For each keyword phrase, run both:
    ```bash
    gh issue list -R <repo> --search "<phrase>" --state all --limit 10 --json number,title,state,url,labels,updatedAt
@@ -36114,7 +36275,7 @@ Search the repository for related work in both directions (open + closed) so the
 3. Merge and deduplicate by `number`. Rank by relevance (keyword match count + recency from `updatedAt`).
 4. Keep the top 5 results across issues+PRs combined. Categorise each as `[open]`, `[closed]`, or `[merged]` (PRs).
 5. On error (non-zero exit, network failure): log a warning and continue with no related items. Do not block the skill.
-6. Pass the related items into Phase 5 (used in the body's Context section as a `Related: #N, #M` line — magic-word free so it does NOT auto-close anything). The duplicate-detection check against the planned title runs in Phase 4 (after the title exists).
+6. Pass the related items into [Phase 5](#phase-5-generate-body) (used in the body's Context section as a `Related: #N, #M` line — magic-word free so it does NOT auto-close anything). The duplicate-detection check against the planned title runs in [Phase 4](#phase-4-generate-title) (after the title exists).
 
 ## Phase 4: Generate Title
 
@@ -36139,14 +36300,14 @@ Search the repository for related work in both directions (open + closed) so the
 
 **Duplicate-detection check (after the title is generated):**
 
-For each open item returned by Phase 3, compute the keyword-overlap ratio against the generated title:
+For each open item returned by [Phase 3](#phase-3-find-related-issues-and-prs), compute the keyword-overlap ratio against the generated title:
 
 - Tokenize both strings into lowercase keywords, drop English stop words (`a`, `the`, `for`, `to`, `of`, `in`, `on`, etc.).
 - Empty-set guard (apply BEFORE the division):
   - If `titleKeywords` is empty AND `candidateKeywords` is empty → `overlap = 1.0` (both strings are stop-word-only; treat as identical).
   - If exactly one of the two sets is empty → `overlap = 0` (no meaningful overlap; one side has nothing to match against).
 - Otherwise: `overlap = |titleKeywords ∩ candidateKeywords| / min(|titleKeywords|, |candidateKeywords|)`.
-- If `overlap > 0.8` for any open item, set `possibleDuplicate` to that item (the highest-scoring one wins on ties). Phase 7 will surface a warning line so the user can cancel and comment on the existing issue instead.
+- If `overlap > 0.8` for any open item, set `possibleDuplicate` to that item (the highest-scoring one wins on ties). [Phase 7](#phase-7-verify-with-user) will surface a warning line so the user can cancel and comment on the existing issue instead.
 - Closed and merged items are not duplicate candidates (they only feed the `Related:` line); only open items can trigger the warning.
 
 ## Phase 5: Generate Body
@@ -36165,7 +36326,7 @@ Heading format MUST be exact: `## Context` (single space, no trailing colon, no 
 
 - 1-2 paragraphs describing the situation, what work area this touches, why we're noticing it now
 - Single continuous line per paragraph (no hard-wrapping — GitHub renders single newlines as visible line breaks)
-- If Phase 3 returned related items, end the section with a single `Related:` line:
+- If [Phase 3](#phase-3-find-related-issues-and-prs) returned related items, end the section with a single `Related:` line:
   ```
   Related: #123 (open), #456 (closed), #789 (merged)
   ```
@@ -36232,11 +36393,11 @@ Related: #123 (closed)
 
 ## Phase 6: Suggest Labels
 
-Match Phase 2's label list against Phase 4 title + Phase 5 body keywords.
+Match [Phase 2](#phase-2-fetch-available-labels)'s label list against [Phase 4](#phase-4-generate-title) title + [Phase 5](#phase-5-generate-body) body keywords.
 
 1. Score each fetched label by: (a) presence of label name/description keywords in title (weight 2), (b) presence in body (weight 1).
 2. Select the top 0-3 matches.
-3. **Validation:** only labels present in the Phase 2 fetched set may be selected. NEVER invent a label name — `gh issue create --label nonexistent` will fail.
+3. **Validation:** only labels present in the [Phase 2](#phase-2-fetch-available-labels) fetched set may be selected. NEVER invent a label name — `gh issue create --label nonexistent` will fail.
 4. If no label scores > 0, select none and proceed with `Labels: (none)`.
 
 ## Phase 7: Verify with User
@@ -36244,7 +36405,7 @@ Match Phase 2's label list against Phase 4 title + Phase 5 body keywords.
 Present the full issue using AskUserQuestion with preview. See the AskUserQuestion Contract above — all rules are mandatory.
 
 1. Compose the full preview string:
-   - If Phase 3 flagged a `possibleDuplicate`, the FIRST line is:
+   - If [Phase 3](#phase-3-find-related-issues-and-prs) flagged a `possibleDuplicate`, the FIRST line is:
      ```
      Possible duplicates: #123 (<title of duplicate>), #456 (<title>)
      ```
@@ -36277,7 +36438,7 @@ Present the full issue using AskUserQuestion with preview. See the AskUserQuesti
    - Otherwise: `Issue creation cancelled.`
    - Abort.
 
-5. Only proceed to Phase 8 after the user selects "Create issue".
+5. Only proceed to [Phase 8](#phase-8-create-issue) after the user selects "Create issue".
 
 ## Phase 8: Create Issue
 
@@ -36295,7 +36456,7 @@ printf '%s' "<body>" | gh issue create \
 
 **Rules:**
 
-- Pass `--repo <owner/repo>` explicitly (resolved in Phase 0). Do not rely on cwd — this matters in worktrees.
+- Pass `--repo <owner/repo>` explicitly (resolved in [Phase 0](#phase-0-resolve-repository-and-hint)). Do not rely on cwd — this matters in worktrees.
 - Use `--body-file -` to read the body from stdin via `printf '%s'`. Avoids shell expansion of backticks and `$(...)` in the body.
 - Repeat `--label` once per label. Do NOT comma-join — label names may contain commas.
 - If no labels were selected, omit the `--label` flags entirely.
@@ -36339,7 +36500,7 @@ User selects "Create issue".
 /autopilot:issue-create "users cannot reset password via email"
 ```
 
-Phase 3 finds one closed issue #87 ("Password reset endpoint returns 500"). Included as `Related: #87 (closed)` in Context.
+[Phase 3](#phase-3-find-related-issues-and-prs) finds one closed issue #87 ("Password reset endpoint returns 500"). Included as `Related: #87 (closed)` in Context.
 
 AskUserQuestion with:
 
@@ -36363,7 +36524,7 @@ User selects "Create issue".
 /autopilot:issue-create "refactor token streaming pipeline"
 ```
 
-Phase 5 detects that the Solution describes a flow between ≥ 2 components and invokes `Skill(autopilot:ascii-schemas)` to draw the new pipeline.
+[Phase 5](#phase-5-generate-body) detects that the Solution describes a flow between ≥ 2 components and invokes `Skill(autopilot:ascii-schemas)` to draw the new pipeline.
 
 AskUserQuestion preview (abbreviated for readability — every option carries the FULL string):
 
@@ -36417,7 +36578,7 @@ User selects "Create issue".
 /autopilot:issue-create "tidy up README badges"
 ```
 
-`gh label list` returns `[]`. Phase 6 selects no labels. Phase 7 preview shows `Labels: (none)`. Phase 8 omits the `--label` flags entirely:
+`gh label list` returns `[]`. [Phase 6](#phase-6-suggest-labels) selects no labels. [Phase 7](#phase-7-verify-with-user) preview shows `Labels: (none)`. [Phase 8](#phase-8-create-issue) omits the `--label` flags entirely:
 
 ```bash
 printf '%s' "$body" | gh issue create --repo org/repo --title "Tidy up README badges" --body-file -
@@ -36433,7 +36594,7 @@ printf '%s' "$body" | gh issue create --repo org/repo --title "Tidy up README ba
 /autopilot:issue-create "add password reset"
 ```
 
-Phase 3 finds open issue #200 ("Add password reset flow") with > 80% title overlap. Phase 7 prepends a warning line to every preview:
+[Phase 3](#phase-3-find-related-issues-and-prs) finds open issue #200 ("Add password reset flow") with > 80% title overlap. [Phase 7](#phase-7-verify-with-user) prepends a warning line to every preview:
 
 ```
 Possible duplicates: #200 (Add password reset flow)
@@ -36451,16 +36612,18 @@ User selects "Cancel".
 Issue creation cancelled. Consider commenting on #200 instead.
 ```
 
+When you generate the issue body, apply the reference-formatting rules inlined at the end of this skill (the **Reference formatting & readability** block below, RFC-0001 v3) to every reference it contains — link files, docs, skills, agents, sections, and commit SHAs as absolute `<repo-blob-url>` URLs (the body is posted to GitHub, where relative paths do not resolve), and never leave a reference as bare text.
+
 <!-- ref-format:start -->
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -36541,8 +36704,8 @@ Expected form:
 
 ## Input resolution
 
-- **Issue number** — if `$ARGUMENTS` contains an issue number, skip Phases 1-2 and hand it straight to Phase 3. Otherwise list and prompt.
-- **`--all` flag** — parse `$ARGUMENTS` for `--all` independently of the issue number (order does not matter). The skill consumes the flag itself: it only toggles the Phase 1 search string and is never forwarded to a `gh` call. Because a bare issue number skips Phases 1-2, `--all` is a no-op when an issue number is also supplied.
+- **Issue number** — if `$ARGUMENTS` contains an issue number, skip Phases 1-2 and hand it straight to [Phase 3](#phase-3-hand-off-to-autopilot). Otherwise list and prompt.
+- **`--all` flag** — parse `$ARGUMENTS` for `--all` independently of the issue number (order does not matter). The skill consumes the flag itself: it only toggles the [Phase 1](#phase-1-fetch-recent-open-issues) search string and is never forwarded to a `gh` call. Because a bare issue number skips Phases 1-2, `--all` is a no-op when an issue number is also supplied.
 - **Repository** — `gh repo view --json nameWithOwner -q .nameWithOwner`. No prompt. Pass `--repo <owner/repo>` to every `gh` call so the skill is correct inside git worktrees.
 
 ## Phase 0: Resolve Repository
@@ -36553,7 +36716,7 @@ Resolve the repository once and store it as `<repo>` (format `owner/name`):
 gh repo view --json nameWithOwner -q .nameWithOwner
 ```
 
-If `$ARGUMENTS` already supplies an issue number, skip directly to Phase 3.
+If `$ARGUMENTS` already supplies an issue number, skip directly to [Phase 3](#phase-3-hand-off-to-autopilot).
 
 ## Phase 1: Fetch Recent Open Issues
 
@@ -36566,7 +36729,7 @@ Build the search string from the `--all` flag, then list the four most-recently-
 gh issue list --repo <repo> --state open --limit 4 --search "sort:updated-desc no:assignee" --json number,title,labels
 ```
 
-- Non-empty result — keep it for Phase 2.
+- Non-empty result — keep it for [Phase 2](#phase-2-select-an-issue).
 - Clean exit with an empty result (`[]`):
   - With `--all` — there are genuinely no open issues to pick from. Tell the user and stop; if they have a number in mind they can re-invoke as `/issue:run <number>`.
   - Without `--all` — every open issue may already be assigned. Probe once for any open issue, using the default search string with `no:assignee` removed:
@@ -36586,7 +36749,7 @@ Present the fetched issues with `AskUserQuestion` (single-select):
 
 - `question`: "Which issue should autopilot run on? Pick one, or choose Other to enter any issue number."
 - `header`: "Issue"
-- `options`: one entry per fetched issue, `{ label: "#<number> <title>", description: "<comma-separated labels, or 'no labels'>" }` (truncate the title so the label stays short). `AskUserQuestion` requires two to four options, so: with two or more issues, list up to four; with exactly one, list it plus a second option `Enter a different number`; with none, follow Phase 1's empty-result handling and do not call `AskUserQuestion`.
+- `options`: one entry per fetched issue, `{ label: "#<number> <title>", description: "<comma-separated labels, or 'no labels'>" }` (truncate the title so the label stays short). `AskUserQuestion` requires two to four options, so: with two or more issues, list up to four; with exactly one, list it plus a second option `Enter a different number`; with none, follow [Phase 1](#phase-1-fetch-recent-open-issues)'s empty-result handling and do not call `AskUserQuestion`.
 - `multiSelect`: false
 
 Do NOT add an "Other" option — `AskUserQuestion` always provides a free-text "Other" automatically, and adding one is invalid. The auto-provided "Other" lets the user type any issue number, including issues beyond the four shown.
@@ -36640,12 +36803,12 @@ The target issue is not among the four shown; the user chooses "Other" and types
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -36700,7 +36863,7 @@ Additional free-form context can be appended after any of the forms above (e.g.,
 ## Input resolution
 
 - **Task description / issue identifier** — parsed from `$ARGUMENTS`. If empty, prompt once via `AskUserQuestion`: "What should we plan?" with free-form slot. Do not abort silently.
-- **Current branch / worktree / issue-ID mismatch** — resolved via `git` commands and Phase 0 context. No prompts beyond the preflight skill's own prompts.
+- **Current branch / worktree / issue-ID mismatch** — resolved via `git` commands and [Phase 0](#phase-0-input-resolution) context. No prompts beyond the preflight skill's own prompts.
 - **Repository root** — `git rev-parse --show-toplevel`. No prompt.
 
 ## Task Progress Protocol
@@ -36819,19 +36982,19 @@ Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
     - `compress`: true
 ```
 
-After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response — Phase 1 (Context Gathering) is the single phase that reads the codebase from it. Phase 0 does NOT grep or read code: build the issue/alert context, Steelmanned Intent, and Assumptions below from the resolved JSON (issue title/body/comments, or alert rule/message) alone. Defer every codebase read to Phase 1.
+After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response — [Phase 1](#phase-1-context-gathering) (Context Gathering) is the single phase that reads the codebase from it. [Phase 0](#phase-0-input-resolution) does NOT grep or read code: build the issue/alert context, Steelmanned Intent, and Assumptions below from the resolved JSON (issue title/body/comments, or alert rule/message) alone. Defer every codebase read to [Phase 1](#phase-1-context-gathering).
 
 ### Alert Context Output (code-scanning-alert input)
 
 For a `code-scanning-alert` input, render the context from the `resolve-alert-context` JSON instead of the issue block — `source`, `ruleId`, `severity`, `state`, `file:line`, and `message`. There is no TODO search and no assignee. Derive the **Steelmanned Intent** from the alert rule and message (what fixing this alert means), and key everything downstream off the `code-scanning-alert` type:
 
-- **Branch (Phase 2)** — a `security-<slug>` branch (NOT `issue-<n>-…`); the slug paraphrases the rule/file (e.g. `security-tainted-format-string`).
+- **Branch ([Phase 2](#phase-2-embed-branch-creation-in-plan-file))** — a `security-<slug>` branch (NOT `issue-<n>-…`); the slug paraphrases the rule/file (e.g. `security-tainted-format-string`).
 - **PR** — a `SECURITY:` title; the body records the alert reference (`htmlUrl`) and emits **no** `Closes #` (alerts are not closed by PR magic words).
 - **Verify** — the plan's Post-Implementation verify step polls alert state with `gh api repos/{owner}/{repo}/code-scanning/alerts/{n} --jq .state`, expecting `fixed` after merge + the next CodeQL scan.
 
 ### Issue Context Output
 
-The `resolve-issue-context` and `search-codebase-todos` agents each return a single JSON object (see each agent's output schema). Parse both, then render the issue context for display from the `resolve-issue-context` fields — `source`, `title`, `status`, `labels`, `assignee` (only when non-null), `description`, and `comments` — and append the TODO results rendered from `search-codebase-todos`:
+The [`resolve-issue-context`](../../agents/resolve-issue-context.md) and [`search-codebase-todos`](../../agents/search-codebase-todos.md) agents each return a single JSON object (see each agent's output schema). Parse both, then render the issue context for display from the `resolve-issue-context` fields — `source`, `title`, `status`, `labels`, `assignee` (only when non-null), `description`, and `comments` — and append the TODO results rendered from `search-codebase-todos`:
 
 ```
 ### Related TODOs in Codebase
@@ -36857,7 +37020,7 @@ After the Steelmanned Intent, emit two short blocks. This forces interpretive ch
 
 **Assumptions** — up to 5 bullets. Each names an interpretation being made that the user could disagree with (e.g., "treating this as a read-only API, not a webhook"). If none, write "none".
 
-**Open Questions** — material ambiguities that would change the design. If any open question is load-bearing (the plan's structure depends on the answer), raise it via `AskUserQuestion` BEFORE delegating to the stack skill in Phase 1. If none are load-bearing, state "none" and proceed.
+**Open Questions** — material ambiguities that would change the design. If any open question is load-bearing (the plan's structure depends on the answer), raise it via `AskUserQuestion` BEFORE delegating to the stack skill in [Phase 1](#phase-1-detect-stack-and-delegate). If none are load-bearing, state "none" and proceed.
 
 Format:
 
@@ -36875,19 +37038,19 @@ After completing the Issue Context Output, Steelmanned Intent, and Assumptions &
 
 ## Preflight Check
 
-After completing Phase 0, invoke the preflight check skill to validate the git branch state:
+After completing [Phase 0](#phase-0-input-resolution), invoke the preflight check skill to validate the git branch state:
 
 ```
 Skill(autopilot:preflight-check)
 ```
 
-The skill receives `mode: plan` and the Phase 0 context (input type, issue ID) from the conversation history. It validates the current branch, checks for merged/stale branches, detects issue ID mismatches, and ensures main is up to date.
+The skill receives `mode: plan` and the [Phase 0](#phase-0-input-resolution) context (input type, issue ID) from the conversation history. It validates the current branch, checks for merged/stale branches, detects issue ID mismatches, and ensures main is up to date.
 
-If the skill outputs "Planning cancelled", stop execution immediately — do not proceed to Phase 1.
+If the skill outputs "Planning cancelled", stop execution immediately — do not proceed to [Phase 1](#phase-1-detect-stack-and-delegate).
 
 ## Common Instructions
 
-The following apply to ALL stacks throughout planning — both the orchestrator phases below and the shared **Stack Pipeline (Phases 1–6)** the stack skills execute, which points back here rather than restating them:
+The following apply to ALL stacks throughout planning — both the orchestrator phases below and the shared [**Stack Pipeline (Phases 1–6)**](#stack-pipeline-phases-16) the stack skills execute, which points back here rather than restating them:
 
 ### Documentation Lookup Protocol (MANDATORY)
 
@@ -36897,7 +37060,7 @@ Before planning, look up documentation for every technology and library relevant
 
 - Manifest file (`package.json`) — libraries relevant to the task
 - Issue/ticket description — libraries explicitly mentioned by the user
-- Codebase exploration — libraries discovered during Phase 1 exploration
+- Codebase exploration — libraries discovered during [Phase 1](#phase-1-context-gathering) exploration
 
 **Step 2: context7** — For each library, call in sequence:
 
@@ -36940,10 +37103,10 @@ Every plan file written by any stack skill MUST begin with a single `# <Title>` 
 
 **Title derivation:**
 
-- For `github-issue` inputs: use the GitHub issue title verbatim as resolved in Phase 0 (no `#<n>` prefix, no truncation).
+- For `github-issue` inputs: use the GitHub issue title verbatim as resolved in [Phase 0](#phase-0-input-resolution) (no `#<n>` prefix, no truncation).
 - For `plain description` inputs: paraphrase the user's task description into a single sentence (≤80 characters), sentence case.
 
-**Section ordering** when a `## Pre-Implementation` block is also emitted (see Phase 2):
+**Section ordering** when a `## Pre-Implementation` block is also emitted (see [Phase 2](#phase-2-embed-branch-creation-in-plan-file)):
 
 ```
 # <Title>
@@ -36996,7 +37159,7 @@ Always reuse `Skill(autopilot:ascii-schemas)` output verbatim — do not hand-dr
 | `NodeJS+React`          | `Skill(autopilot:plan-nodejs-react)` |
 | `NodeJS+React+Tailwind` | `Skill(autopilot:plan-nodejs-react)` |
 
-4. Invoke the skill. The skill receives the full Phase 0 context (issue data, branch info, TODO matches) from the conversation history and executes the stack-specific phases.
+4. Invoke the skill. The skill receives the full [Phase 0](#phase-0-input-resolution) context (issue data, branch info, TODO matches) from the conversation history and executes the stack-specific phases.
 
 **Formatting Note:** Do not use markdown formatting (bold, italic, headers) in AskUserQuestion `question` parameter — it renders as raw text. Use plain text with line breaks and simple labels instead.
 
@@ -37020,7 +37183,7 @@ Tool parameters:
 
 ### Check conditions
 
-1. Input type from Phase 0 Issue Context
+1. Input type from [Phase 0](#phase-0-input-resolution) Issue Context
 2. Current branch: `git branch --show-current`
 3. Worktree detection — run both commands:
    - `git rev-parse --git-dir`
@@ -37032,7 +37195,7 @@ Tool parameters:
 
 ### If on `main` branch OR `worktreeNeedsBranch` is true
 
-Insert `## Pre-Implementation` directly below the `# <Title>` line (which per the Plan File Header rule above must already be line 1) and above `## Summary`. The block content depends on input type from Phase 0.
+Insert `## Pre-Implementation` directly below the `# <Title>` line (which per the [Plan File Header](#plan-file-header-mandatory) rule above must already be line 1) and above `## Summary`. The block content depends on input type from [Phase 0](#phase-0-input-resolution).
 
 #### Input type is `github-issue` (bare number, `#`-prefixed number, or GitHub issue URL)
 
@@ -37082,7 +37245,7 @@ Do NOT add `## Pre-Implementation` — already on a feature branch with active w
 
 ## Stack Pipeline (Phases 1–6)
 
-The stack skills (`plan-bun`, `plan-nodejs-react`) execute this shared pipeline after the Phase 1 delegation above, supplying their three deltas (example libraries, expert table, verify examples) from their own `## Stack Deltas` section. The pipeline is defined ONCE here so the two stacks cannot drift; wherever a phase says "your stack's <delta>", read the value from the delegating stack skill. These "Phase 1–6" are the stack-execution phases — distinct from this orchestrator's Phase 0–2 above — and the stack skill runs them in order after being delegated to.
+The stack skills (`plan-bun`, `plan-nodejs-react`) execute this shared pipeline after the [Phase 1](#phase-1-detect-stack-and-delegate) delegation above, supplying their three deltas (example libraries, expert table, verify examples) from their own `## Stack Deltas` section. The pipeline is defined ONCE here so the two stacks cannot drift; wherever a phase says "your stack's <delta>", read the value from the delegating stack skill. These "[Phase 1](#phase-1-context-gathering)–6" are the stack-execution phases — distinct from this orchestrator's [Phase 0](#phase-0-input-resolution)–2 above — and the stack skill runs them in order after being delegated to.
 
 ### Task Discovery
 
@@ -37100,19 +37263,19 @@ Use these IDs for all TaskUpdate calls in the phases below.
 
 **FIRST**, call TaskUpdate to set task 2 ("Gather context") to `status: "in_progress"`.
 
-This is the pipeline's single codebase-reading pass: Phase 0 read no code and Phase 2 only synthesizes, so gather here everything the rest of planning needs about the code and record it in the **Context Map** (step 7).
+This is the pipeline's single codebase-reading pass: [Phase 0](#phase-0-input-resolution) read no code and [Phase 2](#phase-2-deep-analysis) only synthesizes, so gather here everything the rest of planning needs about the code and record it in the **Context Map** (step 7).
 
 1. **Branch Changes** - Analyze all changes since diverging from main:
    - `git log origin/main..HEAD --oneline` - commits on this branch
    - `git diff origin/main...HEAD` - all code changes
 2. **Codebase Exploration** - Decide where context comes from before crawling, so the snapshot and live tools don't re-traverse the same tree:
-   - **Snapshot (default — broad/whole-repo reads):** the Phase 0 repomix snapshot already covers the whole tree. Search it with `grep_repomix_output`/`read_repomix_output` (step 6) for related implementations, similar features, and test patterns. Do NOT crawl the tree live for what the snapshot can answer.
-   - **Live tools (Explore agents / Grep / Glob — only what the snapshot cannot serve):** the snapshot reflects `main` at the last merge, so on a feature branch it lags by the in-flight changes; those are in the Phase 1 branch diff (step 1), not the pack. Reach for live tools only for in-flight working-tree code, or a targeted fresh read the snapshot is too stale or too coarse to answer.
-   - Launch Explore agents (parallel) ONLY when the rule above calls for a live read; otherwise skip them. When you do, start from TODO locations found in Phase 0 (if any) and search `*.ts`/`*.tsx` files.
-3. **Documentation Lookup** (MANDATORY) - Follow the **Documentation Lookup Protocol** in `## Common Instructions`. Identify task-relevant libraries from `package.json`, the issue/ticket description, and codebase exploration results (e.g. your stack's **example libraries** delta).
-4. **Repository Documentation** (MANDATORY) - Follow the **Repository Documentation** rule in `## Common Instructions`.
-5. **CLAUDE.md Compliance** - Follow the **CLAUDE.md Compliance** rule in `## Common Instructions`.
-6. **Repomix** - Search codebase via `mcp__repomix__grep_repomix_output` (outputId from Phase 0). Use `mcp__repomix__read_repomix_output` with `startLine`/`endLine` for specific sections only.
+   - **Snapshot (default — broad/whole-repo reads):** the [Phase 0](#phase-0-input-resolution) repomix snapshot already covers the whole tree. Search it with `grep_repomix_output`/`read_repomix_output` (step 6) for related implementations, similar features, and test patterns. Do NOT crawl the tree live for what the snapshot can answer.
+   - **Live tools (Explore agents / Grep / Glob — only what the snapshot cannot serve):** the snapshot reflects `main` at the last merge, so on a feature branch it lags by the in-flight changes; those are in the [Phase 1](#phase-1-context-gathering) branch diff (step 1), not the pack. Reach for live tools only for in-flight working-tree code, or a targeted fresh read the snapshot is too stale or too coarse to answer.
+   - Launch Explore agents (parallel) ONLY when the rule above calls for a live read; otherwise skip them. When you do, start from TODO locations found in [Phase 0](#phase-0-input-resolution) (if any) and search `*.ts`/`*.tsx` files.
+3. **Documentation Lookup** (MANDATORY) - Follow the [**Documentation Lookup Protocol**](#documentation-lookup-protocol-mandatory) in `## Common Instructions`. Identify task-relevant libraries from `package.json`, the issue/ticket description, and codebase exploration results (e.g. your stack's **example libraries** delta).
+4. **Repository Documentation** (MANDATORY) - Follow the [**Repository Documentation**](#repository-documentation-mandatory) rule in `## Common Instructions`.
+5. **CLAUDE.md Compliance** - Follow the [**CLAUDE.md Compliance**](#claudemd-compliance) rule in `## Common Instructions`.
+6. **Repomix** - Search codebase via `mcp__repomix__grep_repomix_output` (outputId from [Phase 0](#phase-0-input-resolution)). Use `mcp__repomix__read_repomix_output` with `startLine`/`endLine` for specific sections only.
 7. **Context Map (the output of this pass)** - Because this is the only phase that reads the codebase, record a compact written inventory of what it found, enough that every later phase reasons over the map instead of re-reading:
    - Relevant files/modules and their role in the change
    - Existing patterns and similar implementations to mirror
@@ -37126,11 +37289,11 @@ After completing all context gathering, call TaskUpdate to set task 2 ("Gather c
 
 **FIRST**, call TaskUpdate to set task 3 ("Analyze codebase") to `status: "in_progress"`.
 
-This is a synthesis step, not a second crawl. Reason over the **Context Map** Phase 1 produced — that map is the codebase read, and it already holds the files, patterns, types, tests, and in-flight changes this analysis needs. Work the dimensions below against it; do not re-grep or re-read the tree to reconstruct what the map already contains.
+This is a synthesis step, not a second crawl. Reason over the **Context Map** [Phase 1](#phase-1-context-gathering) produced — that map is the codebase read, and it already holds the files, patterns, types, tests, and in-flight changes this analysis needs. Work the dimensions below against it; do not re-grep or re-read the tree to reconstruct what the map already contains.
 
-Reach for an additional read only if the Context Map is genuinely missing something the analysis turns on, and only under the same snapshot-vs-live rule Phase 1 applies — then fold the result back into the map:
+Reach for an additional read only if the Context Map is genuinely missing something the analysis turns on, and only under the same snapshot-vs-live rule [Phase 1](#phase-1-context-gathering) applies — then fold the result back into the map:
 
-- a targeted `mcp__repomix__grep_repomix_output`/`mcp__repomix__read_repomix_output` (outputId from Phase 0) for the one missing section, or
+- a targeted `mcp__repomix__grep_repomix_output`/`mcp__repomix__read_repomix_output` (outputId from [Phase 0](#phase-0-input-resolution)) for the one missing section, or
 - a live Grep/Read/Glob for in-flight working-tree code the snapshot is too stale to show (the branch's uncommitted changes).
 
 | Dimension        | Key Questions                                             |
@@ -37145,9 +37308,9 @@ After completing deep analysis, call TaskUpdate to set task 3 ("Analyze codebase
 
 ### Phase 3: Draft Plan
 
-Assemble a complete plan draft now — before scoring and expert review — so both operate on a concrete artifact instead of an imagined one. Build the draft from the output template below and keep it available for Phase 4 (expert review) and Phase 5 (scoring). Leave the `Score:` line as a placeholder; Phase 5 fills it. This draft is interim — do NOT flip any task status here; it flows directly into the Phase 4 review. Task 6 ("Output final plan") activates in Phase 6 when the final plan is written, so the progress list advances in numeric order (Review and Validate finish before Output begins).
+Assemble a complete plan draft now — before scoring and expert review — so both operate on a concrete artifact instead of an imagined one. Build the draft from the output template below and keep it available for [Phase 4](#phase-4-dynamic-expert-review) (expert review) and [Phase 5](#phase-5-validation-scoring) (scoring). Leave the `Score:` line as a placeholder; [Phase 5](#phase-5-validation-scoring) fills it. This draft is interim — do NOT flip any task status here; it flows directly into the [Phase 4](#phase-4-dynamic-expert-review) review. Task 6 ("Output final plan") activates in [Phase 6](#phase-6-finalize-output) when the final plan is written, so the progress list advances in numeric order (Review and Validate finish before Output begins).
 
-The template below starts with `# <Title>` — see the canonical "Plan File Header (MANDATORY)" rule in `## Common Instructions` above for title derivation and section ordering.
+The template below starts with `# <Title>` — see the canonical ["Plan File Header (MANDATORY)"](#plan-file-header-mandatory) rule in `## Common Instructions` above for title derivation and section ordering.
 
 ```
 # <Title>
@@ -37214,7 +37377,7 @@ Use the Agent tool with:
 - `description`: "Expert review: [Role]"
 ```
 
-Wait for all agents to complete. Each returns a JSON object (`expertRole`, `score`, `verdict`, `findings`, `revision`). Aggregate the `findings` across experts to refine the Phase 3 draft internally, and treat any `needs-revision` verdict as a signal to address that expert's findings before finalizing. Do not include the raw expert JSON in the plan output.
+Wait for all agents to complete. Each returns a JSON object (`expertRole`, `score`, `verdict`, `findings`, `revision`). Aggregate the `findings` across experts to refine the [Phase 3](#phase-3-draft-plan) draft internally, and treat any `needs-revision` verdict as a signal to address that expert's findings before finalizing. Do not include the raw expert JSON in the plan output.
 
 After all expert reviews complete, call TaskUpdate to set task 4 ("Review with experts") to `status: "completed"`.
 
@@ -37247,20 +37410,22 @@ After scoring completes, call TaskUpdate to set task 5 ("Validate plan scores") 
 
 **FIRST**, call TaskUpdate to set task 6 ("Output final plan") to `status: "in_progress"`.
 
-Apply the expert findings (Phase 4) and the validated score (Phase 5) to the Phase 3 draft, then write the final plan file. Replace the `Score:` placeholder in the `## Summary` block with the Phase 5 result (`Score: [X]/100`).
+Apply the expert findings ([Phase 4](#phase-4-dynamic-expert-review)) and the validated score ([Phase 5](#phase-5-validation-scoring)) to the [Phase 3](#phase-3-draft-plan) draft, then write the final plan file. Replace the `Score:` placeholder in the `## Summary` block with the [Phase 5](#phase-5-validation-scoring) result (`Score: [X]/100`).
 
 After outputting the final plan, call TaskUpdate to set task 6 ("Output final plan") to `status: "completed"`.
+
+When you write the plan file, apply the reference-formatting rules inlined at the end of this skill (the **Reference formatting & readability** block below, RFC-0001 v3) to every reference it contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
 
 <!-- ref-format:start -->
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -37295,13 +37460,13 @@ allowed-tools:
 
 Continue implementation planning using Bun/NodeJS-specific configuration. Phase 0 context (issue data, branch info, TODO matches) is available from the conversation history.
 
-Execute the shared **Stack Pipeline (Phases 1–6)** defined in `plan/SKILL.md` — Task Discovery, then Phase 1 through Phase 6 in order — supplying the three Bun deltas below wherever the pipeline references your stack's delta.
+Execute the shared [**Stack Pipeline (Phases 1–6)**](../plan/SKILL.md#stack-pipeline-phases-16) defined in [`plan/SKILL.md`](../plan/SKILL.md) — Task Discovery, then [Phase 1](../plan/SKILL.md#phase-1-context-gathering) through [Phase 6](../plan/SKILL.md#phase-6-finalize-output) in order — supplying the three Bun deltas below wherever the pipeline references your stack's delta.
 
 ## Stack Deltas
 
-**Example libraries** (Phase 1, Documentation Lookup): `zod`, `hono`, `@effect/schema`
+**Example libraries** ([Phase 1](../plan/SKILL.md#phase-1-context-gathering), [Documentation Lookup](../plan/SKILL.md#documentation-lookup-protocol-mandatory)): `zod`, `hono`, `@effect/schema`
 
-**Expert table** (Phase 4, Dynamic Expert Review) — always include the Pre-mortem Analyst, then select 2-3 additional experts based on task scope:
+**Expert table** ([Phase 4: Dynamic Expert Review](../plan/SKILL.md#phase-4-dynamic-expert-review)) — always include the Pre-mortem Analyst, then select 2-3 additional experts based on task scope:
 
 | Expert                            | When to Include                        | Focus Areas                                                                                                        |
 | --------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
@@ -37311,23 +37476,25 @@ Execute the shared **Stack Pipeline (Phases 1–6)** defined in `plan/SKILL.md` 
 | **Principal SRE**                 | Production systems, Kubernetes, Docker | Scalability, metrics, stability, performance                                                                       |
 | **Boring Tech Writer**            | User-facing changes                    | README clarity, usage instructions, JSDoc, comments                                                                |
 
-**Verify examples** (Phase 3 draft template, Implementation Steps):
+**Verify examples** ([Phase 3](../plan/SKILL.md#phase-3-draft-plan) draft template, Implementation Steps):
 
 1. [ ] [Action] in `path/to/file.ts`
    - verify: `bun test path/to/file.test.ts` passes
 2. [ ] [Action] in `path/to/file.ts`
    - verify: CLI prints the new flag in `--help` output
 
+When you write the plan file, apply the reference-formatting rules inlined at the end of this skill (the **Reference formatting & readability** block below, RFC-0001 v3) to every reference it contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
+
 <!-- ref-format:start -->
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -37362,13 +37529,13 @@ allowed-tools:
 
 Continue implementation planning using NodeJS+React-specific configuration. Phase 0 context (issue data, branch info, TODO matches) is available from the conversation history.
 
-Execute the shared **Stack Pipeline (Phases 1–6)** defined in `plan/SKILL.md` — Task Discovery, then Phase 1 through Phase 6 in order — supplying the three NodeJS+React deltas below wherever the pipeline references your stack's delta.
+Execute the shared [**Stack Pipeline (Phases 1–6)**](../plan/SKILL.md#stack-pipeline-phases-16) defined in [`plan/SKILL.md`](../plan/SKILL.md) — Task Discovery, then [Phase 1](../plan/SKILL.md#phase-1-context-gathering) through [Phase 6](../plan/SKILL.md#phase-6-finalize-output) in order — supplying the three NodeJS+React deltas below wherever the pipeline references your stack's delta.
 
 ## Stack Deltas
 
-**Example libraries** (Phase 1, Documentation Lookup): `react`, `next`, `@tanstack/react-query`
+**Example libraries** ([Phase 1](../plan/SKILL.md#phase-1-context-gathering), [Documentation Lookup](../plan/SKILL.md#documentation-lookup-protocol-mandatory)): `react`, `next`, `@tanstack/react-query`
 
-**Expert table** (Phase 4, Dynamic Expert Review) — always include the Pre-mortem Analyst, then select 2-3 additional experts based on task scope:
+**Expert table** ([Phase 4: Dynamic Expert Review](../plan/SKILL.md#phase-4-dynamic-expert-review)) — always include the Pre-mortem Analyst, then select 2-3 additional experts based on task scope:
 
 | Expert                         | When to Include           | Focus Areas                                                                                                        |
 | ------------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
@@ -37383,23 +37550,25 @@ Execute the shared **Stack Pipeline (Phases 1–6)** defined in `plan/SKILL.md` 
 | **Principal SRE**              | Production systems        | Scalability, metrics, stability, performance                                                                       |
 | **Boring Tech Writer**         | User-facing changes       | README clarity, usage instructions, JSDoc, comments                                                                |
 
-**Verify examples** (Phase 3 draft template, Implementation Steps):
+**Verify examples** ([Phase 3](../plan/SKILL.md#phase-3-draft-plan) draft template, Implementation Steps):
 
 1. [ ] [Action] in `path/to/file.ts`
    - verify: `vitest run path/to/file.test.ts` passes
 2. [ ] [Action] in `path/to/file.ts`
    - verify: rendered component shows the new label in the page
 
+When you write the plan file, apply the reference-formatting rules inlined at the end of this skill (the **Reference formatting & readability** block below, RFC-0001 v3) to every reference it contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
+
 <!-- ref-format:start -->
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -37441,7 +37610,7 @@ Expected form (typically supplied by `awinogradov/code-review-action`):
 - **`PR_NUMBER`** — `$ARGUMENTS` → `gh pr view --json number --jq .number` for the current branch.
 - **`REVIEWER`** — `$ARGUMENTS` → `gh api user --jq .login` (the authenticated user) as fallback.
 - **`COMMENT_BODY` / `COMMENT_PATH` / `COMMENT_LINE`** — `$ARGUMENTS` only. If missing when invoked interactively, abort with a clear error (these must come from the CI context).
-- **`NEEDS_REVERDICT`** — `$ARGUMENTS` only (`true`/`false`); the orchestrator pre-computes this from the comment text. Defaults to `false` when absent. Gates Phase 4's Verdict Update (see below).
+- **`NEEDS_REVERDICT`** — `$ARGUMENTS` only (`true`/`false`); the orchestrator pre-computes this from the comment text. Defaults to `false` when absent. Gates [Phase 4](#phase-4-decide-actions)'s Verdict Update (see below).
 - **`RULES_DOC_URL`** — `$ARGUMENTS` only. The action always supplies it (its `rules_doc_url` input default is the one canonical copy). When absent (e.g. a manual local run), do NOT fabricate a URL — render any `CHECK-` rule code in `updatedReviewComment` as plain text (the bare code, no link).
 
 Do NOT prompt the user. Return an error JSON structure if required inputs cannot be resolved.
@@ -37456,7 +37625,7 @@ $ARGUMENTS
 
 ### 1.1 PR Context and Diff
 
-Fetch PR metadata and diff (needed locally for Phase 3 evaluation):
+Fetch PR metadata and diff (needed locally for [Phase 3](#phase-3-evaluate) evaluation):
 
 ```bash
 gh pr view <PR_NUMBER> -R <REPO> --json title,body,files,commits,reviews,comments
@@ -37537,7 +37706,7 @@ Always provide a reply. Keep it concise (1-5 sentences). Be direct.
 - If needs discussion: "[Acknowledge point], however [concern]."
 - If question: "[Direct answer]."
 
-Format the reply per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) — the **Reference formatting & readability** rules inlined at the end of this skill; they apply to the text inside the `reply` string value, not the JSON envelope. The reference kind that recurs here is the commit SHA: when the reply cites the commit that fixes the thread, render the SHA as a markdown link `[<sha>](<repo-commit-url>/<sha>)` built from `REPO` — never a bare or backticked SHA.
+Format the reply per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) — the **Reference formatting & readability** rules inlined at the end of this skill; they apply to the text inside the `reply` string value, not the JSON envelope. The reference kind that recurs here is the commit SHA: when the reply cites the commit that fixes the thread, render the SHA as a markdown link `[<sha>](<repo-commit-url>/<sha>)` built from `REPO` — never a bare or backticked SHA. Because replies post as GitHub comments, every other reference resolves only as an absolute link built from `REPO`: render any `CHECK-` rule code as a `RULES_DOC_URL` link exactly as the [`pr:review` skill's §2.5](../pr:review/SKILL.md#25-rule-codes) does, and link any file, doc, skill, agent, or section you cite as a `<repo-blob-url>/path#anchor` URL — never a bare name or a repo-relative path (relative paths do not resolve in a comment).
 
 ### Thread Resolution
 
@@ -37568,7 +37737,7 @@ When `NEEDS_REVERDICT` is `true`, decide from the LIVE unresolved bot-thread sta
 
 ### Review Body Update
 
-Only provide `updatedReviewComment` if `updatedVerdict` is non-null. Follow the same format as the original review body (see the pr:review skill for format rules) — including `CHECK-` rule codes rendered exactly as in the pr:review skill's §2.5: when `RULES_DOC_URL` is set, as markdown links (single: `[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002)`; shared: `[[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002), [CHECK-AI-002](<RULES_DOC_URL>#CHECK-AI-002)]`); when it is absent, as the bare code in plain text (single: `CHECK-BUG-002`; shared: `CHECK-BUG-002, CHECK-AI-002`). Do not read agent files.
+Only provide `updatedReviewComment` if `updatedVerdict` is non-null. Follow the same format as the original review body (see the pr:review skill for format rules) — including `CHECK-` rule codes rendered exactly as in the [`pr:review` skill's §2.5](../pr:review/SKILL.md#25-rule-codes): when `RULES_DOC_URL` is set, as markdown links (single: `[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002)`; shared: `[[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002), [CHECK-AI-002](<RULES_DOC_URL>#CHECK-AI-002)]`); when it is absent, as the bare code in plain text (single: `CHECK-BUG-002`; shared: `CHECK-BUG-002, CHECK-AI-002`). Do not read agent files.
 
 ---
 
@@ -37610,12 +37779,12 @@ Only provide `updatedReviewComment` if `updatedVerdict` is non-null. Follow the 
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -37659,15 +37828,15 @@ Expected flags (all optional, any order):
 - `--release-notes` — include a release notes section in the body (auto-enabled on breaking changes)
 - `--closes #N,#M` — additional issue numbers to close on merge (comma-separated, GitHub issue numbers)
 - `--related #X,#Y` — related issues to link without closing (comma-separated, GitHub issue numbers)
-- `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips the Phase 5 confirmation prompt and creates the PR directly with the generated title and body. When meaningful changes are detected (Phase 2), release notes are auto-added.
+- `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips the [Phase 5](#phase-5-verify-with-user) confirmation prompt and creates the PR directly with the generated title and body. When meaningful changes are detected ([Phase 2](#phase-2-gather-context)), release notes are auto-added.
 
 ## Input resolution
 
 Arguments are optional. Resolve each field in this order:
 
 - **`--draft`** — `$ARGUMENTS` → default `false`. Do NOT prompt.
-- **`--release-notes`** — `$ARGUMENTS` → auto-enable when Phase 2 detects breaking changes → default `false`. Do NOT prompt (user gets an "Add release notes" option in Phase 5 preview).
-- **`--closes`** — `$ARGUMENTS` → branch-name-derived issue number is already added automatically in Phase 4. No prompt; treat absence as intentional.
+- **`--release-notes`** — `$ARGUMENTS` → auto-enable when [Phase 2](#phase-2-gather-context) detects breaking changes → default `false`. Do NOT prompt (user gets an "Add release notes" option in [Phase 5](#phase-5-verify-with-user) preview).
+- **`--closes`** — `$ARGUMENTS` → branch-name-derived issue number is already added automatically in [Phase 4](#phase-4-generate-pr-description). No prompt; treat absence as intentional.
 - **`--related`** — `$ARGUMENTS` → no inference. No prompt; treat absence as intentional.
 - **`--autopilot`** — `$ARGUMENTS` only. Never inferred. Default: `false` (interactive mode).
 - **Branch + base + issue number** — from `git branch --show-current` and the branch-name pattern `^issue-([0-9]+)-`. Special prefix branches (`hotfix-`, `trivial-`, `maintenance-`, `proposal-`) have no issue number. No prompt.
@@ -37675,15 +37844,15 @@ Arguments are optional. Resolve each field in this order:
 
 ## Completion Requirement
 
-This workflow is not complete until Phase 6 executes `gh pr create` and outputs the PR URL. Generating a title, generating a description, or running validation does not constitute completion. Execute all six phases in sequence.
+This workflow is not complete until [Phase 6](#phase-6-create-pull-request) executes `gh pr create` and outputs the PR URL. Generating a title, generating a description, or running validation does not constitute completion. Execute all six phases in sequence.
 
 Do not call any skill not listed in `allowed-tools` above. The title and description rules in Phases 3-4 are the validation — there is no separate validation step.
 
 ## AskUserQuestion Contract (MANDATORY)
 
-**Autopilot bypass:** When `autopilotMode` is true (from Phase 1), this contract is moot — the Phase 5 confirmation prompt is skipped. Generate the title and body, then proceed directly to Phase 6.
+**Autopilot bypass:** When `autopilotMode` is true (from [Phase 1](#phase-1-validate-current-state)), this contract is moot — the [Phase 5](#phase-5-verify-with-user) confirmation prompt is skipped. Generate the title and body, then proceed directly to [Phase 6](#phase-6-create-pull-request).
 
-Every AskUserQuestion call that presents content for review (PR previews in Phase 5) MUST follow these exact rules. Simple choice dialogs (Phase 1 uncommitted changes) are exempt from the preview requirement.
+Every AskUserQuestion call that presents content for review (PR previews in [Phase 5](#phase-5-verify-with-user)) MUST follow these exact rules. Simple choice dialogs ([Phase 1](#phase-1-validate-current-state) uncommitted changes) are exempt from the preview requirement.
 
 1. **`question` is FIXED TEXT** — use the EXACT string specified in each phase. NEVER add PR titles, bodies, metadata, file lists, diffs, or any other content to the question field.
 2. **`header` is FIXED TEXT** — use the EXACT string specified in each phase.
@@ -37736,18 +37905,18 @@ AskUserQuestion({
 
 ## Phase 0: Preflight Check
 
-Invoke `Skill(autopilot:preflight-check)` with `mode: pr` from this conversation context. The skill verifies the current branch is appropriate for opening a PR and warns if you are on `main`. If it outputs a "cancelled" message, stop immediately — do not proceed to Phase 1.
+Invoke `Skill(autopilot:preflight-check)` with `mode: pr` from this conversation context. The skill verifies the current branch is appropriate for opening a PR and warns if you are on `main`. If it outputs a "cancelled" message, stop immediately — do not proceed to [Phase 1](#phase-1-validate-current-state).
 
 ## Phase 1: Validate Current State
 
-Uncommitted-change handling is done in Phase 0 by `preflight-check` — do not repeat it here.
+Uncommitted-change handling is done in [Phase 0](#phase-0-preflight-check) by `preflight-check` — do not repeat it here.
 
 0. Parse `$ARGUMENTS`: if it contains `--autopilot`, set `autopilotMode = true` and remove the flag before further parsing. Otherwise `autopilotMode = false`.
 1. Get current branch name with `git branch --show-current`
 2. Validate branch name follows convention:
    - Standard: `issue-<number>-<short-description>` (e.g., `issue-123-add-feature`)
    - Special prefix: `<hotfix|trivial|maintenance|proposal|security>-<short-description>` (e.g., `hotfix-memory-leak-editor`, `security-tainted-format-string`)
-3. Extract the issue number from the branch (e.g., `123` from `issue-123-add-feature`) for use in the `**Issues:**` section as `Closes #123`. OR detect the special prefix (`hotfix`, `trivial`, `maintenance`, `proposal`, `security`) and uppercase it for the PR title prefix (e.g., `HOTFIX:`, `SECURITY:`). For a `security-` branch, emit NO `Closes #` — record the code-scanning alert reference instead (see Phase 4).
+3. Extract the issue number from the branch (e.g., `123` from `issue-123-add-feature`) for use in the `**Issues:**` section as `Closes #123`. OR detect the special prefix (`hotfix`, `trivial`, `maintenance`, `proposal`, `security`) and uppercase it for the PR title prefix (e.g., `HOTFIX:`, `SECURITY:`). For a `security-` branch, emit NO `Closes #` — record the code-scanning alert reference instead (see [Phase 4](#phase-4-generate-pr-description)).
 4. If branch name is invalid, warn user and ask how to proceed
 
 ## Phase 2: Gather Context
@@ -37817,7 +37986,7 @@ Each section is separated by `---`. The `**Issues:**` section is ALWAYS last. Pl
 Include this section (titled `**Release notes:**`) with a `---` separator when:
 
 - `--release-notes` flag is present, OR
-- Breaking changes were detected (Phase 2 step 8 — mandatory)
+- Breaking changes were detected ([Phase 2](#phase-2-gather-context) step 8 — mandatory)
 
 Content rules:
 
@@ -37847,7 +38016,7 @@ Content rules:
 - DO NOT place magic words (e.g., `Closes #N`, `Related to #N`) as bare text in the description — they MUST be inside the `**Issues:**` section
 - Issue links MUST use magic words — NEVER use markdown links like `[#N](url)`
 - The section is omitted ONLY for special prefix branches (HOTFIX / TRIVIAL / MAINTENANCE / PROPOSAL / SECURITY) when no issue numbers are provided
-- For a `security-` branch (code-scanning alert fix), the `**Issues:**` section is omitted and replaced by an `**Alert:**` section recording the alert reference — a `---` separator, then `**Alert:**` on its own line, then the alert URL. The URL is the `htmlUrl` from the run skill's Phase 0 `resolve-alert-context` output, carried in conversation context; when `pr:create` runs standalone (no parent context), resolve it via `gh api repos/{owner}/{repo}/code-scanning/alerts/{n}` if the alert number is known, otherwise ask the user for the alert URL. Emit NO `Closes #`: code-scanning alerts close on the next scan, not via PR magic words. The `**Alert:**` section is last, in the same slot `**Issues:**` would occupy.
+- For a `security-` branch (code-scanning alert fix), the `**Issues:**` section is omitted and replaced by an `**Alert:**` section recording the alert reference — a `---` separator, then `**Alert:**` on its own line, then the alert URL. The URL is the `htmlUrl` from the [`run` skill's Phase 0](../run/SKILL.md#phase-0-input-resolution) `resolve-alert-context` output, carried in conversation context; when `pr:create` runs standalone (no parent context), resolve it via `gh api repos/{owner}/{repo}/code-scanning/alerts/{n}` if the alert number is known, otherwise ask the user for the alert URL. Emit NO `Closes #`: code-scanning alerts close on the next scan, not via PR magic words. The `**Alert:**` section is last, in the same slot `**Issues:**` would occupy.
 
 **Magic Words:**
 
@@ -37905,10 +38074,10 @@ Closes #<issue-from-branch>
 
 ## Phase 5: Verify with User
 
-**Autopilot bypass:** If `autopilotMode` is true, skip the AskUserQuestion confirmation below. Before proceeding to Phase 6:
+**Autopilot bypass:** If `autopilotMode` is true, skip the AskUserQuestion confirmation below. Before proceeding to [Phase 6](#phase-6-create-pull-request):
 
-- If meaningful changes are detected (Phase 2 step 7) AND neither `--release-notes` nor breaking changes triggered the release notes section, auto-generate the `**Release notes:**` section using the rules in Phase 4 and insert it between the description and the `**Issues:**` section (with `---` separators).
-- Then proceed directly to Phase 6 with the resulting title and body.
+- If meaningful changes are detected ([Phase 2](#phase-2-gather-context) step 7) AND neither `--release-notes` nor breaking changes triggered the release notes section, auto-generate the `**Release notes:**` section using the rules in [Phase 4](#phase-4-generate-pr-description) and insert it between the description and the `**Issues:**` section (with `---` separators).
+- Then proceed directly to [Phase 6](#phase-6-create-pull-request) with the resulting title and body.
 
 Present PR details using **AskUserQuestion tool** with preview.
 
@@ -37923,7 +38092,7 @@ Present PR details using **AskUserQuestion tool** with preview.
    - `header`: "Create PR"
    - `options`:
 
-     **If `--release-notes` was NOT used AND no breaking changes AND meaningful changes detected (Phase 2 step 7):**
+     **If `--release-notes` was NOT used AND no breaking changes AND meaningful changes detected ([Phase 2](#phase-2-gather-context) step 7):**
      [
      { label: "Create PR", description: "Create pull request ready for review", preview: "<full PR content>" },
      { label: "Add release notes", description: "Generate a release notes section for the changelog", preview: "<full PR content>" },
@@ -37943,7 +38112,7 @@ Present PR details using **AskUserQuestion tool** with preview.
    All options use the same `preview` content (full PR title + body) since the user is choosing an action, not content. The preview enables a side-by-side layout in the UI.
 
 3. If user selects "Add release notes":
-   - Generate the **Release notes:** section (same rules as Phase 4)
+   - Generate the **Release notes:** section (same rules as [Phase 4](#phase-4-generate-pr-description))
    - Insert it into the PR body between the description and issue links sections (with `---` separators)
    - Re-present the full PR content using AskUserQuestion with preview (without the "Add release notes" option)
 
@@ -37952,7 +38121,7 @@ Present PR details using **AskUserQuestion tool** with preview.
 5. If user selects "Cancel": abort with "PR creation cancelled."
 
 6. Only proceed after user selects "Create PR"
-7. Once "Create PR" is selected, immediately continue to Phase 6 below to execute `gh pr create`. Do not stop here.
+7. Once "Create PR" is selected, immediately continue to [Phase 6](#phase-6-create-pull-request) below to execute `gh pr create`. Do not stop here.
 
 ## Phase 6: Create Pull Request
 
@@ -38196,12 +38365,12 @@ User selects "Create PR".
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -38269,9 +38438,9 @@ Use the Agent tool with:
 - `run_in_background`: true
 ```
 
-Output: "PR monitoring started in the background. You'll be notified when the review status changes." Then return — do NOT continue to Phase 1 in the launching turn.
+Output: "PR monitoring started in the background. You'll be notified when the review status changes." Then return — do NOT continue to [Phase 1](#phase-1-detect-pr) in the launching turn.
 
-Otherwise (no `--background` flag, or already inside an Agent subprocess), continue to Phase 1.
+Otherwise (no `--background` flag, or already inside an Agent subprocess), continue to [Phase 1](#phase-1-detect-pr).
 
 ## Execution Modes
 
@@ -38283,7 +38452,7 @@ Interactive — blocks the conversation, invokes `pr:resolve` when changes are r
 
 ### Background Mode
 
-When invoked via the Agent tool with `run_in_background: true` (spawned by Phase 0 of this skill), the skill operates non-interactively:
+When invoked via the Agent tool with `run_in_background: true` (spawned by [Phase 0](#phase-0-mode-dispatch) of this skill), the skill operates non-interactively:
 
 - **Do NOT invoke** `Skill(autopilot:pr-resolve)` — the user is not available for interaction
 - **Do NOT attempt to fix CI checks** — the user is not available for interaction and fixes may require judgment calls
@@ -38313,7 +38482,7 @@ When invoked via the Agent tool with `run_in_background: true` (spawned by Phase
   Fix the failing checks and push, or run /pr:monitor again.
   ```
 
-- For approved/merged/closed, return the same Phase 3 exit message as foreground mode
+- For approved/merged/closed, return the same [Phase 3](#phase-3-exit) exit message as foreground mode
 
 **Detect background mode:** If the prompt contains "background mode" — use background behavior. Otherwise, use foreground behavior.
 
@@ -38425,11 +38594,11 @@ gh pr view <PR_NUMBER> --json state,reviewDecision,statusCheckRollup
 
 **If `state` is `MERGED`:**
 
-- Exit to Phase 3 with status "merged"
+- Exit to [Phase 3](#phase-3-exit) with status "merged"
 
 **If `state` is `CLOSED`:**
 
-- Exit to Phase 3 with status "closed"
+- Exit to [Phase 3](#phase-3-exit) with status "closed"
 
 **If `reviewDecision` is `APPROVED` AND all checks in `statusCheckRollup` have `state === "SUCCESS"`:**
 
@@ -38443,7 +38612,7 @@ gh pr view <PR_NUMBER> --json state,reviewDecision,statusCheckRollup
    - Set `cooldownRemaining = 3`
    - Continue polling loop (go to 2.1)
 5. If HEAD unchanged:
-   - Exit to Phase 3 with status "approved"
+   - Exit to [Phase 3](#phase-3-exit) with status "approved"
 
 **If `reviewDecision` is `CHANGES_REQUESTED`:**
 
@@ -38523,7 +38692,7 @@ For each failing check, extract the run-id from the `link` field: parse the URL 
    - Set `cooldownRemaining = 3`
    - Continue polling loop (go to 2.1)
 5. If HEAD unchanged:
-   - Exit to Phase 3 with status "approved"
+   - Exit to [Phase 3](#phase-3-exit) with status "approved"
 
 ### 2.3 Check for New Reviews
 
@@ -38617,12 +38786,12 @@ URL: <pr-url>
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -38743,8 +38912,8 @@ Agent 1 (fetch-pr-reviews):
 
 After all calls complete:
 
-- Store the `outputId` from the snapshot acquisition (attach or pack) response — use `grep_repomix_output` and `read_repomix_output` with this ID to search and read codebase content during Phase 4 (code fixes)
-- Store the categorized review comments from `fetch-pr-reviews` — use in Phase 3
+- Store the `outputId` from the snapshot acquisition (attach or pack) response — use `grep_repomix_output` and `read_repomix_output` with this ID to search and read codebase content during [Phase 4](#phase-4-address-comments-code-fixes) (code fixes)
+- Store the categorized review comments from `fetch-pr-reviews` — use in [Phase 3](#phase-3-present-findings-to-user)
 
 ### 1.5 Project Rules
 
@@ -38834,7 +39003,7 @@ For comments that do not require code changes (questions, misunderstandings):
    - If reviewer is wrong: "You're right that [X looks concerning], but [reason it's correct]. [Evidence from code]."
    - If needs discussion: "[Acknowledge point], however [concern or alternative]."
    - If question: "[Direct answer with reference to code]."
-3. Store the reply for Phase 6
+3. Store the reply for [Phase 6](#phase-6-reply-to-review-threads)
 
 ---
 
@@ -38846,11 +39015,11 @@ For comments that do not require code changes (questions, misunderstandings):
 git status --porcelain
 ```
 
-If no changes (only replies needed, no code fixes), skip to Phase 6.
+If no changes (only replies needed, no code fixes), skip to [Phase 6](#phase-6-reply-to-review-threads).
 
 ### 5.2 Commit
 
-Before invoking commits:create, compile a modification list from the changes made in Phase 4. For each code change, write one bullet naming the concrete modification (file, function, value, or behavior that changed).
+Before invoking commits:create, compile a modification list from the changes made in [Phase 4](#phase-4-address-comments-code-fixes). For each code change, write one bullet naming the concrete modification (file, function, value, or behavior that changed).
 
 Example modification list:
 
@@ -38882,7 +39051,7 @@ Compose replies for all processed comments. **Always mention the reviewer** with
 - **Partially addressed**: "@\<reviewer\> [What was changed and why, plus what was intentionally kept]."
 - **Declined by user**: "@\<reviewer\> Considered — [explanation of why this suggestion was not applied]."
 
-Format every reply per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) — the **Reference formatting & readability** rules inlined at the end of this skill. The reference kind that recurs here is the commit SHA: when a reply cites the commit that resolved a thread (the HEAD commit after [Phase 5](#phase-5-commit-and-push)'s push, post-rebase/squash), render the SHA as a markdown link `[<sha>](<repo-commit-url>/<sha>)` built from the repo owner/name resolved in [Phase 1](#phase-1-detect-pr-and-load-context) — never a bare or backticked SHA. Replies that cite no commit (e.g. questions, declines) skip the SHA rule; all other reference kinds still follow the inlined rules.
+Format every reply per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) — the **Reference formatting & readability** rules inlined at the end of this skill. The reference kind that recurs here is the commit SHA: when a reply cites the commit that resolved a thread (the HEAD commit after [Phase 5](#phase-5-commit-and-push)'s push, post-rebase/squash), render the SHA as a markdown link `[<sha>](<repo-commit-url>/<sha>)` built from the repo owner/name resolved in [Phase 1](#phase-1-detect-pr-and-load-context) — never a bare or backticked SHA. Because replies post as GitHub comments, link any file, doc, skill, agent, or section you cite as an absolute `<repo-blob-url>/path#anchor` URL built from the same repo owner/name — never a bare name or a repo-relative path (relative paths do not resolve in a comment). Replies that cite no commit (e.g. questions, declines) skip the SHA rule; all other reference kinds still follow the inlined rules.
 
 Build a summary of all drafted replies:
 
@@ -38993,12 +39162,12 @@ PR #<N>: <url>
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -39051,7 +39220,7 @@ Do NOT prompt the user. Return structured output with an explicit error if input
 
 $ARGUMENTS
 
-You review the whole PR yourself in a single pass: load context, evaluate the diff against every check in Phase 2, then emit one structured verdict. There are no review sub-agents — Phase 2 is the complete rubric.
+You review the whole PR yourself in a single pass: load context, evaluate the diff against every check in [Phase 2](#phase-2-review-the-diff), then emit one structured verdict. There are no review sub-agents — [Phase 2](#phase-2-review-the-diff) is the complete rubric.
 
 ---
 
@@ -39070,7 +39239,7 @@ Fetch the diff exactly once and review it in-model. Never embed the diff more th
 
 This `gh pr view` output is the authoritative source for the PR title/body/diff and prior-review verdicts: `reviews`/`latestReviews` carry each prior review's verdict and summary body (the body lists that round's findings). Per-line inline annotations are NOT in any `gh pr view` field — load them via the read-only `gh api` call the `fetch-pr-reviews` agent makes in [§1.2](#12-load-context-via-sub-agents) (the review action now permits `gh api` GETs; only write forms are blocked). A denied or empty fetch must never be silently treated as "no prior findings" (that path produces an empty, content-free approval).
 
-Treat the prior review **bodies** (§1.1) plus the inline threads loaded by `fetch-pr-reviews` (§1.2) as the record of past findings: the review skill writes a self-contained summary body for every non-empty review (see [reviewComment Format](#reviewcomment-format-30-lines-max)), and the inline threads carry the per-line detail. With both loaded, a follow-up review sees exactly what each prior round flagged and where — do not bail when one source is empty; cross-check the other.
+Treat the prior review **bodies** ([§1.1](#11-pr-context)) plus the inline threads loaded by `fetch-pr-reviews` ([§1.2](#12-load-context-via-sub-agents)) as the record of past findings: the review skill writes a self-contained summary body for every non-empty review (see [reviewComment Format](#reviewcomment-format-30-lines-max)), and the inline threads carry the per-line detail. With both loaded, a follow-up review sees exactly what each prior round flagged and where — do not bail when one source is empty; cross-check the other.
 
 ### 1.2 Load Context via Sub-Agents
 
@@ -39152,7 +39321,7 @@ Do NOT produce the structured JSON output.
 
 ### 1.4 Project Context (read before reviewing)
 
-Read the project's own conventions before judging the diff — you enforce them, so you must load them first (mirrors the plan skill's Phase 1):
+Read the project's own conventions before judging the diff — you enforce them, so you must load them first (mirrors the [`plan` skill's Phase 1](../plan/SKILL.md#phase-1-context-gathering)):
 
 - **CLAUDE.md (stack rules)** — read the repository-root `CLAUDE.md`; map each changed line to the rule it must satisfy.
 - **README + `docs/*` (project conventions)** — read the root `README.md` and the docs it links; treat `docs/` as the source of truth for project-specific conventions.
@@ -39161,13 +39330,13 @@ Read the project's own conventions before judging the diff — you enforce them,
 
 ### 1.5 Context Map
 
-Phase 1 is the single context-gathering pass. Record a compact map; Phase 2 reasons over it without re-fetching the diff or re-reading the pack:
+[Phase 1](#phase-1-context-loading) is the single context-gathering pass. Record a compact map; [Phase 2](#phase-2-review-the-diff) reasons over it without re-fetching the diff or re-reading the pack:
 
-- **PR diff** — changed files and the one-line role of each change (§1.1).
-- **Linked-issue requirements** — acceptance criteria from `resolve-issue-context` (§1.2), or "no linked issue".
-- **Related work** — TODOs and `#<issue>` references in the codebase from `search-codebase-todos` (§1.2): flag whether the diff resolves or conflicts with a related TODO, leaves a referenced issue half-addressed, or duplicates work tracked elsewhere; "none" when no issue is linked or none found.
-- **Prior-review findings** — unresolved findings from prior review bodies (§1.1) and inline threads from `fetch-pr-reviews` (§1.2); empty on first review.
-- **Project conventions** — the CLAUDE.md / README / `docs/*` points that bear on the diff (§1.4).
+- **PR diff** — changed files and the one-line role of each change ([§1.1](#11-pr-context)).
+- **Linked-issue requirements** — acceptance criteria from `resolve-issue-context` ([§1.2](#12-load-context-via-sub-agents)), or "no linked issue".
+- **Related work** — TODOs and `#<issue>` references in the codebase from `search-codebase-todos` ([§1.2](#12-load-context-via-sub-agents)): flag whether the diff resolves or conflicts with a related TODO, leaves a referenced issue half-addressed, or duplicates work tracked elsewhere; "none" when no issue is linked or none found.
+- **Prior-review findings** — unresolved findings from prior review bodies ([§1.1](#11-pr-context)) and inline threads from `fetch-pr-reviews` ([§1.2](#12-load-context-via-sub-agents)); empty on first review.
+- **Project conventions** — the CLAUDE.md / README / `docs/*` points that bear on the diff ([§1.4](#14-project-context-read-before-reviewing)).
 - **Codebase pointers** — only the targeted pack-`grep` hits pulled for cross-file checks; "none" when the diff is self-contained.
 - **Stack** — `agents.rules` value (drives [§2](#phase-2-review-the-diff) thresholds), or `unknown`.
 
@@ -39652,7 +39821,7 @@ Legs:
 
 - **task ↔ solution** — the PR's stated approach omits, contradicts, or silently re-scopes an issue requirement.
 - **solution ↔ result** — a claim in the PR description is not backed by any hunk in the diff (asserted but absent). Undescribed changes present in the diff are the blocker CHECK-PR-001 below — do not double-report them here.
-- **task ↔ result** — an issue requirement, or a codebase TODO referencing the issue (§1.5 Related work), has no corresponding change in the diff (unaddressed); or the diff addresses something the issue never asked for (scope creep) without explanation.
+- **task ↔ result** — an issue requirement, or a codebase TODO referencing the issue ([§1.5](#15-context-map) Related work), has no corresponding change in the diff (unaddressed); or the diff addresses something the issue never asked for (scope creep) without explanation.
 
 <a id="CHECK-PR-001"></a>
 **CHECK-PR-001: Diff matches PR title/description** — Severity: blocker
@@ -39794,7 +39963,7 @@ A new service must target the supported runtimes (e.g. Node.js 22+ LTS with Type
 1. Collect every finding from Phase 2.3 as `{ severity, file, line, rule, title, detail }`.
 2. Deduplicate by `(file, line)` — if the same location matches more than one check, keep the higher severity (`blocker` > `suggestion` > `nitpick`) and merge their `rule` codes into one bare comma-separated list (e.g. `CHECK-BUG-002, CHECK-AI-002`). Findings with a `null` line are never merged.
 3. Order the merged list by severity: blockers first, then suggestions, then nitpicks.
-4. Proceed to Phase 3 with this list.
+4. Proceed to [Phase 3](#phase-3-submit-review) with this list.
 
 ### 2.5 Rule Codes
 
@@ -39814,7 +39983,7 @@ Substitute the resolved `RULES_DOC_URL` value verbatim — do not invent a diffe
 
 In both modes, append nothing when a finding has no rule code (do not emit `[UNSPECIFIED]`).
 
-Map `severity` to its emoji when rendering in Phase 3: `blocker` → 🚧, `suggestion` → 🙋‍♂️, `nitpick` → 💡. The emoji stays first so downstream severity filters keep working.
+Map `severity` to its emoji when rendering in [Phase 3](#phase-3-submit-review): `blocker` → 🚧, `suggestion` → 🙋‍♂️, `nitpick` → 💡. The emoji stays first so downstream severity filters keep working.
 
 ---
 
@@ -40007,12 +40176,12 @@ Add an optional `suggestion` to an inline comment when the fix is concrete and m
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -40068,7 +40237,7 @@ Arguments are optional. Resolve each field:
 
 ## AskUserQuestion Contract (MANDATORY)
 
-Every AskUserQuestion call that presents content for review (PR previews in Phase 6) MUST follow these exact rules. Simple choice dialogs (Phase 4 Auto-generate/Add context) are exempt from the preview requirement.
+Every AskUserQuestion call that presents content for review (PR previews in [Phase 6](#phase-6-verify-with-user)) MUST follow these exact rules. Simple choice dialogs ([Phase 4](#phase-4-ask-user-for-context-optional) Auto-generate/Add context) are exempt from the preview requirement.
 
 1. **`question` is FIXED TEXT** — use the EXACT string specified in each phase. NEVER add PR titles, bodies, metadata, file lists, diffs, or any other content to the question field.
 2. **`header` is FIXED TEXT** — use the EXACT string specified in each phase.
@@ -40230,7 +40399,7 @@ Each section is separated by `---`. The `**Issues:**` section is ALWAYS last. Pl
 Include this section (titled `**Release notes:**`) with a `---` separator when:
 
 - `--release-notes` flag is present in the command invocation, OR
-- Breaking changes were detected (Phase 3 step 10 — mandatory)
+- Breaking changes were detected ([Phase 3](#phase-3-gather-context) step 10 — mandatory)
 
 Content rules:
 
@@ -40356,7 +40525,7 @@ Present the updated PR using **AskUserQuestion tool** with preview.
    All options use the same `preview` content (full PR title + body) since the user is choosing an action, not content. The preview enables a side-by-side layout in the UI.
 
 3. If user selects "Add release notes":
-   - Generate the **Release notes:** section (same rules as Phase 5)
+   - Generate the **Release notes:** section (same rules as [Phase 5](#phase-5-generate-updated-pr-title-and-body))
    - Insert it into the PR body between the description and issue links sections (with `---` separators)
    - Re-present the full PR content using AskUserQuestion with preview (without the "Add release notes" option)
 
@@ -40483,12 +40652,12 @@ User selects "Update PR".
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -40711,12 +40880,12 @@ Return structured JSON output with exactly these fields:
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -40772,9 +40941,9 @@ git branch --show-current
 
 Store the result as `currentBranch`.
 
-- If `currentBranch` is `main` or `master`, go to Phase 1.5.
-- If empty (detached HEAD), treat as not-main with no branch issue ID — go to Phase 1.5.
-- Otherwise, go to Phase 1.5.
+- If `currentBranch` is `main` or `master`, go to [Phase 1.5](#phase-15-detect-git-worktree).
+- If empty (detached HEAD), treat as not-main with no branch issue ID — go to [Phase 1.5](#phase-15-detect-git-worktree).
+- Otherwise, go to [Phase 1.5](#phase-15-detect-git-worktree).
 
 ## Phase 1.5: Detect Git Worktree
 
@@ -40790,8 +40959,8 @@ git rev-parse --git-common-dir
 
 If the two values differ, the session is running inside a **git worktree**. Store `isWorktree = true`. Otherwise `isWorktree = false`.
 
-- If `currentBranch` is `main` or `master`, go to Phase 3.
-- Otherwise, go to Phase 2.
+- If `currentBranch` is `main` or `master`, go to [Phase 3](#phase-3-on-main).
+- Otherwise, go to [Phase 2](#phase-2-on-feature-branch).
 
 ## Phase 2: On Feature Branch
 
@@ -40856,7 +41025,7 @@ Tool parameters:
   ]
 - `multiSelect`: false
 
-- If "Switch to main": run `git checkout main`, then go to Phase 3.
+- If "Switch to main": run `git checkout main`, then go to [Phase 3](#phase-3-on-main).
 - If "Stay on this branch": output "Continuing on branch <currentBranch>" and exit skill.
 
 ### Phase 2b: Branch Has Unmerged Commits
@@ -40900,7 +41069,7 @@ Tool parameters:
 Handle user choice:
 
 - "Continue on this branch": output "Continuing on branch <currentBranch>" and exit skill.
-- "Switch to main" (non-worktree only): run `git checkout main`, then go to Phase 3.
+- "Switch to main" (non-worktree only): run `git checkout main`, then go to [Phase 3](#phase-3-on-main).
 - "Cancel": output "Planning cancelled by user." and abort.
 
 **Matching branch (plan mode) or any mode other than plan:**
@@ -40923,7 +41092,7 @@ Tool parameters:
 - `multiSelect`: false
 
 - "Continue on this branch": output "Continuing on branch <currentBranch>" and exit skill.
-- "Switch to main" (non-worktree only): run `git checkout main`, then go to Phase 3.
+- "Switch to main" (non-worktree only): run `git checkout main`, then go to [Phase 3](#phase-3-on-main).
 - "Cancel": output "<Action noun> cancelled by user." and abort.
 
 ## Phase 3: On Main
@@ -41012,12 +41181,12 @@ Tool parameters:
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -41078,7 +41247,7 @@ Expected forms (same as `plan`):
 
 ## Input resolution
 
-Identical to the `plan` skill. See the `plan` skill's `## Input resolution` section.
+Identical to the `plan` skill. See the [`plan` skill's `## Input resolution` section](../plan/SKILL.md#input-resolution).
 
 ## Task Progress Protocol
 
@@ -41196,7 +41365,7 @@ Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
     - `compress`: true
 ```
 
-After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response — the stack pipeline's Context Gathering phase is the single place that reads the codebase from it. Phase 0 does NOT grep or read code: render the issue/alert context below from the resolved JSON (and, for issues, the TODO results) alone. Defer every codebase read to Context Gathering.
+After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response — the stack pipeline's Context Gathering phase is the single place that reads the codebase from it. [Phase 0](#phase-0-input-resolution) does NOT grep or read code: render the issue/alert context below from the resolved JSON (and, for issues, the TODO results) alone. Defer every codebase read to Context Gathering.
 
 ### Alert Context Output (code-scanning-alert input)
 
@@ -41204,7 +41373,7 @@ For a `code-scanning-alert` input, render the context from the `resolve-alert-co
 
 ### Issue Context Output
 
-The `resolve-issue-context` and `search-codebase-todos` agents each return a single JSON object (see each agent's output schema). Parse both, then render the issue context for display from the `resolve-issue-context` fields — `source`, `title`, `status`, `labels`, `assignee` (only when non-null), `description`, and `comments` — and append the TODO results rendered from `search-codebase-todos`:
+The [`resolve-issue-context`](../../agents/resolve-issue-context.md) and [`search-codebase-todos`](../../agents/search-codebase-todos.md) agents each return a single JSON object (see each agent's output schema). Parse both, then render the issue context for display from the `resolve-issue-context` fields — `source`, `title`, `status`, `labels`, `assignee` (only when non-null), `description`, and `comments` — and append the TODO results rendered from `search-codebase-todos`:
 
 ```
 ### Related TODOs in Codebase
@@ -41215,15 +41384,15 @@ After completing the Issue Context Output, call TaskUpdate to set task 1 ("Resol
 
 ## Preflight Check
 
-After completing Phase 0, invoke the preflight check skill to validate the git branch state:
+After completing [Phase 0](#phase-0-input-resolution), invoke the preflight check skill to validate the git branch state:
 
 ```
 Skill(autopilot:preflight-check)
 ```
 
-The skill receives `mode: plan` and the Phase 0 context (input type, issue ID) from the conversation history. It validates the current branch, checks for merged/stale branches, detects issue ID mismatches, and ensures main is up to date.
+The skill receives `mode: plan` and the [Phase 0](#phase-0-input-resolution) context (input type, issue ID) from the conversation history. It validates the current branch, checks for merged/stale branches, detects issue ID mismatches, and ensures main is up to date.
 
-If the skill outputs "Planning cancelled", stop execution immediately — do not proceed to Phase 1.
+If the skill outputs "Planning cancelled", stop execution immediately — do not proceed to [Phase 1](#phase-1-detect-stack-and-delegate).
 
 ## Common Instructions
 
@@ -41237,7 +41406,7 @@ Before planning, look up documentation for every technology and library relevant
 
 - Manifest file (`package.json`) — libraries relevant to the task
 - Issue/ticket description — libraries explicitly mentioned by the user
-- Codebase exploration — libraries discovered during Phase 1 exploration
+- Codebase exploration — libraries discovered during [Phase 1](#phase-1-detect-stack-and-delegate) exploration
 
 **Step 2: context7** — For each library, call in sequence:
 
@@ -41278,7 +41447,7 @@ Map each planned change to project rules defined in CLAUDE.md.
 | `Bun`          | `Skill(autopilot:plan-bun)`          |
 | `NodeJS+React` | `Skill(autopilot:plan-nodejs-react)` |
 
-4. Invoke the skill. The skill receives the full Phase 0 context (issue data, branch info, TODO matches) from the conversation history and executes the stack-specific phases.
+4. Invoke the skill. The skill receives the full [Phase 0](#phase-0-input-resolution) context (issue data, branch info, TODO matches) from the conversation history and executes the stack-specific phases.
 
 **Formatting Note:** Do not use markdown formatting (bold, italic, headers) in AskUserQuestion `question` parameter — it renders as raw text. Use plain text with line breaks and simple labels instead.
 
@@ -41302,7 +41471,7 @@ Tool parameters:
 
 Check conditions:
 
-1. Input type from Phase 0 Issue Context
+1. Input type from [Phase 0](#phase-0-input-resolution) Issue Context
 2. Current branch: `git branch --show-current`
 3. Worktree detection — run both commands:
    - `git rev-parse --git-dir`
@@ -41314,7 +41483,7 @@ Check conditions:
 
 #### If on `main` branch OR `worktreeNeedsBranch` is true
 
-Add `## Pre-Implementation` as the FIRST section of the plan file (before `## Summary`). The block content depends on input type from Phase 0.
+Add `## Pre-Implementation` as the FIRST section of the plan file (before `## Summary`). The block content depends on input type from [Phase 0](#phase-0-input-resolution).
 
 ##### Input type is `github-issue` (bare number, `#`-prefixed number, or GitHub issue URL)
 
@@ -41437,16 +41606,18 @@ C) [Option with brief explanation]
 D) Other: ___
 ```
 
+When you write the plan file, apply the reference-formatting rules inlined at the end of this skill (the **Reference formatting & readability** block below, RFC-0001 v3) to every reference it contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
+
 <!-- ref-format:start -->
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -41621,7 +41792,7 @@ For each stale TODO:
 
 ## Phase 5: Verify
 
-1. Run verification command determined in Phase 1 based on `agents.rules` field
+1. Run verification command determined in [Phase 1](#phase-1-read-repository-context) based on `agents.rules` field
 2. If verification fails:
    - Report the errors
    - Attempt to fix (e.g., indentation issues from comment removal)
@@ -41655,12 +41826,12 @@ Verification: Passed
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -42907,7 +43078,7 @@ Every TypeScript workspace member (actions and packages) declares its scripts in
 | Script      | Required?                            | Command (today)              | Notes                                                                                                                                                                                            |
 | ----------- | ------------------------------------ | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `typecheck` | Yes                                  | `tsc --noEmit`               | Runs in Turbo's `typecheck` task. Always present in TS members.                                                                                                                                  |
-| `test`      | Yes for actions, opt-in for packages | `bun test`                   | Bun's runner handles unit, integration, and e2e tests in the same invocation — test files live alongside source under `src/` per CLAUDE.md §3.1. Add this script only when the member has tests. |
+| `test`      | Yes for actions, opt-in for packages | `bun test`                   | Bun's runner handles unit, integration, and e2e tests in the same invocation — test files live alongside source under `src/` per [CLAUDE.md §3.1](../rules/Bun.md#31-file-organization). Add this script only when the member has tests. |
 | `clean`     | Yes                                  | `rm -rf node_modules .turbo` | Removes per-member install and Turbo caches.                                                                                                                                                     |
 | `build`     | Optional                             | (none today)                 | Add only when the member produces a compiled output. Today every member runs TypeScript directly via Bun (`bun <entry>.ts`), so no build step is needed.                                         |
 
@@ -42937,7 +43108,7 @@ Any action or package directory (TypeScript action, YAML composite action, or pa
 
 None of these are required. Use them when a member has enough surface area to need it; for small members a `README.md` alone is fine.
 
-### CLAUDE.md §3.1 file organization
+### CLAUDE.md [§3.1](../rules/Bun.md#31-file-organization) file organization
 
 ```
 foo.ts          # single module: a file, no directory
@@ -45528,28 +45699,28 @@ export function readRootRelease(packageJson: unknown): RootReleaseConfig {
 <file path="rfc/0001-reference-formatting.md">
 ---
 number: 1
-version: 2
+version: 3
 title: Reference formatting & readability
 status: Accepted
 author: "@awinogradov"
 created: 2026-06-04
-updated: 2026-06-05
+updated: 2026-06-17
 ---
 
 # RFC-0001: Reference formatting & readability
 
-The single source of truth for how every reference in generated output is formatted — issue bodies, pull request descriptions, code-review comments, and release notes. The block below is inlined verbatim into every autopilot skill (`claude-plugins/autopilot/skills/*/SKILL.md`) and into the release-notes prompt (`releaseNotesPrompt.ts`); the `referenceFormattingSync` test keeps every copy byte-identical with this RFC. Because this RFC is versioned and Accepted, skills, prompts, and the output they generate cite it as RFC-0001 instead of linking a doc that moves.
+The single source of truth for how every reference in generated output is formatted — issue bodies, pull request descriptions, code-review comments, and release notes. The block below is inlined verbatim into every autopilot skill (`claude-plugins/autopilot/skills/*/SKILL.md`) and into the release-notes prompt (`releaseNotesPrompt.ts`); the `referenceFormattingSync` test keeps every copy byte-identical with this RFC. As of v3 every reference — including cross-document files and sections — is a real, resolvable link; the `linkResolution` test checks that every local link target and heading anchor exists. Because this RFC is versioned and Accepted, skills, prompts, and the output they generate cite it as RFC-0001 instead of linking a doc that moves.
 
 <!-- ref-format:start -->
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -45561,6 +45732,7 @@ Write the most helpful, readable output you can: plain, direct prose; every refe
 
 ## Changelog
 
+- **v3** (2026-06-17) — Cross-document references are now linked, not inlined. Link any file, doc, skill, agent, or action you point the reader at, and link cross-document sections by `path#anchor` (repo-relative in repository files, absolute `<repo-blob-url>` in generated output). Every reference must resolve; the `linkResolution` test enforces it. Reverses the v1–v2 rule that cross-document references use an inline gist.
 - **v2** (2026-06-05) — A section in the same document may be linked by its anchor (e.g. `[Phase 6](#phase-6-reply-to-review-threads)`); cross-document sections still use an inline gist.
 - **v1** (2026-06-04) — Initial version.
 </file>
@@ -48248,7 +48420,7 @@ The `docs/` guides are numbered chapters in reading order — newcomers start at
 
 **Standards.**
 
-- [Reference formatting (RFC-0001)](./rfc/0001-reference-formatting.md) — the single reference-formatting + readability standard, versioned as an RFC, inlined into every skill and the release-notes prompt and kept in sync by the `referenceFormattingSync` test; see [`rfc/`](./rfc/README.md) for the RFC convention
+- [Reference formatting (RFC-0001)](./rfc/0001-reference-formatting.md) — the single reference-formatting + readability standard, versioned as an RFC, inlined into every skill and the release-notes prompt and kept in sync by the `referenceFormattingSync` test; as of v3 every reference (including cross-document files and sections) is a real, resolvable link, guarded by the `linkResolution` test; see [`rfc/`](./rfc/README.md) for the RFC convention
 - [Stack rule sets](./rules/) — `Bun`, `Bun+React+Tailwind`, `NodeJS+React`, `NodeJS+React+Tailwind`
 
 ## GitHub Actions
