@@ -107,8 +107,8 @@ Agent 1 (fetch-pr-reviews):
 
 After all calls complete:
 
-- Store the `outputId` from the snapshot acquisition (attach or pack) response — use `grep_repomix_output` and `read_repomix_output` with this ID to search and read codebase content during Phase 4 (code fixes)
-- Store the categorized review comments from `fetch-pr-reviews` — use in Phase 3
+- Store the `outputId` from the snapshot acquisition (attach or pack) response — use `grep_repomix_output` and `read_repomix_output` with this ID to search and read codebase content during [Phase 4](#phase-4-address-comments-code-fixes) (code fixes)
+- Store the categorized review comments from `fetch-pr-reviews` — use in [Phase 3](#phase-3-present-findings-to-user)
 
 ### 1.5 Project Rules
 
@@ -198,7 +198,7 @@ For comments that do not require code changes (questions, misunderstandings):
    - If reviewer is wrong: "You're right that [X looks concerning], but [reason it's correct]. [Evidence from code]."
    - If needs discussion: "[Acknowledge point], however [concern or alternative]."
    - If question: "[Direct answer with reference to code]."
-3. Store the reply for Phase 6
+3. Store the reply for [Phase 6](#phase-6-reply-to-review-threads)
 
 ---
 
@@ -210,11 +210,11 @@ For comments that do not require code changes (questions, misunderstandings):
 git status --porcelain
 ```
 
-If no changes (only replies needed, no code fixes), skip to Phase 6.
+If no changes (only replies needed, no code fixes), skip to [Phase 6](#phase-6-reply-to-review-threads).
 
 ### 5.2 Commit
 
-Before invoking commits:create, compile a modification list from the changes made in Phase 4. For each code change, write one bullet naming the concrete modification (file, function, value, or behavior that changed).
+Before invoking commits:create, compile a modification list from the changes made in [Phase 4](#phase-4-address-comments-code-fixes). For each code change, write one bullet naming the concrete modification (file, function, value, or behavior that changed).
 
 Example modification list:
 
@@ -246,7 +246,7 @@ Compose replies for all processed comments. **Always mention the reviewer** with
 - **Partially addressed**: "@\<reviewer\> [What was changed and why, plus what was intentionally kept]."
 - **Declined by user**: "@\<reviewer\> Considered — [explanation of why this suggestion was not applied]."
 
-Format every reply per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) — the **Reference formatting & readability** rules inlined at the end of this skill. The reference kind that recurs here is the commit SHA: when a reply cites the commit that resolved a thread (the HEAD commit after [Phase 5](#phase-5-commit-and-push)'s push, post-rebase/squash), render the SHA as a markdown link `[<sha>](<repo-commit-url>/<sha>)` built from the repo owner/name resolved in [Phase 1](#phase-1-detect-pr-and-load-context) — never a bare or backticked SHA. Replies that cite no commit (e.g. questions, declines) skip the SHA rule; all other reference kinds still follow the inlined rules.
+Format every reply per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) — the **Reference formatting & readability** rules inlined at the end of this skill. The reference kind that recurs here is the commit SHA: when a reply cites the commit that resolved a thread (the HEAD commit after [Phase 5](#phase-5-commit-and-push)'s push, post-rebase/squash), render the SHA as a markdown link `[<sha>](<repo-commit-url>/<sha>)` built from the repo owner/name resolved in [Phase 1](#phase-1-detect-pr-and-load-context) — never a bare or backticked SHA. Because replies post as GitHub comments, link any file, doc, skill, agent, or section you cite as an absolute `<repo-blob-url>/path#anchor` URL built from the same repo owner/name — never a bare name or a repo-relative path (relative paths do not resolve in a comment). Replies that cite no commit (e.g. questions, declines) skip the SHA rule; all other reference kinds still follow the inlined rules.
 
 Build a summary of all drafted replies:
 
@@ -357,12 +357,12 @@ PR #<N>: <url>
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 

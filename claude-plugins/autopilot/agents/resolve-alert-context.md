@@ -24,7 +24,7 @@ The invoking skill provides in the prompt:
 
 ## Phase 1: Fetch Alert
 
-Store the full JSON so Phase 2 can read every field without another API call:
+Store the full JSON so [Phase 2](#phase-2-degradation) can read every field without another API call:
 
 ```bash
 ALERT_JSON=$(gh api "repos/$REPO/code-scanning/alerts/$NUMBER" 2>/dev/null)
@@ -34,7 +34,7 @@ Extract (with `jq`): `.number`, `.state`, `.rule.id`, `.rule.severity` (fall bac
 
 ## Phase 2: Degradation
 
-The code-scanning API fails in predictable ways. On ANY failure, do not crash — return the Phase 3 object with `state: "unresolved"` and a `resolveError` string so the parent can surface it and STOP rather than misroute. Emit exactly one of:
+The code-scanning API fails in predictable ways. On ANY failure, do not crash — return the [Phase 3](#phase-3-output) object with `state: "unresolved"` and a `resolveError` string so the parent can surface it and STOP rather than misroute. Emit exactly one of:
 
 - `unresolved — gh not authenticated` — `gh api user` returns empty.
 - `unresolved — security_events scope required` — the alerts call returns 403 (token lacks `security_events`).
@@ -58,7 +58,7 @@ Output ONLY a single JSON object matching the schema below.
 | `line`         | integer \| null | `most_recent_instance.location.start_line`; `null` when unresolved |
 | `message`      | string \| null  | `most_recent_instance.message.text`; `null` when unresolved        |
 | `htmlUrl`      | string \| null  | The API's canonical `html_url`; `null` when unresolved             |
-| `resolveError` | string \| null  | One of the Phase 2 status strings on failure; `null` on success    |
+| `resolveError` | string \| null  | One of the [Phase 2](#phase-2-degradation) status strings on failure; `null` on success    |
 
 Example (success):
 

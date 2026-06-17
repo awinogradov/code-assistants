@@ -50,7 +50,7 @@ The `docs/` guides are numbered chapters in reading order — newcomers start at
 
 **Standards.**
 
-- [Reference formatting (RFC-0001)](./rfc/0001-reference-formatting.md) — the single reference-formatting + readability standard, versioned as an RFC, inlined into every skill and the release-notes prompt and kept in sync by the `referenceFormattingSync` test; see [`rfc/`](./rfc/README.md) for the RFC convention
+- [Reference formatting (RFC-0001)](./rfc/0001-reference-formatting.md) — the single reference-formatting + readability standard, versioned as an RFC, inlined into every skill and the release-notes prompt and kept in sync by the `referenceFormattingSync` test; as of v3 every reference (including cross-document files and sections) is a real, resolvable link, guarded by the `linkResolution` test; see [`rfc/`](./rfc/README.md) for the RFC convention
 - [Stack rule sets](./rules/) — `Bun`, `Bun+React+Tailwind`, `NodeJS+React`, `NodeJS+React+Tailwind`
 
 ## GitHub Actions

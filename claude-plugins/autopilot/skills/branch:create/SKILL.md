@@ -30,21 +30,21 @@ Expected forms:
 - `<ISSUE-NUMBER>` — GitHub issue number (e.g., `123` or `#123`). Used to fetch the issue and to build the branch name `issue-<number>-<slug>`.
 - `<ISSUE-NUMBER> "<description>"` — issue number plus custom branch slug description
 - `--hotfix "<description>"` / `--trivial "<description>"` / `--maintenance "<description>"` / `--proposal "<description>"` / `--security "<description>"` — special prefix branches without a GitHub issue (use `--security` for code-scanning alert fixes → `security-<slug>`)
-- `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips the Phase 5 confirmation prompt and creates the branch directly with the auto-generated name. Conflict resolution (Phase 4) and validation errors still surface.
+- `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips the [Phase 5](#phase-5-verify-with-user) confirmation prompt and creates the branch directly with the auto-generated name. Conflict resolution ([Phase 4](#phase-4-check-for-conflicts)) and validation errors still surface.
 
 ## Input resolution
 
 Arguments are optional. When `$ARGUMENTS` is empty OR a field is missing, resolve from context in this order:
 
 - **Issue number** — `$ARGUMENTS` → parse current branch name for `^issue-([0-9]+)` → prompt user only if none found and no special prefix flag is present.
-- **Description** — `$ARGUMENTS` → generate from GitHub issue title via Phase 3 rules → no user prompt (auto-generate always succeeds).
+- **Description** — `$ARGUMENTS` → generate from GitHub issue title via [Phase 3](#phase-3-generate-branch-slug) rules → no user prompt (auto-generate always succeeds).
 - **Special prefix flags** (`--hotfix` / `--trivial` / `--maintenance` / `--proposal` / `--security`) — `$ARGUMENTS` only. Never inferred. Default: none.
 - **`--autopilot`** — `$ARGUMENTS` only. Never inferred. Default: `false` (interactive mode).
 - **Repository conventions** — read `CONTRIBUTING.md` directly from the repository root.
 
 ## Phase 0: Preflight Check
 
-Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversation context. The skill validates current branch state, detects stale merged branches, and ensures main is up to date before a new branch is created. If it outputs a "cancelled" message, stop immediately — do not proceed to Phase 1.
+Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversation context. The skill validates current branch state, detects stale merged branches, and ensures main is up to date before a new branch is created. If it outputs a "cancelled" message, stop immediately — do not proceed to [Phase 1](#phase-1-input-validation).
 
 ## Phase 1: Input Validation
 
@@ -59,7 +59,7 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
    - Try to extract description from the conversation history
    - Description is REQUIRED — error if missing: `Description is required for special prefix branches (e.g., /autopilot:branch-create --trivial "fix typo")`
    - Multiple prefix flags not allowed — error: `Only one special prefix flag allowed`
-   - Skip Phase 2 (no GitHub issue to fetch)
+   - Skip [Phase 2](#phase-2-fetch-github-issue) (no GitHub issue to fetch)
 
 3. **If no flag, validate as issue number:**
    - Accept patterns: `^#?[0-9]+$` (strip a leading `#` if present)
@@ -93,7 +93,7 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
 
    <!-- Mirrors resolve-issue-context.md Phase 2 (canonical). Keep in sync. -->
 
-   Assigning the issue the moment work starts keeps "who is working on what" accurate. This runs on every issue branch (special-prefix branches skip Phase 2, so they never assign). On ANY failure, emit the status line and continue to Phase 3 — the branch is the deliverable; assignment is a side effect.
+   Assigning the issue the moment work starts keeps "who is working on what" accurate. This runs on every issue branch (special-prefix branches skip [Phase 2](#phase-2-fetch-github-issue), so they never assign). On ANY failure, emit the status line and continue to [Phase 3](#phase-3-generate-branch-slug) — the branch is the deliverable; assignment is a side effect.
 
    Emit exactly one status (same vocabulary as the canonical agent):
    - `@<login> (just assigned)`
@@ -110,9 +110,9 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
       LOGIN=$(gh api user --cache 5m --jq .login 2>/dev/null)
       ```
 
-      If `LOGIN` is empty → `unassigned — gh not authenticated`; continue to Phase 3.
+      If `LOGIN` is empty → `unassigned — gh not authenticated`; continue to [Phase 3](#phase-3-generate-branch-slug).
 
-   2. If the issue `state` from step 2 is `CLOSED` → `unassigned — issue closed`; continue to Phase 3.
+   2. If the issue `state` from step 2 is `CLOSED` → `unassigned — issue closed`; continue to [Phase 3](#phase-3-generate-branch-slug).
 
    3. Check whether `LOGIN` is already assigned. GitHub logins are `[A-Za-z0-9-]`, so the login is safe to interpolate into a single `gh --jq` expression (gh's `--jq` cannot take `--arg`); `.assignees[]?` tolerates a null or absent array:
 
@@ -120,7 +120,7 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
       ALREADY=$(gh issue view <ISSUE-NUMBER> -R "$REPO" --json assignees --jq "any(.assignees[]?; .login==\"$LOGIN\")" 2>/dev/null)
       ```
 
-      If `ALREADY == "true"` → `@<LOGIN> (already assigned)`; continue to Phase 3.
+      If `ALREADY == "true"` → `@<LOGIN> (already assigned)`; continue to [Phase 3](#phase-3-generate-branch-slug).
 
    4. Otherwise attempt the assignment, capturing stderr and exit code (keep this order; read `$?` on the very next line):
 
@@ -139,7 +139,7 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
       - `EDIT_EXIT == 0` AND `VERIFIED != "true"` → `unassigned — permission denied or assignee limit reached`
       - `EDIT_EXIT != 0` → `unassigned — gh edit error: <first line of $STDERR>`
 
-   In all cases, continue to Phase 3.
+   In all cases, continue to [Phase 3](#phase-3-generate-branch-slug).
 
 ## Phase 3: Generate Branch Slug
 
@@ -215,7 +215,7 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
 
 ## Phase 5: Verify with User
 
-**Autopilot bypass:** If `autopilotMode` is true (from Phase 1), skip this entire phase and proceed directly to Phase 6 with the resolved branch name. Do NOT call AskUserQuestion.
+**Autopilot bypass:** If `autopilotMode` is true (from [Phase 1](#phase-1-input-validation)), skip this entire phase and proceed directly to [Phase 6](#phase-6-execute) with the resolved branch name. Do NOT call AskUserQuestion.
 
 Present branch details and confirm using **AskUserQuestion tool**.
 
@@ -249,7 +249,7 @@ Tool parameters:
 
 Both options use the same `preview` content since the user is choosing an action, not content.
 
-Only proceed to Phase 6 after user selects "Create branch". If "Edit slug" selected, ask for new slug and regenerate branch name.
+Only proceed to [Phase 6](#phase-6-execute) after user selects "Create branch". If "Edit slug" selected, ask for new slug and regenerate branch name.
 
 ## Phase 6: Execute
 
@@ -417,12 +417,12 @@ User selects "Checkout existing".
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 

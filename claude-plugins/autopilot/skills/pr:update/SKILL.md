@@ -42,7 +42,7 @@ Arguments are optional. Resolve each field:
 
 ## AskUserQuestion Contract (MANDATORY)
 
-Every AskUserQuestion call that presents content for review (PR previews in Phase 6) MUST follow these exact rules. Simple choice dialogs (Phase 4 Auto-generate/Add context) are exempt from the preview requirement.
+Every AskUserQuestion call that presents content for review (PR previews in [Phase 6](#phase-6-verify-with-user)) MUST follow these exact rules. Simple choice dialogs ([Phase 4](#phase-4-ask-user-for-context-optional) Auto-generate/Add context) are exempt from the preview requirement.
 
 1. **`question` is FIXED TEXT** — use the EXACT string specified in each phase. NEVER add PR titles, bodies, metadata, file lists, diffs, or any other content to the question field.
 2. **`header` is FIXED TEXT** — use the EXACT string specified in each phase.
@@ -204,7 +204,7 @@ Each section is separated by `---`. The `**Issues:**` section is ALWAYS last. Pl
 Include this section (titled `**Release notes:**`) with a `---` separator when:
 
 - `--release-notes` flag is present in the command invocation, OR
-- Breaking changes were detected (Phase 3 step 10 — mandatory)
+- Breaking changes were detected ([Phase 3](#phase-3-gather-context) step 10 — mandatory)
 
 Content rules:
 
@@ -330,7 +330,7 @@ Present the updated PR using **AskUserQuestion tool** with preview.
    All options use the same `preview` content (full PR title + body) since the user is choosing an action, not content. The preview enables a side-by-side layout in the UI.
 
 3. If user selects "Add release notes":
-   - Generate the **Release notes:** section (same rules as Phase 5)
+   - Generate the **Release notes:** section (same rules as [Phase 5](#phase-5-generate-updated-pr-title-and-body))
    - Insert it into the PR body between the description and issue links sections (with `---` separators)
    - Re-present the full PR content using AskUserQuestion with preview (without the "Add release notes" option)
 
@@ -457,12 +457,12 @@ User selects "Update PR".
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 

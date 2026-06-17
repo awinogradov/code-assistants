@@ -67,8 +67,8 @@ Expected form:
 
 ## Input resolution
 
-- **Issue number** — if `$ARGUMENTS` contains an issue number, skip Phases 1-2 and hand it straight to Phase 3. Otherwise list and prompt.
-- **`--all` flag** — parse `$ARGUMENTS` for `--all` independently of the issue number (order does not matter). The skill consumes the flag itself: it only toggles the Phase 1 search string and is never forwarded to a `gh` call. Because a bare issue number skips Phases 1-2, `--all` is a no-op when an issue number is also supplied.
+- **Issue number** — if `$ARGUMENTS` contains an issue number, skip Phases 1-2 and hand it straight to [Phase 3](#phase-3-hand-off-to-autopilot). Otherwise list and prompt.
+- **`--all` flag** — parse `$ARGUMENTS` for `--all` independently of the issue number (order does not matter). The skill consumes the flag itself: it only toggles the [Phase 1](#phase-1-fetch-recent-open-issues) search string and is never forwarded to a `gh` call. Because a bare issue number skips Phases 1-2, `--all` is a no-op when an issue number is also supplied.
 - **Repository** — `gh repo view --json nameWithOwner -q .nameWithOwner`. No prompt. Pass `--repo <owner/repo>` to every `gh` call so the skill is correct inside git worktrees.
 
 ## Phase 0: Resolve Repository
@@ -79,7 +79,7 @@ Resolve the repository once and store it as `<repo>` (format `owner/name`):
 gh repo view --json nameWithOwner -q .nameWithOwner
 ```
 
-If `$ARGUMENTS` already supplies an issue number, skip directly to Phase 3.
+If `$ARGUMENTS` already supplies an issue number, skip directly to [Phase 3](#phase-3-hand-off-to-autopilot).
 
 ## Phase 1: Fetch Recent Open Issues
 
@@ -92,7 +92,7 @@ Build the search string from the `--all` flag, then list the four most-recently-
 gh issue list --repo <repo> --state open --limit 4 --search "sort:updated-desc no:assignee" --json number,title,labels
 ```
 
-- Non-empty result — keep it for Phase 2.
+- Non-empty result — keep it for [Phase 2](#phase-2-select-an-issue).
 - Clean exit with an empty result (`[]`):
   - With `--all` — there are genuinely no open issues to pick from. Tell the user and stop; if they have a number in mind they can re-invoke as `/issue:run <number>`.
   - Without `--all` — every open issue may already be assigned. Probe once for any open issue, using the default search string with `no:assignee` removed:
@@ -112,7 +112,7 @@ Present the fetched issues with `AskUserQuestion` (single-select):
 
 - `question`: "Which issue should autopilot run on? Pick one, or choose Other to enter any issue number."
 - `header`: "Issue"
-- `options`: one entry per fetched issue, `{ label: "#<number> <title>", description: "<comma-separated labels, or 'no labels'>" }` (truncate the title so the label stays short). `AskUserQuestion` requires two to four options, so: with two or more issues, list up to four; with exactly one, list it plus a second option `Enter a different number`; with none, follow Phase 1's empty-result handling and do not call `AskUserQuestion`.
+- `options`: one entry per fetched issue, `{ label: "#<number> <title>", description: "<comma-separated labels, or 'no labels'>" }` (truncate the title so the label stays short). `AskUserQuestion` requires two to four options, so: with two or more issues, list up to four; with exactly one, list it plus a second option `Enter a different number`; with none, follow [Phase 1](#phase-1-fetch-recent-open-issues)'s empty-result handling and do not call `AskUserQuestion`.
 - `multiSelect`: false
 
 Do NOT add an "Other" option — `AskUserQuestion` always provides a free-text "Other" automatically, and adding one is invalid. The auto-provided "Other" lets the user type any issue number, including issues beyond the four shown.
@@ -166,12 +166,12 @@ The target issue is not among the four shown; the user chooses "Other" and types
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 

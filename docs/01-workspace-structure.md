@@ -171,7 +171,7 @@ Every TypeScript workspace member (actions and packages) declares its scripts in
 | Script      | Required?                            | Command (today)              | Notes                                                                                                                                                                                            |
 | ----------- | ------------------------------------ | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `typecheck` | Yes                                  | `tsc --noEmit`               | Runs in Turbo's `typecheck` task. Always present in TS members.                                                                                                                                  |
-| `test`      | Yes for actions, opt-in for packages | `bun test`                   | Bun's runner handles unit, integration, and e2e tests in the same invocation — test files live alongside source under `src/` per CLAUDE.md §3.1. Add this script only when the member has tests. |
+| `test`      | Yes for actions, opt-in for packages | `bun test`                   | Bun's runner handles unit, integration, and e2e tests in the same invocation — test files live alongside source under `src/` per [CLAUDE.md §3.1](../rules/Bun.md#31-file-organization). Add this script only when the member has tests. |
 | `clean`     | Yes                                  | `rm -rf node_modules .turbo` | Removes per-member install and Turbo caches.                                                                                                                                                     |
 | `build`     | Optional                             | (none today)                 | Add only when the member produces a compiled output. Today every member runs TypeScript directly via Bun (`bun <entry>.ts`), so no build step is needed.                                         |
 
@@ -201,7 +201,7 @@ Any action or package directory (TypeScript action, YAML composite action, or pa
 
 None of these are required. Use them when a member has enough surface area to need it; for small members a `README.md` alone is fine.
 
-### CLAUDE.md §3.1 file organization
+### CLAUDE.md [§3.1](../rules/Bun.md#31-file-organization) file organization
 
 ```
 foo.ts          # single module: a file, no directory

@@ -42,9 +42,9 @@ git branch --show-current
 
 Store the result as `currentBranch`.
 
-- If `currentBranch` is `main` or `master`, go to Phase 1.5.
-- If empty (detached HEAD), treat as not-main with no branch issue ID — go to Phase 1.5.
-- Otherwise, go to Phase 1.5.
+- If `currentBranch` is `main` or `master`, go to [Phase 1.5](#phase-15-detect-git-worktree).
+- If empty (detached HEAD), treat as not-main with no branch issue ID — go to [Phase 1.5](#phase-15-detect-git-worktree).
+- Otherwise, go to [Phase 1.5](#phase-15-detect-git-worktree).
 
 ## Phase 1.5: Detect Git Worktree
 
@@ -60,8 +60,8 @@ git rev-parse --git-common-dir
 
 If the two values differ, the session is running inside a **git worktree**. Store `isWorktree = true`. Otherwise `isWorktree = false`.
 
-- If `currentBranch` is `main` or `master`, go to Phase 3.
-- Otherwise, go to Phase 2.
+- If `currentBranch` is `main` or `master`, go to [Phase 3](#phase-3-on-main).
+- Otherwise, go to [Phase 2](#phase-2-on-feature-branch).
 
 ## Phase 2: On Feature Branch
 
@@ -126,7 +126,7 @@ Tool parameters:
   ]
 - `multiSelect`: false
 
-- If "Switch to main": run `git checkout main`, then go to Phase 3.
+- If "Switch to main": run `git checkout main`, then go to [Phase 3](#phase-3-on-main).
 - If "Stay on this branch": output "Continuing on branch <currentBranch>" and exit skill.
 
 ### Phase 2b: Branch Has Unmerged Commits
@@ -170,7 +170,7 @@ Tool parameters:
 Handle user choice:
 
 - "Continue on this branch": output "Continuing on branch <currentBranch>" and exit skill.
-- "Switch to main" (non-worktree only): run `git checkout main`, then go to Phase 3.
+- "Switch to main" (non-worktree only): run `git checkout main`, then go to [Phase 3](#phase-3-on-main).
 - "Cancel": output "Planning cancelled by user." and abort.
 
 **Matching branch (plan mode) or any mode other than plan:**
@@ -193,7 +193,7 @@ Tool parameters:
 - `multiSelect`: false
 
 - "Continue on this branch": output "Continuing on branch <currentBranch>" and exit skill.
-- "Switch to main" (non-worktree only): run `git checkout main`, then go to Phase 3.
+- "Switch to main" (non-worktree only): run `git checkout main`, then go to [Phase 3](#phase-3-on-main).
 - "Cancel": output "<Action noun> cancelled by user." and abort.
 
 ## Phase 3: On Main
@@ -282,12 +282,12 @@ Tool parameters:
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 

@@ -54,9 +54,9 @@ Use the Agent tool with:
 - `run_in_background`: true
 ```
 
-Output: "PR monitoring started in the background. You'll be notified when the review status changes." Then return — do NOT continue to Phase 1 in the launching turn.
+Output: "PR monitoring started in the background. You'll be notified when the review status changes." Then return — do NOT continue to [Phase 1](#phase-1-detect-pr) in the launching turn.
 
-Otherwise (no `--background` flag, or already inside an Agent subprocess), continue to Phase 1.
+Otherwise (no `--background` flag, or already inside an Agent subprocess), continue to [Phase 1](#phase-1-detect-pr).
 
 ## Execution Modes
 
@@ -68,7 +68,7 @@ Interactive — blocks the conversation, invokes `pr:resolve` when changes are r
 
 ### Background Mode
 
-When invoked via the Agent tool with `run_in_background: true` (spawned by Phase 0 of this skill), the skill operates non-interactively:
+When invoked via the Agent tool with `run_in_background: true` (spawned by [Phase 0](#phase-0-mode-dispatch) of this skill), the skill operates non-interactively:
 
 - **Do NOT invoke** `Skill(autopilot:pr-resolve)` — the user is not available for interaction
 - **Do NOT attempt to fix CI checks** — the user is not available for interaction and fixes may require judgment calls
@@ -98,7 +98,7 @@ When invoked via the Agent tool with `run_in_background: true` (spawned by Phase
   Fix the failing checks and push, or run /pr:monitor again.
   ```
 
-- For approved/merged/closed, return the same Phase 3 exit message as foreground mode
+- For approved/merged/closed, return the same [Phase 3](#phase-3-exit) exit message as foreground mode
 
 **Detect background mode:** If the prompt contains "background mode" — use background behavior. Otherwise, use foreground behavior.
 
@@ -210,11 +210,11 @@ gh pr view <PR_NUMBER> --json state,reviewDecision,statusCheckRollup
 
 **If `state` is `MERGED`:**
 
-- Exit to Phase 3 with status "merged"
+- Exit to [Phase 3](#phase-3-exit) with status "merged"
 
 **If `state` is `CLOSED`:**
 
-- Exit to Phase 3 with status "closed"
+- Exit to [Phase 3](#phase-3-exit) with status "closed"
 
 **If `reviewDecision` is `APPROVED` AND all checks in `statusCheckRollup` have `state === "SUCCESS"`:**
 
@@ -228,7 +228,7 @@ gh pr view <PR_NUMBER> --json state,reviewDecision,statusCheckRollup
    - Set `cooldownRemaining = 3`
    - Continue polling loop (go to 2.1)
 5. If HEAD unchanged:
-   - Exit to Phase 3 with status "approved"
+   - Exit to [Phase 3](#phase-3-exit) with status "approved"
 
 **If `reviewDecision` is `CHANGES_REQUESTED`:**
 
@@ -308,7 +308,7 @@ For each failing check, extract the run-id from the `link` field: parse the URL 
    - Set `cooldownRemaining = 3`
    - Continue polling loop (go to 2.1)
 5. If HEAD unchanged:
-   - Exit to Phase 3 with status "approved"
+   - Exit to [Phase 3](#phase-3-exit) with status "approved"
 
 ### 2.3 Check for New Reviews
 
@@ -402,12 +402,12 @@ URL: <pr-url>
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
