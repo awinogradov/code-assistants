@@ -47,7 +47,7 @@ Expected forms (same as `plan`):
 
 ## Input resolution
 
-Identical to the `plan` skill. See the `plan` skill's `## Input resolution` section.
+Identical to the `plan` skill. See the [`plan` skill's `## Input resolution` section](../plan/SKILL.md#input-resolution).
 
 ## Task Progress Protocol
 
@@ -165,7 +165,7 @@ Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
     - `compress`: true
 ```
 
-After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response — the stack pipeline's Context Gathering phase is the single place that reads the codebase from it. Phase 0 does NOT grep or read code: render the issue/alert context below from the resolved JSON (and, for issues, the TODO results) alone. Defer every codebase read to Context Gathering.
+After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response — the stack pipeline's Context Gathering phase is the single place that reads the codebase from it. [Phase 0](#phase-0-input-resolution) does NOT grep or read code: render the issue/alert context below from the resolved JSON (and, for issues, the TODO results) alone. Defer every codebase read to Context Gathering.
 
 ### Alert Context Output (code-scanning-alert input)
 
@@ -173,7 +173,7 @@ For a `code-scanning-alert` input, render the context from the `resolve-alert-co
 
 ### Issue Context Output
 
-The `resolve-issue-context` and `search-codebase-todos` agents each return a single JSON object (see each agent's output schema). Parse both, then render the issue context for display from the `resolve-issue-context` fields — `source`, `title`, `status`, `labels`, `assignee` (only when non-null), `description`, and `comments` — and append the TODO results rendered from `search-codebase-todos`:
+The [`resolve-issue-context`](../../agents/resolve-issue-context.md) and [`search-codebase-todos`](../../agents/search-codebase-todos.md) agents each return a single JSON object (see each agent's output schema). Parse both, then render the issue context for display from the `resolve-issue-context` fields — `source`, `title`, `status`, `labels`, `assignee` (only when non-null), `description`, and `comments` — and append the TODO results rendered from `search-codebase-todos`:
 
 ```
 ### Related TODOs in Codebase
@@ -184,15 +184,15 @@ After completing the Issue Context Output, call TaskUpdate to set task 1 ("Resol
 
 ## Preflight Check
 
-After completing Phase 0, invoke the preflight check skill to validate the git branch state:
+After completing [Phase 0](#phase-0-input-resolution), invoke the preflight check skill to validate the git branch state:
 
 ```
 Skill(autopilot:preflight-check)
 ```
 
-The skill receives `mode: plan` and the Phase 0 context (input type, issue ID) from the conversation history. It validates the current branch, checks for merged/stale branches, detects issue ID mismatches, and ensures main is up to date.
+The skill receives `mode: plan` and the [Phase 0](#phase-0-input-resolution) context (input type, issue ID) from the conversation history. It validates the current branch, checks for merged/stale branches, detects issue ID mismatches, and ensures main is up to date.
 
-If the skill outputs "Planning cancelled", stop execution immediately — do not proceed to Phase 1.
+If the skill outputs "Planning cancelled", stop execution immediately — do not proceed to [Phase 1](#phase-1-detect-stack-and-delegate).
 
 ## Common Instructions
 
@@ -206,7 +206,7 @@ Before planning, look up documentation for every technology and library relevant
 
 - Manifest file (`package.json`) — libraries relevant to the task
 - Issue/ticket description — libraries explicitly mentioned by the user
-- Codebase exploration — libraries discovered during Phase 1 exploration
+- Codebase exploration — libraries discovered during [Phase 1](#phase-1-detect-stack-and-delegate) exploration
 
 **Step 2: context7** — For each library, call in sequence:
 
@@ -247,7 +247,7 @@ Map each planned change to project rules defined in CLAUDE.md.
 | `Bun`          | `Skill(autopilot:plan-bun)`          |
 | `NodeJS+React` | `Skill(autopilot:plan-nodejs-react)` |
 
-4. Invoke the skill. The skill receives the full Phase 0 context (issue data, branch info, TODO matches) from the conversation history and executes the stack-specific phases.
+4. Invoke the skill. The skill receives the full [Phase 0](#phase-0-input-resolution) context (issue data, branch info, TODO matches) from the conversation history and executes the stack-specific phases.
 
 **Formatting Note:** Do not use markdown formatting (bold, italic, headers) in AskUserQuestion `question` parameter — it renders as raw text. Use plain text with line breaks and simple labels instead.
 
@@ -271,7 +271,7 @@ Tool parameters:
 
 Check conditions:
 
-1. Input type from Phase 0 Issue Context
+1. Input type from [Phase 0](#phase-0-input-resolution) Issue Context
 2. Current branch: `git branch --show-current`
 3. Worktree detection — run both commands:
    - `git rev-parse --git-dir`
@@ -283,7 +283,7 @@ Check conditions:
 
 #### If on `main` branch OR `worktreeNeedsBranch` is true
 
-Add `## Pre-Implementation` as the FIRST section of the plan file (before `## Summary`). The block content depends on input type from Phase 0.
+Add `## Pre-Implementation` as the FIRST section of the plan file (before `## Summary`). The block content depends on input type from [Phase 0](#phase-0-input-resolution).
 
 ##### Input type is `github-issue` (bare number, `#`-prefixed number, or GitHub issue URL)
 
@@ -406,16 +406,18 @@ C) [Option with brief explanation]
 D) Other: ___
 ```
 
+When you write the plan file, apply the reference-formatting rules inlined at the end of this skill (the **Reference formatting & readability** block below, RFC-0001 v3) to every reference it contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
+
 <!-- ref-format:start -->
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 

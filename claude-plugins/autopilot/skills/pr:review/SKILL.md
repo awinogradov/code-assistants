@@ -39,7 +39,7 @@ Do NOT prompt the user. Return structured output with an explicit error if input
 
 $ARGUMENTS
 
-You review the whole PR yourself in a single pass: load context, evaluate the diff against every check in Phase 2, then emit one structured verdict. There are no review sub-agents — Phase 2 is the complete rubric.
+You review the whole PR yourself in a single pass: load context, evaluate the diff against every check in [Phase 2](#phase-2-review-the-diff), then emit one structured verdict. There are no review sub-agents — [Phase 2](#phase-2-review-the-diff) is the complete rubric.
 
 ---
 
@@ -58,7 +58,7 @@ Fetch the diff exactly once and review it in-model. Never embed the diff more th
 
 This `gh pr view` output is the authoritative source for the PR title/body/diff and prior-review verdicts: `reviews`/`latestReviews` carry each prior review's verdict and summary body (the body lists that round's findings). Per-line inline annotations are NOT in any `gh pr view` field — load them via the read-only `gh api` call the `fetch-pr-reviews` agent makes in [§1.2](#12-load-context-via-sub-agents) (the review action now permits `gh api` GETs; only write forms are blocked). A denied or empty fetch must never be silently treated as "no prior findings" (that path produces an empty, content-free approval).
 
-Treat the prior review **bodies** (§1.1) plus the inline threads loaded by `fetch-pr-reviews` (§1.2) as the record of past findings: the review skill writes a self-contained summary body for every non-empty review (see [reviewComment Format](#reviewcomment-format-30-lines-max)), and the inline threads carry the per-line detail. With both loaded, a follow-up review sees exactly what each prior round flagged and where — do not bail when one source is empty; cross-check the other.
+Treat the prior review **bodies** ([§1.1](#11-pr-context)) plus the inline threads loaded by `fetch-pr-reviews` ([§1.2](#12-load-context-via-sub-agents)) as the record of past findings: the review skill writes a self-contained summary body for every non-empty review (see [reviewComment Format](#reviewcomment-format-30-lines-max)), and the inline threads carry the per-line detail. With both loaded, a follow-up review sees exactly what each prior round flagged and where — do not bail when one source is empty; cross-check the other.
 
 ### 1.2 Load Context via Sub-Agents
 
@@ -140,7 +140,7 @@ Do NOT produce the structured JSON output.
 
 ### 1.4 Project Context (read before reviewing)
 
-Read the project's own conventions before judging the diff — you enforce them, so you must load them first (mirrors the plan skill's Phase 1):
+Read the project's own conventions before judging the diff — you enforce them, so you must load them first (mirrors the [`plan` skill's Phase 1](../plan/SKILL.md#phase-1-context-gathering)):
 
 - **CLAUDE.md (stack rules)** — read the repository-root `CLAUDE.md`; map each changed line to the rule it must satisfy.
 - **README + `docs/*` (project conventions)** — read the root `README.md` and the docs it links; treat `docs/` as the source of truth for project-specific conventions.
@@ -149,13 +149,13 @@ Read the project's own conventions before judging the diff — you enforce them,
 
 ### 1.5 Context Map
 
-Phase 1 is the single context-gathering pass. Record a compact map; Phase 2 reasons over it without re-fetching the diff or re-reading the pack:
+[Phase 1](#phase-1-context-loading) is the single context-gathering pass. Record a compact map; [Phase 2](#phase-2-review-the-diff) reasons over it without re-fetching the diff or re-reading the pack:
 
-- **PR diff** — changed files and the one-line role of each change (§1.1).
-- **Linked-issue requirements** — acceptance criteria from `resolve-issue-context` (§1.2), or "no linked issue".
-- **Related work** — TODOs and `#<issue>` references in the codebase from `search-codebase-todos` (§1.2): flag whether the diff resolves or conflicts with a related TODO, leaves a referenced issue half-addressed, or duplicates work tracked elsewhere; "none" when no issue is linked or none found.
-- **Prior-review findings** — unresolved findings from prior review bodies (§1.1) and inline threads from `fetch-pr-reviews` (§1.2); empty on first review.
-- **Project conventions** — the CLAUDE.md / README / `docs/*` points that bear on the diff (§1.4).
+- **PR diff** — changed files and the one-line role of each change ([§1.1](#11-pr-context)).
+- **Linked-issue requirements** — acceptance criteria from `resolve-issue-context` ([§1.2](#12-load-context-via-sub-agents)), or "no linked issue".
+- **Related work** — TODOs and `#<issue>` references in the codebase from `search-codebase-todos` ([§1.2](#12-load-context-via-sub-agents)): flag whether the diff resolves or conflicts with a related TODO, leaves a referenced issue half-addressed, or duplicates work tracked elsewhere; "none" when no issue is linked or none found.
+- **Prior-review findings** — unresolved findings from prior review bodies ([§1.1](#11-pr-context)) and inline threads from `fetch-pr-reviews` ([§1.2](#12-load-context-via-sub-agents)); empty on first review.
+- **Project conventions** — the CLAUDE.md / README / `docs/*` points that bear on the diff ([§1.4](#14-project-context-read-before-reviewing)).
 - **Codebase pointers** — only the targeted pack-`grep` hits pulled for cross-file checks; "none" when the diff is self-contained.
 - **Stack** — `agents.rules` value (drives [§2](#phase-2-review-the-diff) thresholds), or `unknown`.
 
@@ -640,7 +640,7 @@ Legs:
 
 - **task ↔ solution** — the PR's stated approach omits, contradicts, or silently re-scopes an issue requirement.
 - **solution ↔ result** — a claim in the PR description is not backed by any hunk in the diff (asserted but absent). Undescribed changes present in the diff are the blocker CHECK-PR-001 below — do not double-report them here.
-- **task ↔ result** — an issue requirement, or a codebase TODO referencing the issue (§1.5 Related work), has no corresponding change in the diff (unaddressed); or the diff addresses something the issue never asked for (scope creep) without explanation.
+- **task ↔ result** — an issue requirement, or a codebase TODO referencing the issue ([§1.5](#15-context-map) Related work), has no corresponding change in the diff (unaddressed); or the diff addresses something the issue never asked for (scope creep) without explanation.
 
 <a id="CHECK-PR-001"></a>
 **CHECK-PR-001: Diff matches PR title/description** — Severity: blocker
@@ -782,7 +782,7 @@ A new service must target the supported runtimes (e.g. Node.js 22+ LTS with Type
 1. Collect every finding from Phase 2.3 as `{ severity, file, line, rule, title, detail }`.
 2. Deduplicate by `(file, line)` — if the same location matches more than one check, keep the higher severity (`blocker` > `suggestion` > `nitpick`) and merge their `rule` codes into one bare comma-separated list (e.g. `CHECK-BUG-002, CHECK-AI-002`). Findings with a `null` line are never merged.
 3. Order the merged list by severity: blockers first, then suggestions, then nitpicks.
-4. Proceed to Phase 3 with this list.
+4. Proceed to [Phase 3](#phase-3-submit-review) with this list.
 
 ### 2.5 Rule Codes
 
@@ -802,7 +802,7 @@ Substitute the resolved `RULES_DOC_URL` value verbatim — do not invent a diffe
 
 In both modes, append nothing when a finding has no rule code (do not emit `[UNSPECIFIED]`).
 
-Map `severity` to its emoji when rendering in Phase 3: `blocker` → 🚧, `suggestion` → 🙋‍♂️, `nitpick` → 💡. The emoji stays first so downstream severity filters keep working.
+Map `severity` to its emoji when rendering in [Phase 3](#phase-3-submit-review): `blocker` → 🚧, `suggestion` → 🙋‍♂️, `nitpick` → 💡. The emoji stays first so downstream severity filters keep working.
 
 ---
 
@@ -995,12 +995,12 @@ Add an optional `suggestion` to an inline comment when the fix is concrete and m
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 

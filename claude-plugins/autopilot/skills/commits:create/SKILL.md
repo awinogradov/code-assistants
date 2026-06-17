@@ -38,13 +38,13 @@ Arguments are optional. When `$ARGUMENTS` is empty:
 - **Commit context** — skip; rely on the diff itself (`git diff --staged`) plus recent conversation history (skill analyses, user instructions) to generate the message. Do NOT prompt.
 - **`--autopilot`** — `$ARGUMENTS` only. Never inferred. Default: `false` (interactive mode). Strip from `$ARGUMENTS` before parsing the remainder as commit context.
 - **Repository conventions** — read `CONTRIBUTING.md` directly from the repository root.
-- **Existing PR** — detect via `gh pr view --json number,url 2>/dev/null` at Phase 5. No user prompt needed.
+- **Existing PR** — detect via `gh pr view --json number,url 2>/dev/null` at [Phase 5](#phase-5-offer-pr-update). No user prompt needed.
 
 ## AskUserQuestion Contract (MANDATORY)
 
-**Autopilot bypass:** When `autopilotMode` is true (from Phase 1), this entire contract is moot — every AskUserQuestion call in Phases 3, 4, and 5 is skipped. Generate the commit message(s), commit directly, and exit without prompting.
+**Autopilot bypass:** When `autopilotMode` is true (from [Phase 1](#phase-1-check-for-changes)), this entire contract is moot — every AskUserQuestion call in Phases 3, 4, and 5 is skipped. Generate the commit message(s), commit directly, and exit without prompting.
 
-Every AskUserQuestion call that presents content for review (commit messages) MUST follow these exact rules. Simple choice dialogs (Phase 3 commit strategy, Phase 5 PR update offer) are exempt from the preview requirement.
+Every AskUserQuestion call that presents content for review (commit messages) MUST follow these exact rules. Simple choice dialogs ([Phase 3](#phase-3-choose-commit-strategy) commit strategy, [Phase 5](#phase-5-offer-pr-update) PR update offer) are exempt from the preview requirement.
 
 1. **`question` is FIXED TEXT** — use the EXACT string specified in each phase. NEVER add commit messages, file names, diffs, metadata, or any other content to the question field.
 2. **`header` is FIXED TEXT** — use the EXACT string specified in each phase.
@@ -110,7 +110,7 @@ AskUserQuestion({
 
 ## Phase 0: Preflight Check
 
-Invoke `Skill(autopilot:preflight-check)` with `mode: commits` from this conversation context. The skill verifies the current branch is appropriate for committing and warns if you are on `main`. If it outputs a "cancelled" message, stop immediately — do not proceed to Phase 1.
+Invoke `Skill(autopilot:preflight-check)` with `mode: commits` from this conversation context. The skill verifies the current branch is appropriate for committing and warns if you are on `main`. If it outputs a "cancelled" message, stop immediately — do not proceed to [Phase 1](#phase-1-check-for-changes).
 
 ## Phase 1: Check for Changes
 
@@ -137,11 +137,11 @@ After the agent completes, store the structured results (categories, file lists,
 
 ## Phase 3: Choose Commit Strategy
 
-**Autopilot bypass:** If `autopilotMode` is true, do NOT call AskUserQuestion. Use single commit flow when `singleCommitRecommended: true`; otherwise use grouped commit flow. Proceed to Phase 4.
+**Autopilot bypass:** If `autopilotMode` is true, do NOT call AskUserQuestion. Use single commit flow when `singleCommitRecommended: true`; otherwise use grouped commit flow. Proceed to [Phase 4](#phase-4-execute-commits).
 
 Use the agent's analysis to decide the commit flow:
 
-- **If agent recommends `singleCommitRecommended: true`:** single commit flow (Phase 4)
+- **If agent recommends `singleCommitRecommended: true`:** single commit flow ([Phase 4](#phase-4-execute-commits))
 - **If agent recommends `singleCommitRecommended: false`:** the changeset is large enough to consider splitting. Evaluate whether the changes represent genuinely distinct areas. If a single coherent commit message can describe all changes, use single commit flow. Otherwise, ask the user:
 
   **Formatting Note:** Do not use markdown formatting (bold, italic, headers) in the `question` parameter — it renders as raw text. Use plain text with line breaks and simple labels instead.
@@ -155,8 +155,8 @@ Use the agent's analysis to decide the commit flow:
     ]
   - `multiSelect`: false
 
-- **If user chooses "Separate commits":** Continue to Phase 4 with grouped flow
-- **If user chooses "Single commit":** Continue to Phase 4 with single commit flow
+- **If user chooses "Separate commits":** Continue to [Phase 4](#phase-4-execute-commits) with grouped flow
+- **If user chooses "Single commit":** Continue to [Phase 4](#phase-4-execute-commits) with single commit flow
 
 ## Phase 4: Execute Commits
 
@@ -170,7 +170,7 @@ Use the agent's analysis to decide the commit flow:
 4. **WHAT-not-WHY validation**: Check the generated title against the WHY signal words and vague signal words listed in the WHAT-not-WHY Rule section below. If the title contains any of those words followed by abstract goals (not technical specifics), or contains the words "review", "feedback", "comments", or "suggestions", regenerate the title using only concrete technical details from the diff. Repeat up to 3 times. If the title still fails, present it to the user with a note that it may need manual rewording.
 5. Verify the title is at most 72 characters: run `printf '%s' "<title>" | wc -m`. If the count exceeds 72, regenerate a shorter title and re-run the check. Do not present a title to the user that exceeds 72 characters.
 
-**Autopilot bypass:** If `autopilotMode` is true, skip steps 6–9 below. Run `git commit -m "<message>"` directly with the generated message and continue to Phase 5.
+**Autopilot bypass:** If `autopilotMode` is true, skip steps 6–9 below. Run `git commit -m "<message>"` directly with the generated message and continue to [Phase 5](#phase-5-offer-pr-update).
 
 6. Present using **AskUserQuestion tool** with preview:
 
@@ -522,12 +522,12 @@ User selects "Update PR". Invokes `Skill(autopilot:pr-update)`.
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 

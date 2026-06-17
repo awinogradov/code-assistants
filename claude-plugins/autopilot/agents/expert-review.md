@@ -52,10 +52,10 @@ Output ONLY a single JSON object matching the schema below — no preamble, no s
 | Field        | Type                               | Constraint                                                                                  |
 | ------------ | ---------------------------------- | ------------------------------------------------------------------------------------------- |
 | `expertRole` | string                             | Your expert role, verbatim from the prompt                                                  |
-| `score`      | integer                            | 0–100; the final score after any Phase 3 iteration                                          |
+| `score`      | integer                            | 0–100; the final score after any [Phase 3](#phase-3-auto-iterate) iteration                                          |
 | `verdict`    | `"approved"` \| `"needs-revision"` | `"approved"` when `score` meets the target, otherwise `"needs-revision"`                    |
 | `findings`   | string[]                           | 3–5 entries, strongest first; stack minor objections together rather than listing each      |
-| `revision`   | object \| null                     | `null` when no Phase 3 iteration ran; otherwise `{ "changed": string, "rescore": integer }` |
+| `revision`   | object \| null                     | `null` when no [Phase 3](#phase-3-auto-iterate) iteration ran; otherwise `{ "changed": string, "rescore": integer }` |
 
 Example (illustrative — emit the raw object, not this fenced form):
 

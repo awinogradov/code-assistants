@@ -30,15 +30,15 @@ Expected flags (all optional, any order):
 - `--release-notes` — include a release notes section in the body (auto-enabled on breaking changes)
 - `--closes #N,#M` — additional issue numbers to close on merge (comma-separated, GitHub issue numbers)
 - `--related #X,#Y` — related issues to link without closing (comma-separated, GitHub issue numbers)
-- `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips the Phase 5 confirmation prompt and creates the PR directly with the generated title and body. When meaningful changes are detected (Phase 2), release notes are auto-added.
+- `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips the [Phase 5](#phase-5-verify-with-user) confirmation prompt and creates the PR directly with the generated title and body. When meaningful changes are detected ([Phase 2](#phase-2-gather-context)), release notes are auto-added.
 
 ## Input resolution
 
 Arguments are optional. Resolve each field in this order:
 
 - **`--draft`** — `$ARGUMENTS` → default `false`. Do NOT prompt.
-- **`--release-notes`** — `$ARGUMENTS` → auto-enable when Phase 2 detects breaking changes → default `false`. Do NOT prompt (user gets an "Add release notes" option in Phase 5 preview).
-- **`--closes`** — `$ARGUMENTS` → branch-name-derived issue number is already added automatically in Phase 4. No prompt; treat absence as intentional.
+- **`--release-notes`** — `$ARGUMENTS` → auto-enable when [Phase 2](#phase-2-gather-context) detects breaking changes → default `false`. Do NOT prompt (user gets an "Add release notes" option in [Phase 5](#phase-5-verify-with-user) preview).
+- **`--closes`** — `$ARGUMENTS` → branch-name-derived issue number is already added automatically in [Phase 4](#phase-4-generate-pr-description). No prompt; treat absence as intentional.
 - **`--related`** — `$ARGUMENTS` → no inference. No prompt; treat absence as intentional.
 - **`--autopilot`** — `$ARGUMENTS` only. Never inferred. Default: `false` (interactive mode).
 - **Branch + base + issue number** — from `git branch --show-current` and the branch-name pattern `^issue-([0-9]+)-`. Special prefix branches (`hotfix-`, `trivial-`, `maintenance-`, `proposal-`) have no issue number. No prompt.
@@ -46,15 +46,15 @@ Arguments are optional. Resolve each field in this order:
 
 ## Completion Requirement
 
-This workflow is not complete until Phase 6 executes `gh pr create` and outputs the PR URL. Generating a title, generating a description, or running validation does not constitute completion. Execute all six phases in sequence.
+This workflow is not complete until [Phase 6](#phase-6-create-pull-request) executes `gh pr create` and outputs the PR URL. Generating a title, generating a description, or running validation does not constitute completion. Execute all six phases in sequence.
 
 Do not call any skill not listed in `allowed-tools` above. The title and description rules in Phases 3-4 are the validation — there is no separate validation step.
 
 ## AskUserQuestion Contract (MANDATORY)
 
-**Autopilot bypass:** When `autopilotMode` is true (from Phase 1), this contract is moot — the Phase 5 confirmation prompt is skipped. Generate the title and body, then proceed directly to Phase 6.
+**Autopilot bypass:** When `autopilotMode` is true (from [Phase 1](#phase-1-validate-current-state)), this contract is moot — the [Phase 5](#phase-5-verify-with-user) confirmation prompt is skipped. Generate the title and body, then proceed directly to [Phase 6](#phase-6-create-pull-request).
 
-Every AskUserQuestion call that presents content for review (PR previews in Phase 5) MUST follow these exact rules. Simple choice dialogs (Phase 1 uncommitted changes) are exempt from the preview requirement.
+Every AskUserQuestion call that presents content for review (PR previews in [Phase 5](#phase-5-verify-with-user)) MUST follow these exact rules. Simple choice dialogs ([Phase 1](#phase-1-validate-current-state) uncommitted changes) are exempt from the preview requirement.
 
 1. **`question` is FIXED TEXT** — use the EXACT string specified in each phase. NEVER add PR titles, bodies, metadata, file lists, diffs, or any other content to the question field.
 2. **`header` is FIXED TEXT** — use the EXACT string specified in each phase.
@@ -107,18 +107,18 @@ AskUserQuestion({
 
 ## Phase 0: Preflight Check
 
-Invoke `Skill(autopilot:preflight-check)` with `mode: pr` from this conversation context. The skill verifies the current branch is appropriate for opening a PR and warns if you are on `main`. If it outputs a "cancelled" message, stop immediately — do not proceed to Phase 1.
+Invoke `Skill(autopilot:preflight-check)` with `mode: pr` from this conversation context. The skill verifies the current branch is appropriate for opening a PR and warns if you are on `main`. If it outputs a "cancelled" message, stop immediately — do not proceed to [Phase 1](#phase-1-validate-current-state).
 
 ## Phase 1: Validate Current State
 
-Uncommitted-change handling is done in Phase 0 by `preflight-check` — do not repeat it here.
+Uncommitted-change handling is done in [Phase 0](#phase-0-preflight-check) by `preflight-check` — do not repeat it here.
 
 0. Parse `$ARGUMENTS`: if it contains `--autopilot`, set `autopilotMode = true` and remove the flag before further parsing. Otherwise `autopilotMode = false`.
 1. Get current branch name with `git branch --show-current`
 2. Validate branch name follows convention:
    - Standard: `issue-<number>-<short-description>` (e.g., `issue-123-add-feature`)
    - Special prefix: `<hotfix|trivial|maintenance|proposal|security>-<short-description>` (e.g., `hotfix-memory-leak-editor`, `security-tainted-format-string`)
-3. Extract the issue number from the branch (e.g., `123` from `issue-123-add-feature`) for use in the `**Issues:**` section as `Closes #123`. OR detect the special prefix (`hotfix`, `trivial`, `maintenance`, `proposal`, `security`) and uppercase it for the PR title prefix (e.g., `HOTFIX:`, `SECURITY:`). For a `security-` branch, emit NO `Closes #` — record the code-scanning alert reference instead (see Phase 4).
+3. Extract the issue number from the branch (e.g., `123` from `issue-123-add-feature`) for use in the `**Issues:**` section as `Closes #123`. OR detect the special prefix (`hotfix`, `trivial`, `maintenance`, `proposal`, `security`) and uppercase it for the PR title prefix (e.g., `HOTFIX:`, `SECURITY:`). For a `security-` branch, emit NO `Closes #` — record the code-scanning alert reference instead (see [Phase 4](#phase-4-generate-pr-description)).
 4. If branch name is invalid, warn user and ask how to proceed
 
 ## Phase 2: Gather Context
@@ -188,7 +188,7 @@ Each section is separated by `---`. The `**Issues:**` section is ALWAYS last. Pl
 Include this section (titled `**Release notes:**`) with a `---` separator when:
 
 - `--release-notes` flag is present, OR
-- Breaking changes were detected (Phase 2 step 8 — mandatory)
+- Breaking changes were detected ([Phase 2](#phase-2-gather-context) step 8 — mandatory)
 
 Content rules:
 
@@ -218,7 +218,7 @@ Content rules:
 - DO NOT place magic words (e.g., `Closes #N`, `Related to #N`) as bare text in the description — they MUST be inside the `**Issues:**` section
 - Issue links MUST use magic words — NEVER use markdown links like `[#N](url)`
 - The section is omitted ONLY for special prefix branches (HOTFIX / TRIVIAL / MAINTENANCE / PROPOSAL / SECURITY) when no issue numbers are provided
-- For a `security-` branch (code-scanning alert fix), the `**Issues:**` section is omitted and replaced by an `**Alert:**` section recording the alert reference — a `---` separator, then `**Alert:**` on its own line, then the alert URL. The URL is the `htmlUrl` from the run skill's Phase 0 `resolve-alert-context` output, carried in conversation context; when `pr:create` runs standalone (no parent context), resolve it via `gh api repos/{owner}/{repo}/code-scanning/alerts/{n}` if the alert number is known, otherwise ask the user for the alert URL. Emit NO `Closes #`: code-scanning alerts close on the next scan, not via PR magic words. The `**Alert:**` section is last, in the same slot `**Issues:**` would occupy.
+- For a `security-` branch (code-scanning alert fix), the `**Issues:**` section is omitted and replaced by an `**Alert:**` section recording the alert reference — a `---` separator, then `**Alert:**` on its own line, then the alert URL. The URL is the `htmlUrl` from the [`run` skill's Phase 0](../run/SKILL.md#phase-0-input-resolution) `resolve-alert-context` output, carried in conversation context; when `pr:create` runs standalone (no parent context), resolve it via `gh api repos/{owner}/{repo}/code-scanning/alerts/{n}` if the alert number is known, otherwise ask the user for the alert URL. Emit NO `Closes #`: code-scanning alerts close on the next scan, not via PR magic words. The `**Alert:**` section is last, in the same slot `**Issues:**` would occupy.
 
 **Magic Words:**
 
@@ -276,10 +276,10 @@ Closes #<issue-from-branch>
 
 ## Phase 5: Verify with User
 
-**Autopilot bypass:** If `autopilotMode` is true, skip the AskUserQuestion confirmation below. Before proceeding to Phase 6:
+**Autopilot bypass:** If `autopilotMode` is true, skip the AskUserQuestion confirmation below. Before proceeding to [Phase 6](#phase-6-create-pull-request):
 
-- If meaningful changes are detected (Phase 2 step 7) AND neither `--release-notes` nor breaking changes triggered the release notes section, auto-generate the `**Release notes:**` section using the rules in Phase 4 and insert it between the description and the `**Issues:**` section (with `---` separators).
-- Then proceed directly to Phase 6 with the resulting title and body.
+- If meaningful changes are detected ([Phase 2](#phase-2-gather-context) step 7) AND neither `--release-notes` nor breaking changes triggered the release notes section, auto-generate the `**Release notes:**` section using the rules in [Phase 4](#phase-4-generate-pr-description) and insert it between the description and the `**Issues:**` section (with `---` separators).
+- Then proceed directly to [Phase 6](#phase-6-create-pull-request) with the resulting title and body.
 
 Present PR details using **AskUserQuestion tool** with preview.
 
@@ -294,7 +294,7 @@ Present PR details using **AskUserQuestion tool** with preview.
    - `header`: "Create PR"
    - `options`:
 
-     **If `--release-notes` was NOT used AND no breaking changes AND meaningful changes detected (Phase 2 step 7):**
+     **If `--release-notes` was NOT used AND no breaking changes AND meaningful changes detected ([Phase 2](#phase-2-gather-context) step 7):**
      [
      { label: "Create PR", description: "Create pull request ready for review", preview: "<full PR content>" },
      { label: "Add release notes", description: "Generate a release notes section for the changelog", preview: "<full PR content>" },
@@ -314,7 +314,7 @@ Present PR details using **AskUserQuestion tool** with preview.
    All options use the same `preview` content (full PR title + body) since the user is choosing an action, not content. The preview enables a side-by-side layout in the UI.
 
 3. If user selects "Add release notes":
-   - Generate the **Release notes:** section (same rules as Phase 4)
+   - Generate the **Release notes:** section (same rules as [Phase 4](#phase-4-generate-pr-description))
    - Insert it into the PR body between the description and issue links sections (with `---` separators)
    - Re-present the full PR content using AskUserQuestion with preview (without the "Add release notes" option)
 
@@ -323,7 +323,7 @@ Present PR details using **AskUserQuestion tool** with preview.
 5. If user selects "Cancel": abort with "PR creation cancelled."
 
 6. Only proceed after user selects "Create PR"
-7. Once "Create PR" is selected, immediately continue to Phase 6 below to execute `gh pr create`. Do not stop here.
+7. Once "Create PR" is selected, immediately continue to [Phase 6](#phase-6-create-pull-request) below to execute `gh pr create`. Do not stop here.
 
 ## Phase 6: Create Pull Request
 
@@ -567,12 +567,12 @@ User selects "Create PR".
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 

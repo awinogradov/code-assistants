@@ -41,7 +41,7 @@ Additional free-form context can be appended after any of the forms above (e.g.,
 ## Input resolution
 
 - **Task description / issue identifier** — parsed from `$ARGUMENTS`. If empty, prompt once via `AskUserQuestion`: "What should we plan?" with free-form slot. Do not abort silently.
-- **Current branch / worktree / issue-ID mismatch** — resolved via `git` commands and Phase 0 context. No prompts beyond the preflight skill's own prompts.
+- **Current branch / worktree / issue-ID mismatch** — resolved via `git` commands and [Phase 0](#phase-0-input-resolution) context. No prompts beyond the preflight skill's own prompts.
 - **Repository root** — `git rev-parse --show-toplevel`. No prompt.
 
 ## Task Progress Protocol
@@ -160,19 +160,19 @@ Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
     - `compress`: true
 ```
 
-After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response — Phase 1 (Context Gathering) is the single phase that reads the codebase from it. Phase 0 does NOT grep or read code: build the issue/alert context, Steelmanned Intent, and Assumptions below from the resolved JSON (issue title/body/comments, or alert rule/message) alone. Defer every codebase read to Phase 1.
+After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response — [Phase 1](#phase-1-context-gathering) (Context Gathering) is the single phase that reads the codebase from it. [Phase 0](#phase-0-input-resolution) does NOT grep or read code: build the issue/alert context, Steelmanned Intent, and Assumptions below from the resolved JSON (issue title/body/comments, or alert rule/message) alone. Defer every codebase read to [Phase 1](#phase-1-context-gathering).
 
 ### Alert Context Output (code-scanning-alert input)
 
 For a `code-scanning-alert` input, render the context from the `resolve-alert-context` JSON instead of the issue block — `source`, `ruleId`, `severity`, `state`, `file:line`, and `message`. There is no TODO search and no assignee. Derive the **Steelmanned Intent** from the alert rule and message (what fixing this alert means), and key everything downstream off the `code-scanning-alert` type:
 
-- **Branch (Phase 2)** — a `security-<slug>` branch (NOT `issue-<n>-…`); the slug paraphrases the rule/file (e.g. `security-tainted-format-string`).
+- **Branch ([Phase 2](#phase-2-embed-branch-creation-in-plan-file))** — a `security-<slug>` branch (NOT `issue-<n>-…`); the slug paraphrases the rule/file (e.g. `security-tainted-format-string`).
 - **PR** — a `SECURITY:` title; the body records the alert reference (`htmlUrl`) and emits **no** `Closes #` (alerts are not closed by PR magic words).
 - **Verify** — the plan's Post-Implementation verify step polls alert state with `gh api repos/{owner}/{repo}/code-scanning/alerts/{n} --jq .state`, expecting `fixed` after merge + the next CodeQL scan.
 
 ### Issue Context Output
 
-The `resolve-issue-context` and `search-codebase-todos` agents each return a single JSON object (see each agent's output schema). Parse both, then render the issue context for display from the `resolve-issue-context` fields — `source`, `title`, `status`, `labels`, `assignee` (only when non-null), `description`, and `comments` — and append the TODO results rendered from `search-codebase-todos`:
+The [`resolve-issue-context`](../../agents/resolve-issue-context.md) and [`search-codebase-todos`](../../agents/search-codebase-todos.md) agents each return a single JSON object (see each agent's output schema). Parse both, then render the issue context for display from the `resolve-issue-context` fields — `source`, `title`, `status`, `labels`, `assignee` (only when non-null), `description`, and `comments` — and append the TODO results rendered from `search-codebase-todos`:
 
 ```
 ### Related TODOs in Codebase
@@ -198,7 +198,7 @@ After the Steelmanned Intent, emit two short blocks. This forces interpretive ch
 
 **Assumptions** — up to 5 bullets. Each names an interpretation being made that the user could disagree with (e.g., "treating this as a read-only API, not a webhook"). If none, write "none".
 
-**Open Questions** — material ambiguities that would change the design. If any open question is load-bearing (the plan's structure depends on the answer), raise it via `AskUserQuestion` BEFORE delegating to the stack skill in Phase 1. If none are load-bearing, state "none" and proceed.
+**Open Questions** — material ambiguities that would change the design. If any open question is load-bearing (the plan's structure depends on the answer), raise it via `AskUserQuestion` BEFORE delegating to the stack skill in [Phase 1](#phase-1-detect-stack-and-delegate). If none are load-bearing, state "none" and proceed.
 
 Format:
 
@@ -216,19 +216,19 @@ After completing the Issue Context Output, Steelmanned Intent, and Assumptions &
 
 ## Preflight Check
 
-After completing Phase 0, invoke the preflight check skill to validate the git branch state:
+After completing [Phase 0](#phase-0-input-resolution), invoke the preflight check skill to validate the git branch state:
 
 ```
 Skill(autopilot:preflight-check)
 ```
 
-The skill receives `mode: plan` and the Phase 0 context (input type, issue ID) from the conversation history. It validates the current branch, checks for merged/stale branches, detects issue ID mismatches, and ensures main is up to date.
+The skill receives `mode: plan` and the [Phase 0](#phase-0-input-resolution) context (input type, issue ID) from the conversation history. It validates the current branch, checks for merged/stale branches, detects issue ID mismatches, and ensures main is up to date.
 
-If the skill outputs "Planning cancelled", stop execution immediately — do not proceed to Phase 1.
+If the skill outputs "Planning cancelled", stop execution immediately — do not proceed to [Phase 1](#phase-1-detect-stack-and-delegate).
 
 ## Common Instructions
 
-The following apply to ALL stacks throughout planning — both the orchestrator phases below and the shared **Stack Pipeline (Phases 1–6)** the stack skills execute, which points back here rather than restating them:
+The following apply to ALL stacks throughout planning — both the orchestrator phases below and the shared [**Stack Pipeline (Phases 1–6)**](#stack-pipeline-phases-16) the stack skills execute, which points back here rather than restating them:
 
 ### Documentation Lookup Protocol (MANDATORY)
 
@@ -238,7 +238,7 @@ Before planning, look up documentation for every technology and library relevant
 
 - Manifest file (`package.json`) — libraries relevant to the task
 - Issue/ticket description — libraries explicitly mentioned by the user
-- Codebase exploration — libraries discovered during Phase 1 exploration
+- Codebase exploration — libraries discovered during [Phase 1](#phase-1-context-gathering) exploration
 
 **Step 2: context7** — For each library, call in sequence:
 
@@ -281,10 +281,10 @@ Every plan file written by any stack skill MUST begin with a single `# <Title>` 
 
 **Title derivation:**
 
-- For `github-issue` inputs: use the GitHub issue title verbatim as resolved in Phase 0 (no `#<n>` prefix, no truncation).
+- For `github-issue` inputs: use the GitHub issue title verbatim as resolved in [Phase 0](#phase-0-input-resolution) (no `#<n>` prefix, no truncation).
 - For `plain description` inputs: paraphrase the user's task description into a single sentence (≤80 characters), sentence case.
 
-**Section ordering** when a `## Pre-Implementation` block is also emitted (see Phase 2):
+**Section ordering** when a `## Pre-Implementation` block is also emitted (see [Phase 2](#phase-2-embed-branch-creation-in-plan-file)):
 
 ```
 # <Title>
@@ -337,7 +337,7 @@ Always reuse `Skill(autopilot:ascii-schemas)` output verbatim — do not hand-dr
 | `NodeJS+React`          | `Skill(autopilot:plan-nodejs-react)` |
 | `NodeJS+React+Tailwind` | `Skill(autopilot:plan-nodejs-react)` |
 
-4. Invoke the skill. The skill receives the full Phase 0 context (issue data, branch info, TODO matches) from the conversation history and executes the stack-specific phases.
+4. Invoke the skill. The skill receives the full [Phase 0](#phase-0-input-resolution) context (issue data, branch info, TODO matches) from the conversation history and executes the stack-specific phases.
 
 **Formatting Note:** Do not use markdown formatting (bold, italic, headers) in AskUserQuestion `question` parameter — it renders as raw text. Use plain text with line breaks and simple labels instead.
 
@@ -361,7 +361,7 @@ Tool parameters:
 
 ### Check conditions
 
-1. Input type from Phase 0 Issue Context
+1. Input type from [Phase 0](#phase-0-input-resolution) Issue Context
 2. Current branch: `git branch --show-current`
 3. Worktree detection — run both commands:
    - `git rev-parse --git-dir`
@@ -373,7 +373,7 @@ Tool parameters:
 
 ### If on `main` branch OR `worktreeNeedsBranch` is true
 
-Insert `## Pre-Implementation` directly below the `# <Title>` line (which per the Plan File Header rule above must already be line 1) and above `## Summary`. The block content depends on input type from Phase 0.
+Insert `## Pre-Implementation` directly below the `# <Title>` line (which per the [Plan File Header](#plan-file-header-mandatory) rule above must already be line 1) and above `## Summary`. The block content depends on input type from [Phase 0](#phase-0-input-resolution).
 
 #### Input type is `github-issue` (bare number, `#`-prefixed number, or GitHub issue URL)
 
@@ -423,7 +423,7 @@ Do NOT add `## Pre-Implementation` — already on a feature branch with active w
 
 ## Stack Pipeline (Phases 1–6)
 
-The stack skills (`plan-bun`, `plan-nodejs-react`) execute this shared pipeline after the Phase 1 delegation above, supplying their three deltas (example libraries, expert table, verify examples) from their own `## Stack Deltas` section. The pipeline is defined ONCE here so the two stacks cannot drift; wherever a phase says "your stack's <delta>", read the value from the delegating stack skill. These "Phase 1–6" are the stack-execution phases — distinct from this orchestrator's Phase 0–2 above — and the stack skill runs them in order after being delegated to.
+The stack skills (`plan-bun`, `plan-nodejs-react`) execute this shared pipeline after the [Phase 1](#phase-1-detect-stack-and-delegate) delegation above, supplying their three deltas (example libraries, expert table, verify examples) from their own `## Stack Deltas` section. The pipeline is defined ONCE here so the two stacks cannot drift; wherever a phase says "your stack's <delta>", read the value from the delegating stack skill. These "[Phase 1](#phase-1-context-gathering)–6" are the stack-execution phases — distinct from this orchestrator's [Phase 0](#phase-0-input-resolution)–2 above — and the stack skill runs them in order after being delegated to.
 
 ### Task Discovery
 
@@ -441,19 +441,19 @@ Use these IDs for all TaskUpdate calls in the phases below.
 
 **FIRST**, call TaskUpdate to set task 2 ("Gather context") to `status: "in_progress"`.
 
-This is the pipeline's single codebase-reading pass: Phase 0 read no code and Phase 2 only synthesizes, so gather here everything the rest of planning needs about the code and record it in the **Context Map** (step 7).
+This is the pipeline's single codebase-reading pass: [Phase 0](#phase-0-input-resolution) read no code and [Phase 2](#phase-2-deep-analysis) only synthesizes, so gather here everything the rest of planning needs about the code and record it in the **Context Map** (step 7).
 
 1. **Branch Changes** - Analyze all changes since diverging from main:
    - `git log origin/main..HEAD --oneline` - commits on this branch
    - `git diff origin/main...HEAD` - all code changes
 2. **Codebase Exploration** - Decide where context comes from before crawling, so the snapshot and live tools don't re-traverse the same tree:
-   - **Snapshot (default — broad/whole-repo reads):** the Phase 0 repomix snapshot already covers the whole tree. Search it with `grep_repomix_output`/`read_repomix_output` (step 6) for related implementations, similar features, and test patterns. Do NOT crawl the tree live for what the snapshot can answer.
-   - **Live tools (Explore agents / Grep / Glob — only what the snapshot cannot serve):** the snapshot reflects `main` at the last merge, so on a feature branch it lags by the in-flight changes; those are in the Phase 1 branch diff (step 1), not the pack. Reach for live tools only for in-flight working-tree code, or a targeted fresh read the snapshot is too stale or too coarse to answer.
-   - Launch Explore agents (parallel) ONLY when the rule above calls for a live read; otherwise skip them. When you do, start from TODO locations found in Phase 0 (if any) and search `*.ts`/`*.tsx` files.
-3. **Documentation Lookup** (MANDATORY) - Follow the **Documentation Lookup Protocol** in `## Common Instructions`. Identify task-relevant libraries from `package.json`, the issue/ticket description, and codebase exploration results (e.g. your stack's **example libraries** delta).
-4. **Repository Documentation** (MANDATORY) - Follow the **Repository Documentation** rule in `## Common Instructions`.
-5. **CLAUDE.md Compliance** - Follow the **CLAUDE.md Compliance** rule in `## Common Instructions`.
-6. **Repomix** - Search codebase via `mcp__repomix__grep_repomix_output` (outputId from Phase 0). Use `mcp__repomix__read_repomix_output` with `startLine`/`endLine` for specific sections only.
+   - **Snapshot (default — broad/whole-repo reads):** the [Phase 0](#phase-0-input-resolution) repomix snapshot already covers the whole tree. Search it with `grep_repomix_output`/`read_repomix_output` (step 6) for related implementations, similar features, and test patterns. Do NOT crawl the tree live for what the snapshot can answer.
+   - **Live tools (Explore agents / Grep / Glob — only what the snapshot cannot serve):** the snapshot reflects `main` at the last merge, so on a feature branch it lags by the in-flight changes; those are in the [Phase 1](#phase-1-context-gathering) branch diff (step 1), not the pack. Reach for live tools only for in-flight working-tree code, or a targeted fresh read the snapshot is too stale or too coarse to answer.
+   - Launch Explore agents (parallel) ONLY when the rule above calls for a live read; otherwise skip them. When you do, start from TODO locations found in [Phase 0](#phase-0-input-resolution) (if any) and search `*.ts`/`*.tsx` files.
+3. **Documentation Lookup** (MANDATORY) - Follow the [**Documentation Lookup Protocol**](#documentation-lookup-protocol-mandatory) in `## Common Instructions`. Identify task-relevant libraries from `package.json`, the issue/ticket description, and codebase exploration results (e.g. your stack's **example libraries** delta).
+4. **Repository Documentation** (MANDATORY) - Follow the [**Repository Documentation**](#repository-documentation-mandatory) rule in `## Common Instructions`.
+5. **CLAUDE.md Compliance** - Follow the [**CLAUDE.md Compliance**](#claudemd-compliance) rule in `## Common Instructions`.
+6. **Repomix** - Search codebase via `mcp__repomix__grep_repomix_output` (outputId from [Phase 0](#phase-0-input-resolution)). Use `mcp__repomix__read_repomix_output` with `startLine`/`endLine` for specific sections only.
 7. **Context Map (the output of this pass)** - Because this is the only phase that reads the codebase, record a compact written inventory of what it found, enough that every later phase reasons over the map instead of re-reading:
    - Relevant files/modules and their role in the change
    - Existing patterns and similar implementations to mirror
@@ -467,11 +467,11 @@ After completing all context gathering, call TaskUpdate to set task 2 ("Gather c
 
 **FIRST**, call TaskUpdate to set task 3 ("Analyze codebase") to `status: "in_progress"`.
 
-This is a synthesis step, not a second crawl. Reason over the **Context Map** Phase 1 produced — that map is the codebase read, and it already holds the files, patterns, types, tests, and in-flight changes this analysis needs. Work the dimensions below against it; do not re-grep or re-read the tree to reconstruct what the map already contains.
+This is a synthesis step, not a second crawl. Reason over the **Context Map** [Phase 1](#phase-1-context-gathering) produced — that map is the codebase read, and it already holds the files, patterns, types, tests, and in-flight changes this analysis needs. Work the dimensions below against it; do not re-grep or re-read the tree to reconstruct what the map already contains.
 
-Reach for an additional read only if the Context Map is genuinely missing something the analysis turns on, and only under the same snapshot-vs-live rule Phase 1 applies — then fold the result back into the map:
+Reach for an additional read only if the Context Map is genuinely missing something the analysis turns on, and only under the same snapshot-vs-live rule [Phase 1](#phase-1-context-gathering) applies — then fold the result back into the map:
 
-- a targeted `mcp__repomix__grep_repomix_output`/`mcp__repomix__read_repomix_output` (outputId from Phase 0) for the one missing section, or
+- a targeted `mcp__repomix__grep_repomix_output`/`mcp__repomix__read_repomix_output` (outputId from [Phase 0](#phase-0-input-resolution)) for the one missing section, or
 - a live Grep/Read/Glob for in-flight working-tree code the snapshot is too stale to show (the branch's uncommitted changes).
 
 | Dimension        | Key Questions                                             |
@@ -486,9 +486,9 @@ After completing deep analysis, call TaskUpdate to set task 3 ("Analyze codebase
 
 ### Phase 3: Draft Plan
 
-Assemble a complete plan draft now — before scoring and expert review — so both operate on a concrete artifact instead of an imagined one. Build the draft from the output template below and keep it available for Phase 4 (expert review) and Phase 5 (scoring). Leave the `Score:` line as a placeholder; Phase 5 fills it. This draft is interim — do NOT flip any task status here; it flows directly into the Phase 4 review. Task 6 ("Output final plan") activates in Phase 6 when the final plan is written, so the progress list advances in numeric order (Review and Validate finish before Output begins).
+Assemble a complete plan draft now — before scoring and expert review — so both operate on a concrete artifact instead of an imagined one. Build the draft from the output template below and keep it available for [Phase 4](#phase-4-dynamic-expert-review) (expert review) and [Phase 5](#phase-5-validation-scoring) (scoring). Leave the `Score:` line as a placeholder; [Phase 5](#phase-5-validation-scoring) fills it. This draft is interim — do NOT flip any task status here; it flows directly into the [Phase 4](#phase-4-dynamic-expert-review) review. Task 6 ("Output final plan") activates in [Phase 6](#phase-6-finalize-output) when the final plan is written, so the progress list advances in numeric order (Review and Validate finish before Output begins).
 
-The template below starts with `# <Title>` — see the canonical "Plan File Header (MANDATORY)" rule in `## Common Instructions` above for title derivation and section ordering.
+The template below starts with `# <Title>` — see the canonical ["Plan File Header (MANDATORY)"](#plan-file-header-mandatory) rule in `## Common Instructions` above for title derivation and section ordering.
 
 ```
 # <Title>
@@ -555,7 +555,7 @@ Use the Agent tool with:
 - `description`: "Expert review: [Role]"
 ```
 
-Wait for all agents to complete. Each returns a JSON object (`expertRole`, `score`, `verdict`, `findings`, `revision`). Aggregate the `findings` across experts to refine the Phase 3 draft internally, and treat any `needs-revision` verdict as a signal to address that expert's findings before finalizing. Do not include the raw expert JSON in the plan output.
+Wait for all agents to complete. Each returns a JSON object (`expertRole`, `score`, `verdict`, `findings`, `revision`). Aggregate the `findings` across experts to refine the [Phase 3](#phase-3-draft-plan) draft internally, and treat any `needs-revision` verdict as a signal to address that expert's findings before finalizing. Do not include the raw expert JSON in the plan output.
 
 After all expert reviews complete, call TaskUpdate to set task 4 ("Review with experts") to `status: "completed"`.
 
@@ -588,20 +588,22 @@ After scoring completes, call TaskUpdate to set task 5 ("Validate plan scores") 
 
 **FIRST**, call TaskUpdate to set task 6 ("Output final plan") to `status: "in_progress"`.
 
-Apply the expert findings (Phase 4) and the validated score (Phase 5) to the Phase 3 draft, then write the final plan file. Replace the `Score:` placeholder in the `## Summary` block with the Phase 5 result (`Score: [X]/100`).
+Apply the expert findings ([Phase 4](#phase-4-dynamic-expert-review)) and the validated score ([Phase 5](#phase-5-validation-scoring)) to the [Phase 3](#phase-3-draft-plan) draft, then write the final plan file. Replace the `Score:` placeholder in the `## Summary` block with the [Phase 5](#phase-5-validation-scoring) result (`Score: [X]/100`).
 
 After outputting the final plan, call TaskUpdate to set task 6 ("Output final plan") to `status: "completed"`.
+
+When you write the plan file, apply the reference-formatting rules inlined at the end of this skill (the **Reference formatting & readability** block below, RFC-0001 v3) to every reference it contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
 
 <!-- ref-format:start -->
 
 ### Reference formatting & readability
 
-These rules govern references — when you point the reader at a real file, standard, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Prefer stable references that never rot; render the same kind of reference the same way everywhere:
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
 
-- Code identifiers and file names — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked specimen names the thing without a link that breaks when a file moves or a doc is restructured.
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections in the same document — link the heading by its anchor, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`; a same-file anchor moves with the file and stays clickable on GitHub.
-- Other docs and cross-document sections — do NOT link the doc name or an anchor in another file; those rot the moment that doc is restructured. Inline a short gist of the point you need instead.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
