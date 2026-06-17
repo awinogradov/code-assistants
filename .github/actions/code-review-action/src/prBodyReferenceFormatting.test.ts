@@ -1,10 +1,10 @@
 /**
- * Guards that the body-generation phases of the pr:create and pr:update autopilot
- * skills explicitly instruct the model to apply the inlined reference-formatting
- * rules (RFC-0001). Both skills already inline the canonical block — the
- * referenceFormattingSync test guards that copy stays byte-identical — but inlining
- * alone never made the generators apply it, so generated PR bodies escaped the
- * standard (issue #279).
+ * Guards that the output-generating autopilot skills explicitly instruct the model to
+ * apply the inlined reference-formatting rules (RFC-0001): pr:create and pr:update (PR
+ * bodies, issue #279) plus plan, plan-bun, plan-nodejs-react, run, and issue:create
+ * (plan files and issue bodies, issue #334). Each already inlines the canonical block —
+ * the referenceFormattingSync test guards that copy stays byte-identical — but inlining
+ * alone never made the generators apply it, so generated output escaped the standard.
  *
  * This is a presence-guard: it asserts the apply-instruction survives in the
  * instructions ABOVE the inlined block, so the wiring cannot be silently dropped. It
@@ -29,9 +29,9 @@ const startSentinel = "<!-- ref-format:start -->";
 // generation phase. Reword it only alongside this test.
 const applyInstruction = "reference-formatting rules inlined at the end";
 
-const skills = ["pr:create", "pr:update"];
+const skills = ["pr:create", "pr:update", "plan", "plan-bun", "plan-nodejs-react", "run", "issue:create"];
 
-describe("PR body reference-formatting wiring", () => {
+describe("output reference-formatting wiring", () => {
   test.each(skills)("%s instructs the body generator to apply RFC-0001", async (skill) => {
     const content = await readFile(join(skillsDir, skill, "SKILL.md"), "utf8");
     const blockStart = content.indexOf(startSentinel);
