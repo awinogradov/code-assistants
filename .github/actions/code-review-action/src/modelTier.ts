@@ -35,11 +35,13 @@ export const maxCheapChurn = 500;
 
 /**
  * Path fragments that keep a PR on the default tier regardless of size: CI/action
- * config (a broken workflow degrades every consuming repo) and security- or
- * auth-sensitive code, where a missed subtle bug is most costly.
+ * config (a broken workflow degrades every consuming repo), env files (runtime
+ * config that may carry credentials), and security- or auth-sensitive code, where
+ * a missed subtle bug is most costly.
  */
 const riskSensitivePatterns = [
   /(^|\/)\.github\//,
+  /(^|\/)\.env(\.|$)/i,
   // Substring (not word-bounded) so `oauth`, `authentication`, `tokenizer`, etc.
   // also keep the default tier — over-matching here only forgoes savings on a PR,
   // whereas under-matching would route security code to the weaker model.
@@ -105,8 +107,6 @@ export function selectModel({ changedFiles, churn, baseModel, cheapModel }: Mode
 async function resolveTierModel(baseModel: string, cheapModel: string): Promise<string> {
   try {
     const { octokit, owner, repoName, pullNumber } = parseRepoEnv();
-    // One page of up to 100 files: a PR larger than that exceeds maxCheapChurn,
-    // so it is never cheap-tier eligible and pagination cannot change the verdict.
     const { data: files } = await octokit.rest.pulls.listFiles({
       owner,
       repo: repoName,
@@ -114,6 +114,12 @@ async function resolveTierModel(baseModel: string, cheapModel: string): Promise<
       per_page: 100,
     });
     const changedFiles = files.map((file) => file.filename);
+    // A full page may be truncated: files beyond it are invisible, and a 100-file
+    // diff can still fall under maxCheapChurn, so keep the default tier rather than
+    // miss a risk-sensitive file past the page boundary.
+    if (files.length >= 100) {
+      return baseModel;
+    }
     const churn = files.reduce((sum, file) => sum + file.additions + file.deletions, 0);
     const model = selectModel({ changedFiles, churn, baseModel, cheapModel });
     console.log(`model-tier: ${model} (${changedFiles.length} files, ${churn} churn, base ${baseModel})`);

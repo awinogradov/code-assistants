@@ -19,6 +19,8 @@ describe("isRiskSensitive", () => {
     for (const path of [
       ".github/workflows/code-review.yml",
       ".github/actions/foo/action.yml",
+      ".env.local",
+      ".env.production",
       "src/auth/session.ts",
       "src/oauth/client.ts",
       "lib/crypto/sign.ts",
@@ -96,6 +98,17 @@ describe("selectModel", () => {
       selectModel({
         changedFiles: ["src/auth/login.ts"],
         churn: 10,
+        baseModel: base,
+        cheapModel: cheap,
+      })
+    ).toBe(base);
+  });
+
+  test("keeps the default tier for env files despite their dotfile shape", () => {
+    expect(
+      selectModel({
+        changedFiles: [".env.production"],
+        churn: 5,
         baseModel: base,
         cheapModel: cheap,
       })
