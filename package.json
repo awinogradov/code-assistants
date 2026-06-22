@@ -29,7 +29,8 @@
     ".github/actions/validate-actions",
     ".github/actions/perf-report-action",
     "claude-plugins/*",
-    "packages/*"
+    "packages/*",
+    "!claude-plugins/autopilot/skills/**"
   ],
   "scripts": {
     "prepare": "husky",
