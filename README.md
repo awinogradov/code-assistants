@@ -44,6 +44,10 @@ The `docs/` guides are numbered chapters in reading order — newcomers start at
 8. [Upstream sync](./docs/08-upstream-sync.md) — the one-action `upstream-sync` aggregator and the thin `upstream.yml` consumers run, with per-kind opt-out
 9. [Committed Repomix pack](./docs/09-repomix-pack.md) — the `.repomix/pack.xml` snapshot, the merge-triggered workflow that refreshes it, and the snapshot-first contract skills follow
 
+**Part VI — Document generation.** Turning content into beautiful, branded files.
+
+10. [The `pdf:create` skill](./docs/10-pdf-create-skill.md) — how the bundled, portable `@react-pdf/renderer` pipeline turns content plus an optional `design.md` into a themed PDF, and how its Node sub-project stays decoupled from the Bun workspace
+
 **Appendix.** Historical records — kept for context, not current guidance.
 
 - [Plan skills audit](./docs/appendix-a-plan-skills-audit.md) — a dimension-by-dimension audit of the `plan`, `plan-bun`, and `plan-nodejs-react` skills; most of its recommendations have since shipped
