@@ -84,6 +84,7 @@ code-assistants/
             ├── dependabot:resolve/
             ├── issue:create/
             ├── issue:run/
+            ├── pdf:create/             # bundles a self-contained Node renderer/ sub-project
             ├── plan/
             ├── plan-bun/
             ├── plan-nodejs-react/
@@ -268,6 +269,16 @@ Generate ASCII schemas, diagrams, and UI wireframes using Unicode box-drawing ch
 
 ```bash
 /autopilot:ascii-schemas
+```
+
+### `/autopilot:pdf-create`
+
+Generate a beautiful, brand-themed, multi-page PDF — report, research doc, six-pager, or playbook — from structured content, using a bundled `@react-pdf/renderer` pipeline (direct rendering, no headless browser). Optionally themed by a Google `design.md`. The skill is self-contained and portable: copy its folder into `~/.claude/skills/` to use it without the plugin (requires a local Node runtime). See the [pdf:create skill doc](../../docs/10-pdf-create-skill.md).
+
+```bash
+/autopilot:pdf-create "quarterly report from these notes"                 # Default theme
+/autopilot:pdf-create "strategy six-pager" ./brand/design.md             # Brand-themed
+/autopilot:pdf-create "ops playbook" ./brand/design.md ./playbook.pdf    # Theme + output path
 ```
 
 ### `/autopilot:ask-codex`
