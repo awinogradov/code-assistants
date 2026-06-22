@@ -33,6 +33,9 @@ async function walkMarkdown(dir: string): Promise<string[]> {
   }
   const out: string[] = [];
   for (const entry of entries) {
+    // Skip bundled dependencies (e.g. the pdf:create skill's renderer/node_modules):
+    // their READMEs carry package-relative links that do not resolve in this tree.
+    if (entry.isDirectory() && entry.name === "node_modules") continue;
     const full = join(dir, entry.name);
     if (entry.isDirectory()) out.push(...(await walkMarkdown(full)));
     else if (entry.isFile() && entry.name.endsWith(".md")) out.push(full);
