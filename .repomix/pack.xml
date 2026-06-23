@@ -388,6 +388,79 @@ claude-plugins/
         SKILL.md
       issue:run/
         SKILL.md
+      pdf:create/
+        renderer/
+          assets/
+            fonts/
+              README.md
+          components/
+            layout/
+              Columns.tsx
+              PageShell.tsx
+              Section.tsx
+            primitives/
+              Body.tsx
+              Callout.tsx
+              Caption.tsx
+              Figure.tsx
+              Heading.tsx
+              InlineText.tsx
+              ListBlock.tsx
+              PullQuote.tsx
+            BlockRenderer.tsx
+            Chart.tsx
+            CoverPage.tsx
+            Table.tsx
+            TableOfContents.tsx
+          lib/
+            paths.ts
+          references/
+            examples/
+              brand.design.md
+              report.content.json
+            content-schema.md
+            design-md-spec.md
+          render/
+            collectTocEntries.ts
+            errors.ts
+            pageNumberStore.ts
+          schemas/
+            blockSchema.ts
+            chartSpecSchema.ts
+            contentSchema.ts
+          templates/
+            playbookTemplate.tsx
+            reportTemplate.tsx
+            researchDocTemplate.tsx
+            sixPagerTemplate.tsx
+            templateProps.ts
+            templateRegistry.ts
+          test/
+            assertFontsResolve.test.ts
+            contentSchema.test.ts
+            contrast.test.ts
+            makeTheme.test.ts
+            resolveTokenRefs.test.ts
+            smokeRender.test.ts
+          theme/
+            assertFontsResolve.ts
+            contrast.ts
+            defaultTheme.ts
+            designMdSchema.ts
+            loadDesignMd.ts
+            makeTheme.ts
+            pageMetrics.ts
+            registerFonts.ts
+            resolveTokenRefs.ts
+            themeContext.ts
+            themeInterface.ts
+            unitToPt.ts
+          .gitignore
+          install-check.mjs
+          package.json
+          render.tsx
+          tsconfig.json
+        SKILL.md
       plan/
         SKILL.md
       plan-bun/
@@ -430,6 +503,7 @@ docs/
   07-release-automerge.md
   08-upstream-sync.md
   09-repomix-pack.md
+  10-pdf-create-skill.md
   appendix-a-plan-skills-audit.md
 packages/
   actions-core/
@@ -5932,6 +6006,9 @@ async function walkMarkdown(dir: string): Promise<string[]> {
   }
   const out: string[] = [];
   for (const entry of entries) {
+    // Skip bundled dependencies (e.g. the pdf:create skill's renderer/node_modules):
+    // their READMEs carry package-relative links that do not resolve in this tree.
+    if (entry.isDirectory() && entry.name === "node_modules") continue;
     const full = join(dir, entry.name);
     if (entry.isDirectory()) out.push(...(await walkMarkdown(full)));
     else if (entry.isFile() && entry.name.endsWith(".md")) out.push(full);
@@ -36819,6 +36896,3207 @@ Write the most helpful, readable output you can: plain, direct prose; every refe
 <!-- ref-format:end -->
 </file>
 
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/assets/fonts/README.md">
+# Bundled fonts
+
+The default theme renders with the **standard PDF font families** — `Helvetica`,
+`Times-Roman`, and `Courier` — which are built into every PDF reader. This is a
+deliberate choice: no binary font files ship in the repo, the skill works
+offline with zero font-resolution risk, and it stays small to copy standalone.
+
+## Adding brand fonts
+
+To use a custom typeface, drop its **static-weight** `.ttf` or `.woff` files in
+this directory and reference them from a `design.md`:
+
+```yaml
+fonts:
+  - family: Inter
+    weights:
+      "400": Inter-Regular.ttf
+      "700": Inter-Bold.ttf
+    italics:
+      "400": Inter-Italic.ttf
+typography:
+  body:
+    fontFamily: Inter
+  h1:
+    fontFamily: Inter
+    fontWeight: 700
+```
+
+File names in `weights`/`italics` resolve against this directory. Absolute paths
+are also accepted.
+
+> Variable fonts are **not** supported — the PDF format needs discrete weights,
+> and `@react-pdf/renderer` fails on them. Ship one file per weight. The renderer
+> validates every referenced font before rendering and fails loudly if a family
+> is missing, remote, or looks like a variable font.
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/components/layout/Columns.tsx">
+import { View } from "@react-pdf/renderer";
+import type { ReactElement, ReactNode } from "react";
+
+import { useTheme } from "../../theme/themeContext";
+
+/** A horizontal row of equal-gutter columns. Children control their own widths (e.g. `flex: 1`). */
+export function Columns({ children }: { children: ReactNode }): ReactElement {
+  const theme = useTheme();
+  return <View style={{ flexDirection: "row", gap: theme.spacing.gutter }}>{children}</View>;
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/components/layout/PageShell.tsx">
+import { Page, Text, View } from "@react-pdf/renderer";
+import type { ReactElement, ReactNode } from "react";
+
+import type { Metadata } from "../../schemas/contentSchema";
+import { useTheme } from "../../theme/themeContext";
+
+/**
+ * The standard content page: margins, a fixed running header (org/title and
+ * optional confidentiality) and a fixed footer with the document title and
+ * `page / total` numbers that repeat on every page.
+ */
+export function PageShell({
+  children,
+  metadata,
+}: {
+  children: ReactNode;
+  metadata: Metadata;
+}): ReactElement {
+  const theme = useTheme();
+  const { margins } = theme.page;
+  return (
+    <Page
+      size={theme.page.size}
+      style={{
+        backgroundColor: theme.colors.background,
+        color: theme.colors.text,
+        fontFamily: theme.text.body.fontFamily,
+        fontSize: theme.text.body.fontSize,
+        paddingTop: margins.top,
+        paddingBottom: margins.bottom,
+        paddingLeft: margins.left,
+        paddingRight: margins.right,
+      }}
+    >
+      <View
+        fixed
+        style={{
+          position: "absolute",
+          top: 28,
+          left: margins.left,
+          right: margins.right,
+          flexDirection: "row",
+          justifyContent: "space-between",
+        }}
+      >
+        <Text style={{ ...theme.text.label, color: theme.colors.muted }}>
+          {metadata.org ?? metadata.title}
+        </Text>
+        {metadata.confidentiality ? (
+          <Text style={{ ...theme.text.label, color: theme.colors.muted }}>{metadata.confidentiality}</Text>
+        ) : null}
+      </View>
+
+      <View>{children}</View>
+
+      <View
+        fixed
+        style={{
+          position: "absolute",
+          bottom: 28,
+          left: margins.left,
+          right: margins.right,
+          flexDirection: "row",
+          justifyContent: "space-between",
+          borderTopWidth: 0.5,
+          borderTopColor: theme.colors.border,
+          paddingTop: 4,
+        }}
+      >
+        <Text style={theme.text.caption}>{metadata.title}</Text>
+        <Text
+          style={theme.text.caption}
+          render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`}
+        />
+      </View>
+    </Page>
+  );
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/components/layout/Section.tsx">
+import { Text, View } from "@react-pdf/renderer";
+import type { ReactElement } from "react";
+
+import type { Section as SectionData } from "../../schemas/contentSchema";
+import type { PageNumberStore } from "../../render/pageNumberStore";
+import { useTheme } from "../../theme/themeContext";
+import { BlockRenderer } from "../BlockRenderer";
+import { Heading } from "../primitives/Heading";
+
+interface SectionProps {
+  section: SectionData;
+  store: PageNumberStore;
+  level?: 1 | 2 | 3;
+  /** Optional leading number, e.g. "2" or "2.1", prepended to the title. */
+  numberLabel?: string;
+  /** "banded" renders the title in a filled bar (used by the playbook template). */
+  variant?: "plain" | "banded";
+}
+
+/**
+ * A document section: a probe records its first page for the TOC, a bookmark adds
+ * it to the outline, the `id` is its internal link target, then its blocks render.
+ */
+export function Section({
+  section,
+  store,
+  level = 1,
+  numberLabel,
+  variant = "plain",
+}: SectionProps): ReactElement {
+  const theme = useTheme();
+  const title = numberLabel ? `${numberLabel} ${section.title}` : section.title;
+  return (
+    <View id={section.id} bookmark={{ title }} style={{ marginBottom: theme.spacing.md }}>
+      <Text
+        style={{ height: 0, fontSize: 1 }}
+        render={({ pageNumber }) => {
+          store.set(section.id, pageNumber);
+          return "";
+        }}
+      />
+      {variant === "banded" ? (
+        <View
+          minPresenceAhead={theme.spacing.keepWithNext}
+          style={{
+            backgroundColor: theme.colors.primary,
+            paddingVertical: theme.spacing.sm,
+            paddingHorizontal: theme.spacing.md,
+            borderRadius: theme.rounded.sm,
+            marginTop: theme.spacing.lg,
+            marginBottom: theme.spacing.sm,
+          }}
+        >
+          <Text style={{ ...theme.text.h3, color: theme.colors.onPrimary }}>{title}</Text>
+        </View>
+      ) : (
+        <Heading level={level}>{title}</Heading>
+      )}
+      {section.blocks.map((block, index) => (
+        <BlockRenderer key={index} block={block} />
+      ))}
+    </View>
+  );
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/components/primitives/Body.tsx">
+import { Text } from "@react-pdf/renderer";
+import type { ReactElement } from "react";
+
+import type { RichText } from "../../schemas/blockSchema";
+import { useTheme } from "../../theme/themeContext";
+import { InlineRuns } from "./InlineText";
+
+export function Body({ content }: { content: RichText }): ReactElement {
+  const theme = useTheme();
+  return (
+    <Text style={{ ...theme.text.body, marginBottom: theme.spacing.sm }} orphans={2} widows={2}>
+      <InlineRuns content={content} />
+    </Text>
+  );
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/components/primitives/Callout.tsx">
+import { Text, View } from "@react-pdf/renderer";
+import type { ReactElement } from "react";
+
+import type { Block } from "../../schemas/blockSchema";
+import { useTheme } from "../../theme/themeContext";
+import { InlineRuns } from "./InlineText";
+
+type CalloutData = Extract<Block, { type: "callout" }>;
+
+export function Callout({ block }: { block: CalloutData }): ReactElement {
+  const theme = useTheme();
+  const toneColor = theme.colors[block.tone];
+  return (
+    <View
+      wrap={false}
+      style={{
+        marginVertical: theme.spacing.sm,
+        padding: theme.spacing.md,
+        paddingLeft: theme.spacing.md + 4,
+        backgroundColor: theme.colors.surface,
+        borderLeftWidth: 3,
+        borderLeftColor: toneColor,
+        borderTopRightRadius: theme.rounded.md,
+        borderBottomRightRadius: theme.rounded.md,
+      }}
+    >
+      {block.title ? (
+        <Text style={{ ...theme.text.h3, color: toneColor, marginBottom: theme.spacing.xs }}>
+          {block.title}
+        </Text>
+      ) : null}
+      <Text style={theme.text.body}>
+        <InlineRuns content={block.content} />
+      </Text>
+    </View>
+  );
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/components/primitives/Caption.tsx">
+import { Text } from "@react-pdf/renderer";
+import type { ReactElement } from "react";
+
+import { useTheme } from "../../theme/themeContext";
+
+export function Caption({ children }: { children: string }): ReactElement {
+  const theme = useTheme();
+  return <Text style={{ ...theme.text.caption, marginTop: theme.spacing.xs }}>{children}</Text>;
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/components/primitives/Figure.tsx">
+import { Image, View } from "@react-pdf/renderer";
+import type { ReactElement } from "react";
+
+import type { Block } from "../../schemas/blockSchema";
+import { useTheme } from "../../theme/themeContext";
+import { Caption } from "./Caption";
+
+type FigureData = Extract<Block, { type: "figure" }>;
+
+export function Figure({
+  block,
+  contentWidth,
+}: {
+  block: FigureData;
+  contentWidth: number;
+}): ReactElement {
+  const theme = useTheme();
+  const width = Math.round(contentWidth * block.widthPct);
+  return (
+    <View style={{ marginVertical: theme.spacing.md, alignItems: "center" }}>
+      <Image src={block.src} style={{ width }} />
+      {block.caption ? <Caption>{block.caption}</Caption> : null}
+    </View>
+  );
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/components/primitives/Heading.tsx">
+import { Text } from "@react-pdf/renderer";
+import type { ReactElement } from "react";
+
+import { useTheme } from "../../theme/themeContext";
+
+interface HeadingProps {
+  level: 1 | 2 | 3;
+  children: string;
+  /** Link-target id for internal references. */
+  id?: string;
+}
+
+/**
+ * A heading that stays attached to the content beneath it via `minPresenceAhead`
+ * (rather than `wrap={false}`, which throws on blocks taller than a page).
+ */
+export function Heading({ level, children, id }: HeadingProps): ReactElement {
+  const theme = useTheme();
+  const style = { 1: theme.text.h1, 2: theme.text.h2, 3: theme.text.h3 }[level];
+  const marginTop = level === 1 ? theme.spacing.lg : theme.spacing.md;
+  return (
+    <Text
+      id={id}
+      minPresenceAhead={theme.spacing.keepWithNext}
+      style={{ ...style, marginTop, marginBottom: theme.spacing.sm }}
+    >
+      {children}
+    </Text>
+  );
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/components/primitives/InlineText.tsx">
+import { Link, Text } from "@react-pdf/renderer";
+import type { ReactElement } from "react";
+
+import type { RichText } from "../../schemas/blockSchema";
+import { useTheme } from "../../theme/themeContext";
+
+/**
+ * Render rich text as inline runs. Returns a fragment of nested <Text>/<Link>
+ * elements meant to sit inside a styled parent <Text>, so emphasis and links
+ * flow inline rather than stacking as blocks.
+ */
+export function InlineRuns({ content }: { content: RichText }): ReactElement {
+  const theme = useTheme();
+  return (
+    <>
+      {content.map((mark, index) => {
+        const isLink = Boolean(mark.href || mark.anchor);
+        const style = {
+          fontFamily: mark.code ? theme.text.mono.fontFamily : undefined,
+          fontWeight: mark.bold ? ("bold" as const) : undefined,
+          fontStyle: mark.italic ? ("italic" as const) : undefined,
+          color: isLink ? theme.colors.primary : undefined,
+          textDecoration: isLink ? ("underline" as const) : undefined,
+        };
+        if (mark.href) {
+          return (
+            <Link key={index} src={mark.href} style={style}>
+              {mark.text}
+            </Link>
+          );
+        }
+        if (mark.anchor) {
+          return (
+            <Link key={index} src={`#${mark.anchor}`} style={style}>
+              {mark.text}
+            </Link>
+          );
+        }
+        return (
+          <Text key={index} style={style}>
+            {mark.text}
+          </Text>
+        );
+      })}
+    </>
+  );
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/components/primitives/ListBlock.tsx">
+import { Text, View } from "@react-pdf/renderer";
+import type { ReactElement } from "react";
+
+import type { Block } from "../../schemas/blockSchema";
+import { useTheme } from "../../theme/themeContext";
+import { InlineRuns } from "./InlineText";
+
+type ListBlockData = Extract<Block, { type: "list" }>;
+
+export function ListBlock({ block }: { block: ListBlockData }): ReactElement {
+  const theme = useTheme();
+  return (
+    <View style={{ marginBottom: theme.spacing.sm }}>
+      {block.items.map((item, index) => (
+        <View key={index} style={{ flexDirection: "row", marginBottom: theme.spacing.xs }}>
+          <Text style={{ ...theme.text.body, width: 18, color: theme.colors.muted }}>
+            {block.ordered ? `${index + 1}.` : "•"}
+          </Text>
+          <Text style={{ ...theme.text.body, flex: 1 }}>
+            <InlineRuns content={item} />
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/components/primitives/PullQuote.tsx">
+import { Text, View } from "@react-pdf/renderer";
+import type { ReactElement } from "react";
+
+import type { Block } from "../../schemas/blockSchema";
+import { useTheme } from "../../theme/themeContext";
+
+type PullQuoteData = Extract<Block, { type: "pullquote" }>;
+
+export function PullQuote({ block }: { block: PullQuoteData }): ReactElement {
+  const theme = useTheme();
+  return (
+    <View
+      wrap={false}
+      style={{
+        marginVertical: theme.spacing.md,
+        paddingLeft: theme.spacing.md,
+        borderLeftWidth: 2,
+        borderLeftColor: theme.colors.primary,
+      }}
+    >
+      <Text style={theme.text.quote}>{block.text}</Text>
+      {block.attribution ? (
+        <Text style={{ ...theme.text.caption, marginTop: theme.spacing.xs }}>
+          — {block.attribution}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/components/BlockRenderer.tsx">
+import { View } from "@react-pdf/renderer";
+import type { ReactElement } from "react";
+
+import type { Block } from "../schemas/blockSchema";
+import { contentWidth } from "../theme/pageMetrics";
+import { useTheme } from "../theme/themeContext";
+import { Chart } from "./Chart";
+import { Table } from "./Table";
+import { Body } from "./primitives/Body";
+import { Callout } from "./primitives/Callout";
+import { Figure } from "./primitives/Figure";
+import { Heading } from "./primitives/Heading";
+import { ListBlock } from "./primitives/ListBlock";
+import { PullQuote } from "./primitives/PullQuote";
+
+/** Dispatch a content block to its component. The `never` default enforces exhaustiveness. */
+export function BlockRenderer({ block }: { block: Block }): ReactElement | null {
+  const theme = useTheme();
+  const width = contentWidth(theme);
+  switch (block.type) {
+    case "heading":
+      return (
+        <Heading level={block.level} id={block.id}>
+          {block.text}
+        </Heading>
+      );
+    case "paragraph":
+      return <Body content={block.content} />;
+    case "list":
+      return <ListBlock block={block} />;
+    case "table":
+      return <Table block={block} />;
+    case "figure":
+      return <Figure block={block} contentWidth={width} />;
+    case "chart":
+      return <Chart block={block} maxWidth={width} />;
+    case "callout":
+      return <Callout block={block} />;
+    case "pullquote":
+      return <PullQuote block={block} />;
+    case "pagebreak":
+      return <View break />;
+    default: {
+      const exhaustive: never = block;
+      void exhaustive;
+      return null;
+    }
+  }
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/components/Chart.tsx">
+import { Line, Path, Rect, Svg, Text as SvgText, Text, View } from "@react-pdf/renderer";
+import type { ReactElement, ReactNode } from "react";
+
+import type { Block } from "../schemas/blockSchema";
+import type { ChartSpec } from "../schemas/chartSpecSchema";
+import { useTheme } from "../theme/themeContext";
+import type { Theme } from "../theme/themeInterface";
+import { Caption } from "./primitives/Caption";
+
+type ChartData = Extract<Block, { type: "chart" }>;
+
+const padding = { left: 44, right: 16, top: 14, bottom: 30 };
+const gridSteps = 4;
+const axisLabelFontSize = 7;
+const groupFillRatio = 0.8; // grouped bars span this fraction of a category slot
+const barWidthRatio = 0.9; // each bar fills this fraction of its sub-slot
+const stackedWidthRatio = 0.6; // a stacked bar spans this fraction of a category slot
+const areaFillOpacity = 0.18;
+const lineStrokeWidth = 1.5;
+const donutHoleRatio = 0.55; // inner radius as a fraction of the outer radius
+
+function seriesColors(spec: ChartSpec, theme: Theme): string[] {
+  return (
+    spec.palette ?? [
+      theme.colors.primary,
+      theme.colors.accent,
+      theme.colors.success,
+      theme.colors.warning,
+      theme.colors.info,
+      theme.colors.danger,
+      theme.colors.neutral,
+    ]
+  );
+}
+
+/** Round a value up to a clean axis maximum (1/2/5 × 10^n). */
+function niceCeil(value: number): number {
+  if (value <= 0) return 1;
+  const magnitude = 10 ** Math.floor(Math.log10(value));
+  const normalized = value / magnitude;
+  const step = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  return step * magnitude;
+}
+
+function polar(cx: number, cy: number, radius: number, angleDeg: number): [number, number] {
+  const rad = ((angleDeg - 90) * Math.PI) / 180;
+  return [cx + radius * Math.cos(rad), cy + radius * Math.sin(rad)];
+}
+
+interface CartesianGeometry {
+  categories: string[];
+  plotW: number;
+  plotH: number;
+  baseY: number;
+  yMax: number;
+  scaleY: (value: number) => number;
+}
+
+/** Compute the shared plot geometry and y-scale for a cartesian chart. */
+function cartesianGeometry(spec: ChartSpec): CartesianGeometry {
+  const categories = spec.series[0].points.map((point) => String(point.x));
+  const plotW = spec.width - padding.left - padding.right;
+  const plotH = spec.height - padding.top - padding.bottom;
+  const baseY = padding.top + plotH;
+  const seriesMax = Math.max(...spec.series.flatMap((series) => series.points.map((point) => point.y)), 0);
+  const stackedMax = Math.max(
+    ...categories.map((_, index) =>
+      spec.series.reduce((sum, series) => sum + (series.points[index]?.y ?? 0), 0),
+    ),
+    0,
+  );
+  const yMax = niceCeil(spec.kind === "stackedBar" ? stackedMax : seriesMax);
+  const scaleY = (value: number): number => baseY - (value / yMax) * plotH;
+  return { categories, plotW, plotH, baseY, yMax, scaleY };
+}
+
+/** Horizontal position of a category: evenly spread for line/area, slot-centered for bars. */
+function categoryX(spec: ChartSpec, geo: CartesianGeometry, index: number): number {
+  const { categories, plotW } = geo;
+  if (spec.kind === "line" || spec.kind === "area") {
+    return padding.left + (categories.length === 1 ? plotW / 2 : (index / (categories.length - 1)) * plotW);
+  }
+  return padding.left + (index + 0.5) * (plotW / categories.length);
+}
+
+function drawGridlines(geo: CartesianGeometry, theme: Theme): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  for (let step = 0; step <= gridSteps; step += 1) {
+    const value = (geo.yMax / gridSteps) * step;
+    const y = geo.scaleY(value);
+    nodes.push(
+      <Line
+        key={`grid-${step}`}
+        x1={padding.left}
+        y1={y}
+        x2={padding.left + geo.plotW}
+        y2={y}
+        strokeWidth={0.5}
+        stroke={theme.colors.border}
+      />,
+    );
+    nodes.push(
+      <SvgText
+        key={`ylabel-${step}`}
+        x={padding.left - 6}
+        y={y + 3}
+        style={{ fontSize: axisLabelFontSize, fontFamily: theme.text.caption.fontFamily }}
+        fill={theme.colors.muted}
+        textAnchor="end"
+      >
+        {String(Math.round(value))}
+      </SvgText>,
+    );
+  }
+  return nodes;
+}
+
+function drawAxisLabels(spec: ChartSpec, geo: CartesianGeometry, theme: Theme): ReactNode[] {
+  return geo.categories.map((label, index) => (
+    <SvgText
+      key={`xlabel-${index}`}
+      x={categoryX(spec, geo, index)}
+      y={geo.baseY + 12}
+      style={{ fontSize: axisLabelFontSize, fontFamily: theme.text.caption.fontFamily }}
+      fill={theme.colors.muted}
+      textAnchor="middle"
+    >
+      {label}
+    </SvgText>
+  ));
+}
+
+function drawBars(spec: ChartSpec, geo: CartesianGeometry, colors: string[]): ReactNode[] {
+  const groupW = geo.plotW / geo.categories.length;
+  const groupPad = (1 - groupFillRatio) / 2;
+  const barW = (groupW * groupFillRatio) / spec.series.length;
+  return spec.series.flatMap((series, seriesIndex) =>
+    series.points.map((point, index) => {
+      const x = padding.left + index * groupW + groupW * groupPad + seriesIndex * barW;
+      const top = geo.scaleY(point.y);
+      return (
+        <Rect
+          key={`bar-${seriesIndex}-${index}`}
+          x={x}
+          y={top}
+          width={barW * barWidthRatio}
+          height={geo.baseY - top}
+          fill={colors[seriesIndex % colors.length]}
+        />
+      );
+    }),
+  );
+}
+
+function drawStackedBars(spec: ChartSpec, geo: CartesianGeometry, colors: string[]): ReactNode[] {
+  const groupW = geo.plotW / geo.categories.length;
+  const barW = groupW * stackedWidthRatio;
+  const nodes: ReactNode[] = [];
+  geo.categories.forEach((_, index) => {
+    let runningTop = geo.baseY;
+    spec.series.forEach((series, seriesIndex) => {
+      const segmentHeight = ((series.points[index]?.y ?? 0) / geo.yMax) * geo.plotH;
+      runningTop -= segmentHeight;
+      nodes.push(
+        <Rect
+          key={`stack-${seriesIndex}-${index}`}
+          x={padding.left + index * groupW + (groupW - barW) / 2}
+          y={runningTop}
+          width={barW}
+          height={segmentHeight}
+          fill={colors[seriesIndex % colors.length]}
+        />,
+      );
+    });
+  });
+  return nodes;
+}
+
+function drawLineArea(spec: ChartSpec, geo: CartesianGeometry, colors: string[]): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  spec.series.forEach((series, seriesIndex) => {
+    const color = colors[seriesIndex % colors.length];
+    const points = series.points.map((point, index) => `${categoryX(spec, geo, index)},${geo.scaleY(point.y)}`);
+    const polyline = points.join(" L ");
+    if (spec.kind === "area") {
+      const first = categoryX(spec, geo, 0);
+      const last = categoryX(spec, geo, series.points.length - 1);
+      nodes.push(
+        <Path
+          key={`area-${seriesIndex}`}
+          d={`M ${first},${geo.baseY} L ${polyline} L ${last},${geo.baseY} Z`}
+          fill={color}
+          fillOpacity={areaFillOpacity}
+        />,
+      );
+    }
+    nodes.push(
+      <Path key={`line-${seriesIndex}`} d={`M ${polyline}`} stroke={color} strokeWidth={lineStrokeWidth} fill="none" />,
+    );
+  });
+  return nodes;
+}
+
+/** Draw a bar, stacked-bar, line, or area chart by composing the focused helpers. */
+function cartesian(spec: ChartSpec, theme: Theme, colors: string[]): ReactNode[] {
+  const geo = cartesianGeometry(spec);
+  const nodes = [...drawGridlines(geo, theme), ...drawAxisLabels(spec, geo, theme)];
+  if (spec.kind === "stackedBar") nodes.push(...drawStackedBars(spec, geo, colors));
+  else if (spec.kind === "bar") nodes.push(...drawBars(spec, geo, colors));
+  else nodes.push(...drawLineArea(spec, geo, colors));
+  return nodes;
+}
+
+function pie(spec: ChartSpec, colors: string[]): ReactNode[] {
+  const series = spec.series[0];
+  const total = series.points.reduce((sum, point) => sum + Math.abs(point.y), 0) || 1;
+  const cx = spec.width / 2;
+  const cy = spec.height / 2;
+  const radius = Math.min(spec.width, spec.height) / 2 - padding.top;
+  const innerRadius = spec.kind === "donut" ? radius * donutHoleRatio : 0;
+
+  let angle = 0;
+  return series.points.map((point, index) => {
+    const sweep = (Math.abs(point.y) / total) * 360;
+    const start = angle;
+    const end = angle + sweep;
+    angle = end;
+    const largeArc = sweep > 180 ? 1 : 0;
+    const [ox1, oy1] = polar(cx, cy, radius, start);
+    const [ox2, oy2] = polar(cx, cy, radius, end);
+    const color = colors[index % colors.length];
+    if (innerRadius === 0) {
+      const d = `M ${cx},${cy} L ${ox1},${oy1} A ${radius},${radius} 0 ${largeArc} 1 ${ox2},${oy2} Z`;
+      return <Path key={`slice-${index}`} d={d} fill={color} />;
+    }
+    const [ix1, iy1] = polar(cx, cy, innerRadius, start);
+    const [ix2, iy2] = polar(cx, cy, innerRadius, end);
+    const d =
+      `M ${ox1},${oy1} A ${radius},${radius} 0 ${largeArc} 1 ${ox2},${oy2} ` +
+      `L ${ix2},${iy2} A ${innerRadius},${innerRadius} 0 ${largeArc} 0 ${ix1},${iy1} Z`;
+    return <Path key={`slice-${index}`} d={d} fill={color} />;
+  });
+}
+
+function Legend({ spec, colors }: { spec: ChartSpec; colors: string[] }): ReactElement {
+  const theme = useTheme();
+  const isPie = spec.kind === "pie" || spec.kind === "donut";
+  const items = isPie
+    ? spec.series[0].points.map((point) => String(point.x))
+    : spec.series.map((series) => series.name);
+  return (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: theme.spacing.xs }}>
+      {items.map((label, index) => (
+        <View key={index} style={{ flexDirection: "row", alignItems: "center", marginRight: theme.spacing.md }}>
+          <View
+            style={{
+              width: 8,
+              height: 8,
+              backgroundColor: colors[index % colors.length],
+              marginRight: 4,
+              borderRadius: 1,
+            }}
+          />
+          <Text style={theme.text.caption}>{label}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/**
+ * A chart drawn with @react-pdf/renderer's SVG primitives — bar, stacked bar,
+ * line, area, pie, and donut. Vector output, no native canvas dependency.
+ */
+export function Chart({ block, maxWidth }: { block: ChartData; maxWidth: number }): ReactElement {
+  const theme = useTheme();
+  const colors = seriesColors(block.spec, theme);
+  const width = Math.min(block.spec.width, maxWidth);
+  const scale = width / block.spec.width;
+  const height = block.spec.height * scale;
+  const isPie = block.spec.kind === "pie" || block.spec.kind === "donut";
+
+  return (
+    <View wrap={false} style={{ marginVertical: theme.spacing.md }}>
+      <Svg width={width} height={height} viewBox={`0 0 ${block.spec.width} ${block.spec.height}`}>
+        {isPie ? pie(block.spec, colors) : cartesian(block.spec, theme, colors)}
+      </Svg>
+      <Legend spec={block.spec} colors={colors} />
+      {block.caption ? <Caption>{block.caption}</Caption> : null}
+    </View>
+  );
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/components/CoverPage.tsx">
+import { Page, Text, View } from "@react-pdf/renderer";
+import type { ReactElement } from "react";
+
+import type { Cover, Metadata } from "../schemas/contentSchema";
+import { useTheme } from "../theme/themeContext";
+
+export function CoverPage({ cover, metadata }: { cover?: Cover; metadata: Metadata }): ReactElement {
+  const theme = useTheme();
+  const title = cover?.title ?? metadata.title;
+  const subtitle = cover?.subtitle ?? metadata.subtitle;
+  return (
+    <Page size={theme.page.size} bookmark={{ title: "Cover" }} style={{ backgroundColor: theme.colors.background }}>
+      <View
+        style={{
+          backgroundColor: theme.colors.primary,
+          paddingHorizontal: 56,
+          paddingVertical: 64,
+          minHeight: 300,
+          justifyContent: "flex-end",
+        }}
+      >
+        {cover?.eyebrow ? (
+          <Text style={{ ...theme.text.label, color: theme.colors.onPrimary, marginBottom: theme.spacing.sm }}>
+            {cover.eyebrow}
+          </Text>
+        ) : null}
+        <Text style={{ ...theme.text.display, color: theme.colors.onPrimary }}>{title}</Text>
+      </View>
+      <View style={{ paddingHorizontal: 56, paddingTop: 32 }}>
+        {subtitle ? (
+          <Text style={{ ...theme.text.h2, fontWeight: "normal", color: theme.colors.muted }}>{subtitle}</Text>
+        ) : null}
+        <View style={{ marginTop: 24 }}>
+          {metadata.authors.length > 0 ? (
+            <Text style={{ ...theme.text.body, marginBottom: 2 }}>{metadata.authors.join(", ")}</Text>
+          ) : null}
+          {metadata.org ? <Text style={theme.text.caption}>{metadata.org}</Text> : null}
+          {metadata.date ? <Text style={theme.text.caption}>{metadata.date}</Text> : null}
+        </View>
+      </View>
+      {cover?.footnote ? (
+        <View style={{ position: "absolute", bottom: 40, left: 56, right: 56 }}>
+          <Text style={theme.text.caption}>{cover.footnote}</Text>
+        </View>
+      ) : null}
+    </Page>
+  );
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/components/Table.tsx">
+import { Text, View } from "@react-pdf/renderer";
+import type { ReactElement } from "react";
+
+import type { Block } from "../schemas/blockSchema";
+import { useTheme } from "../theme/themeContext";
+import { Caption } from "./primitives/Caption";
+import { InlineRuns } from "./primitives/InlineText";
+
+type TableData = Extract<Block, { type: "table" }>;
+
+/** Column widths as percentage strings: explicit fractions when given, else evenly split. */
+function columnWidths(columns: TableData["columns"]): string[] {
+  const explicit = columns.every((column) => typeof column.width === "number");
+  if (explicit) {
+    const total = columns.reduce((sum, column) => sum + (column.width ?? 0), 0) || 1;
+    return columns.map((column) => `${(((column.width ?? 0) / total) * 100).toFixed(3)}%`);
+  }
+  return columns.map(() => `${(100 / columns.length).toFixed(3)}%`);
+}
+
+/**
+ * A themed table built from flexbox rows. Each row is `wrap={false}` (a single
+ * row never splits) while the table itself wraps, so long tables paginate
+ * cleanly. (Header rows do not repeat across pages — a react-pdf limitation.)
+ */
+export function Table({ block }: { block: TableData }): ReactElement {
+  const theme = useTheme();
+  const widths = columnWidths(block.columns);
+  const cellBase = {
+    fontSize: theme.text.body.fontSize - 0.5,
+    fontFamily: theme.text.body.fontFamily,
+    padding: theme.spacing.sm,
+  };
+
+  return (
+    <View style={{ marginVertical: theme.spacing.md }}>
+      <View
+        style={{
+          borderWidth: 0.5,
+          borderColor: theme.colors.border,
+          borderRadius: theme.rounded.sm,
+        }}
+      >
+        <View wrap={false} style={{ flexDirection: "row", backgroundColor: theme.colors.primary }}>
+          {block.columns.map((column, index) => (
+            <Text
+              key={index}
+              style={{
+                ...theme.text.label,
+                color: theme.colors.onPrimary,
+                width: widths[index],
+                padding: theme.spacing.sm,
+                textAlign: column.align ?? "left",
+              }}
+            >
+              {column.header}
+            </Text>
+          ))}
+        </View>
+        {block.rows.map((row, rowIndex) => (
+          <View
+            key={rowIndex}
+            wrap={false}
+            style={{
+              flexDirection: "row",
+              backgroundColor: rowIndex % 2 === 1 ? theme.colors.surface : theme.colors.background,
+              borderTopWidth: 0.5,
+              borderTopColor: theme.colors.border,
+            }}
+          >
+            {block.columns.map((column, cellIndex) => {
+              const cell = row[cellIndex];
+              return (
+                <Text
+                  key={cellIndex}
+                  style={{
+                    ...cellBase,
+                    color: theme.colors.text,
+                    width: widths[cellIndex],
+                    textAlign: column.align ?? "left",
+                  }}
+                >
+                  {cell ? <InlineRuns content={cell} /> : ""}
+                </Text>
+              );
+            })}
+          </View>
+        ))}
+      </View>
+      {block.caption ? <Caption>{block.caption}</Caption> : null}
+    </View>
+  );
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/components/TableOfContents.tsx">
+import { Link, Text, View } from "@react-pdf/renderer";
+import type { ReactElement } from "react";
+
+import type { TocEntry } from "../render/collectTocEntries";
+import type { PageNumberStore } from "../render/pageNumberStore";
+import { useTheme } from "../theme/themeContext";
+
+/**
+ * A table of contents. Each row links to its section anchor; the page number is
+ * read from the store (populated during the layout pass, finalized on the
+ * second pass), and a PDF bookmark gives a navigable sidebar outline.
+ */
+export function TableOfContents({
+  entries,
+  store,
+}: {
+  entries: TocEntry[];
+  store: PageNumberStore;
+}): ReactElement {
+  const theme = useTheme();
+  return (
+    <View bookmark={{ title: "Contents" }} style={{ marginBottom: theme.spacing.lg }}>
+      <Text style={{ ...theme.text.h1, marginBottom: theme.spacing.md }}>Contents</Text>
+      {entries.map((entry) => (
+        <View
+          key={entry.id}
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            marginBottom: theme.spacing.xs,
+            marginLeft: entry.level === 2 ? theme.spacing.md : 0,
+          }}
+        >
+          <Link src={`#${entry.id}`} style={{ textDecoration: "none", flex: 1, paddingRight: theme.spacing.sm }}>
+            <Text
+              style={{
+                ...theme.text.body,
+                color: entry.level === 2 ? theme.colors.muted : theme.colors.text,
+              }}
+            >
+              {entry.title}
+            </Text>
+          </Link>
+          <Text style={{ ...theme.text.body, color: theme.colors.muted }} render={() => String(store.get(entry.id) ?? "")} />
+        </View>
+      ))}
+    </View>
+  );
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/lib/paths.ts">
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+/**
+ * Absolute paths into the renderer, resolved from this module's own URL.
+ *
+ * Resolving from `import.meta.url` (never `process.cwd()` or a plugin-only env
+ * var) is what makes the skill portable: the same code finds its bundled assets
+ * whether it runs as the autopilot plugin or is copied into `~/.claude/skills/`.
+ */
+const libDir = dirname(fileURLToPath(import.meta.url));
+
+export const rendererDir = join(libDir, "..");
+export const assetsDir = join(rendererDir, "assets");
+export const fontsDir = join(assetsDir, "fonts");
+export const examplesDir = join(rendererDir, "references", "examples");
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/references/examples/brand.design.md">
+---
+version: alpha
+name: Acme Brand
+colors:
+  brand:
+    primary: "#6d28d9"
+    secondary: "#db2777"
+  primary: "{colors.brand.primary}"
+  accent: "{colors.brand.secondary}"
+  background: "#ffffff"
+  surface: "#f5f3ff"
+  text: "#111827"
+  muted: "#6b7280"
+  border: "#e5e7eb"
+typography:
+  body:
+    fontFamily: Helvetica
+    fontSize: 11
+    lineHeight: 1.5
+  h1:
+    fontFamily: Helvetica
+    fontSize: 24
+    fontWeight: 700
+  display:
+    fontFamily: Helvetica
+    fontSize: 34
+    fontWeight: 700
+spacing:
+  md: 14
+---
+
+# Acme Brand
+
+A small example `design.md` for the `pdf:create` skill. It demonstrates token
+references (`{colors.brand.primary}`), a partial typography scale, and a spacing
+override. Everything not specified here falls back to the renderer's default
+theme, so a brand file only needs to declare what differs.
+
+## Colors
+
+The primary and accent colors reference the brand palette via `{path.to.token}`
+syntax, which the loader resolves before building the theme.
+
+## Typography
+
+Uses the standard `Helvetica` family at brand sizes. To use a custom typeface,
+add a `fonts` mapping and drop static-weight files in `assets/fonts/`.
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/references/examples/report.content.json">
+{
+  "schemaVersion": 1,
+  "template": "report",
+  "metadata": {
+    "title": "Quarterly Business Review",
+    "subtitle": "Q2 2026 performance and outlook",
+    "authors": ["Jane Doe", "Sam Patel"],
+    "date": "Q2 2026",
+    "org": "Acme Corporation",
+    "confidentiality": "Confidential"
+  },
+  "cover": {
+    "eyebrow": "Quarterly Review",
+    "title": "Q2 2026 Business Review",
+    "subtitle": "Revenue, product, and the road to Q3",
+    "footnote": "Prepared for the Acme leadership team. Do not distribute."
+  },
+  "toc": true,
+  "sections": [
+    {
+      "id": "summary",
+      "title": "Executive Summary",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "content": [
+            { "text": "Revenue grew " },
+            { "text": "18% quarter over quarter", "bold": true },
+            { "text": ", driven by enterprise expansion and stronger retention." }
+          ]
+        },
+        {
+          "type": "callout",
+          "tone": "success",
+          "title": "On track for the annual plan",
+          "content": [{ "text": "Every top-line target for the quarter was met or exceeded." }]
+        },
+        {
+          "type": "list",
+          "ordered": false,
+          "items": [
+            [{ "text": "Net revenue retention reached 121%." }],
+            [{ "text": "Two of three product bets shipped on schedule." }],
+            [{ "text": "Gross margin improved by 3 points." }]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "performance",
+      "title": "Performance",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "content": [{ "text": "Quarterly revenue continued its upward trend across both segments." }]
+        },
+        {
+          "type": "chart",
+          "spec": {
+            "kind": "bar",
+            "series": [
+              {
+                "name": "Revenue ($M)",
+                "points": [
+                  { "x": "Q3'25", "y": 98 },
+                  { "x": "Q4'25", "y": 112 },
+                  { "x": "Q1'26", "y": 120 },
+                  { "x": "Q2'26", "y": 142 }
+                ]
+              }
+            ]
+          },
+          "caption": "Quarterly revenue, last four quarters ($M)."
+        },
+        {
+          "type": "table",
+          "columns": [
+            { "header": "Segment", "width": 0.5 },
+            { "header": "Revenue", "width": 0.25, "align": "right" },
+            { "header": "Growth", "width": 0.25, "align": "right" }
+          ],
+          "rows": [
+            [[{ "text": "Enterprise" }], [{ "text": "$96M" }], [{ "text": "+22%" }]],
+            [[{ "text": "Mid-market" }], [{ "text": "$46M" }], [{ "text": "+11%" }]]
+          ],
+          "caption": "Revenue by segment."
+        }
+      ]
+    },
+    {
+      "id": "outlook",
+      "title": "Outlook",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "content": [{ "text": "We enter Q3 with healthy pipeline coverage and a focused roadmap." }]
+        },
+        {
+          "type": "pullquote",
+          "text": "The next quarter is about turning expansion momentum into durable, profitable growth.",
+          "attribution": "Jane Doe, CEO"
+        }
+      ]
+    }
+  ],
+  "appendix": [
+    {
+      "id": "data",
+      "title": "Supporting Data",
+      "blocks": [
+        {
+          "type": "table",
+          "columns": [{ "header": "Metric" }, { "header": "Value", "align": "right" }],
+          "rows": [
+            [[{ "text": "Net revenue retention" }], [{ "text": "121%" }]],
+            [[{ "text": "Gross margin" }], [{ "text": "74%" }]],
+            [[{ "text": "Logo churn" }], [{ "text": "1.2%" }]]
+          ]
+        }
+      ]
+    }
+  ]
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/references/content-schema.md">
+# Content JSON schema
+
+The renderer consumes one JSON document validated by `schemas/contentSchema.ts`.
+Produce a file that conforms to this shape, then pass its path with `--content`.
+A complete worked example is in `examples/report.content.json`.
+
+## Top level
+
+| Field           | Type                                                  | Required | Notes                                            |
+| --------------- | ---------------------------------------------------- | -------- | ------------------------------------------------ |
+| `schemaVersion` | `1`                                                  | yes      | Always `1`.                                      |
+| `template`      | `report` \| `researchDoc` \| `sixPager` \| `playbook` | yes      | Overridable with `--template`.                   |
+| `metadata`      | object                                               | yes      | See below.                                       |
+| `cover`         | object                                               | no       | Cover page content; falls back to `metadata`.    |
+| `toc`           | boolean                                              | no       | Default `true`. Table of contents.               |
+| `sections`      | array of section                                     | yes      | At least one.                                    |
+| `appendix`      | array of section                                     | no       | Rendered after a page break.                     |
+
+### `metadata`
+
+`title` (required), `subtitle`, `authors` (string array), `date`, `org`,
+`confidentiality`. `title` is used in the PDF metadata and the running footer.
+
+### `cover`
+
+`title` (required), `eyebrow`, `subtitle`, `footnote`. Shown on the cover page
+(report, researchDoc, playbook). The six-pager uses a memo header instead.
+
+### `section`
+
+`id` (required, unique — it is the internal link/anchor target), `title`
+(required), `tocLevel` (`1` or `2`, default `1`), `blocks` (at least one).
+
+## Blocks
+
+Every block has a `type`. The union:
+
+- **heading** — `level` (1–3), `text`, optional `id`. For sub-headings inside a
+  section; the section title is rendered automatically.
+- **paragraph** — `content`: rich text (see below).
+- **list** — `ordered` (boolean, default false), `items`: array of rich text.
+- **table** — `columns` (`{ header, width?, align? }`; `width` is a 0–1 fraction),
+  `rows` (array of rows; each row is an array of rich-text cells), `caption?`.
+- **figure** — `src` (PNG/JPG path or data URI; **SVG is rejected**), `alt`,
+  `caption?`, `widthPct` (0–1, default 1).
+- **chart** — `spec` (see Charts), `caption?`.
+- **callout** — `tone` (`info` \| `success` \| `warning` \| `danger` \| `neutral`),
+  `title?`, `content`: rich text.
+- **pullquote** — `text`, `attribution?`.
+- **pagebreak** — forces a new page.
+
+### Rich text
+
+An array of runs: `{ text, bold?, italic?, code?, href?, anchor? }`. `href` is an
+external link; `anchor` links to a section `id` within the document.
+
+```json
+[{ "text": "Revenue grew " }, { "text": "18%", "bold": true }, { "text": " QoQ." }]
+```
+
+### Charts
+
+`spec` fields: `kind` (`bar` \| `line` \| `area` \| `pie` \| `donut` \| `stackedBar`),
+`series` (array of `{ name, points: [{ x, y }] }`), `xLabel?`, `yLabel?`,
+`width?` (default 480), `height?` (default 280), `palette?` (array of hex colors).
+For `pie`/`donut`, the first series' points are the slices.
+
+```json
+{
+  "type": "chart",
+  "spec": {
+    "kind": "bar",
+    "series": [{ "name": "Revenue", "points": [{ "x": "Q1", "y": 120 }, { "x": "Q2", "y": 142 }] }]
+  },
+  "caption": "Quarterly revenue."
+}
+```
+
+## Tips
+
+- Put styling in the theme (design.md), not the content. The content carries
+  meaning; the theme carries appearance.
+- Give every section a stable, unique `id` so the TOC, bookmarks, and internal
+  links resolve.
+- For a six-pager, provide exactly six sections (Introduction, Goals, Tenets,
+  State of the Business, Lessons Learned, Strategic Priorities); push tables and
+  charts into the `appendix`.
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/references/design-md-spec.md">
+# design.md theming
+
+A `design.md` carries a brand's visual identity as YAML front-matter design
+tokens plus a human-readable body. The renderer parses the front-matter,
+resolves `{path.to.token}` references, validates it, and overlays it onto the
+default theme — so a brand file only declares what differs. See
+`examples/brand.design.md`.
+
+## Front-matter tokens
+
+| Key          | Shape                                                              | Maps to                                   |
+| ------------ | ----------------------------------------------------------------- | ----------------------------------------- |
+| `name`       | string                                                            | Theme name.                               |
+| `version`    | string                                                            | Informational.                            |
+| `colors`     | flat or nested map of name → hex (or `{token}` ref)               | The document palette.                     |
+| `typography` | map of name → `{ fontFamily, fontSize, fontWeight, lineHeight, letterSpacing, textTransform, fontStyle, color }` | Text styles. |
+| `spacing`    | map of name → length                                              | Spacing scale (matching keys override).   |
+| `rounded`    | map of name → length                                              | Corner radii (matching keys override).    |
+| `fonts`      | array of `{ family, weights, italics }`                           | Custom font registration.                 |
+
+### Token references
+
+Any value may be a `{path.to.token}` reference (or embed one). References are
+resolved before validation; an unknown or cyclic reference fails the render
+loudly (exit 4).
+
+```yaml
+colors:
+  brand:
+    primary: "#6d28d9"
+  primary: "{colors.brand.primary}"
+```
+
+### Color mapping
+
+Palette slots are filled by matching token names (case-insensitive, by full
+dot-path or leaf name), with sensible fallbacks: `background`, `surface`, `text`,
+`muted`, `primary`, `onPrimary`, `border`, `accent`, and tones `info`, `success`,
+`warning`, `danger`, `neutral`. Unmatched colors are ignored; unfilled slots keep
+their default.
+
+### Typography mapping
+
+Slots `display`, `h1`, `h2`, `h3`, `body`, `caption`, `quote`, `label`, `mono`
+are matched by name (with aliases — e.g. `heading1`→`h1`, `paragraph`→`body`,
+`code`→`mono`). `fontSize`/`letterSpacing` accept `px`, `pt`, `rem`, `em`, or a
+number (points); `1rem` = `12pt`. `lineHeight` is a unitless multiple.
+
+### Lengths
+
+`px` → ×0.75 pt, `rem` → ×12 pt, `em` → × the element's size, bare number → pt.
+
+## Fonts
+
+The default theme uses standard PDF families (`Helvetica`, `Times-Roman`,
+`Courier`) — no files needed. For a custom typeface, drop static-weight `.ttf`/
+`.woff` files in `assets/fonts/` and declare them:
+
+```yaml
+fonts:
+  - family: Inter
+    weights:
+      "400": Inter-Regular.ttf
+      "700": Inter-Bold.ttf
+    italics:
+      "400": Inter-Italic.ttf
+typography:
+  body: { fontFamily: Inter }
+```
+
+Variable fonts are rejected — the PDF format needs discrete weights. The renderer
+verifies every referenced font exists before rendering and fails loudly (exit 5)
+on a missing, remote, or variable font, rather than hanging.
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/render/collectTocEntries.ts">
+import type { Content, Section } from "../schemas/contentSchema";
+
+export interface TocEntry {
+  id: string;
+  title: string;
+  level: 1 | 2;
+}
+
+/** Flatten body sections and the appendix into an ordered list of TOC entries. */
+export function collectTocEntries(content: Content): TocEntry[] {
+  const entries = (sections: Section[]): TocEntry[] =>
+    sections.map((section) => ({ id: section.id, title: section.title, level: section.tocLevel }));
+  return [...entries(content.sections), ...entries(content.appendix)];
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/render/errors.ts">
+/**
+ * Typed, exit-code-bearing errors for the render pipeline.
+ *
+ * Factories (not classes) keep the module functional while attaching a numeric
+ * `code` to each Error so `render.tsx` can map a failure to a deterministic
+ * process exit code the calling skill can branch on.
+ */
+export interface CodedError extends Error {
+  code: number;
+}
+
+function makeError(name: string, code: number): (message: string) => CodedError {
+  return (message: string): CodedError => {
+    const error = new Error(message) as CodedError;
+    error.name = name;
+    error.code = code;
+    return error;
+  };
+}
+
+/** Bad CLI arguments or unknown template (exit 2). */
+export const usageError = makeError("UsageError", 2);
+/** Content JSON failed schema validation (exit 3). */
+export const contentError = makeError("ContentError", 3);
+/** design.md parsing / token resolution failed (exit 4). */
+export const themeError = makeError("ThemeError", 4);
+/** A required font could not be resolved (exit 5). */
+export const fontResolutionError = makeError("FontResolutionError", 5);
+/** A chart spec could not be rendered (exit 6). */
+export const chartError = makeError("ChartError", 6);
+/** PDF rendering threw or timed out (exit 7). */
+export const renderError = makeError("RenderError", 7);
+
+/** Resolve a thrown value to its exit code, defaulting to 1 for unexpected errors. */
+export function exitCodeFor(error: unknown): number {
+  const code = (error as CodedError | undefined)?.code;
+  return typeof code === "number" ? code : 1;
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/render/pageNumberStore.ts">
+/**
+ * Records the first page each section lands on during layout, so the table of
+ * contents can print real page numbers.
+ *
+ * @react-pdf/renderer evaluates `render` callbacks during a layout pass before
+ * the final pass. A probe inside each section writes its page here; TOC rows
+ * read it back. Only the first page seen for an id is kept.
+ */
+export interface PageNumberStore {
+  set(id: string, page: number): void;
+  get(id: string): number | undefined;
+}
+
+export function createPageNumberStore(): PageNumberStore {
+  const pages = new Map<string, number>();
+  return {
+    set(id, page) {
+      if (!pages.has(id)) pages.set(id, page);
+    },
+    get(id) {
+      return pages.get(id);
+    },
+  };
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/schemas/blockSchema.ts">
+import { z } from "zod";
+
+import { chartSpecSchema } from "./chartSpecSchema";
+
+/** An inline run of text with optional emphasis or a link. */
+export const inlineMarkSchema = z.object({
+  text: z.string(),
+  bold: z.boolean().optional(),
+  italic: z.boolean().optional(),
+  code: z.boolean().optional(),
+  /** External link target. */
+  href: z.string().url().optional(),
+  /** Internal link to a section `id` (rendered as `#<anchor>`). */
+  anchor: z.string().optional(),
+});
+export type InlineMark = z.infer<typeof inlineMarkSchema>;
+
+/** Rich text is an ordered list of inline runs. */
+export const richTextSchema = z.array(inlineMarkSchema).min(1);
+export type RichText = z.infer<typeof richTextSchema>;
+
+export const headingBlockSchema = z.object({
+  type: z.literal("heading"),
+  level: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  text: z.string(),
+  id: z.string().optional(),
+});
+
+export const paragraphBlockSchema = z.object({
+  type: z.literal("paragraph"),
+  content: richTextSchema,
+});
+
+export const listBlockSchema = z.object({
+  type: z.literal("list"),
+  ordered: z.boolean().default(false),
+  items: z.array(richTextSchema).min(1),
+});
+
+export const tableColumnSchema = z.object({
+  header: z.string(),
+  /** Column width as a fraction of table width (0–1); evenly split when omitted. */
+  width: z.number().min(0).max(1).optional(),
+  align: z.enum(["left", "center", "right"]).optional(),
+});
+
+export const tableBlockSchema = z.object({
+  type: z.literal("table"),
+  columns: z.array(tableColumnSchema).min(1),
+  rows: z.array(z.array(richTextSchema)).min(1),
+  caption: z.string().optional(),
+});
+
+/** SVG sources are rejected — @react-pdf/renderer's <Image> cannot decode them. */
+const rasterImageSrc = z
+  .string()
+  .refine((value) => !/^data:image\/svg\+xml/i.test(value) && !/\.svg($|[?#])/i.test(value), {
+    message: "SVG images are unsupported by <Image>; pre-render to PNG or JPG",
+  });
+
+export const figureBlockSchema = z.object({
+  type: z.literal("figure"),
+  src: rasterImageSrc,
+  alt: z.string(),
+  caption: z.string().optional(),
+  /** Image width as a fraction of the content width (0–1). */
+  widthPct: z.number().min(0).max(1).default(1),
+});
+
+export const chartBlockSchema = z.object({
+  type: z.literal("chart"),
+  spec: chartSpecSchema,
+  caption: z.string().optional(),
+});
+
+export const calloutBlockSchema = z.object({
+  type: z.literal("callout"),
+  tone: z.enum(["info", "success", "warning", "danger", "neutral"]).default("info"),
+  title: z.string().optional(),
+  content: richTextSchema,
+});
+
+export const pullQuoteBlockSchema = z.object({
+  type: z.literal("pullquote"),
+  text: z.string(),
+  attribution: z.string().optional(),
+});
+
+export const pageBreakBlockSchema = z.object({
+  type: z.literal("pagebreak"),
+});
+
+/** The block model — a discriminated union on `type`. */
+export const blockSchema = z.discriminatedUnion("type", [
+  headingBlockSchema,
+  paragraphBlockSchema,
+  listBlockSchema,
+  tableBlockSchema,
+  figureBlockSchema,
+  chartBlockSchema,
+  calloutBlockSchema,
+  pullQuoteBlockSchema,
+  pageBreakBlockSchema,
+]);
+export type Block = z.infer<typeof blockSchema>;
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/schemas/chartSpecSchema.ts">
+import { z } from "zod";
+
+/** A single data point. `x` is a category label (string) or numeric position. */
+export const chartPointSchema = z.object({
+  x: z.union([z.string(), z.number()]),
+  y: z.number(),
+});
+
+/** A named data series — one bar group, line, or pie's worth of points. */
+export const chartSeriesSchema = z.object({
+  name: z.string(),
+  points: z.array(chartPointSchema).min(1),
+});
+
+/**
+ * A declarative chart, rendered to vector graphics with @react-pdf/renderer's
+ * own SVG primitives (no native canvas dependency, fully portable).
+ */
+export const chartSpecSchema = z.object({
+  kind: z.enum(["bar", "line", "area", "pie", "donut", "stackedBar"]),
+  series: z.array(chartSeriesSchema).min(1),
+  xLabel: z.string().optional(),
+  yLabel: z.string().optional(),
+  width: z.number().positive().default(480),
+  height: z.number().positive().default(280),
+  palette: z.array(z.string()).optional(),
+});
+
+export type ChartSpec = z.infer<typeof chartSpecSchema>;
+export type ChartSeries = z.infer<typeof chartSeriesSchema>;
+export type ChartPoint = z.infer<typeof chartPointSchema>;
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/schemas/contentSchema.ts">
+import { z } from "zod";
+
+import { blockSchema } from "./blockSchema";
+
+export const metadataSchema = z.object({
+  title: z.string(),
+  subtitle: z.string().optional(),
+  authors: z.array(z.string()).default([]),
+  date: z.string().optional(),
+  org: z.string().optional(),
+  confidentiality: z.string().optional(),
+});
+export type Metadata = z.infer<typeof metadataSchema>;
+
+export const coverSchema = z.object({
+  eyebrow: z.string().optional(),
+  title: z.string(),
+  subtitle: z.string().optional(),
+  footnote: z.string().optional(),
+});
+export type Cover = z.infer<typeof coverSchema>;
+
+export const sectionSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  /** Heading depth in the table of contents (1 = top level, 2 = nested). */
+  tocLevel: z.union([z.literal(1), z.literal(2)]).default(1),
+  blocks: z.array(blockSchema).min(1),
+});
+export type Section = z.infer<typeof sectionSchema>;
+
+export const templateNameSchema = z.enum(["report", "researchDoc", "sixPager", "playbook"]);
+export type TemplateName = z.infer<typeof templateNameSchema>;
+
+/** The single document object the renderer consumes — the stable Claude↔renderer contract. */
+export const contentSchema = z.object({
+  schemaVersion: z.literal(1),
+  template: templateNameSchema,
+  metadata: metadataSchema,
+  cover: coverSchema.optional(),
+  toc: z.boolean().default(true),
+  sections: z.array(sectionSchema).min(1),
+  appendix: z.array(sectionSchema).default([]),
+});
+export type Content = z.infer<typeof contentSchema>;
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/templates/playbookTemplate.tsx">
+import { Document, View } from "@react-pdf/renderer";
+import type { ReactElement } from "react";
+
+import { CoverPage } from "../components/CoverPage";
+import { TableOfContents } from "../components/TableOfContents";
+import { PageShell } from "../components/layout/PageShell";
+import { Section } from "../components/layout/Section";
+import { Heading } from "../components/primitives/Heading";
+import { collectTocEntries } from "../render/collectTocEntries";
+import type { TemplateProps } from "./templateProps";
+
+/** Operational playbook: each section is a "play" with a banded header. */
+export function playbookTemplate({ content, store }: TemplateProps): ReactElement {
+  const entries = collectTocEntries(content);
+  return (
+    <Document title={content.metadata.title} author={content.metadata.authors.join(", ")}>
+      <CoverPage cover={content.cover} metadata={content.metadata} />
+      <PageShell metadata={content.metadata}>
+        {content.toc ? <TableOfContents entries={entries} store={store} /> : null}
+        {content.sections.map((section) => (
+          <Section key={section.id} section={section} store={store} variant="banded" />
+        ))}
+        {content.appendix.length > 0 ? (
+          <View break>
+            <Heading level={1}>Appendix</Heading>
+            {content.appendix.map((section) => (
+              <Section key={section.id} section={section} store={store} variant="banded" />
+            ))}
+          </View>
+        ) : null}
+      </PageShell>
+    </Document>
+  );
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/templates/reportTemplate.tsx">
+import { Document, View } from "@react-pdf/renderer";
+import type { ReactElement } from "react";
+
+import { CoverPage } from "../components/CoverPage";
+import { TableOfContents } from "../components/TableOfContents";
+import { PageShell } from "../components/layout/PageShell";
+import { Section } from "../components/layout/Section";
+import { Heading } from "../components/primitives/Heading";
+import { collectTocEntries } from "../render/collectTocEntries";
+import type { TemplateProps } from "./templateProps";
+
+/** General-purpose business report: cover, contents, sequential sections, appendix. */
+export function reportTemplate({ content, store }: TemplateProps): ReactElement {
+  const entries = collectTocEntries(content);
+  return (
+    <Document title={content.metadata.title} author={content.metadata.authors.join(", ")}>
+      <CoverPage cover={content.cover} metadata={content.metadata} />
+      <PageShell metadata={content.metadata}>
+        {content.toc ? <TableOfContents entries={entries} store={store} /> : null}
+        {content.sections.map((section) => (
+          <Section key={section.id} section={section} store={store} />
+        ))}
+        {content.appendix.length > 0 ? (
+          <View break>
+            <Heading level={1}>Appendix</Heading>
+            {content.appendix.map((section) => (
+              <Section key={section.id} section={section} store={store} />
+            ))}
+          </View>
+        ) : null}
+      </PageShell>
+    </Document>
+  );
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/templates/researchDocTemplate.tsx">
+import { Document, View } from "@react-pdf/renderer";
+import type { ReactElement } from "react";
+
+import { CoverPage } from "../components/CoverPage";
+import { TableOfContents } from "../components/TableOfContents";
+import { PageShell } from "../components/layout/PageShell";
+import { Section } from "../components/layout/Section";
+import { Heading } from "../components/primitives/Heading";
+import { collectTocEntries } from "../render/collectTocEntries";
+import type { TemplateProps } from "./templateProps";
+
+/** Academic-style document: author-forward cover, numbered sections, references appendix. */
+export function researchDocTemplate({ content, store }: TemplateProps): ReactElement {
+  const entries = collectTocEntries(content);
+  return (
+    <Document title={content.metadata.title} author={content.metadata.authors.join(", ")}>
+      <CoverPage cover={content.cover} metadata={content.metadata} />
+      <PageShell metadata={content.metadata}>
+        {content.toc ? <TableOfContents entries={entries} store={store} /> : null}
+        {content.sections.map((section, index) => (
+          <Section key={section.id} section={section} store={store} numberLabel={`${index + 1}.`} />
+        ))}
+        {content.appendix.length > 0 ? (
+          <View break>
+            <Heading level={1}>References</Heading>
+            {content.appendix.map((section) => (
+              <Section key={section.id} section={section} store={store} />
+            ))}
+          </View>
+        ) : null}
+      </PageShell>
+    </Document>
+  );
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/templates/sixPagerTemplate.tsx">
+import { Document, Text, View } from "@react-pdf/renderer";
+import type { ReactElement } from "react";
+
+import { TableOfContents } from "../components/TableOfContents";
+import { PageShell } from "../components/layout/PageShell";
+import { Section } from "../components/layout/Section";
+import { Heading } from "../components/primitives/Heading";
+import { collectTocEntries } from "../render/collectTocEntries";
+import { useTheme } from "../theme/themeContext";
+import type { TemplateProps } from "./templateProps";
+
+/**
+ * Amazon-style six-pager: a memo header (no cover page), six numbered narrative
+ * sections, and an unlimited appendix for tables and charts.
+ */
+export function sixPagerTemplate({ content, store }: TemplateProps): ReactElement {
+  const theme = useTheme();
+  const meta = content.metadata;
+  const entries = collectTocEntries(content);
+  const byline = [meta.org, meta.date, meta.authors.join(", ")].filter(Boolean).join("  ·  ");
+  return (
+    <Document title={meta.title} author={meta.authors.join(", ")}>
+      <PageShell metadata={meta}>
+        <View
+          style={{
+            borderBottomWidth: 2,
+            borderBottomColor: theme.colors.primary,
+            paddingBottom: theme.spacing.sm,
+            marginBottom: theme.spacing.md,
+          }}
+        >
+          <Text style={theme.text.h1}>{meta.title}</Text>
+          {meta.subtitle ? (
+            <Text style={{ ...theme.text.body, color: theme.colors.muted, marginTop: 2 }}>
+              {meta.subtitle}
+            </Text>
+          ) : null}
+          {byline ? (
+            <Text style={{ ...theme.text.caption, marginTop: theme.spacing.xs }}>{byline}</Text>
+          ) : null}
+        </View>
+        {content.toc ? <TableOfContents entries={entries} store={store} /> : null}
+        {content.sections.map((section, index) => (
+          <Section key={section.id} section={section} store={store} numberLabel={`${index + 1}.`} />
+        ))}
+        {content.appendix.length > 0 ? (
+          <View break>
+            <Heading level={1}>Appendix</Heading>
+            {content.appendix.map((section) => (
+              <Section key={section.id} section={section} store={store} />
+            ))}
+          </View>
+        ) : null}
+      </PageShell>
+    </Document>
+  );
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/templates/templateProps.ts">
+import type { ReactElement } from "react";
+
+import type { PageNumberStore } from "../render/pageNumberStore";
+import type { Content } from "../schemas/contentSchema";
+
+export interface TemplateProps {
+  content: Content;
+  store: PageNumberStore;
+}
+
+export type TemplateComponent = (props: TemplateProps) => ReactElement;
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/templates/templateRegistry.ts">
+import type { TemplateName } from "../schemas/contentSchema";
+import { playbookTemplate } from "./playbookTemplate";
+import { reportTemplate } from "./reportTemplate";
+import { researchDocTemplate } from "./researchDocTemplate";
+import { sixPagerTemplate } from "./sixPagerTemplate";
+import type { TemplateComponent } from "./templateProps";
+
+/** Maps a content `template` name to its component. */
+export const templateRegistry: Record<TemplateName, TemplateComponent> = {
+  report: reportTemplate,
+  researchDoc: researchDocTemplate,
+  sixPager: sixPagerTemplate,
+  playbook: playbookTemplate,
+};
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/test/assertFontsResolve.test.ts">
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import { assertFontsResolve } from "../theme/assertFontsResolve";
+import { defaultTheme } from "../theme/defaultTheme";
+import type { Theme } from "../theme/themeInterface";
+
+function withBodyFamily(family: string, fonts: Theme["fonts"] = []): Theme {
+  return {
+    ...defaultTheme,
+    text: { ...defaultTheme.text, body: { ...defaultTheme.text.body, fontFamily: family } },
+    fonts,
+  };
+}
+
+test("passes for the default standard-font theme", () => {
+  assert.doesNotThrow(() => assertFontsResolve(defaultTheme));
+});
+
+test("throws when a used family is neither standard nor registered", () => {
+  assert.throws(() => assertFontsResolve(withBodyFamily("GhostFont")), /GhostFont/);
+});
+
+test("throws on a remote font source", () => {
+  const theme = withBodyFamily("Web", [{ family: "Web", sources: [{ src: "http://x/font.ttf" }] }]);
+  assert.throws(() => assertFontsResolve(theme), /remote/);
+});
+
+test("throws on a variable-font file", () => {
+  const theme = withBodyFamily("Var", [
+    { family: "Var", sources: [{ src: "/fonts/Inter-VariableFont_wght.ttf" }] },
+  ]);
+  assert.throws(() => assertFontsResolve(theme), /variable font/);
+});
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/test/contentSchema.test.ts">
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import { contentSchema } from "../schemas/contentSchema";
+
+const valid = {
+  schemaVersion: 1,
+  template: "report",
+  metadata: { title: "Test" },
+  sections: [
+    { id: "s", title: "Section", blocks: [{ type: "paragraph", content: [{ text: "hi" }] }] },
+  ],
+};
+
+test("parses a minimal valid document and applies defaults", () => {
+  const parsed = contentSchema.parse(valid);
+  assert.equal(parsed.toc, true);
+  assert.deepEqual(parsed.appendix, []);
+  assert.equal(parsed.metadata.authors.length, 0);
+});
+
+test("rejects an unknown block type", () => {
+  assert.throws(() =>
+    contentSchema.parse({
+      ...valid,
+      sections: [{ id: "s", title: "S", blocks: [{ type: "bogus" }] }],
+    }),
+  );
+});
+
+test("rejects an SVG figure source", () => {
+  assert.throws(() =>
+    contentSchema.parse({
+      ...valid,
+      sections: [{ id: "s", title: "S", blocks: [{ type: "figure", src: "diagram.svg", alt: "x" }] }],
+    }),
+  );
+});
+
+test("rejects an empty section", () => {
+  assert.throws(() =>
+    contentSchema.parse({ ...valid, sections: [{ id: "s", title: "S", blocks: [] }] }),
+  );
+});
+
+test("parses every block type", () => {
+  const parsed = contentSchema.parse({
+    ...valid,
+    sections: [
+      {
+        id: "s",
+        title: "S",
+        blocks: [
+          { type: "heading", level: 2, text: "H" },
+          { type: "paragraph", content: [{ text: "p" }] },
+          { type: "list", items: [[{ text: "i" }]] },
+          { type: "table", columns: [{ header: "c" }], rows: [[[{ text: "v" }]]] },
+          { type: "figure", src: "image.png", alt: "a" },
+          { type: "chart", spec: { kind: "bar", series: [{ name: "n", points: [{ x: "a", y: 1 }] }] } },
+          { type: "callout", content: [{ text: "c" }] },
+          { type: "pullquote", text: "q" },
+          { type: "pagebreak" },
+        ],
+      },
+    ],
+  });
+  assert.equal(parsed.sections[0].blocks.length, 9);
+});
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/test/contrast.test.ts">
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import { contrastRatio } from "../theme/contrast";
+
+test("white on black is near-maximal contrast", () => {
+  const ratio = contrastRatio("#ffffff", "#000000");
+  assert.ok(ratio !== null && ratio > 20);
+});
+
+test("returns null for an unparseable color", () => {
+  assert.equal(contrastRatio("not-a-color", "#000000"), null);
+});
+
+test("flags low contrast below the AA threshold", () => {
+  const ratio = contrastRatio("#cccccc", "#ffffff");
+  assert.ok(ratio !== null && ratio < 4.5);
+});
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/test/makeTheme.test.ts">
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import type { DesignMdTokens } from "../theme/designMdSchema";
+import { defaultTheme } from "../theme/defaultTheme";
+import { fontsDir } from "../lib/paths";
+import { makeTheme } from "../theme/makeTheme";
+
+const tokens = (value: unknown): DesignMdTokens => value as DesignMdTokens;
+
+test("converts 1rem to 12pt", () => {
+  const theme = makeTheme(tokens({ typography: { body: { fontSize: "1rem" } } }), { fontsDir });
+  assert.equal(theme.text.body.fontSize, 12);
+});
+
+test("overlays colors onto the default palette", () => {
+  const theme = makeTheme(tokens({ colors: { primary: "#123456" } }), { fontsDir });
+  assert.equal(theme.colors.primary, "#123456");
+  assert.equal(theme.colors.background, defaultTheme.colors.background);
+});
+
+test("maps a leaf color name from a nested tree", () => {
+  const theme = makeTheme(tokens({ colors: { brand: { primary: "#abcdef" } } }), { fontsDir });
+  assert.equal(theme.colors.primary, "#abcdef");
+});
+
+test("empty tokens reproduce the default theme typography", () => {
+  const theme = makeTheme(tokens({}), { fontsDir });
+  assert.equal(theme.text.body.fontFamily, defaultTheme.text.body.fontFamily);
+  assert.equal(theme.text.h1.fontSize, defaultTheme.text.h1.fontSize);
+});
+
+test("resolves custom font file paths against the fonts dir", () => {
+  const theme = makeTheme(tokens({ fonts: [{ family: "Inter", weights: { "400": "Inter-Regular.ttf" } }] }), {
+    fontsDir,
+  });
+  assert.equal(theme.fonts.length, 1);
+  assert.ok(theme.fonts[0].sources[0].src.endsWith("Inter-Regular.ttf"));
+  assert.ok(theme.fonts[0].sources[0].src.startsWith("/"));
+});
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/test/resolveTokenRefs.test.ts">
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import { resolveTokenRefs } from "../theme/resolveTokenRefs";
+
+test("resolves a nested reference", () => {
+  const out = resolveTokenRefs({
+    colors: { brand: { primary: "#fff" }, primary: "{colors.brand.primary}" },
+  });
+  assert.equal((out.colors as Record<string, unknown>).primary, "#fff");
+});
+
+test("resolves an embedded reference", () => {
+  const out = resolveTokenRefs({ x: "1", y: "v-{x}" });
+  assert.equal(out.y, "v-1");
+});
+
+test("throws on an unknown reference", () => {
+  assert.throws(() => resolveTokenRefs({ a: "{nope.missing}" }), /Unknown token reference/);
+});
+
+test("throws on a cyclic reference", () => {
+  assert.throws(() => resolveTokenRefs({ a: "{b}", b: "{a}" }), /Cyclic token reference/);
+});
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/test/smokeRender.test.ts">
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { test } from "node:test";
+
+import { renderToBuffer } from "@react-pdf/renderer";
+import { createElement } from "react";
+
+import { contentSchema } from "../schemas/contentSchema";
+import type { TemplateName } from "../schemas/contentSchema";
+import { createPageNumberStore } from "../render/pageNumberStore";
+import { assertFontsResolve } from "../theme/assertFontsResolve";
+import { defaultTheme } from "../theme/defaultTheme";
+import { examplesDir } from "../lib/paths";
+import { registerFonts } from "../theme/registerFonts";
+import { ThemeContext } from "../theme/themeContext";
+import { templateRegistry } from "../templates/templateRegistry";
+
+async function renderToPdf(content: ReturnType<typeof contentSchema.parse>): Promise<Buffer> {
+  assertFontsResolve(defaultTheme);
+  registerFonts(defaultTheme);
+  const store = createPageNumberStore();
+  const Template = templateRegistry[content.template];
+  const element = createElement(
+    ThemeContext.Provider,
+    { value: defaultTheme },
+    createElement(Template, { content, store }),
+  );
+  return renderToBuffer(element);
+}
+
+test("renders the example report to a valid PDF", async () => {
+  const raw = readFileSync(join(examplesDir, "report.content.json"), "utf8");
+  const content = contentSchema.parse(JSON.parse(raw));
+  const buffer = await renderToPdf(content);
+  assert.equal(buffer.subarray(0, 5).toString("latin1"), "%PDF-");
+  assert.ok(buffer.length > 3000, `expected a non-trivial PDF, got ${buffer.length} bytes`);
+});
+
+const templates: TemplateName[] = ["report", "researchDoc", "sixPager", "playbook"];
+for (const template of templates) {
+  test(`renders the ${template} template`, async () => {
+    const content = contentSchema.parse({
+      schemaVersion: 1,
+      template,
+      metadata: { title: "Smoke Test", authors: ["Tester"], org: "Acme", date: "2026" },
+      cover: { title: "Smoke Test" },
+      sections: [
+        {
+          id: "alpha",
+          title: "Alpha",
+          blocks: [
+            { type: "paragraph", content: [{ text: "Hello " }, { text: "world", bold: true }] },
+            { type: "list", items: [[{ text: "one" }], [{ text: "two" }]] },
+            { type: "callout", tone: "info", content: [{ text: "Note." }] },
+          ],
+        },
+        {
+          id: "beta",
+          title: "Beta",
+          blocks: [
+            {
+              type: "table",
+              columns: [{ header: "Key" }, { header: "Value", align: "right" }],
+              rows: [[[{ text: "a" }], [{ text: "1" }]]],
+            },
+            {
+              type: "chart",
+              spec: { kind: "bar", series: [{ name: "S", points: [{ x: "Q1", y: 10 }, { x: "Q2", y: 20 }] }] },
+            },
+          ],
+        },
+      ],
+      appendix: [
+        { id: "app", title: "Appendix A", blocks: [{ type: "paragraph", content: [{ text: "end" }] }] },
+      ],
+    });
+    const buffer = await renderToPdf(content);
+    assert.equal(buffer.subarray(0, 5).toString("latin1"), "%PDF-");
+    assert.ok(buffer.length > 2000);
+  });
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/theme/assertFontsResolve.ts">
+import { existsSync } from "node:fs";
+
+import { fontResolutionError } from "../render/errors";
+import type { Theme } from "./themeInterface";
+
+/** Standard PDF font families that need no registration. */
+export const standardFamilies = new Set(["Helvetica", "Times-Roman", "Courier"]);
+
+/**
+ * Verify every font the theme uses can actually be rendered, BEFORE any
+ * `Font.register` call. @react-pdf/renderer hangs silently on a missing or
+ * variable font, so this turns those into a loud, named failure instead.
+ */
+export function assertFontsResolve(theme: Theme): void {
+  const problems: string[] = [];
+  const registered = new Set(theme.fonts.map((face) => face.family));
+
+  const usedFamilies = new Set(Object.values(theme.text).map((style) => style.fontFamily));
+  for (const family of usedFamilies) {
+    if (standardFamilies.has(family) || registered.has(family)) continue;
+    problems.push(
+      `Font family "${family}" is used but is neither a standard PDF family ` +
+        `(${[...standardFamilies].join(", ")}) nor registered. Add it to the design.md "fonts" ` +
+        `mapping with a static-weight file in assets/fonts/, or use a standard family.`,
+    );
+  }
+
+  for (const face of theme.fonts) {
+    for (const source of face.sources) {
+      const { src } = source;
+      if (/^https?:\/\//i.test(src)) {
+        problems.push(
+          `Font "${face.family}" uses a remote src (${src}); bundle the file under assets/fonts/ ` +
+            `so rendering is offline and deterministic.`,
+        );
+        continue;
+      }
+      if (!/\.(ttf|woff)$/i.test(src)) {
+        problems.push(`Font "${face.family}" must be a .ttf or .woff file: ${src}`);
+      }
+      if (/variablefont|\[wght\]|-vf\b/i.test(src)) {
+        problems.push(
+          `Font "${face.family}" looks like a variable font (${src}); the PDF format needs ` +
+            `static weights — provide separate files per weight.`,
+        );
+      }
+      if (!existsSync(src)) {
+        problems.push(`Font file not found for "${face.family}": ${src}`);
+      }
+    }
+  }
+
+  if (problems.length > 0) throw fontResolutionError(problems.join("\n"));
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/theme/contrast.ts">
+/** WCAG contrast utilities used to warn about hard-to-read brand palettes. */
+function hexToRgb(hex: string): [number, number, number] | null {
+  const match = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!match) return null;
+  const value = Number.parseInt(match[1], 16);
+  return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+}
+
+function relativeLuminance([r, g, b]: [number, number, number]): number {
+  const channel = (c: number): number => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+}
+
+/** Contrast ratio (1–21) between two hex colors, or null if either cannot be parsed. */
+export function contrastRatio(foreground: string, background: string): number | null {
+  const fg = hexToRgb(foreground);
+  const bg = hexToRgb(background);
+  if (!fg || !bg) return null;
+  const lighter = Math.max(relativeLuminance(fg), relativeLuminance(bg));
+  const darker = Math.min(relativeLuminance(fg), relativeLuminance(bg));
+  return (lighter + 0.05) / (darker + 0.05);
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/theme/defaultTheme.ts">
+import type { Theme } from "./themeInterface";
+
+/**
+ * The bundled default theme. It uses the standard PDF font families (Helvetica,
+ * Times-Roman, Courier) so the skill renders a clean, professional document with
+ * zero bundled font files and no font-resolution risk. A design.md overlays its
+ * tokens onto this base, so a partial brand spec still yields a complete theme.
+ */
+export const defaultTheme: Theme = {
+  name: "Default",
+  version: "1.0",
+  colors: {
+    background: "#ffffff",
+    surface: "#f5f7fa",
+    text: "#1a1d23",
+    muted: "#5b6470",
+    primary: "#1d4ed8",
+    onPrimary: "#ffffff",
+    border: "#dfe3e8",
+    accent: "#0ea5e9",
+    info: "#2563eb",
+    success: "#15803d",
+    warning: "#b45309",
+    danger: "#b91c1c",
+    neutral: "#52606d",
+  },
+  text: {
+    display: { fontFamily: "Helvetica", fontSize: 30, fontWeight: "bold", lineHeight: 1.15, color: "#1a1d23" },
+    h1: { fontFamily: "Helvetica", fontSize: 21, fontWeight: "bold", lineHeight: 1.2, color: "#1a1d23" },
+    h2: { fontFamily: "Helvetica", fontSize: 15.5, fontWeight: "bold", lineHeight: 1.25, color: "#1a1d23" },
+    h3: { fontFamily: "Helvetica", fontSize: 12.5, fontWeight: "bold", lineHeight: 1.3, color: "#1a1d23" },
+    body: { fontFamily: "Helvetica", fontSize: 10.5, lineHeight: 1.5, color: "#1a1d23" },
+    caption: { fontFamily: "Helvetica", fontSize: 8.5, lineHeight: 1.4, color: "#5b6470" },
+    quote: { fontFamily: "Times-Roman", fontSize: 13.5, fontStyle: "italic", lineHeight: 1.4, color: "#1a1d23" },
+    label: {
+      fontFamily: "Helvetica",
+      fontSize: 8,
+      fontWeight: "bold",
+      letterSpacing: 1.1,
+      textTransform: "uppercase",
+      lineHeight: 1.2,
+      color: "#5b6470",
+    },
+    mono: { fontFamily: "Courier", fontSize: 9.5, lineHeight: 1.45, color: "#1a1d23" },
+  },
+  spacing: { xs: 3, sm: 6, md: 12, lg: 20, xl: 32, gutter: 16, keepWithNext: 56 },
+  rounded: { sm: 2, md: 4, lg: 8 },
+  fonts: [],
+  page: { size: "A4", margins: { top: 64, right: 56, bottom: 64, left: 56 } },
+};
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/theme/designMdSchema.ts">
+import { z } from "zod";
+
+/**
+ * Lenient schema for design.md YAML front-matter. The spec is alpha and tools
+ * emit varied shapes, so unknown keys pass through and most fields are optional;
+ * `makeTheme` overlays whatever is present onto the complete default theme.
+ */
+const lengthValue = z.union([z.string(), z.number()]);
+
+export const typographyTokenSchema = z.object({
+  fontFamily: z.string().optional(),
+  fontSize: lengthValue.optional(),
+  fontWeight: lengthValue.optional(),
+  lineHeight: lengthValue.optional(),
+  letterSpacing: lengthValue.optional(),
+  textTransform: z.string().optional(),
+  fontStyle: z.string().optional(),
+  color: z.string().optional(),
+});
+export type TypographyToken = z.infer<typeof typographyTokenSchema>;
+
+/** A custom font family: weight → bundled file name (resolved under assets/fonts). */
+export const fontFaceTokenSchema = z.object({
+  family: z.string(),
+  weights: z.record(z.string(), z.string()).optional(),
+  italics: z.record(z.string(), z.string()).optional(),
+});
+
+/** Colors may be flat (`primary: "#..."`) or nested (`brand: { primary: "#..." }`). */
+const colorTree: z.ZodType<unknown> = z.lazy(() =>
+  z.union([z.string(), z.record(z.string(), colorTree)]),
+);
+
+export const designMdSchema = z
+  .object({
+    version: z.string().optional(),
+    name: z.string().optional(),
+    colors: z.record(z.string(), colorTree).optional(),
+    typography: z.record(z.string(), typographyTokenSchema).optional(),
+    spacing: z.record(z.string(), lengthValue).optional(),
+    rounded: z.record(z.string(), lengthValue).optional(),
+    fonts: z.array(fontFaceTokenSchema).optional(),
+  })
+  .passthrough();
+
+export type DesignMdTokens = z.infer<typeof designMdSchema>;
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/theme/loadDesignMd.ts">
+import { readFileSync } from "node:fs";
+
+import matter from "gray-matter";
+import { ZodError } from "zod";
+
+import { fontsDir } from "../lib/paths";
+import { themeError } from "../render/errors";
+import { designMdSchema } from "./designMdSchema";
+import { defaultTheme } from "./defaultTheme";
+import { makeTheme } from "./makeTheme";
+import { resolveTokenRefs } from "./resolveTokenRefs";
+import type { Theme } from "./themeInterface";
+
+/** Parse a design.md file into a theme; throws a themed (exit 4) error on any problem. */
+export function loadDesignMd(path: string): Theme {
+  let raw: string;
+  try {
+    raw = readFileSync(path, "utf8");
+  } catch {
+    throw themeError(`Could not read design.md at ${path}`);
+  }
+
+  let frontMatter: Record<string, unknown>;
+  try {
+    frontMatter = matter(raw).data as Record<string, unknown>;
+  } catch (error) {
+    throw themeError(`Invalid YAML front-matter in ${path}: ${(error as Error).message}`);
+  }
+
+  let theme: Theme;
+  try {
+    const resolved = resolveTokenRefs(frontMatter);
+    const tokens = designMdSchema.parse(resolved);
+    theme = makeTheme(tokens, { fontsDir });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      const issues = error.errors
+        .map((issue) => `  - ${issue.path.join(".") || "(root)"}: ${issue.message}`)
+        .join("\n");
+      throw themeError(`design.md token validation failed in ${path}:\n${issues}`);
+    }
+    throw themeError(`Could not build theme from ${path}: ${(error as Error).message}`);
+  }
+
+  return theme;
+}
+
+/** Resolve a theme from an optional design.md path, falling back to the bundled default. */
+export function resolveTheme(designPath?: string): Theme {
+  return designPath ? loadDesignMd(designPath) : defaultTheme;
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/theme/makeTheme.ts">
+import { isAbsolute, join } from "node:path";
+
+import type { DesignMdTokens, TypographyToken } from "./designMdSchema";
+import { defaultTheme } from "./defaultTheme";
+import { cssLengthToPt } from "./unitToPt";
+import type {
+  FontWeight,
+  Theme,
+  ThemeFontFace,
+  ThemePalette,
+  ThemeTextStyle,
+  ThemeTextStyles,
+} from "./themeInterface";
+
+export interface MakeThemeOptions {
+  /** Directory bundled font files are resolved against. */
+  fontsDir: string;
+}
+
+/**
+ * Build a complete theme by overlaying resolved design.md tokens onto the
+ * default theme. Anything the design.md omits keeps its default, so a partial
+ * brand spec still produces a full, valid theme.
+ */
+export function makeTheme(tokens: DesignMdTokens, options: MakeThemeOptions): Theme {
+  const colors = flattenColors(tokens.colors);
+  return {
+    name: tokens.name ?? defaultTheme.name,
+    version: tokens.version ?? defaultTheme.version,
+    colors: mapPalette(colors),
+    text: mapTypography(tokens.typography),
+    spacing: mapScale(tokens.spacing, defaultTheme.spacing),
+    rounded: mapScale(tokens.rounded, defaultTheme.rounded),
+    fonts: mapFonts(tokens.fonts, options.fontsDir),
+    page: defaultTheme.page,
+  };
+}
+
+/** Flatten a (possibly nested) color tree to a lookup keyed by dot-path and by leaf name (lowercased). */
+function flattenColors(input: DesignMdTokens["colors"]): Record<string, string> {
+  const out: Record<string, string> = {};
+  const walk = (value: unknown, path: string[]): void => {
+    if (typeof value === "string") {
+      out[path.join(".").toLowerCase()] = value;
+      const leaf = path[path.length - 1].toLowerCase();
+      if (!(leaf in out)) out[leaf] = value;
+      return;
+    }
+    if (value && typeof value === "object") {
+      for (const [key, child] of Object.entries(value)) walk(child, [...path, key]);
+    }
+  };
+  if (input) walk(input, []);
+  return out;
+}
+
+function firstColor(colors: Record<string, string>, names: string[]): string | undefined {
+  for (const name of names) {
+    const value = colors[name.toLowerCase()];
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function mapPalette(colors: Record<string, string>): ThemePalette {
+  const base = defaultTheme.colors;
+  const pick = (slot: keyof ThemePalette, ...alts: string[]): string =>
+    firstColor(colors, [slot, ...alts]) ?? base[slot];
+  return {
+    background: pick("background", "bg", "base", "canvas"),
+    surface: pick("surface", "card", "panel"),
+    text: pick("text", "foreground", "fg", "ink", "primary.text"),
+    muted: pick("muted", "secondary", "subtle", "text.secondary"),
+    primary: pick("primary", "brand", "brand.primary", "accent.primary"),
+    onPrimary: pick("onPrimary", "on-primary", "onprimary", "primary.foreground"),
+    border: pick("border", "outline", "divider"),
+    accent: pick("accent", "brand.secondary"),
+    info: pick("info", "blue"),
+    success: pick("success", "green", "positive"),
+    warning: pick("warning", "amber", "yellow", "caution"),
+    danger: pick("danger", "red", "error", "negative", "destructive"),
+    neutral: pick("neutral", "gray", "grey"),
+  };
+}
+
+function normalizeWeight(weight: string | number | undefined): FontWeight | undefined {
+  if (weight === undefined) return undefined;
+  const numeric = Number(weight);
+  if (Number.isFinite(numeric)) return numeric;
+  return weight === "bold" ? "bold" : "normal";
+}
+
+function mergeTextStyle(base: ThemeTextStyle, token: TypographyToken): ThemeTextStyle {
+  const lineHeight = token.lineHeight === undefined ? base.lineHeight : Number(token.lineHeight);
+  return {
+    fontFamily: token.fontFamily ?? base.fontFamily,
+    fontSize: token.fontSize === undefined ? base.fontSize : cssLengthToPt(token.fontSize),
+    fontWeight: normalizeWeight(token.fontWeight) ?? base.fontWeight,
+    lineHeight: Number.isFinite(lineHeight) ? lineHeight : base.lineHeight,
+    letterSpacing:
+      token.letterSpacing === undefined ? base.letterSpacing : cssLengthToPt(token.letterSpacing),
+    textTransform: (token.textTransform as ThemeTextStyle["textTransform"]) ?? base.textTransform,
+    fontStyle: (token.fontStyle as ThemeTextStyle["fontStyle"]) ?? base.fontStyle,
+    color: token.color ?? base.color,
+  };
+}
+
+function firstToken(
+  typography: DesignMdTokens["typography"],
+  names: string[],
+): TypographyToken | undefined {
+  if (!typography) return undefined;
+  const lower = new Map(Object.entries(typography).map(([key, value]) => [key.toLowerCase(), value]));
+  for (const name of names) {
+    const value = lower.get(name.toLowerCase());
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function mapTypography(typography: DesignMdTokens["typography"]): ThemeTextStyles {
+  const base = defaultTheme.text;
+  const slot = (key: keyof ThemeTextStyles, ...alts: string[]): ThemeTextStyle => {
+    const token = firstToken(typography, [key, ...alts]);
+    return token ? mergeTextStyle(base[key], token) : base[key];
+  };
+  return {
+    display: slot("display", "hero", "title"),
+    h1: slot("h1", "heading1", "heading", "title"),
+    h2: slot("h2", "heading2", "subtitle"),
+    h3: slot("h3", "heading3"),
+    body: slot("body", "paragraph", "text", "base"),
+    caption: slot("caption", "small", "footnote"),
+    quote: slot("quote", "blockquote"),
+    label: slot("label", "eyebrow", "overline"),
+    mono: slot("mono", "code"),
+  };
+}
+
+function mapScale<T extends Record<string, number>>(
+  scale: Record<string, string | number> | undefined,
+  base: T,
+): T {
+  if (!scale) return base;
+  const out = { ...base };
+  for (const key of Object.keys(base) as (keyof T)[]) {
+    const value = scale[key as string];
+    if (value === undefined) continue;
+    try {
+      out[key] = cssLengthToPt(value) as T[keyof T];
+    } catch {
+      // Keep the default when a token value cannot be parsed as a length.
+    }
+  }
+  return out;
+}
+
+function mapFonts(
+  fonts: DesignMdTokens["fonts"],
+  fontsDir: string,
+): ThemeFontFace[] {
+  if (!fonts) return [];
+  const resolve = (file: string): string => (isAbsolute(file) ? file : join(fontsDir, file));
+  return fonts.map((face) => {
+    const sources = [
+      ...Object.entries(face.weights ?? {}).map(([weight, file]) => ({
+        src: resolve(file),
+        fontWeight: normalizeWeight(weight),
+      })),
+      ...Object.entries(face.italics ?? {}).map(([weight, file]) => ({
+        src: resolve(file),
+        fontWeight: normalizeWeight(weight),
+        fontStyle: "italic" as const,
+      })),
+    ];
+    return { family: face.family, sources };
+  });
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/theme/pageMetrics.ts">
+import type { Theme } from "./themeInterface";
+
+/** Page dimensions in points for the supported page sizes. */
+const pageSizes = {
+  A4: { width: 595.28, height: 841.89 },
+  LETTER: { width: 612, height: 792 },
+} as const;
+
+export function pageWidth(theme: Theme): number {
+  return pageSizes[theme.page.size].width;
+}
+
+export function pageHeight(theme: Theme): number {
+  return pageSizes[theme.page.size].height;
+}
+
+/** Width available for content between the left and right page margins. */
+export function contentWidth(theme: Theme): number {
+  return pageWidth(theme) - theme.page.margins.left - theme.page.margins.right;
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/theme/registerFonts.ts">
+import { Font } from "@react-pdf/renderer";
+
+import type { Theme } from "./themeInterface";
+
+/**
+ * Register the theme's custom fonts with @react-pdf/renderer. Standard families
+ * need no registration. Call `assertFontsResolve` first so this never registers
+ * a missing or variable font (which would hang rendering).
+ */
+export function registerFonts(theme: Theme): void {
+  for (const face of theme.fonts) {
+    Font.register({
+      family: face.family,
+      fonts: face.sources.map((source) => ({
+        src: source.src,
+        fontWeight: source.fontWeight,
+        fontStyle: source.fontStyle,
+      })),
+    });
+  }
+
+  // Disable hyphenation for cleaner business typography (react-pdf otherwise
+  // splits words with the Knuth-Plass algorithm).
+  Font.registerHyphenationCallback((word) => [word]);
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/theme/resolveTokenRefs.ts">
+/**
+ * Resolve W3C-design-tokens-style `{path.to.token}` references in a parsed
+ * design.md token tree.
+ *
+ * A value may be a whole reference (`"{colors.brand.primary}"`) or embed one
+ * (`"1px solid {colors.border}"`). Resolution is recursive with cycle and
+ * unknown-reference detection, both of which throw — broken brand tokens must
+ * fail loudly, never silently produce a wrong color.
+ */
+type TokenTree = Record<string, unknown>;
+
+function flattenInto(value: unknown, prefix: string, out: Map<string, unknown>): void {
+  if (value === null || typeof value !== "object") {
+    out.set(prefix, value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    out.set(prefix, value);
+    return;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    flattenInto(child, prefix ? `${prefix}.${key}` : key, out);
+  }
+}
+
+export function resolveTokenRefs<T extends TokenTree>(tokens: T): T {
+  const flat = new Map<string, unknown>();
+  flattenInto(tokens, "", flat);
+
+  const cache = new Map<string, unknown>();
+  const inProgress = new Set<string>();
+
+  function resolvePath(path: string): unknown {
+    if (cache.has(path)) return cache.get(path);
+    if (!flat.has(path)) throw new Error(`Unknown token reference: {${path}}`);
+    if (inProgress.has(path)) throw new Error(`Cyclic token reference at {${path}}`);
+    inProgress.add(path);
+    const resolved = resolveValue(flat.get(path));
+    inProgress.delete(path);
+    cache.set(path, resolved);
+    return resolved;
+  }
+
+  function resolveValue(value: unknown): unknown {
+    if (typeof value !== "string") return value;
+    const whole = /^\{([^}]+)\}$/.exec(value.trim());
+    if (whole) return resolvePath(whole[1].trim());
+    return value.replace(/\{([^}]+)\}/g, (_, path: string) => String(resolvePath(path.trim())));
+  }
+
+  function mapStrings(value: unknown): unknown {
+    if (typeof value === "string") return resolveValue(value);
+    if (Array.isArray(value)) return value.map(mapStrings);
+    if (value && typeof value === "object") {
+      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, mapStrings(v)]));
+    }
+    return value;
+  }
+
+  return mapStrings(tokens) as T;
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/theme/themeContext.ts">
+import { createContext, useContext } from "react";
+
+import { defaultTheme } from "./defaultTheme";
+import type { Theme } from "./themeInterface";
+
+/** Carries the resolved theme to every component; defaults to the bundled theme. */
+export const ThemeContext = createContext<Theme>(defaultTheme);
+
+export function useTheme(): Theme {
+  return useContext(ThemeContext);
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/theme/themeInterface.ts">
+/** Font weight as accepted by @react-pdf/renderer. */
+export type FontWeight = number | "normal" | "bold";
+
+export interface ThemeTextStyle {
+  fontFamily: string;
+  /** Size in points. */
+  fontSize: number;
+  fontWeight?: FontWeight;
+  /** Unitless multiple of font size. */
+  lineHeight?: number;
+  /** Letter spacing in points. */
+  letterSpacing?: number;
+  textTransform?: "none" | "uppercase" | "lowercase" | "capitalize";
+  fontStyle?: "normal" | "italic";
+  color?: string;
+}
+
+export interface ThemeFontSource {
+  /** Absolute file path (bundled font) or, discouraged, a URL. */
+  src: string;
+  fontWeight?: FontWeight;
+  fontStyle?: "normal" | "italic";
+}
+
+export interface ThemeFontFace {
+  family: string;
+  sources: ThemeFontSource[];
+}
+
+export interface ThemePalette {
+  background: string;
+  surface: string;
+  text: string;
+  muted: string;
+  primary: string;
+  onPrimary: string;
+  border: string;
+  accent: string;
+  info: string;
+  success: string;
+  warning: string;
+  danger: string;
+  neutral: string;
+}
+
+export interface ThemeTextStyles {
+  display: ThemeTextStyle;
+  h1: ThemeTextStyle;
+  h2: ThemeTextStyle;
+  h3: ThemeTextStyle;
+  body: ThemeTextStyle;
+  caption: ThemeTextStyle;
+  quote: ThemeTextStyle;
+  label: ThemeTextStyle;
+  mono: ThemeTextStyle;
+}
+
+export interface ThemeSpacing {
+  xs: number;
+  sm: number;
+  md: number;
+  lg: number;
+  xl: number;
+  gutter: number;
+  /** Minimum points that must remain on the page after a heading (keep-with-next). */
+  keepWithNext: number;
+}
+
+export interface ThemeRounded {
+  sm: number;
+  md: number;
+  lg: number;
+}
+
+export interface ThemePageConfig {
+  size: "A4" | "LETTER";
+  margins: { top: number; right: number; bottom: number; left: number };
+}
+
+/** The fully resolved theme every component reads via context. */
+export interface Theme {
+  name: string;
+  version: string;
+  colors: ThemePalette;
+  text: ThemeTextStyles;
+  spacing: ThemeSpacing;
+  rounded: ThemeRounded;
+  /** Custom fonts to register; empty when using the standard PDF families. */
+  fonts: ThemeFontFace[];
+  page: ThemePageConfig;
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/theme/unitToPt.ts">
+/**
+ * Convert a CSS-style length to PDF points.
+ *
+ * PDF uses points; CSS design tokens are usually px or rem. Using the CSS
+ * convention 1rem = 16px and 1px = 0.75pt gives 1rem = 12pt. Bare numbers are
+ * treated as points. `em` is resolved against `basePt` (the element's own size).
+ */
+export function cssLengthToPt(value: string | number, basePt = 12): number {
+  if (typeof value === "number") return value;
+  const match = /^(-?\d*\.?\d+)\s*(px|pt|rem|em)?$/.exec(value.trim());
+  if (!match) throw new Error(`Unrecognized length: "${value}"`);
+  const amount = Number(match[1]);
+  const unit = match[2] ?? "pt";
+  switch (unit) {
+    case "pt":
+      return amount;
+    case "px":
+      return amount * 0.75;
+    case "rem":
+      return amount * 12;
+    case "em":
+      return amount * basePt;
+    default:
+      throw new Error(`Unsupported unit: ${unit}`);
+  }
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/.gitignore">
+node_modules/
+*.pdf
+.pdf-create-ok
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/install-check.mjs">
+#!/usr/bin/env node
+/**
+ * Idempotent on-demand dependency installer for the pdf:create renderer.
+ *
+ * Runs `npm install --omit=dev` only when the install marker is absent, so the
+ * first render bootstraps the renderer's pinned dependencies and every later
+ * render is instant and offline-capable. Run from the renderer directory:
+ *
+ *   node install-check.mjs
+ *
+ * Because it resolves its own directory from import.meta.url, it works whether
+ * the skill runs as the autopilot plugin or is copied standalone into
+ * ~/.claude/skills/.
+ */
+import { execFileSync } from "node:child_process";
+import { existsSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const marker = join(here, "node_modules", ".pdf-create-ok");
+const rendererEntry = join(here, "node_modules", "@react-pdf", "renderer", "package.json");
+
+const nodeMajor = Number(process.versions.node.split(".")[0]);
+if (nodeMajor > 22) {
+  console.warn(
+    `pdf:create: Node ${process.versions.node} detected. @react-pdf/renderer is most tested on Node 18-22; ` +
+      `use the repo .nvmrc (22) if you hit rendering issues.`,
+  );
+}
+
+if (existsSync(marker) && existsSync(rendererEntry)) {
+  process.exit(0);
+}
+
+console.error("pdf:create: installing renderer dependencies (one-time, ~30s)...");
+try {
+  execFileSync("npm", ["install", "--omit=dev", "--no-audit", "--no-fund", "--prefer-offline"], {
+    cwd: here,
+    stdio: "inherit",
+  });
+} catch {
+  console.error(
+    "pdf:create: dependency install failed. Ensure Node and npm are on PATH and you have " +
+      "network access for the first run.",
+  );
+  process.exit(1);
+}
+
+writeFileSync(marker, "ok\n");
+process.exit(0);
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/package.json">
+{
+  "name": "pdf-create-renderer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Bundled @react-pdf/renderer pipeline for the pdf:create skill",
+  "license": "MIT",
+  "scripts": {
+    "render": "tsx render.tsx",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@react-pdf/renderer": "4.5.1",
+    "gray-matter": "4.0.3",
+    "react": "19.2.7",
+    "tsx": "4.22.4",
+    "zod": "3.23.8"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.17"
+  }
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/render.tsx">
+import { mkdirSync, readFileSync, statSync } from "node:fs";
+import { dirname } from "node:path";
+import { parseArgs } from "node:util";
+
+import { renderToFile } from "@react-pdf/renderer";
+import { createElement } from "react";
+import { ZodError } from "zod";
+
+import { ThemeContext } from "./theme/themeContext";
+import { assertFontsResolve } from "./theme/assertFontsResolve";
+import { contrastRatio } from "./theme/contrast";
+import { registerFonts } from "./theme/registerFonts";
+import { resolveTheme } from "./theme/loadDesignMd";
+import { contentSchema, templateNameSchema } from "./schemas/contentSchema";
+import { createPageNumberStore } from "./render/pageNumberStore";
+import { contentError, exitCodeFor, renderError, usageError } from "./render/errors";
+import { templateRegistry } from "./templates/templateRegistry";
+
+const usage =
+  "Usage: render.tsx --content <content.json> --out <output.pdf> " +
+  "[--design <design.md>] [--template <report|researchDoc|sixPager|playbook>] [--strict-contrast]";
+
+function parseCliArgs(): {
+  content: string;
+  out: string;
+  design?: string;
+  template?: string;
+  strictContrast: boolean;
+} {
+  let parsed;
+  try {
+    parsed = parseArgs({
+      options: {
+        content: { type: "string" },
+        out: { type: "string" },
+        design: { type: "string" },
+        template: { type: "string" },
+        "strict-contrast": { type: "boolean", default: false },
+      },
+    });
+  } catch (error) {
+    throw usageError(`${(error as Error).message}\n${usage}`);
+  }
+  const { values } = parsed;
+  if (!values.content || !values.out) throw usageError(`--content and --out are required.\n${usage}`);
+  return {
+    content: values.content,
+    out: values.out,
+    design: values.design,
+    template: values.template,
+    strictContrast: values["strict-contrast"] ?? false,
+  };
+}
+
+function loadContent(path: string): ReturnType<typeof contentSchema.parse> {
+  let raw: string;
+  try {
+    raw = readFileSync(path, "utf8");
+  } catch {
+    throw contentError(`Could not read content JSON at ${path}`);
+  }
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch (error) {
+    throw contentError(`Invalid JSON in ${path}: ${(error as Error).message}`);
+  }
+  try {
+    return contentSchema.parse(json);
+  } catch (error) {
+    if (error instanceof ZodError) {
+      const issues = error.errors
+        .map((issue) => `  - ${issue.path.join(".") || "(root)"}: ${issue.message}`)
+        .join("\n");
+      throw contentError(`Content JSON failed validation:\n${issues}`);
+    }
+    throw error;
+  }
+}
+
+async function main(): Promise<void> {
+  const args = parseCliArgs();
+  const content = loadContent(args.content);
+
+  const templateName = args.template ?? content.template;
+  const validTemplate = templateNameSchema.safeParse(templateName);
+  if (!validTemplate.success) {
+    throw usageError(
+      `Unknown template "${templateName}". Valid: ${templateNameSchema.options.join(", ")}.`,
+    );
+  }
+
+  const theme = resolveTheme(args.design);
+
+  const ratio = contrastRatio(theme.text.body.color ?? theme.colors.text, theme.colors.background);
+  if (ratio !== null && ratio < 4.5) {
+    const message = `Body text vs background contrast is ${ratio.toFixed(2)}:1 (WCAG AA wants >= 4.5:1).`;
+    if (args.strictContrast) throw renderError(message);
+    console.warn(`pdf:create: ${message}`);
+  }
+
+  assertFontsResolve(theme);
+  registerFonts(theme);
+
+  if (validTemplate.data === "sixPager" && content.sections.length !== 6) {
+    console.warn(
+      `pdf:create: sixPager has ${content.sections.length} sections; the format expects 6 ` +
+        `(Introduction, Goals, Tenets, State of the Business, Lessons Learned, Strategic Priorities).`,
+    );
+  }
+
+  const store = createPageNumberStore();
+  const Template = templateRegistry[validTemplate.data];
+  const element = createElement(
+    ThemeContext.Provider,
+    { value: theme },
+    createElement(Template, { content, store }),
+  );
+
+  mkdirSync(dirname(args.out), { recursive: true });
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const watchdog = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () =>
+        reject(
+          renderError(
+            "Rendering timed out after 60s — likely a missing/variable font or a block taller than a page.",
+          ),
+        ),
+      60_000,
+    );
+  });
+  try {
+    await Promise.race([renderToFile(element, args.out), watchdog]);
+  } catch (error) {
+    throw renderError(`Failed to render PDF: ${(error as Error).message}`);
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const sizeKb = (statSync(args.out).size / 1024).toFixed(1);
+  console.log(`pdf:create: wrote ${args.out} (${sizeKb} KB)`);
+}
+
+main().catch((error: unknown) => {
+  console.error(`pdf:create: ${(error as Error).message}`);
+  process.exit(exitCodeFor(error));
+});
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/renderer/tsconfig.json">
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "noEmit": true
+  },
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules"]
+}
+</file>
+
+<file path="claude-plugins/autopilot/skills/pdf:create/SKILL.md">
+---
+name: pdf:create
+description: >-
+  Generate a beautiful, brand-themed, multi-page PDF — report, research doc,
+  six-pager, or playbook — from structured content using a bundled
+  @react-pdf/renderer pipeline (direct rendering, no headless browser). Use when
+  the user asks to create, generate, build, export, or design a PDF, report,
+  whitepaper, six-pager, playbook, proposal, or branded document, especially
+  from notes, data, or a Google design.md brand spec.
+  Trigger on: "PDF", "create a report", "generate a document", "six-pager",
+  "playbook", "proposal", "whitepaper", "branded PDF", "design.md", "export to PDF".
+  Do NOT use for: editing or extracting text from an existing PDF, or filling PDF forms.
+argument-hint: "<what to put in the PDF> [path/to/design.md] [path/to/output.pdf]"
+allowed-tools:
+  - Read
+  - Write
+  - Bash(node *)
+  - Bash(npm *)
+  - Bash(npx *)
+  - AskUserQuestion
+---
+
+# Create a beautiful PDF (`pdf:create`)
+
+Turn structured content into a polished, multi-page PDF using a bundled, self-contained `@react-pdf/renderer` pipeline. Rendering is **deterministic and runs outside this conversation**: you assemble a small JSON document, a Node script turns it into a themed PDF. You never hand-write rendering code.
+
+## When to use
+
+- The user wants a PDF report, research document, six-pager, playbook, proposal, or any branded multi-page document.
+- The user has content (notes, data, sections, tables, charts) and wants it laid out beautifully.
+- The user provides — or wants to apply — a brand identity via a Google `design.md` file.
+
+Do not use this to read, edit, merge, or extract from an existing PDF.
+
+## How it works
+
+```text
+You assemble  ──►  content.json  ──►  render.tsx  ──►  validate (Zod)  ──►  theme
+(from the user's        (Write tool)        │            content + design.md     │
+ content + choices)                          │                                    ▼
+                                             └──►  registerFonts ──► template ──► output.pdf
+```
+
+Three inputs, all passed as file paths (no inline JSON on the command line):
+
+1. **content JSON** — the document model you write (metadata, cover, sections, blocks). This is the only artifact you produce per run; its schema is the stable contract.
+2. **design.md** (optional) — a brand spec whose tokens (colors, typography, spacing) become the theme. Omit it to use the bundled default theme.
+3. **output path** — where the `.pdf` is written.
+
+## Portability (works without the plugin)
+
+The skill is a self-contained folder: `SKILL.md` plus a `renderer/` Node project with its own pinned dependencies. It has **no** cross-skill calls and **no** MCP dependencies. To use it outside this plugin, copy the whole `pdf:create/` folder into `~/.claude/skills/` — it behaves identically. The only requirement is a local **Node** runtime (Node 18–22 recommended); the first render installs the renderer's dependencies once. It does not run in the hosted claude.ai web sandbox, which has no Node toolchain.
+
+## Workflow
+
+Let `SKILL_DIR` be the directory that contains this `SKILL.md`. Every command below runs from `SKILL_DIR/renderer`.
+
+### Phase 1 — Pick a template and gather content
+
+Choose the template that fits the request (see [Templates](#templates)). If the user has not implied one, ask with `AskUserQuestion` (Report / Research doc / Six-pager / Playbook). Collect the content: title and metadata, an optional cover, and the ordered sections with their blocks (headings, paragraphs, lists, tables, figures, charts, callouts, pull quotes).
+
+### Phase 2 — Write the content JSON
+
+Read `renderer/references/content-schema.md` for the full schema, and `renderer/references/examples/report.content.json` for a worked example. Then write a content JSON file (e.g. to a temp path or the user's working directory) that conforms to it. Keep prose in the content; do not put styling in it — styling comes from the theme.
+
+### Phase 3 — Resolve a brand theme (optional)
+
+If the user supplied (or points to) a `design.md`, pass its path with `--design`. Otherwise omit it and the bundled default theme is used. See [design.md theming](#designmd-theming).
+
+### Phase 4 — Install renderer dependencies (one-time)
+
+```bash
+node install-check.mjs
+```
+
+This installs the renderer's pinned runtime dependencies on first use and is a no-op afterward (guarded by a marker file). If `node` is not found, tell the user this skill needs a local Node runtime on PATH.
+
+### Phase 5 — Render
+
+```bash
+node --import tsx render.tsx \
+  --content "<content.json>" \
+  --out "<output.pdf>" \
+  [--design "<design.md>"] \
+  [--template <report|researchDoc|sixPager|playbook>]
+```
+
+`--template` overrides the `template` field in the content JSON; usually you can omit it. The script validates both inputs and exits non-zero with a clear, field-named message on any problem (see [Failure modes](#failure-modes)).
+
+### Phase 6 — Report and verify
+
+On success the script prints the output path and byte size. Tell the user where the PDF is. If anything failed, read the error message — it names the offending file, field, font, or token — fix the content JSON or design.md, and re-run.
+
+## The content JSON contract
+
+The renderer accepts one document object. Top level: `schemaVersion` (1), `template`, `metadata`, optional `cover`, `toc` (boolean), `sections[]`, and optional `appendix[]`. Each section has an `id`, `title`, and ordered `blocks[]`. Blocks are a discriminated union on `type`: `heading`, `paragraph`, `list`, `table`, `figure`, `chart`, `callout`, `pullquote`, `pagebreak`. The authoritative schema with every field is in `renderer/references/content-schema.md`; mirror `renderer/references/examples/report.content.json`.
+
+## design.md theming
+
+A `design.md` is a markdown file with YAML front-matter design tokens (colors, typography, spacing, rounded) plus a human-readable body. The loader parses the front-matter, resolves `{path.to.token}` references, validates the tokens, and produces the theme the components consume. Colors and typography names map onto the document's palette and text styles. If a token reference is broken or a referenced font cannot be resolved, the render **fails loudly** rather than producing a silently wrong PDF. With no `design.md`, the bundled default theme (standard PDF font families, a neutral professional palette) is used. See `renderer/references/design-md-spec.md`.
+
+Custom brand fonts are supported: drop TTF/WOFF static-weight files into `renderer/assets/fonts/` and reference the family from the design.md `fonts` mapping. Variable fonts are rejected (the PDF format does not support them) — ship explicit weights.
+
+## Templates
+
+- **report** — cover, table of contents, executive summary, sequential sections, appendix. The general-purpose business document.
+- **researchDoc** — cover with authors, abstract, numbered sections, references appendix; supports pull quotes.
+- **sixPager** — Amazon-style six narrative sections (Introduction, Goals, Tenets, State of the Business, Lessons Learned, Strategic Priorities) plus an unlimited appendix for tables and charts.
+- **playbook** — operational guide: each section is a "play" with step lists, callouts, and owner/RACI tables.
+
+All templates share the cover → TOC → sections → appendix spine, a fixed header/footer with page numbers, and a navigable bookmark outline.
+
+## Failure modes
+
+- **`node` not found** — install Node (18–22) and re-run. The hosted claude.ai sandbox is unsupported.
+- **content JSON invalid** — the error names the failing field; fix it against `references/content-schema.md`.
+- **broken design.md token reference** — the error names the unresolved `{token}`; fix the design.md.
+- **unresolved or variable font** — the error names the family; add a static-weight file to `assets/fonts/` or use a standard family.
+- **a block taller than a page** — split it (e.g. break a huge table into sections); the renderer keeps headings with following content via `minPresenceAhead`, not by forcing oversized blocks onto one page.
+
+## Examples
+
+Generate a report from notes, default theme:
+
+```bash
+# after writing /tmp/report.content.json
+node install-check.mjs
+node --import tsx render.tsx --content /tmp/report.content.json --out ./quarterly-report.pdf
+```
+
+Generate a branded six-pager with a company design.md:
+
+```bash
+node install-check.mjs
+node --import tsx render.tsx \
+  --content /tmp/sixpager.content.json \
+  --design ./brand/design.md \
+  --out ./strategy-sixpager.pdf \
+  --template sixPager
+```
+
+<!-- ref-format:start -->
+
+### Reference formatting & readability
+
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
+
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
+- Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
+- Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
+- Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
+
+Backticks suppress GitHub autolinking: a commit SHA or issue/PR number inside a code span renders as dead text — that is why a backticked SHA was un-clickable in a prior review. Never wrap a SHA or issue/PR number in backticks; link it, or leave it bare so GitHub auto-links it.
+
+Write the most helpful, readable output you can: plain, direct prose; every reference resolvable; explain the "why", not the obvious "what".
+
+<!-- ref-format:end -->
+</file>
+
 <file path="claude-plugins/autopilot/skills/plan/SKILL.md">
 ---
 name: plan
@@ -42588,6 +45866,7 @@ code-assistants/
             ├── dependabot:resolve/
             ├── issue:create/
             ├── issue:run/
+            ├── pdf:create/             # bundles a self-contained Node renderer/ sub-project
             ├── plan/
             ├── plan-bun/
             ├── plan-nodejs-react/
@@ -42772,6 +46051,16 @@ Generate ASCII schemas, diagrams, and UI wireframes using Unicode box-drawing ch
 
 ```bash
 /autopilot:ascii-schemas
+```
+
+### `/autopilot:pdf-create`
+
+Generate a beautiful, brand-themed, multi-page PDF — report, research doc, six-pager, or playbook — from structured content, using a bundled `@react-pdf/renderer` pipeline (direct rendering, no headless browser). Optionally themed by a Google `design.md`. The skill is self-contained and portable: copy its folder into `~/.claude/skills/` to use it without the plugin (requires a local Node runtime). See the [pdf:create skill doc](../../docs/10-pdf-create-skill.md).
+
+```bash
+/autopilot:pdf-create "quarterly report from these notes"                 # Default theme
+/autopilot:pdf-create "strategy six-pager" ./brand/design.md             # Brand-themed
+/autopilot:pdf-create "ops playbook" ./brand/design.md ./playbook.pdf    # Theme + output path
 ```
 
 ### `/autopilot:ask-codex`
@@ -44364,6 +47653,172 @@ The 6 packing skills follow a **snapshot-first with fallback** contract:
 3. If it is absent (or the attach fails), fall back to `mcp__repomix__pack_codebase` with the skill's existing arguments.
 
 Either path yields an `outputId`; the downstream flow (`grep_repomix_output` / `read_repomix_output`) is identical. Because the snapshot reflects `main` at the last merge, on a feature branch it lags by the in-flight changes — acceptable, since review-time skills obtain the actual diff separately and use the pack only for surrounding context.
+</file>
+
+<file path="docs/10-pdf-create-skill.md">
+# The `pdf:create` skill
+
+> Chapter 10 of the [repository docs](../README.md#repository-docs).
+
+`pdf:create` generates beautiful, brand-themed, multi-page PDFs — reports,
+research docs, six-pagers, playbooks — from structured content. It is the
+plugin's first **bundled-asset** skill: alongside its [`SKILL.md`](../claude-plugins/autopilot/skills/pdf:create/SKILL.md)
+it ships a self-contained Node sub-project (`renderer/`) built on
+`@react-pdf/renderer` (direct rendering, no headless browser). This chapter
+documents the machinery that makes it work and stay decoupled — read it before
+changing the skill's layout, its dependency story, or the monorepo's workspace
+and formatting config.
+
+## Render pipeline
+
+The skill keeps rendering out of the model's context: Claude only assembles a
+small content JSON, and a Node script ([`render.tsx`](../claude-plugins/autopilot/skills/pdf:create/renderer/render.tsx))
+deterministically turns it into a themed PDF.
+
+```text
+┌────────────────┐
+│     Claude     │
+└───────┬────────┘
+        │ ①
+        ▼
+┌────────────────┐
+│  content.json  │
+└───────┬────────┘
+        │ ②
+        ▼
+┌────────────────┐
+│   render.tsx   │
+└───────┬────────┘
+        │ ③
+        ▼
+┌────────────────┐  ④   ┌────────────────┐
+│  Zod validate  │      │   design.md    │
+└───────┬────────┘      │   (optional)   │
+        │               └───────┬────────┘
+        ▼                       │ ④
+┌────────────────┐◀─────────────┘
+│ theme resolve  │
+└───────┬────────┘
+        │ ⑤
+        ▼
+┌────────────────┐
+│ register fonts │
+└───────┬────────┘
+        │ ⑥
+        ▼
+┌────────────────┐
+│  pick template │
+└───────┬────────┘
+        │ ⑦
+        ▼
+┌────────────────┐
+│   output.pdf   │
+└────────────────┘
+```
+
+**Flow Legend:**
+
+- ① Claude assembles a content JSON (the `Write` tool) from the user's content and template choice.
+- ② The content JSON path is passed to `render.tsx`, run with `node --import tsx`.
+- ③ `render.tsx` validates the content JSON against `contentSchema` (Zod); a failure exits non-zero with the offending field.
+- ④ Theme resolution: with a `design.md`, `loadDesignMd` → `resolveTokenRefs` → `makeTheme`; otherwise the bundled `defaultTheme`.
+- ⑤ `assertFontsResolve` fails loudly on a missing or variable font, then `registerFonts` registers any custom faces.
+- ⑥ The template named by the content (or `--template`) is looked up in `templateRegistry`.
+- ⑦ `renderToFile` writes the output `.pdf`.
+
+## Skill layout
+
+```text
+claude-plugins/autopilot/skills/pdf:create/
+├── SKILL.md                 # the only file the plugin validator sees
+└── renderer/                # self-contained Node project (colon-free path)
+    ├── package.json         # private, exact-pinned deps; not a workspace member
+    ├── package-lock.json    # committed for deterministic installs
+    ├── install-check.mjs    # idempotent on-demand installer (marker-guarded)
+    ├── render.tsx           # CLI entry
+    ├── lib/paths.ts         # import.meta.url self-location
+    ├── schemas/             # contentSchema, blockSchema, chartSpecSchema (Zod)
+    ├── theme/               # design.md loader, token resolver, makeTheme, fonts
+    ├── components/          # primitives, layout, Table, Chart, TOC, BlockRenderer
+    ├── templates/           # report, researchDoc, sixPager, playbook + registry
+    ├── assets/fonts/        # drop-in dir for brand fonts (default uses std fonts)
+    ├── references/          # content-schema + design-md docs and examples
+    └── test/                # node:test unit + smoke-render tests
+```
+
+The skill folder keeps the colon (`pdf:create`) to match the other 15 colon
+skills, but the Node sub-project lives under a **colon-free `renderer/`** so
+`npm`/`node` never run from a path containing `:` (npm warns and may misparse a
+colon in a script path).
+
+## Portability — works without the plugin
+
+The skill is a movable, hermetic unit. To use it outside this plugin, copy the
+`pdf:create/` folder into `~/.claude/skills/`; it behaves identically.
+
+- **Self-location.** [`lib/paths.ts`](../claude-plugins/autopilot/skills/pdf:create/renderer/lib/paths.ts)
+  resolves every bundled path from `import.meta.url` — never `process.cwd()` or a
+  plugin-only env var — so fonts and examples resolve wherever the folder is copied.
+- **No cross-dependencies.** The `SKILL.md` makes no `Skill(autopilot:*)` calls
+  and lists no `MCP(...)` tools, so nothing breaks when the plugin is absent.
+- **On-demand install.** [`install-check.mjs`](../claude-plugins/autopilot/skills/pdf:create/renderer/install-check.mjs)
+  runs `npm install --omit=dev` only when its `node_modules/.pdf-create-ok` marker
+  is missing, so the first render bootstraps dependencies (~30s) and every later
+  render is instant and offline-capable. The runtime dependency set is pure-JS
+  (no native builds), keeping installs portable.
+- **Node requirement.** Rendering needs a local Node runtime (18–22 recommended;
+  it warns on newer majors). It runs in local Claude Code and in Claude Desktop
+  with a local runtime, but **not** in the hosted claude.ai web sandbox, which has
+  no Node toolchain. If `node` is absent the skill says so rather than failing
+  cryptically.
+
+## Decoupling from the monorepo
+
+The renderer is a Node + React sub-project inside a Bun + TypeScript monorepo. It
+is deliberately invisible to the workspace tooling — **do not "fix" these
+exclusions**:
+
+- **Bun workspace.** The root `workspaces` globs are single-level
+  (`claude-plugins/*`), so a sub-project four levels deeper is never a member; a
+  defensive `!claude-plugins/autopilot/skills/**` negation guards against a future
+  glob broadening. React is never hoisted into the root `bun.lock`.
+- **Turbo / typecheck.** Turbo runs tasks only in workspace members, so it never
+  discovers the renderer; the monorepo `typecheck` does not cover it. The
+  renderer's own tests run with `node --import tsx --test` (not wired into CI).
+- **Prettier.** Root `format`/`format:check` target `**/*.{md,json}`, which would
+  otherwise match the renderer's JSON/Markdown and lockfile, so `renderer/` is
+  listed in `.prettierignore`.
+- **Licenses audit.** The licenses workflow triggers on any `**/package.json` but
+  no-ops here, because its audit is gated on a repo-root `licenses:audit` script
+  that does not exist.
+
+## Inputs
+
+Two contracts, both documented and exemplified inside the renderer:
+
+- **Content JSON** — the document model Claude writes. Full schema in
+  [`references/content-schema.md`](../claude-plugins/autopilot/skills/pdf:create/renderer/references/content-schema.md),
+  worked example in
+  [`references/examples/report.content.json`](../claude-plugins/autopilot/skills/pdf:create/renderer/references/examples/report.content.json).
+- **design.md** — an optional brand spec whose tokens become the theme. Format
+  and token-mapping rules in
+  [`references/design-md-spec.md`](../claude-plugins/autopilot/skills/pdf:create/renderer/references/design-md-spec.md).
+
+## Fonts
+
+The default theme uses the standard PDF families (`Helvetica`, `Times-Roman`,
+`Courier`) — no binary font files ship in the repo, and there is zero
+font-resolution risk offline. Brand fonts are opt-in: drop static-weight
+`.ttf`/`.woff` files in `renderer/assets/fonts/` and reference them from a
+`design.md`. Variable fonts are rejected (the PDF format needs discrete weights),
+and every referenced font is verified before rendering.
+
+## Versioning
+
+Adding the skill is a `feat`. Per the [release field spec](./06-release-field.md),
+the `claude-plugin` version source is `plugin.json` and the version bump is made
+by the conventional-commit-driven release pipeline in the release PR — not in the
+feature PR.
 </file>
 
 <file path="docs/appendix-a-plan-skills-audit.md">
@@ -47441,6 +50896,10 @@ bun.lock
 dist/
 coverage/
 .github/workflows/
+
+# Bundled, self-contained Node sub-project for the pdf:create skill — decoupled
+# from the Bun workspace and the root Prettier (.{md,json}) glob on purpose.
+claude-plugins/autopilot/skills/pdf:create/renderer/
 </file>
 
 <file path="CODE_OF_CONDUCT.md">
@@ -48328,7 +51787,8 @@ export default config;
     ".github/actions/validate-actions",
     ".github/actions/perf-report-action",
     "claude-plugins/*",
-    "packages/*"
+    "packages/*",
+    "!claude-plugins/autopilot/skills/**"
   ],
   "scripts": {
     "prepare": "husky",
@@ -48413,6 +51873,10 @@ The `docs/` guides are numbered chapters in reading order — newcomers start at
 
 8. [Upstream sync](./docs/08-upstream-sync.md) — the one-action `upstream-sync` aggregator and the thin `upstream.yml` consumers run, with per-kind opt-out
 9. [Committed Repomix pack](./docs/09-repomix-pack.md) — the `.repomix/pack.xml` snapshot, the merge-triggered workflow that refreshes it, and the snapshot-first contract skills follow
+
+**Part VI — Document generation.** Turning content into beautiful, branded files.
+
+10. [The `pdf:create` skill](./docs/10-pdf-create-skill.md) — how the bundled, portable `@react-pdf/renderer` pipeline turns content plus an optional `design.md` into a themed PDF, and how its Node sub-project stays decoupled from the Bun workspace
 
 **Appendix.** Historical records — kept for context, not current guidance.
 
