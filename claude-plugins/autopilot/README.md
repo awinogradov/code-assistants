@@ -392,6 +392,8 @@ Configure in `.mcp.json` at plugin root:
 }
 ```
 
+The plugin ships two servers: `wiretext` (ASCII wireframes) and `linear` (`https://mcp.linear.app/mcp`, OAuth) for Linear issue tracking when a project sets `agents.tracker: "linear"`. The Linear read path falls back to a bundled zero-dependency GraphQL helper (`lib/linear/`) keyed by `LINEAR_API_KEY` for headless/CI. See [Linear tracker support](../../docs/11-linear-tracker.md).
+
 ### Versioning
 
 Update version in `.claude-plugin/plugin.json` following [semantic versioning](https://semver.org/):

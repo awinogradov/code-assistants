@@ -48,6 +48,10 @@ The `docs/` guides are numbered chapters in reading order — newcomers start at
 
 10. [The `pdf:create` skill](./docs/10-pdf-create-skill.md) — how the bundled, portable `@react-pdf/renderer` pipeline turns content plus an optional `design.md` into a themed PDF, and how its Node sub-project stays decoupled from the Bun workspace
 
+**Part VII — Issue trackers.** Pointing autopilot at a non-GitHub issue tracker.
+
+11. [Linear tracker support](./docs/11-linear-tracker.md) — how `agents.tracker`/`agents.linear` opt a project into Linear, the Linear MCP server plus the bundled GraphQL fallback, and how `resolve-issue-context` resolves issues from either provider behind one JSON contract
+
 **Appendix.** Historical records — kept for context, not current guidance.
 
 - [Plan skills audit](./docs/appendix-a-plan-skills-audit.md) — a dimension-by-dimension audit of the `plan`, `plan-bun`, and `plan-nodejs-react` skills; most of its recommendations have since shipped
