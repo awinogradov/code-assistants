@@ -1,8 +1,9 @@
 /**
- * Structural guard (issues #259, #334): asserts the reply-composition steps of the
+ * Structural guard (issues #259, #334, #347): asserts the reply-composition steps of the
  * pr:resolve and pr:answer skills carry the reference-formatting instructions, so
  * review-thread replies and PR comments render references per RFC-0001 v3 — commit
- * SHAs AND any file/doc/skill/agent/section they cite as links rather than bare text.
+ * SHAs, any file/doc/skill/agent/section they cite, AND `CHECK-` rule codes (linked to
+ * their anchor in the pr:review skill's §2.5, #347) as links rather than bare text.
  * The canonical standard lives in rfc/0001-reference-formatting.md and is inlined
  * verbatim into every skill (guarded by referenceFormattingSync); this test checks only
  * that the actionable instructions are PRESENT — the distinctive phrases below — not that
@@ -31,5 +32,11 @@ describe("reply reference-formatting wiring", () => {
   test.each(replySkillFiles)("%s instructs replies to link doc and section references", async (file) => {
     const content = await readFile(file, "utf8");
     expect(content).toContain("link any file, doc, skill, agent, or section you cite");
+  });
+
+  test.each(replySkillFiles)("%s instructs replies to link CHECK- rule codes per pr:review §2.5", async (file) => {
+    const content = await readFile(file, "utf8");
+    expect(content).toContain("`CHECK-` rule code");
+    expect(content).toContain("pr:review/SKILL.md#25-rule-codes");
   });
 });
