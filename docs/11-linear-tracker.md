@@ -4,7 +4,7 @@
 
 Autopilot is GitHub-first: by default every issue-aware skill reads and writes GitHub issues through the `gh` CLI. A project can opt into **Linear** — on its own or alongside GitHub — through the `package.json` `agents.trackers` array. GitHub stays the zero-config default — repositories that set nothing behave exactly as before.
 
-This chapter covers the **foundation** (read path): how a project enables Linear, how a skill resolves the active provider, and the two ways autopilot reaches Linear. Branch and pull-request conventions, issue creation and listing, and TODO links arrive in later phases (tracked under issue #339).
+This chapter covers configuring trackers, how a skill resolves the active provider, the two ways autopilot reaches Linear, and the branch and pull-request conventions on the write path. Issue creation and listing, and TODO links, arrive in later phases (tracked under issue #339).
 
 ## Configuring trackers
 
@@ -48,3 +48,13 @@ Autopilot reaches Linear two ways:
 ## The single resolution seam
 
 Every issue read flows through the [`resolve-issue-context`](../claude-plugins/autopilot/agents/resolve-issue-context.md) agent, which returns a **provider-agnostic** JSON object (`source`, `issueId`, `title`, `status`, `labels`, `assignee`, `description`, `comments`). For Linear it tries the MCP tools, falls back to the GraphQL helper, then degrades with a non-null `resolveError` that the caller surfaces before stopping. Because `plan`, `run`, and every other consumer read that JSON — never raw tracker output — GitHub and Linear share one downstream code path; only this agent and the input-detection rows are provider-aware. `issueId` is a number for GitHub and the string identifier (e.g. `"ENG-123"`) for Linear.
+
+## Branches and pull requests
+
+Once a Linear ticket is resolved, the write path mirrors the GitHub flow with Linear identifiers:
+
+- **Branch** — [`branch:create`](../claude-plugins/autopilot/skills/branch:create/SKILL.md) builds `<team>-<n>-<slug>` (the ticket id lowercased, e.g. `ENG-123` → `eng-123-add-auth`) instead of GitHub's `issue-<n>-<slug>`. Passing `--start` also moves the ticket to "In Progress" (best-effort) via the Linear MCP `list_issue_statuses` + `save_issue` tools.
+- **Pull request** — [`pr:create`](../claude-plugins/autopilot/skills/pr:create/SKILL.md) and [`pr:update`](../claude-plugins/autopilot/skills/pr:update/SKILL.md) detect the provider from the branch shape, prefix the title with the uppercase id (`ENG-123: <description>`) so the ticket shows in the PR list, and put `Closes ENG-123` (or `Part of` / `Related to`) in the `**Issues:**` section. GitHub branches keep their business-only title and `Closes #N`.
+- **Done on merge** — a Linear ticket auto-closes on merge only when the [GitHub↔Linear integration](https://linear.app/docs/github) is configured for the repository; otherwise the magic word is a tracked reference.
+
+The shared CI gates accept both conventions: the branch-name and semantic-PR-title checks in the [`contributing-check`](../.github/actions/contributing-check/action.yml) action — and the local [`pre-push`](../.husky/pre-push) hook — recognise the Linear `<team>-<n>-<slug>` branch and the `ENG-123:` title alongside the GitHub forms.
