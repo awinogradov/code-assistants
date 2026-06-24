@@ -50,7 +50,8 @@ async function main() {
       resolveError: null,
     };
   } catch (error) {
-    return degraded(id, `unresolved — ${error.message}`);
+    const detail = error.cause ? ` (${Object.values(error.cause).join(" ")})` : "";
+    return degraded(id, `unresolved — ${error.message}${detail}`);
   }
 }
 
