@@ -116,9 +116,13 @@ Uncommitted-change handling is done in [Phase 0](#phase-0-preflight-check) by `p
 0. Parse `$ARGUMENTS`: if it contains `--autopilot`, set `autopilotMode = true` and remove the flag before further parsing. Otherwise `autopilotMode = false`.
 1. Get current branch name with `git branch --show-current`
 2. Validate branch name follows convention:
-   - Standard: `issue-<number>-<short-description>` (e.g., `issue-123-add-feature`)
+   - GitHub: `issue-<number>-<short-description>` (e.g., `issue-123-add-feature`)
+   - Linear: `<team>-<number>-<short-description>` (e.g., `eng-123-add-auth`)
    - Special prefix: `<hotfix|trivial|maintenance|proposal|security>-<short-description>` (e.g., `hotfix-memory-leak-editor`, `security-tainted-format-string`)
-3. Extract the issue number from the branch (e.g., `123` from `issue-123-add-feature`) for use in the `**Issues:**` section as `Closes #123`. OR detect the special prefix (`hotfix`, `trivial`, `maintenance`, `proposal`, `security`) and uppercase it for the PR title prefix (e.g., `HOTFIX:`, `SECURITY:`). For a `security-` branch, emit NO `Closes #` — record the code-scanning alert reference instead (see [Phase 4](#phase-4-generate-pr-description)).
+3. Determine the provider and issue reference from the branch, checking **in this order** (so `issue-` and the special prefixes are matched before the generic Linear pattern):
+   - **GitHub** — matches `^issue-([0-9]+)-`: extract the number (e.g., `123`); `provider = github`; link as `Closes #123`.
+   - **Special prefix** — starts with `hotfix-`/`trivial-`/`maintenance-`/`proposal-`/`security-`: uppercase it for the PR title prefix (e.g., `HOTFIX:`). For a `security-` branch, emit NO `Closes #` — record the code-scanning alert reference instead (see [Phase 4](#phase-4-generate-pr-description)).
+   - **Linear** — matches `^([a-z][a-z0-9]*)-([0-9]+)-`: uppercase team + number to the Linear id (e.g., `eng-123-…` → `ENG-123`); `provider = linear`; the title gets the `ENG-123:` prefix and `**Issues:**` uses `Closes ENG-123`.
 4. If branch name is invalid, warn user and ask how to proceed
 
 ## Phase 2: Gather Context
@@ -128,7 +132,7 @@ Invoke the `analyze-pr-commits` sub-agent to gather commit history, diff summary
 ```
 Use the Agent tool with:
 - `subagent_type`: "autopilot:analyze-pr-commits"
-- `prompt`: "Analyze commits for PR. Base: main. Branch: [branch name]. Issue number: [number or none]. Repository: [owner/repo]. Fetch GitHub issue: [true if standard branch, false if special prefix]."
+- `prompt`: "Analyze commits for PR. Base: main. Branch: [branch name]. Provider: [github or linear]. Issue number: [GitHub number, Linear id, or none]. Repository: [owner/repo]. Fetch issue: [true if a GitHub or Linear issue branch, false if special prefix]."
 - `description`: "Analyze PR commits"
 ```
 
@@ -138,12 +142,14 @@ If the agent reports breaking changes, treat `--release-notes` as mandatory — 
 
 ## Phase 3: Generate PR Title
 
-**Standard format:** `<Business-valuable description>`
+**Standard (GitHub) format:** `<Business-valuable description>`
+**Linear format:** `<LINEAR-ID>: <Business-valuable description>` (e.g., `ENG-123: Allow theme selection`)
 **Special prefix format:** `<PREFIX>: <Business-valuable description>` where `<PREFIX>` is one of `HOTFIX`, `TRIVIAL`, `MAINTENANCE`, `PROPOSAL`, `SECURITY`
 
 **Rules:**
 
-- Standard title is the business description only — do NOT include the issue number in the title (it goes in the `**Issues:**` section via `Closes #<n>`)
+- Standard (GitHub) title is the business description only — do NOT include the issue number in the title (it goes in the `**Issues:**` section via `Closes #<n>`)
+- Linear title is prefixed with the uppercase Linear id and a colon (`ENG-123: …`) so the ticket shows in the PR list; the `**Issues:**` section still carries `Closes ENG-123`
 - Special prefixes are uppercase, followed by a colon and a space
 - Description is capitalized, business-focused, no period
 - Under 120 characters total
@@ -228,9 +234,11 @@ Content rules:
 - `Part of #N` — Plain reference (auto-linked, no close)
 - `Related to #N` — Plain reference (auto-linked, no close)
 
+For a **Linear** branch, use the Linear id in place of `#N` (e.g., `Closes ENG-123`, `Part of ENG-100`). Linear auto-closes the ticket on merge only when the GitHub↔Linear integration is configured for the repository; otherwise the magic word is a tracked reference.
+
 **Issue linking rules:**
 
-1. Always include `Closes #<N>` for the issue number derived from the branch name (skip for special prefix branches — no GitHub issue exists)
+1. Always include `Closes #<N>` (GitHub) or `Closes <LINEAR-ID>` (Linear) for the issue derived from the branch name (skip for special prefix branches — no issue exists)
 2. If `--closes` provided, add `Closes #<n>` for each additional issue
 3. If `--related` provided, add `Related to #<n>` for each related issue
 4. Each magic word on its own line

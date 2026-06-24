@@ -1,7 +1,7 @@
 ---
 name: analyze-pr-commits
-description: Analyze branch commits, diff, and linked GitHub issue for PR context. Use when pr:create or pr:update needs pre-computed context without polluting parent conversation.
-tools: Bash
+description: Analyze branch commits, diff, and the linked GitHub or Linear issue for PR context. Use when pr:create or pr:update needs pre-computed context without polluting parent conversation.
+tools: Bash, MCP(linear:*)
 model: sonnet
 ---
 
@@ -13,9 +13,10 @@ The invoking skill provides in the prompt:
 
 - **Base branch** (e.g., `main`)
 - **Branch name** (e.g., `123-add-feature`)
-- **Issue number** (optional, e.g., `123`) — extracted from branch name by the parent
+- **Provider** (optional, `github` or `linear`; default `github`) — selects how the issue is fetched in [Phase 2](#phase-2-fetch-issue-context-if-requested)
+- **Issue number** (optional, e.g., `123`) — GitHub issue number, or a Linear identifier (e.g., `ENG-123`) when provider is `linear`; extracted from the branch name by the parent
 - **Repository** in `owner/repo` format (e.g., `awinogradov/code-assistants`)
-- **Fetch GitHub issue**: `true` or `false` (false for special prefix branches)
+- **Fetch issue**: `true` or `false` (false for special prefix branches)
 
 ## Phase 1: Gather Git Context
 
@@ -34,11 +35,15 @@ git diff origin/<base>...HEAD
 
 ## Phase 2: Fetch Issue Context (if requested)
 
-If `fetchGithubIssue` is `true` and an issue number is provided:
+If the fetch flag is `true` and an issue identifier is provided, fetch by provider:
 
-```bash
-gh issue view <ISSUE-NUMBER> -R <REPO> --json title,body,state
-```
+- **GitHub** (default):
+
+  ```bash
+  gh issue view <ISSUE-NUMBER> -R <REPO> --json title,body,state
+  ```
+
+- **Linear** (provider is `linear`): call `mcp__plugin_autopilot_linear__get_issue` with `{ "id": "<ISSUE-ID>" }` and read `title`, `description`, and `state.name`.
 
 If the call fails, skip issue context — do not abort.
 
@@ -58,7 +63,7 @@ Output ONLY the structured block. No preamble or commentary:
 ## PR Commit Analysis
 
 **Branch:** [branch name]
-**Issue:** #[issue number] or Special prefix: [HOTFIX/TRIVIAL/MAINTENANCE]
+**Issue:** #[issue number] (GitHub), [ENG-123] (Linear), or Special prefix: [HOTFIX/TRIVIAL/MAINTENANCE]
 **Base:** [base branch]
 **Commits:** N since [base]
 
