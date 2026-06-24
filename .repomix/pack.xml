@@ -34059,12 +34059,12 @@ Emit the raw object, not the fenced form. Set `assignee` to `null` (not the stri
 <file path="claude-plugins/autopilot/agents/scan-and-analyze-todos.md">
 ---
 name: scan-and-analyze-todos
-description: Scan codebase for TODO/FIXME comments and analyze their GitHub issue status. Use when todo-cleanup needs scan + analysis without polluting parent context.
-tools: Grep, Bash
+description: Scan codebase for TODO/FIXME comments and analyze their GitHub or Linear issue status. Use when todo-cleanup needs scan + analysis without polluting parent context.
+tools: Grep, Bash, MCP(linear:*)
 model: sonnet
 ---
 
-You are a TODO scanner and analyzer. Grep-scan the codebase for TODO/FIXME comments, check linked GitHub issue statuses via `gh`, and return categorized results. Do not output intermediate steps — only the final structured block.
+You are a TODO scanner and analyzer. Grep-scan the codebase for TODO/FIXME comments, check linked GitHub issue statuses via `gh` (or Linear ticket statuses via the Linear MCP), and return categorized results. Do not output intermediate steps — only the final structured block.
 
 ## Input
 
@@ -34072,6 +34072,7 @@ The invoking command provides in the prompt:
 
 - **Language**: `typescript`, `python`, or `go`
 - **Repository** in `owner/repo` format (e.g., `awinogradov/code-assistants`)
+- **Provider** (optional, `github` or `linear`; default `github`) — selects how referenced issues are checked in [Phase 3](#phase-3-analyze-with-github)
 
 ## Phase 1: Scan
 
@@ -34095,10 +34096,12 @@ For each match, extract:
 - Type: `TODO` or `FIXME`
 - Description text (everything after `TODO:` or `FIXME:`)
 - Whether there is an existing `@see` link in the context lines (check `-A` context lines for `@see`)
-- Whether the description contains a GitHub issue reference (pattern: `#\d+`)
-- The `@see` URL if present (extract issue number from GitHub URL)
+- Whether the description contains a GitHub issue reference (`#\d+`) or, on a Linear project, a Linear id (`[A-Z]+-\d+`)
+- The `@see` URL if present — extract the GitHub issue number from a `github.com/.../issues/N` URL, or the Linear id from a `linear.app/.../issue/<ID>` URL
 
 ## Phase 3: Analyze with GitHub
+
+For a **Linear** project (provider is `linear`), check a referenced ticket with `mcp__plugin_autopilot_linear__get_issue` instead of `gh issue view`: a `state.name` of `Done` or `Canceled` is **stale**, any other state is **linked** (or **needs link** when the `@see` is missing). The GitHub buckets below apply otherwise.
 
 Categorize each TODO into buckets:
 
@@ -34122,7 +34125,7 @@ Extract the issue number from the TODO text. Use the same `gh issue view` call.
 
 ### c) Unlinked (no issue reference at all)
 
-Mark as **unlinked** — needs a new GitHub issue created.
+Mark as **unlinked** — needs a new issue created (GitHub, or Linear on a linear-tracked project).
 
 Batch `gh issue view` calls where possible.
 
@@ -45395,10 +45398,11 @@ allowed-tools:
   - Bash(ruff *)
   - Bash(mypy *)
   - Bash(gh *)
+  - MCP(linear:*)
   - AskUserQuestion
 ---
 
-Scan codebase for TODO and FIXME comments. Check if referenced issues are still open, remove stale comments, create GitHub issues for untracked TODOs, and link them with `@see` tags.
+Scan codebase for TODO and FIXME comments. Check if referenced issues are still open, remove stale comments, create issues for untracked TODOs (GitHub, or Linear on a linear-tracked project), and link them with `@see` tags.
 
 ## Input
 
@@ -45415,7 +45419,8 @@ No arguments are expected. Any supplied arguments are ignored.
 1. Read `package.json` from the repository root
 2. Extract `agents.language` field — determines file globs and comment syntax
 3. Extract `agents.rules` field — determines verification commands
-4. Determine the repository in `owner/repo` form from `gh repo view --json nameWithOwner --jq .nameWithOwner` (or `git remote get-url origin`)
+4. Extract `agents.trackers` — when a `linear` tracker is configured the provider is **Linear** (note its `team`); otherwise **GitHub**
+5. Determine the repository in `owner/repo` form from `gh repo view --json nameWithOwner --jq .nameWithOwner` (or `git remote get-url origin`)
 
 **Language-to-pattern mapping:**
 
@@ -45439,7 +45444,7 @@ Invoke the `scan-and-analyze-todos` sub-agent to scan the codebase for TODO/FIXM
 ```
 Use the Agent tool with:
 - `subagent_type`: "autopilot:scan-and-analyze-todos"
-- `prompt`: "Scan for TODOs. Language: [language from Phase 1]. Repository: [owner/repo from Phase 1]."
+- `prompt`: "Scan for TODOs. Language: [language from Phase 1]. Repository: [owner/repo from Phase 1]. Provider: [github or linear]."
 - `description`: "Scan and analyze TODOs"
 ```
 
@@ -45525,19 +45530,17 @@ For each stale TODO:
    - Surrounding code context
 
    c. Create the issue:
+   - **GitHub:** `gh issue create --title "<title>" --body "<body>"`
+   - **Linear:** `mcp__plugin_autopilot_linear__save_issue` with `{ "title": "<title>", "team": "<team>", "description": "<body>" }` (the `team` from [Phase 1](#phase-1-read-repository-context))
 
-   ```bash
-   gh issue create --title "<title>" --body "<body>"
-   ```
-
-   d. Capture the issue URL from the `gh issue create` output (it prints the URL on the last line).
+   d. Capture the created issue's URL (GitHub prints it on the last line; for Linear use the returned ticket URL).
 
    e. Use Edit tool to add `@see` link on the line after the TODO comment:
    - TypeScript/Go: `// @see <issue-url>`
 
 ### 5c. Add links for "referenced but not linked" TODOs
 
-1. Build the issue URL: `https://github.com/<owner>/<repo>/issues/<N>`
+1. Build the issue URL — GitHub: `https://github.com/<owner>/<repo>/issues/<N>`; Linear: the ticket URL (e.g. `https://linear.app/<org>/issue/<ID>`)
 2. Use Edit tool to add `@see` link on the line after the TODO:
    - TypeScript/Go: `// @see <issue-url>`
 
@@ -48309,7 +48312,7 @@ feature PR.
 
 Autopilot is GitHub-first: by default every issue-aware skill reads and writes GitHub issues through the `gh` CLI. A project can opt into **Linear** — on its own or alongside GitHub — through the `package.json` `agents.trackers` array. GitHub stays the zero-config default — repositories that set nothing behave exactly as before.
 
-This chapter covers configuring trackers, how a skill resolves the active provider, the two ways autopilot reaches Linear, the branch and pull-request conventions on the write path, and creating and listing Linear issues. TODO links and issue-state-on-merge arrive in a later phase (tracked under issue #339).
+This chapter covers configuring trackers, how a skill resolves the active provider, the two ways autopilot reaches Linear, the branch and pull-request conventions on the write path, creating and listing Linear issues, and keeping TODO links and ticket state in sync — the complete Linear tracker reference.
 
 ## Configuring trackers
 
@@ -48369,6 +48372,11 @@ The shared CI gates accept both conventions: the branch-name and semantic-PR-tit
 - **Create** — [`linear:create`](../claude-plugins/autopilot/skills/linear:create/SKILL.md) is the Linear counterpart to `issue:create`: it generates the same five-section body (Context/What/Why/Scope/Solution), then a short wizard picks the workflow status (`list_issue_statuses`), labels (`list_issue_labels`, pre-selecting the `agents.trackers` repo label), and an assignee, and creates the ticket with `save_issue`.
 - **List and run** — [`issue:run`](../claude-plugins/autopilot/skills/issue:run/SKILL.md) lists the team's recent open tickets via `list_issues` (instead of `gh issue list`) and hands the chosen `TEAM-123` identifier to `autopilot:run`.
 - **Assignees** — the [`resolve-assignees`](../claude-plugins/autopilot/agents/resolve-assignees.md) agent gathers candidates from CODEOWNERS and the Linear team's members; Linear member listing is best-effort and degrades to CODEOWNERS when the MCP user-list tool is unavailable.
+
+## TODO links and issue state
+
+- **TODO cleanup** — [`todo-cleanup`](../claude-plugins/autopilot/skills/todo-cleanup/SKILL.md) and the [`scan-and-analyze-todos`](../claude-plugins/autopilot/agents/scan-and-analyze-todos.md) agent recognise Linear ids (`TEAM-123`) and `@see https://linear.app/...` links: a ticket in `Done` or `Canceled` marks the TODO stale, and unlinked TODOs become Linear tickets (via `save_issue`) on a linear-tracked project.
+- **Issue state** — `branch:create --start` moves a ticket to "In Progress" (see [Branches and pull requests](#branches-and-pull-requests)); a ticket returns to Done on merge only when the [GitHub↔Linear integration](https://linear.app/docs/github) is configured, since autopilot expresses the intent through the PR's `Closes TEAM-123` magic word rather than writing the state directly.
 </file>
 
 <file path="docs/appendix-a-plan-skills-audit.md">
