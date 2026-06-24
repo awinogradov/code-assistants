@@ -4,7 +4,7 @@
 
 Autopilot is GitHub-first: by default every issue-aware skill reads and writes GitHub issues through the `gh` CLI. A project can opt into **Linear** — on its own or alongside GitHub — through the `package.json` `agents.trackers` array. GitHub stays the zero-config default — repositories that set nothing behave exactly as before.
 
-This chapter covers configuring trackers, how a skill resolves the active provider, the two ways autopilot reaches Linear, and the branch and pull-request conventions on the write path. Issue creation and listing, and TODO links, arrive in later phases (tracked under issue #339).
+This chapter covers configuring trackers, how a skill resolves the active provider, the two ways autopilot reaches Linear, the branch and pull-request conventions on the write path, and creating and listing Linear issues. TODO links and issue-state-on-merge arrive in a later phase (tracked under issue #339).
 
 ## Configuring trackers
 
@@ -58,3 +58,9 @@ Once a Linear ticket is resolved, the write path mirrors the GitHub flow with Li
 - **Done on merge** — a Linear ticket auto-closes on merge only when the [GitHub↔Linear integration](https://linear.app/docs/github) is configured for the repository; otherwise the magic word is a tracked reference.
 
 The shared CI gates accept both conventions: the branch-name and semantic-PR-title checks in the [`contributing-check`](../.github/actions/contributing-check/action.yml) action — and the local [`pre-push`](../.husky/pre-push) hook — recognise the Linear `<team>-<n>-<slug>` branch and the `ENG-123:` title alongside the GitHub forms.
+
+## Creating and listing issues
+
+- **Create** — [`linear:create`](../claude-plugins/autopilot/skills/linear:create/SKILL.md) is the Linear counterpart to `issue:create`: it generates the same five-section body (Context/What/Why/Scope/Solution), then a short wizard picks the workflow status (`list_issue_statuses`), labels (`list_issue_labels`, pre-selecting the `agents.trackers` repo label), and an assignee, and creates the ticket with `save_issue`.
+- **List and run** — [`issue:run`](../claude-plugins/autopilot/skills/issue:run/SKILL.md) lists the team's recent open tickets via `list_issues` (instead of `gh issue list`) and hands the chosen `TEAM-123` identifier to `autopilot:run`.
+- **Assignees** — the [`resolve-assignees`](../claude-plugins/autopilot/agents/resolve-assignees.md) agent gathers candidates from CODEOWNERS and the Linear team's members; Linear member listing is best-effort and degrades to CODEOWNERS when the MCP user-list tool is unavailable.
