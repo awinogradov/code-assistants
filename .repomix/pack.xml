@@ -13636,7 +13636,7 @@ runs:
     - name: Validate branch name
       uses: deepakputhraya/action-branch-name@v1.0.0
       with:
-        regex: '^(issue-\d+-[a-z0-9]+(-[a-z0-9]+)*|(hotfix|trivial|maintenance|proposal|security)-[a-z0-9]+(-[a-z0-9]+)*|release-([a-z0-9]+(-[a-z0-9]+)*-)?\d+\.\d+\.\d+)$'
+        regex: '^(issue-\d+-[a-z0-9]+(-[a-z0-9]+)*|[a-z][a-z0-9]*-\d+-[a-z0-9]+(-[a-z0-9]+)*|(hotfix|trivial|maintenance|proposal|security)-[a-z0-9]+(-[a-z0-9]+)*|release-([a-z0-9]+(-[a-z0-9]+)*-)?\d+\.\d+\.\d+)$'
         min_length: 5
         max_length: 100
         ignore: main,master
@@ -13664,6 +13664,7 @@ runs:
           PROPOSAL
           SECURITY
           Release
+          [A-Z]+-\d+
           [A-Z]\w*
         headerPattern: '^([A-Z]\S*?):?\s+(.+)$'
         headerPatternCorrespondence: type, subject
@@ -32739,13 +32740,17 @@ fi
 #   (trivial|maintenance|hotfix)-<short-description>   escapes
 issue_pattern='^issue-[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$'
 escape_pattern='^(trivial|maintenance|hotfix)-[a-z0-9]+(-[a-z0-9]+)*$'
+# Linear ticket branch: <team>-<number>-<short-description> (lowercased), e.g. eng-123-add-auth
+linear_pattern='^[a-z][a-z0-9]*-[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$'
 
 if ! echo "$branch" | grep -qE "$issue_pattern" \
-  && ! echo "$branch" | grep -qE "$escape_pattern"; then
+  && ! echo "$branch" | grep -qE "$escape_pattern" \
+  && ! echo "$branch" | grep -qE "$linear_pattern"; then
   echo "✖ Branch name \"$branch\" does not follow naming convention."
   echo ""
   echo "  Expected one of:"
   echo "    issue-<number>-<short-description>      e.g. issue-42-add-auth"
+  echo "    <team>-<number>-<short-description>     e.g. eng-123-add-auth (Linear)"
   echo "    trivial-<short-description>             e.g. trivial-fix-typo"
   echo "    maintenance-<short-description>         e.g. maintenance-bump-deps"
   echo "    hotfix-<short-description>              e.g. hotfix-bad-release"
@@ -33408,8 +33413,8 @@ The repository documentation has been reorganized into numbered book chapters wi
 <file path="claude-plugins/autopilot/agents/analyze-pr-commits.md">
 ---
 name: analyze-pr-commits
-description: Analyze branch commits, diff, and linked GitHub issue for PR context. Use when pr:create or pr:update needs pre-computed context without polluting parent conversation.
-tools: Bash
+description: Analyze branch commits, diff, and the linked GitHub or Linear issue for PR context. Use when pr:create or pr:update needs pre-computed context without polluting parent conversation.
+tools: Bash, MCP(linear:*)
 model: sonnet
 ---
 
@@ -33421,9 +33426,10 @@ The invoking skill provides in the prompt:
 
 - **Base branch** (e.g., `main`)
 - **Branch name** (e.g., `123-add-feature`)
-- **Issue number** (optional, e.g., `123`) — extracted from branch name by the parent
+- **Provider** (optional, `github` or `linear`; default `github`) — selects how the issue is fetched in [Phase 2](#phase-2-fetch-issue-context-if-requested)
+- **Issue number** (optional, e.g., `123`) — GitHub issue number, or a Linear identifier (e.g., `ENG-123`) when provider is `linear`; extracted from the branch name by the parent
 - **Repository** in `owner/repo` format (e.g., `awinogradov/code-assistants`)
-- **Fetch GitHub issue**: `true` or `false` (false for special prefix branches)
+- **Fetch issue**: `true` or `false` (false for special prefix branches)
 
 ## Phase 1: Gather Git Context
 
@@ -33442,11 +33448,15 @@ git diff origin/<base>...HEAD
 
 ## Phase 2: Fetch Issue Context (if requested)
 
-If `fetchGithubIssue` is `true` and an issue number is provided:
+If the fetch flag is `true` and an issue identifier is provided, fetch by provider:
 
-```bash
-gh issue view <ISSUE-NUMBER> -R <REPO> --json title,body,state
-```
+- **GitHub** (default):
+
+  ```bash
+  gh issue view <ISSUE-NUMBER> -R <REPO> --json title,body,state
+  ```
+
+- **Linear** (provider is `linear`): call `mcp__plugin_autopilot_linear__get_issue` with `{ "id": "<ISSUE-ID>" }` and read `title`, `description`, and `state.name`.
 
 If the call fails, skip issue context — do not abort.
 
@@ -33466,7 +33476,7 @@ Output ONLY the structured block. No preamble or commentary:
 ## PR Commit Analysis
 
 **Branch:** [branch name]
-**Issue:** #[issue number] or Special prefix: [HOTFIX/TRIVIAL/MAINTENANCE]
+**Issue:** #[issue number] (GitHub), [ENG-123] (Linear), or Special prefix: [HOTFIX/TRIVIAL/MAINTENANCE]
 **Base:** [base branch]
 **Commits:** N since [base]
 
@@ -35004,18 +35014,19 @@ Write the most helpful, readable output you can: plain, direct prose; every refe
 ---
 name: branch:create
 description: Create and checkout a git branch following repository naming conventions with GitHub issue integration. Use when creating branches, or when invoked from other skills.
-argument-hint: <ISSUE-NUMBER> [description] [--trivial | --hotfix | --maintenance | --proposal | --security] [--autopilot]
+argument-hint: <ISSUE-ID> [description] [--start] [--trivial | --hotfix | --maintenance | --proposal | --security] [--autopilot]
 allowed-tools:
   - Bash(git *)
   - Read
   - Bash(gh *)
+  - MCP(linear:*)
   - AskUserQuestion
   - Skill(autopilot:preflight-check)
 ---
 
 # Create Branch
 
-Create a git branch following the repository's naming conventions with GitHub issue integration. Supports standard issue branches (`issue-<number>-<slug>`) and special prefix branches (hotfix, trivial, maintenance, proposal, security).
+Create a git branch following the repository's naming conventions with GitHub or Linear issue integration. Supports GitHub issue branches (`issue-<number>-<slug>`), Linear ticket branches (`<team>-<number>-<slug>`), and special prefix branches (hotfix, trivial, maintenance, proposal, security).
 
 ## When to Use
 
@@ -35031,7 +35042,9 @@ Arguments: `$ARGUMENTS`
 Expected forms:
 
 - `<ISSUE-NUMBER>` — GitHub issue number (e.g., `123` or `#123`). Used to fetch the issue and to build the branch name `issue-<number>-<slug>`.
-- `<ISSUE-NUMBER> "<description>"` — issue number plus custom branch slug description
+- `<LINEAR-ID>` — Linear identifier (e.g., `ENG-123`, matching `^[A-Z]+-[0-9]+$`) when the project lists a `linear` tracker in `package.json` `agents.trackers`. Builds `<team>-<number>-<slug>` (the id lowercased).
+- `<ISSUE-NUMBER|LINEAR-ID> "<description>"` — issue identifier plus custom branch slug description
+- `--start` — Linear only: also move the Linear ticket to "In Progress" after the branch is created (best-effort). Ignored for GitHub and special-prefix branches.
 - `--hotfix "<description>"` / `--trivial "<description>"` / `--maintenance "<description>"` / `--proposal "<description>"` / `--security "<description>"` — special prefix branches without a GitHub issue (use `--security` for code-scanning alert fixes → `security-<slug>`)
 - `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips the [Phase 5](#phase-5-verify-with-user) confirmation prompt and creates the branch directly with the auto-generated name. Conflict resolution ([Phase 4](#phase-4-check-for-conflicts)) and validation errors still surface.
 
@@ -35053,9 +35066,10 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
 
 1. **Parse `$ARGUMENTS`** (shell-quoted positional tokens):
    - Check for `--autopilot`: if present, strip it from the arguments and set `autopilotMode = true`. Otherwise `autopilotMode = false`.
+   - Check for `--start`: if present, strip it and set `startIssue = true` (Linear only; see [Phase 6](#phase-6-execute)). Otherwise `startIssue = false`.
    - Check for special prefix flags: `--trivial`, `--hotfix`, `--maintenance`, `--proposal`, `--security`
    - If flag found: extract description from remaining arguments
-   - If no flag: extract first argument as issue number, optional description
+   - If no flag: extract the first argument as the issue identifier (GitHub number or Linear id), optional description
    - If `$ARGUMENTS` is empty, fall back to Input resolution (see above).
 
 2. **If special prefix flag detected:**
@@ -35064,13 +35078,16 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
    - Multiple prefix flags not allowed — error: `Only one special prefix flag allowed`
    - Skip [Phase 2](#phase-2-fetch-github-issue) (no GitHub issue to fetch)
 
-3. **If no flag, validate as issue number:**
-   - Accept patterns: `^#?[0-9]+$` (strip a leading `#` if present)
-   - If invalid: `Invalid issue number. Expected: a positive integer (e.g., 123 or #123) or use --trivial, --hotfix, --maintenance, --proposal, --security`
+3. **If no flag, validate the issue identifier and resolve the provider** (read `package.json` `agents.trackers` with the Read tool):
+   - **Linear** — the identifier matches `^[A-Z]+-[0-9]+$` (e.g., `ENG-123`) AND a `linear` tracker is configured: set `provider = linear`.
+   - **GitHub** — the identifier matches `^#?[0-9]+$` (strip a leading `#`): set `provider = github`.
+   - If invalid: `Invalid issue identifier. Expected a GitHub number (e.g., 123 or #123), a Linear id (e.g., ENG-123) for a linear-tracked project, or a --trivial/--hotfix/--maintenance/--proposal/--security flag`
 
 ## Phase 2: Fetch GitHub Issue
 
 **Skip this phase entirely for special prefix flag branches (--hotfix, --trivial, --maintenance, --proposal, --security).**
+
+**If `provider` is `linear`:** fetch the ticket via `mcp__plugin_autopilot_linear__get_issue` with `{ "id": "<LINEAR-ID>" }` and read its `title` (for the slug) and `state.name`. Skip the GitHub `gh` steps below and do NOT self-assign — Linear assignment is deferred to a later phase; emit `unassigned — Linear assignment deferred`. Then continue to [Phase 3](#phase-3-generate-branch-slug). The steps below apply to **GitHub** issues only.
 
 1. **Determine the repository** and bind it to `REPO` so every `gh` call in this phase targets the same repo (important in worktrees and multi-remote checkouts):
 
@@ -35182,7 +35199,8 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
 
 **Construct full branch name:**
 
-- Format: `issue-<number>-<slug>`
+- **GitHub:** `issue-<number>-<slug>`
+- **Linear:** `<team>-<number>-<slug>` — the Linear id lowercased, then the slug (e.g. `ENG-123` → `eng-123-<slug>`)
 - Aim for under 60 characters; reject if over 100
 - If too long: regenerate shorter slug
 
@@ -35238,6 +35256,8 @@ Tool parameters:
 
 Both options use the same `preview` content since the user is choosing an action, not content. The preview enables a side-by-side layout in the UI.
 
+**For Linear ticket branches**, use the same two-option structure with the resolved `<team>-<number>-<slug>` branch name and a `Ticket: <LINEAR-ID>` line in place of `Issue:`.
+
 **For special prefix branches:**
 
 Tool parameters:
@@ -35269,7 +35289,9 @@ Only proceed to [Phase 6](#phase-6-execute) after user selects "Create branch". 
    git push -u origin <branch-name>
    ```
 
-3. **Output result:**
+3. **If `provider` is `linear` AND `--start` was passed:** move the ticket to "In Progress" — best-effort, never blocks the branch. Resolve the target state id with `mcp__plugin_autopilot_linear__list_issue_statuses` for the ticket's team, then call `mcp__plugin_autopilot_linear__save_issue` with `{ "id": "<LINEAR-ID>", "state": "<In Progress state>" }`. On success, emit `✓ Ticket <LINEAR-ID> moved to In Progress`; on any failure, emit `issue not started — <reason>` and continue.
+
+4. **Output result:**
 
    ```
    ✓ Branch created: <branch-name>
@@ -35280,6 +35302,8 @@ Only proceed to [Phase 6](#phase-6-execute) after user selects "Create branch". 
    - Use /autopilot:commits-create to create commits
    - Use /autopilot:pr-create when ready
    ```
+
+   When `--start` moved a Linear ticket (step 3 success), add a `✓ Ticket <LINEAR-ID> moved to In Progress` line after the push confirmation.
 
 ## Examples
 
@@ -35328,6 +35352,31 @@ User selects "Create branch".
 ```
 ✓ Branch created: issue-123-api-endpoint-only
 ✓ Pushed to origin with tracking
+```
+
+### Linear ticket (with --start)
+
+```
+/autopilot:branch-create ENG-123 --start
+```
+
+Fetches Linear ticket `ENG-123`, builds `eng-123-<slug>`, and moves the ticket to In Progress after creation.
+
+AskUserQuestion with:
+
+- `question`: "Review the branch name and choose an action."
+- `header`: "Create branch"
+- `options`: [
+  { label: "Create branch", description: "Create and push to origin with tracking", preview: "eng-123-jwt-refresh\n\nTicket: ENG-123\nFrom: origin/main" },
+  { label: "Edit slug", description: "Modify the branch name slug", preview: "eng-123-jwt-refresh\n\nTicket: ENG-123\nFrom: origin/main" }
+  ]
+
+User selects "Create branch".
+
+```
+✓ Branch created: eng-123-jwt-refresh
+✓ Pushed to origin with tracking
+✓ Ticket ENG-123 moved to In Progress
 ```
 
 ### Special prefix (--hotfix)
@@ -41365,9 +41414,13 @@ Uncommitted-change handling is done in [Phase 0](#phase-0-preflight-check) by `p
 0. Parse `$ARGUMENTS`: if it contains `--autopilot`, set `autopilotMode = true` and remove the flag before further parsing. Otherwise `autopilotMode = false`.
 1. Get current branch name with `git branch --show-current`
 2. Validate branch name follows convention:
-   - Standard: `issue-<number>-<short-description>` (e.g., `issue-123-add-feature`)
+   - GitHub: `issue-<number>-<short-description>` (e.g., `issue-123-add-feature`)
+   - Linear: `<team>-<number>-<short-description>` (e.g., `eng-123-add-auth`)
    - Special prefix: `<hotfix|trivial|maintenance|proposal|security>-<short-description>` (e.g., `hotfix-memory-leak-editor`, `security-tainted-format-string`)
-3. Extract the issue number from the branch (e.g., `123` from `issue-123-add-feature`) for use in the `**Issues:**` section as `Closes #123`. OR detect the special prefix (`hotfix`, `trivial`, `maintenance`, `proposal`, `security`) and uppercase it for the PR title prefix (e.g., `HOTFIX:`, `SECURITY:`). For a `security-` branch, emit NO `Closes #` — record the code-scanning alert reference instead (see [Phase 4](#phase-4-generate-pr-description)).
+3. Determine the provider and issue reference from the branch, checking **in this order** (so `issue-` and the special prefixes are matched before the generic Linear pattern):
+   - **GitHub** — matches `^issue-([0-9]+)-`: extract the number (e.g., `123`); `provider = github`; link as `Closes #123`.
+   - **Special prefix** — starts with `hotfix-`/`trivial-`/`maintenance-`/`proposal-`/`security-`: uppercase it for the PR title prefix (e.g., `HOTFIX:`). For a `security-` branch, emit NO `Closes #` — record the code-scanning alert reference instead (see [Phase 4](#phase-4-generate-pr-description)).
+   - **Linear** — matches `^([a-z][a-z0-9]*)-([0-9]+)-`: uppercase team + number to the Linear id (e.g., `eng-123-…` → `ENG-123`); `provider = linear`; the title gets the `ENG-123:` prefix and `**Issues:**` uses `Closes ENG-123`.
 4. If branch name is invalid, warn user and ask how to proceed
 
 ## Phase 2: Gather Context
@@ -41377,7 +41430,7 @@ Invoke the `analyze-pr-commits` sub-agent to gather commit history, diff summary
 ```
 Use the Agent tool with:
 - `subagent_type`: "autopilot:analyze-pr-commits"
-- `prompt`: "Analyze commits for PR. Base: main. Branch: [branch name]. Issue number: [number or none]. Repository: [owner/repo]. Fetch GitHub issue: [true if standard branch, false if special prefix]."
+- `prompt`: "Analyze commits for PR. Base: main. Branch: [branch name]. Provider: [github or linear]. Issue number: [GitHub number, Linear id, or none]. Repository: [owner/repo]. Fetch issue: [true if a GitHub or Linear issue branch, false if special prefix]."
 - `description`: "Analyze PR commits"
 ```
 
@@ -41387,12 +41440,14 @@ If the agent reports breaking changes, treat `--release-notes` as mandatory — 
 
 ## Phase 3: Generate PR Title
 
-**Standard format:** `<Business-valuable description>`
+**Standard (GitHub) format:** `<Business-valuable description>`
+**Linear format:** `<LINEAR-ID>: <Business-valuable description>` (e.g., `ENG-123: Allow theme selection`)
 **Special prefix format:** `<PREFIX>: <Business-valuable description>` where `<PREFIX>` is one of `HOTFIX`, `TRIVIAL`, `MAINTENANCE`, `PROPOSAL`, `SECURITY`
 
 **Rules:**
 
-- Standard title is the business description only — do NOT include the issue number in the title (it goes in the `**Issues:**` section via `Closes #<n>`)
+- Standard (GitHub) title is the business description only — do NOT include the issue number in the title (it goes in the `**Issues:**` section via `Closes #<n>`)
+- Linear title is prefixed with the uppercase Linear id and a colon (`ENG-123: …`) so the ticket shows in the PR list; the `**Issues:**` section still carries `Closes ENG-123`
 - Special prefixes are uppercase, followed by a colon and a space
 - Description is capitalized, business-focused, no period
 - Under 120 characters total
@@ -41477,9 +41532,11 @@ Content rules:
 - `Part of #N` — Plain reference (auto-linked, no close)
 - `Related to #N` — Plain reference (auto-linked, no close)
 
+For a **Linear** branch, use the Linear id in place of `#N` (e.g., `Closes ENG-123`, `Part of ENG-100`). Linear auto-closes the ticket on merge only when the GitHub↔Linear integration is configured for the repository; otherwise the magic word is a tracked reference.
+
 **Issue linking rules:**
 
-1. Always include `Closes #<N>` for the issue number derived from the branch name (skip for special prefix branches — no GitHub issue exists)
+1. Always include `Closes #<N>` (GitHub) or `Closes <LINEAR-ID>` (Linear) for the issue derived from the branch name (skip for special prefix branches — no issue exists)
 2. If `--closes` provided, add `Closes #<n>` for each additional issue
 3. If `--related` provided, add `Related to #<n>` for each related issue
 4. Each magic word on its own line
@@ -43759,16 +43816,20 @@ AskUserQuestion({
 
 1. Get current branch name with `git branch --show-current`
 2. Validate branch name follows convention:
-   - Standard: `issue-<number>-<short-description>` (e.g., `issue-123-add-feature`)
+   - GitHub: `issue-<number>-<short-description>` (e.g., `issue-123-add-feature`)
+   - Linear: `<team>-<number>-<short-description>` (e.g., `eng-123-add-auth`)
    - Special prefix: `<hotfix|trivial|maintenance|proposal|security>-<short-description>` (e.g., `hotfix-memory-leak-editor`, `security-tainted-format-string`)
-3. Extract the issue number from `^issue-([0-9]+)-` for use in the `**Issues:**` section as `Closes #<n>`. For special prefix branches there is no issue number — the PR title uses the uppercased prefix (e.g., `HOTFIX:`, `SECURITY:`). For a `security-` branch, emit NO `Closes #` — keep the code-scanning alert reference (see the `**Alert:**` rule below).
+3. Determine the provider and issue reference from the branch, checking **in this order**:
+   - **GitHub** — `^issue-([0-9]+)-`: extract the number; `provider = github`; link as `Closes #<n>`.
+   - **Special prefix** — `hotfix-`/`trivial-`/`maintenance-`/`proposal-`/`security-`: the PR title uses the uppercased prefix (e.g., `HOTFIX:`). For a `security-` branch, emit NO `Closes #` — keep the code-scanning alert reference (see the `**Alert:**` rule below).
+   - **Linear** — `^([a-z][a-z0-9]*)-([0-9]+)-`: uppercase to the Linear id (e.g., `eng-123-…` → `ENG-123`); `provider = linear`; the title gets the `ENG-123:` prefix and `**Issues:**` uses `Closes ENG-123`.
 
 Invoke the `analyze-pr-commits` sub-agent to gather commit history, diff summary, issue context, and change significance:
 
 ```
 Use the Agent tool with:
 - `subagent_type`: "autopilot:analyze-pr-commits"
-- `prompt`: "Analyze commits for PR. Base: [base branch from Phase 1]. Branch: [branch name]. Issue number: [number or none]. Repository: [owner/repo]. Fetch GitHub issue: [true if standard branch, false if special prefix]."
+- `prompt`: "Analyze commits for PR. Base: [base branch from Phase 1]. Branch: [branch name]. Provider: [github or linear]. Issue number: [GitHub number, Linear id, or none]. Repository: [owner/repo]. Fetch issue: [true if a GitHub or Linear issue branch, false if special prefix]."
 - `description`: "Analyze PR commits"
 ```
 
@@ -43800,12 +43861,14 @@ Tool parameters:
 
 ### PR Title
 
-**Standard format:** `<Business-valuable description>`
+**Standard (GitHub) format:** `<Business-valuable description>`
+**Linear format:** `<LINEAR-ID>: <Business-valuable description>` (e.g., `ENG-123: Allow theme selection`)
 **Special prefix format:** `<PREFIX>: <Business-valuable description>` where `<PREFIX>` is one of `HOTFIX`, `TRIVIAL`, `MAINTENANCE`, `PROPOSAL`, `SECURITY`
 
 **Rules:**
 
-- Standard title is the business description only — do NOT include the issue number in the title (it goes in the `**Issues:**` section via `Closes #<n>`)
+- Standard (GitHub) title is the business description only — do NOT include the issue number in the title (it goes in the `**Issues:**` section via `Closes #<n>`)
+- Linear title is prefixed with the uppercase Linear id and a colon (`ENG-123: …`) so the ticket shows in the PR list; the `**Issues:**` section still carries `Closes ENG-123`
 - Special prefixes are uppercase, followed by a colon and a space
 - Description is capitalized, business-focused, no period
 - Under 120 characters total
@@ -43882,7 +43945,7 @@ Content rules:
 - The section is omitted ONLY for special prefix branches (HOTFIX / TRIVIAL / MAINTENANCE / PROPOSAL / SECURITY) when no issue numbers are provided
 - For a `security-` branch (code-scanning alert fix), the `**Issues:**` section is replaced by an `**Alert:**` section recording the alert URL (a `---` separator, then `**Alert:**` on its own line, then the alert URL). Emit NO `Closes #`: code-scanning alerts close on the next scan, not via PR magic words. The `**Alert:**` section occupies the last slot, where `**Issues:**` would go.
 
-**Preserving existing links:** Parse the old PR body's `**Issues:**` section to preserve existing magic-word links (`Closes`, `Fixes`, `Resolves`, `Part of`, `Related to`) that were set during PR creation or previous updates.
+**Preserving existing links:** Parse the old PR body's `**Issues:**` section to preserve existing magic-word links (`Closes`, `Fixes`, `Resolves`, `Part of`, `Related to`) — for either a GitHub `#N` or a Linear id (e.g. `Closes ENG-123`) — that were set during PR creation or previous updates.
 
 **Adding new links:** If `--closes` or `--related` flags were provided in the command invocation, add those as additional links.
 
@@ -43894,9 +43957,11 @@ Content rules:
 - `Part of #N` — Plain reference (auto-linked, no close)
 - `Related to #N` — Plain reference (auto-linked, no close)
 
+For a **Linear** branch, use the Linear id in place of `#N` (e.g., `Closes ENG-123`); Linear auto-closes on merge only when the GitHub↔Linear integration is configured.
+
 **Issue linking rules:**
 
-1. Always include `Closes #<N>` for the issue number derived from the branch name (skip for special prefix branches)
+1. Always include `Closes #<N>` (GitHub) or `Closes <LINEAR-ID>` (Linear) for the issue derived from the branch name (skip for special prefix branches)
 2. Preserve any additional magic-word links from the old PR body
 3. If `--closes` provided, add `Closes #<n>` for each additional issue (dedup with existing)
 4. If `--related` provided, add `Related to #<n>` for each related issue (dedup with existing)
@@ -48025,7 +48090,7 @@ feature PR.
 
 Autopilot is GitHub-first: by default every issue-aware skill reads and writes GitHub issues through the `gh` CLI. A project can opt into **Linear** — on its own or alongside GitHub — through the `package.json` `agents.trackers` array. GitHub stays the zero-config default — repositories that set nothing behave exactly as before.
 
-This chapter covers the **foundation** (read path): how a project enables Linear, how a skill resolves the active provider, and the two ways autopilot reaches Linear. Branch and pull-request conventions, issue creation and listing, and TODO links arrive in later phases (tracked under issue #339).
+This chapter covers configuring trackers, how a skill resolves the active provider, the two ways autopilot reaches Linear, and the branch and pull-request conventions on the write path. Issue creation and listing, and TODO links, arrive in later phases (tracked under issue #339).
 
 ## Configuring trackers
 
@@ -48069,6 +48134,16 @@ Autopilot reaches Linear two ways:
 ## The single resolution seam
 
 Every issue read flows through the [`resolve-issue-context`](../claude-plugins/autopilot/agents/resolve-issue-context.md) agent, which returns a **provider-agnostic** JSON object (`source`, `issueId`, `title`, `status`, `labels`, `assignee`, `description`, `comments`). For Linear it tries the MCP tools, falls back to the GraphQL helper, then degrades with a non-null `resolveError` that the caller surfaces before stopping. Because `plan`, `run`, and every other consumer read that JSON — never raw tracker output — GitHub and Linear share one downstream code path; only this agent and the input-detection rows are provider-aware. `issueId` is a number for GitHub and the string identifier (e.g. `"ENG-123"`) for Linear.
+
+## Branches and pull requests
+
+Once a Linear ticket is resolved, the write path mirrors the GitHub flow with Linear identifiers:
+
+- **Branch** — [`branch:create`](../claude-plugins/autopilot/skills/branch:create/SKILL.md) builds `<team>-<n>-<slug>` (the ticket id lowercased, e.g. `ENG-123` → `eng-123-add-auth`) instead of GitHub's `issue-<n>-<slug>`. Passing `--start` also moves the ticket to "In Progress" (best-effort) via the Linear MCP `list_issue_statuses` + `save_issue` tools.
+- **Pull request** — [`pr:create`](../claude-plugins/autopilot/skills/pr:create/SKILL.md) and [`pr:update`](../claude-plugins/autopilot/skills/pr:update/SKILL.md) detect the provider from the branch shape, prefix the title with the uppercase id (`ENG-123: <description>`) so the ticket shows in the PR list, and put `Closes ENG-123` (or `Part of` / `Related to`) in the `**Issues:**` section. GitHub branches keep their business-only title and `Closes #N`.
+- **Done on merge** — a Linear ticket auto-closes on merge only when the [GitHub↔Linear integration](https://linear.app/docs/github) is configured for the repository; otherwise the magic word is a tracked reference.
+
+The shared CI gates accept both conventions: the branch-name and semantic-PR-title checks in the [`contributing-check`](../.github/actions/contributing-check/action.yml) action — and the local [`pre-push`](../.husky/pre-push) hook — recognise the Linear `<team>-<n>-<slug>` branch and the `ENG-123:` title alongside the GitHub forms.
 </file>
 
 <file path="docs/appendix-a-plan-skills-audit.md">
