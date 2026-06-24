@@ -12,13 +12,17 @@ fi
 #   (trivial|maintenance|hotfix)-<short-description>   escapes
 issue_pattern='^issue-[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$'
 escape_pattern='^(trivial|maintenance|hotfix)-[a-z0-9]+(-[a-z0-9]+)*$'
+# Linear ticket branch: <team>-<number>-<short-description> (lowercased), e.g. eng-123-add-auth
+linear_pattern='^[a-z][a-z0-9]*-[0-9]+-[a-z0-9]+(-[a-z0-9]+)*$'
 
 if ! echo "$branch" | grep -qE "$issue_pattern" \
-  && ! echo "$branch" | grep -qE "$escape_pattern"; then
+  && ! echo "$branch" | grep -qE "$escape_pattern" \
+  && ! echo "$branch" | grep -qE "$linear_pattern"; then
   echo "✖ Branch name \"$branch\" does not follow naming convention."
   echo ""
   echo "  Expected one of:"
   echo "    issue-<number>-<short-description>      e.g. issue-42-add-auth"
+  echo "    <team>-<number>-<short-description>     e.g. eng-123-add-auth (Linear)"
   echo "    trivial-<short-description>             e.g. trivial-fix-typo"
   echo "    maintenance-<short-description>         e.g. maintenance-bump-deps"
   echo "    hotfix-<short-description>              e.g. hotfix-bad-release"
