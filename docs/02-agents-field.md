@@ -24,7 +24,7 @@ An object under the top-level key `agents` in a `package.json`:
 
 The field coexists with normal npm metadata. It is not consumed by npm, Bun, or any package manager — only by Autopilot skills.
 
-An optional `tracker` key (`"linear"` or `"github"`, default `"github"`) plus a `linear` block opts the project into the Linear issue tracker; see [Linear tracker support](./11-linear-tracker.md).
+An optional `trackers` array (entries `{ type: "linear" | "github", ... }`; absent ⇒ a single `github` tracker) opts the project into one or more issue trackers — for example Linear for internal issues and GitHub for external feedback; see [Linear tracker support](./11-linear-tracker.md).
 
 ### Workspaces
 
