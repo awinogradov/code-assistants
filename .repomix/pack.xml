@@ -126,6 +126,7 @@ The content is organized as follows:
         preflightChecks.ts
         preflightSkipComment.test.ts
         preflightSkipComment.ts
+        promptInputs.test.ts
         reactToComment.ts
         referenceFormattingSync.test.ts
         replyReferenceFormatting.test.ts
@@ -7189,6 +7190,53 @@ try {
 }
 </file>
 
+<file path=".github/actions/code-review-action/src/promptInputs.test.ts">
+/**
+ * Guards the configurable `review_prompt` / `react_prompt` action inputs. A
+ * consumer can swap the leading command to run a different skill without forking,
+ * while the action keeps appending its runtime arguments block after the prompt.
+ *
+ * These assertions pin two invariants: the input defaults reproduce the bundled
+ * skills (so the shipped behavior stays byte-identical), and each mode step still
+ * injects its arguments and an explicit `CLAUDE_RUN_MODE`. The arguments must
+ * never be dropped for a custom prompt, and the run-summary mode must not depend
+ * on the prompt text — `resolveRunMode` prefers `CLAUDE_RUN_MODE` over parsing it.
+ */
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
+import { describe, expect, test } from "bun:test";
+
+const actionYmlPath = join(import.meta.dirname, "..", "action.yml");
+
+describe("configurable prompt inputs", () => {
+  test("review_prompt and react_prompt default to the bundled skills", async () => {
+    const actionYml = await readFile(actionYmlPath, "utf8");
+    const reviewDefault = /review_prompt:[\s\S]*?default:\s*"([^"]+)"/.exec(actionYml)?.[1];
+    const reactDefault = /react_prompt:[\s\S]*?default:\s*"([^"]+)"/.exec(actionYml)?.[1];
+
+    expect(reviewDefault).toBe("/autopilot:pr-review");
+    expect(reactDefault).toBe("/autopilot:pr-answer");
+  });
+
+  test("each mode step injects its prompt input, the runtime args, and a pinned run mode", async () => {
+    const actionYml = await readFile(actionYmlPath, "utf8");
+
+    // The prompt is built from the input plus the action-owned arguments block,
+    // so a custom prompt can never drop the arguments.
+    expect(actionYml).toContain(
+      "${{ inputs.review_prompt }} REPO: ${{ github.repository }} PR_NUMBER:"
+    );
+    expect(actionYml).toContain(
+      "${{ inputs.react_prompt }} REPO: ${{ github.repository }} PR_NUMBER:"
+    );
+    // CLAUDE_RUN_MODE is pinned so the run-summary label never depends on the prompt text.
+    expect(actionYml).toContain("CLAUDE_RUN_MODE: review");
+    expect(actionYml).toContain("CLAUDE_RUN_MODE: react");
+  });
+});
+</file>
+
 <file path=".github/actions/code-review-action/src/reactToComment.ts">
 /**
  * Process comment reaction and update PR review state on GitHub.
@@ -9750,6 +9798,14 @@ inputs:
     description: "Canonical GitHub blob URL of the pr:review SKILL.md. The review/answer skills use it to build CHECK-* rule links. Override only when the skill lives in a fork."
     required: false
     default: "https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/pr%3Areview/SKILL.md"
+  review_prompt:
+    description: "Leading slash command / prompt for review mode. The action appends the runtime arguments block (REPO, PR_NUMBER, REVIEWER, PR_AUTHOR, RULES_DOC_URL) after this value, so a custom prompt still receives them. Override to run a different review skill without forking the action."
+    required: false
+    default: "/autopilot:pr-review"
+  react_prompt:
+    description: "Leading slash command / prompt for react mode (comment reactions). The action appends the runtime arguments block (REPO, PR_NUMBER, REVIEWER, COMMENT_BODY, COMMENT_PATH, COMMENT_LINE, NEEDS_REVERDICT, RULES_DOC_URL) after this value, so a custom prompt still receives them. Override to run a different reply skill without forking the action."
+    required: false
+    default: "/autopilot:pr-answer"
 
 runs:
   using: composite
@@ -10197,7 +10253,8 @@ runs:
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude_oauth_token }}
         GH_TOKEN: ${{ inputs.bot_token }}
         CLAUDE_PROMPT: |
-          /autopilot:pr-review REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} PR_AUTHOR: ${{ steps.pr.outputs.author }} RULES_DOC_URL: ${{ inputs.rules_doc_url }}
+          ${{ inputs.review_prompt }} REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} PR_AUTHOR: ${{ steps.pr.outputs.author }} RULES_DOC_URL: ${{ inputs.rules_doc_url }}
+        CLAUDE_RUN_MODE: review
         CLAUDE_MODEL: ${{ inputs.model }}
         CLAUDE_ALLOWED_TOOLS: "Bash(gh:*),mcp__repomix__*,mcp__context7__*,mcp__Ref__*,mcp__exa__*,mcp__perplexity__*,Read,Glob,Grep"
         CLAUDE_DISALLOWED_TOOLS: "Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh issue comment:*),Bash(gh api * -X *:*),Bash(gh api * --method *:*),Bash(gh api * -f *:*),Bash(gh api * -F *:*),Bash(gh api * --field *:*),Bash(gh api * --raw-field *:*),Bash(gh api * --input *:*),Bash(gh api graphql:*)"
@@ -10264,7 +10321,8 @@ runs:
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude_oauth_token }}
         GH_TOKEN: ${{ inputs.bot_token }}
         CLAUDE_PROMPT: |
-          /autopilot:pr-answer REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} COMMENT_BODY: ${{ steps.ctx.outputs.comment_body }} COMMENT_PATH: ${{ steps.ctx.outputs.comment_path }} COMMENT_LINE: ${{ steps.ctx.outputs.comment_line }} NEEDS_REVERDICT: ${{ steps.classify.outputs.needs_reverdict }} RULES_DOC_URL: ${{ inputs.rules_doc_url }}
+          ${{ inputs.react_prompt }} REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} COMMENT_BODY: ${{ steps.ctx.outputs.comment_body }} COMMENT_PATH: ${{ steps.ctx.outputs.comment_path }} COMMENT_LINE: ${{ steps.ctx.outputs.comment_line }} NEEDS_REVERDICT: ${{ steps.classify.outputs.needs_reverdict }} RULES_DOC_URL: ${{ inputs.rules_doc_url }}
+        CLAUDE_RUN_MODE: react
         CLAUDE_MODEL: ${{ inputs.model }}
         CLAUDE_ALLOWED_TOOLS: "Bash(gh:*),mcp__repomix__*,mcp__context7__*,mcp__Ref__*,mcp__exa__*,mcp__perplexity__*,Read,Glob,Grep"
         CLAUDE_DISALLOWED_TOOLS: "Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh issue comment:*),Bash(gh api * -X *:*),Bash(gh api * --method *:*),Bash(gh api * -f *:*),Bash(gh api * -F *:*),Bash(gh api * --field *:*),Bash(gh api * --raw-field *:*),Bash(gh api * --input *:*),Bash(gh api graphql:*)"
@@ -11047,6 +11105,8 @@ The `if` condition prevents runner provisioning for non-PR issue comments. All o
 | `poll_interval`        | no       | `10`                     | Seconds between check status polls.                                                                                                                                           |
 | `checks_timeout`       | no       | `600`                    | Maximum seconds to wait for checks.                                                                                                                                           |
 | `rules_doc_url`        | no       | see `action.yml`         | Canonical blob URL of the `pr:review` SKILL.md (literal default in `action.yml`); skills build `CHECK-*` links from it. Override only for forks.                              |
+| `review_prompt`        | no       | `/autopilot:pr-review`   | Slash command for `review` mode; override to run a different review skill. Appends runtime args (REPO, PR_NUMBER, REVIEWER, PR_AUTHOR, RULES_DOC_URL).                        |
+| `react_prompt`         | no       | `/autopilot:pr-answer`   | Slash command for `react` mode; override to run a different reply skill. Appends runtime args (REPO, PR_NUMBER, REVIEWER, comment fields, NEEDS_REVERDICT, RULES_DOC_URL).    |
 | `debug_logs`           | no       | `false`                  | Enable DEBUG-level Claude trace logging and always upload the execution artifact.                                                                                             |
 | `pr_number`            | no       | event context            | Override auto-detected PR number.                                                                                                                                             |
 | `pr_head_sha`          | no       | event context            | Override auto-detected PR head SHA.                                                                                                                                           |
