@@ -1,9 +1,11 @@
 ---
 name: issue:run
-description: List recent open GitHub issues, pick one, and start autopilot on it via the run skill. Use to go from browsing issues to a running autopilot session in one step.
+description: List recent open GitHub or Linear issues, pick one, and start autopilot on it via the run skill. Use to go from browsing issues to a running autopilot session in one step.
 argument-hint: "[issue number — optional; skips the picker] [--all — include assigned issues]"
 allowed-tools:
   - Bash(gh *)
+  - Read
+  - MCP(linear:*)
   - AskUserQuestion
   - Skill(autopilot:run)
 ---
@@ -71,7 +73,7 @@ Expected form:
 - **`--all` flag** — parse `$ARGUMENTS` for `--all` independently of the issue number (order does not matter). The skill consumes the flag itself: it only toggles the [Phase 1](#phase-1-fetch-recent-open-issues) search string and is never forwarded to a `gh` call. Because a bare issue number skips Phases 1-2, `--all` is a no-op when an issue number is also supplied.
 - **Repository** — `gh repo view --json nameWithOwner -q .nameWithOwner`. No prompt. Pass `--repo <owner/repo>` to every `gh` call so the skill is correct inside git worktrees.
 
-## Phase 0: Resolve Repository
+## Phase 0: Resolve Repository and Provider
 
 Resolve the repository once and store it as `<repo>` (format `owner/name`):
 
@@ -79,9 +81,13 @@ Resolve the repository once and store it as `<repo>` (format `owner/name`):
 gh repo view --json nameWithOwner -q .nameWithOwner
 ```
 
-If `$ARGUMENTS` already supplies an issue number, skip directly to [Phase 3](#phase-3-hand-off-to-autopilot).
+Determine the provider: read `agents.trackers` from `package.json` (via the Read tool). When a `linear` tracker is configured, the provider is **Linear** (note its `team`); otherwise **GitHub** (the default).
+
+If `$ARGUMENTS` already supplies an issue identifier (a GitHub number or a Linear id), skip directly to [Phase 3](#phase-3-hand-off-to-autopilot).
 
 ## Phase 1: Fetch Recent Open Issues
+
+**If the provider is Linear:** list the team's recent open issues via `mcp__plugin_autopilot_linear__list_issues` (open only, ordered by most-recently-updated; without `--all`, prefer unassigned). Map each to a picker option `{ label: "<identifier> <title>", description: "<labels or 'no labels'>" }` and continue at [Phase 2](#phase-2-select-an-issue). The GitHub steps below apply to **GitHub** projects.
 
 Build the search string from the `--all` flag, then list the four most-recently-updated matching open issues:
 
@@ -117,7 +123,7 @@ Present the fetched issues with `AskUserQuestion` (single-select):
 
 Do NOT add an "Other" option — `AskUserQuestion` always provides a free-text "Other" automatically, and adding one is invalid. The auto-provided "Other" lets the user type any issue number, including issues beyond the four shown.
 
-Resolve the selection to an issue number:
+Resolve the selection to an issue identifier (a GitHub number or a Linear id):
 
 - A listed issue option — use its `<number>`.
 - `Enter a different number` (shown only in the single-issue case) or the auto-provided free-text "Other" — read the entered value, strip a leading `#`, and take the leading integer. If it is not a positive integer, re-prompt once; if it still fails, report the invalid input and stop.
@@ -126,7 +132,7 @@ Existence and open/closed state are not checked here — `autopilot:run` owns is
 
 ## Phase 3: Hand Off to Autopilot
 
-Invoke `Skill(autopilot:run)` with the resolved number as its argument (the bare integer, e.g. `142`). `autopilot:run` owns everything downstream — issue resolution, planning, branch creation, implementation, commit, PR, and monitoring. This skill makes no further changes after the hand-off.
+Invoke `Skill(autopilot:run)` with the resolved identifier as its argument (a bare integer like `142`, or a Linear id like `ENG-123`). `autopilot:run` owns everything downstream — issue resolution, planning, branch creation, implementation, commit, PR, and monitoring. This skill makes no further changes after the hand-off.
 
 ## Examples
 
