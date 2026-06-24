@@ -182,10 +182,13 @@ These rules are mandatory. Apply them exactly as written. Exceptions are only th
 - **A check may be skipped only when:** (a) the rule's stated scope does not match the diff (wrong stack, wrong file type, no matching diff pattern), or (b) the rule text itself names an exception that applies. "Too hard to fix" and "project settings allow it" are not grounds.
 - **Severity is fixed.** A rule declared as blocker is reported as blocker. When in doubt, use the severity the rule declares. Do not invent intermediate severities.
 - **Evaluate only changes visible in the diff** (lines prefixed with `+` or `-`). Skip checks that do not apply to the diff.
+- **Work the checks silently — emit findings, not narration.** Walk the checklist in a single internal pass. Do not narrate per-check reasoning (e.g. "Checking CHECK-BUG-001… passes"), do not announce which section you are evaluating, and do not restate the diff or the Context Map. Produce only the structured output; a passing check generates no text.
 
 ### 2.3 Review Checks
 
 Each check below carries an HTML anchor so this skill can link its `CHECK-` code back to this file (see [§2.5](#25-rule-codes)). Keep each `<a id="...">` immediately above its rule.
+
+Evaluate the sections in one silent pass per [§2.2](#22-review-principles). A `####` section that opens with a **Scope gate** is evaluated only when the gate matches the diff (judged from the [§1.5](#15-context-map) changed-file list); when it does not match, skip the whole section — do not read or evaluate its individual `CHECK-` rules.
 
 #### Correctness & Bugs
 
@@ -689,7 +692,7 @@ Feature/fix PRs affecting users should include a `**Release notes:**` section in
 
 #### Logging
 
-Applies when the diff adds or changes log calls or error/exception messages in service/backend code. Skip browser `console.*` in frontend code. Sensitive data in logs is CHECK-SEC-006 — do not double-report it here.
+**Scope gate — skip this entire section unless** the diff adds or changes log calls or error/exception messages in service/backend code (judged from the [§1.5](#15-context-map) changed-file list); on a docs-only, CSS-only, or config-only diff, do not evaluate any CHECK-LOG rule. Skip browser `console.*` in frontend code. Sensitive data in logs is CHECK-SEC-006 — do not double-report it here.
 
 <a id="CHECK-LOG-001"></a>
 **CHECK-LOG-001: Dynamic value interpolated into a log message** — Severity: suggestion
@@ -731,7 +734,7 @@ Binary or oversized data (audio, images, encoded blobs, whole buffers) logged in
 
 #### Documentation
 
-Applies to repositories carrying a `docs/` folder and `README.md`. Skip when the diff changes neither documented behavior nor documentation.
+**Scope gate — skip this entire section unless** the diff changes code, config, or documentation in a repository carrying a `docs/` folder and `README.md` (judged from the [§1.5](#15-context-map) changed-file list); when it touches neither documented behavior nor documentation, do not evaluate any CHECK-DOC rule.
 
 <a id="CHECK-DOC-001"></a>
 **CHECK-DOC-001: Docs not updated in the same PR as the code** — Severity: suggestion
@@ -755,7 +758,7 @@ A `docs/*.md` file exceeds ~5000 characters or documents more than one area. Spl
 
 #### Service Standards
 
-Applies when the diff adds or changes a backend service's API, entrypoint, or runtime config. Skip libraries, frontend-only changes, and diffs that touch none of these. Secrets in code are CHECK-SEC-001 and missing tests are CHECK-TEST-008 — do not double-report them here.
+**Scope gate — skip this entire section unless** the diff adds or changes a backend service's API, entrypoint, or runtime config (judged from the [§1.5](#15-context-map) changed-file list); on library, frontend-only, or docs/CSS/config-only diffs, do not evaluate any CHECK-SVC rule. Secrets in code are CHECK-SEC-001 and missing tests are CHECK-TEST-008 — do not double-report them here.
 
 <a id="CHECK-SVC-001"></a>
 **CHECK-SVC-001: New or changed HTTP API without an OpenAPI schema** — Severity: suggestion
