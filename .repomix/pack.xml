@@ -366,6 +366,7 @@ claude-plugins/
       expert-review.md
       fetch-pr-reviews.md
       resolve-alert-context.md
+      resolve-assignees.md
       resolve-issue-context.md
       scan-and-analyze-todos.md
       search-codebase-todos.md
@@ -391,6 +392,8 @@ claude-plugins/
       issue:create/
         SKILL.md
       issue:run/
+        SKILL.md
+      linear:create/
         SKILL.md
       pdf:create/
         renderer/
@@ -6818,7 +6821,7 @@ const startSentinel = "<!-- ref-format:start -->";
 // generation phase. Reword it only alongside this test.
 const applyInstruction = "reference-formatting rules inlined at the end";
 
-const skills = ["pr:create", "pr:update", "plan", "plan-bun", "plan-nodejs-react", "run", "issue:create"];
+const skills = ["pr:create", "pr:update", "plan", "plan-bun", "plan-nodejs-react", "run", "issue:create", "linear:create"];
 
 describe("output reference-formatting wiring", () => {
   test.each(skills)("%s instructs the body generator to apply RFC-0001", async (skill) => {
@@ -33856,6 +33859,62 @@ Example (success):
 Emit the raw object, not the fenced form. Set `resolveError` to `null` (not the string `"null"`) on success, and the unresolved fields to `null` (not the string `"null"`) on failure.
 </file>
 
+<file path="claude-plugins/autopilot/agents/resolve-assignees.md">
+---
+name: resolve-assignees
+description: Resolve candidate assignees for an issue from CODEOWNERS and Linear team members. Use when a creation skill needs an assignee picklist without polluting parent context.
+tools: Bash, Grep, MCP(linear:*)
+model: sonnet
+---
+
+You are an assignee resolver. Gather candidate assignees from the repository's CODEOWNERS and, for Linear, the team's members, then return a single structured JSON object. Do not output intermediate steps — only the final block.
+
+**Constraints:**
+
+- For **GitHub**/CODEOWNERS data, use ONLY the `gh` CLI and file reads.
+- For **Linear** members, use ONLY the `mcp__plugin_autopilot_linear__*` tools; never `npx`/`curl`/`npm`.
+- All variable interpolations into shell commands MUST be double-quoted.
+
+## Input
+
+The invoking skill provides in the prompt:
+
+- **Repository** in `owner/repo` format (e.g., `awinogradov/code-assistants`)
+- **Linear team** (optional, e.g., `ENG`) — when present, also gather Linear team members
+- **Paths** (optional) — changed or relevant file paths to match against CODEOWNERS rules
+
+## Phase 1: CODEOWNERS Candidates
+
+Read the CODEOWNERS file from the first location that exists: `.github/CODEOWNERS`, `CODEOWNERS`, or `docs/CODEOWNERS`. Extract owner logins (strip a leading `@`; keep `@org/team` handles flagged as teams). When **Paths** are provided, prefer owners whose glob matches a path; otherwise return the catch-all (`*`) owners. If no CODEOWNERS file exists, skip this phase.
+
+## Phase 2: Linear Members (when a team is given)
+
+Best-effort: list the team's members via `mcp__plugin_autopilot_linear__list_users` (scope to the team when the tool supports it). If the tool is unavailable or errors, skip it and record the reason in `notes` — return the CODEOWNERS candidates alone rather than failing.
+
+## Phase 3: Output
+
+Output ONLY a single JSON object matching the schema below — no preamble, no code fence, no commentary. The parent parses it directly.
+
+| Field        | Type           | Constraint                                                                                     |
+| ------------ | -------------- | ---------------------------------------------------------------------------------------------- |
+| `candidates` | object[]       | `{ "name": string, "source": "codeowners" \| "linear", "id": string \| null }`; `[]` when none |
+| `notes`      | string \| null | A short note (e.g. a degraded Linear lookup); `null` when clean                                |
+
+Example:
+
+```json
+{
+  "candidates": [
+    { "name": "octocat", "source": "codeowners", "id": null },
+    { "name": "Ann Lee", "source": "linear", "id": "u_123" }
+  ],
+  "notes": null
+}
+```
+
+Emit the raw object, not the fenced form.
+</file>
+
 <file path="claude-plugins/autopilot/agents/resolve-issue-context.md">
 ---
 name: resolve-issue-context
@@ -36920,10 +36979,12 @@ Write the most helpful, readable output you can: plain, direct prose; every refe
 <file path="claude-plugins/autopilot/skills/issue:run/SKILL.md">
 ---
 name: issue:run
-description: List recent open GitHub issues, pick one, and start autopilot on it via the run skill. Use to go from browsing issues to a running autopilot session in one step.
+description: List recent open GitHub or Linear issues, pick one, and start autopilot on it via the run skill. Use to go from browsing issues to a running autopilot session in one step.
 argument-hint: "[issue number — optional; skips the picker] [--all — include assigned issues]"
 allowed-tools:
   - Bash(gh *)
+  - Read
+  - MCP(linear:*)
   - AskUserQuestion
   - Skill(autopilot:run)
 ---
@@ -36991,7 +37052,7 @@ Expected form:
 - **`--all` flag** — parse `$ARGUMENTS` for `--all` independently of the issue number (order does not matter). The skill consumes the flag itself: it only toggles the [Phase 1](#phase-1-fetch-recent-open-issues) search string and is never forwarded to a `gh` call. Because a bare issue number skips Phases 1-2, `--all` is a no-op when an issue number is also supplied.
 - **Repository** — `gh repo view --json nameWithOwner -q .nameWithOwner`. No prompt. Pass `--repo <owner/repo>` to every `gh` call so the skill is correct inside git worktrees.
 
-## Phase 0: Resolve Repository
+## Phase 0: Resolve Repository and Provider
 
 Resolve the repository once and store it as `<repo>` (format `owner/name`):
 
@@ -36999,9 +37060,13 @@ Resolve the repository once and store it as `<repo>` (format `owner/name`):
 gh repo view --json nameWithOwner -q .nameWithOwner
 ```
 
-If `$ARGUMENTS` already supplies an issue number, skip directly to [Phase 3](#phase-3-hand-off-to-autopilot).
+Determine the provider: read `agents.trackers` from `package.json` (via the Read tool). When a `linear` tracker is configured, the provider is **Linear** (note its `team`); otherwise **GitHub** (the default).
+
+If `$ARGUMENTS` already supplies an issue identifier (a GitHub number or a Linear id), skip directly to [Phase 3](#phase-3-hand-off-to-autopilot).
 
 ## Phase 1: Fetch Recent Open Issues
+
+**If the provider is Linear:** list the team's recent open issues via `mcp__plugin_autopilot_linear__list_issues` (open only, ordered by most-recently-updated; without `--all`, prefer unassigned). Map each to a picker option `{ label: "<identifier> <title>", description: "<labels or 'no labels'>" }` and continue at [Phase 2](#phase-2-select-an-issue). The GitHub steps below apply to **GitHub** projects.
 
 Build the search string from the `--all` flag, then list the four most-recently-updated matching open issues:
 
@@ -37037,7 +37102,7 @@ Present the fetched issues with `AskUserQuestion` (single-select):
 
 Do NOT add an "Other" option — `AskUserQuestion` always provides a free-text "Other" automatically, and adding one is invalid. The auto-provided "Other" lets the user type any issue number, including issues beyond the four shown.
 
-Resolve the selection to an issue number:
+Resolve the selection to an issue identifier (a GitHub number or a Linear id):
 
 - A listed issue option — use its `<number>`.
 - `Enter a different number` (shown only in the single-issue case) or the auto-provided free-text "Other" — read the entered value, strip a leading `#`, and take the leading integer. If it is not a positive integer, re-prompt once; if it still fails, report the invalid input and stop.
@@ -37046,7 +37111,7 @@ Existence and open/closed state are not checked here — `autopilot:run` owns is
 
 ## Phase 3: Hand Off to Autopilot
 
-Invoke `Skill(autopilot:run)` with the resolved number as its argument (the bare integer, e.g. `142`). `autopilot:run` owns everything downstream — issue resolution, planning, branch creation, implementation, commit, PR, and monitoring. This skill makes no further changes after the hand-off.
+Invoke `Skill(autopilot:run)` with the resolved identifier as its argument (a bare integer like `142`, or a Linear id like `ENG-123`). `autopilot:run` owns everything downstream — issue resolution, planning, branch creation, implementation, commit, PR, and monitoring. This skill makes no further changes after the hand-off.
 
 ## Examples
 
@@ -37081,6 +37146,160 @@ The target issue is not among the four shown; the user chooses "Other" and types
 ```
 
 `--all` drops the default `no:assignee` filter, so the picker lists every open issue including assigned ones; the user selects `#138 Flaky CI run`; the skill invokes `Skill(autopilot:run)` with `138`.
+
+<!-- ref-format:start -->
+
+### Reference formatting & readability
+
+These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
+
+- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
+- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
+- Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
+- Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
+- Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
+
+Backticks suppress GitHub autolinking: a commit SHA or issue/PR number inside a code span renders as dead text — that is why a backticked SHA was un-clickable in a prior review. Never wrap a SHA or issue/PR number in backticks; link it, or leave it bare so GitHub auto-links it.
+
+Write the most helpful, readable output you can: plain, direct prose; every reference resolvable; explain the "why", not the obvious "what".
+
+<!-- ref-format:end -->
+</file>
+
+<file path="claude-plugins/autopilot/skills/linear:create/SKILL.md">
+---
+name: linear:create
+description: Create a Linear issue with a structured body (Context, What, Why, Scope, Solution) and wizard-selected status, label, and assignee via the Linear MCP. Use when filing a Linear ticket on a linear-tracked project.
+argument-hint: "[title hint or short description]"
+allowed-tools:
+  - Bash(git *)
+  - Read
+  - Grep
+  - Glob
+  - MCP(linear:*)
+  - MCP(repomix:*)
+  - MCP(context7:*)
+  - MCP(Ref:*)
+  - MCP(exa:*)
+  - MCP(perplexity:*)
+  - Agent
+  - AskUserQuestion
+  - Skill(autopilot:ascii-schemas)
+---
+
+# Create Linear Issue
+
+Create a Linear issue with a structured five-section body (Context, What, Why, Scope, Solution) and wizard-selected status, label, and assignee. This is the Linear counterpart to `issue:create` (which files GitHub issues): use it on a project that lists a `linear` tracker in `package.json` `agents.trackers`. The body uses the same fixed five-section structure as `issue:create`; the Linear-specific metadata (status, labels, assignee) is chosen through a short wizard.
+
+## When to Use
+
+- Filing a new Linear ticket on a linear-tracked project
+- When invoked from other skills that need to open a Linear issue
+
+## Input
+
+Arguments: `$ARGUMENTS`
+
+Expected form:
+
+- `[title hint or short description]` — optional free-form hint that seeds the title and body (e.g., `"users cannot reset password via email"`).
+
+## Input resolution
+
+- **Title hint** — `$ARGUMENTS` → if empty, prompt once via AskUserQuestion: "What is this issue about?" with a free-form slot. Do not abort silently.
+- **Linear team** — read the `linear` entry of `agents.trackers` in the repo-root `package.json` (via the Read tool); use its `team`. REQUIRED. If no `linear` tracker is configured, stop and tell the user to file a GitHub issue with `/autopilot:issue-create` instead.
+- **Repo label** — the `linear` entry's optional `label`, pre-selected in [Phase 4](#phase-4-select-labels).
+
+## Completion Requirement
+
+This workflow is not complete until [Phase 7](#phase-7-create-issue) calls `mcp__plugin_autopilot_linear__save_issue` and outputs the created issue identifier and URL. Generating a title, body, or wizard selections does not constitute completion.
+
+## Phase 0: Resolve Team and Hint
+
+1. Parse `$ARGUMENTS` as an optional title hint; if empty, prompt once via AskUserQuestion.
+2. Read `package.json` and extract the `linear` entry from `agents.trackers`. If absent, stop: `This project is not Linear-tracked. Use /autopilot:issue-create for a GitHub issue.`
+
+## Phase 1: Gather Context
+
+Mirror `issue:create` so the body reflects real code, not hallucinated structure.
+
+1. Acquire the codebase snapshot once (prefer the committed pack): if `.repomix/pack.xml` exists at the repository root, call `mcp__repomix__attach_packed_output` with its path; otherwise `mcp__repomix__pack_codebase` with `compress: true`. Store the `outputId`.
+2. `mcp__repomix__grep_repomix_output` for files/symbols related to the hint, then `mcp__repomix__read_repomix_output` for the matched sections only.
+3. Collect git context (`git log -20 --oneline`, `git status --short`).
+4. **External documentation (best-effort):** for any library/framework named in the hint, consult context7/Ref/exa/perplexity. On error or empty result, continue — never block creation on MCP availability.
+
+## Phase 2: Generate Title and Body
+
+**Title:** capitalized, ≤ 80 characters, no trailing period, business-focused, NOT Conventional Commits, no prefix.
+
+**Body — section ordering is MANDATORY** (exact `## ` headings, no trailing colon, no bold):
+
+1. `## Context` — 1-2 paragraphs on the situation and why it matters now.
+2. `## What` — the deliverable in plain terms.
+3. `## Why` — user impact / business motivation.
+4. `## Scope` — a bullet list with `**In scope:**` and `**Out of scope:**` sub-headings.
+5. `## Solution` — the high-level approach. Invoke `Skill(autopilot:ascii-schemas)` for a diagram when the Solution describes a flow between ≥ 2 components; embed it verbatim in a fenced ` ```text ` block.
+
+## Phase 3: Select Status
+
+Fetch the team's workflow states and let the user choose (default to the team's initial state — e.g. `Triage` or `Todo`):
+
+```
+mcp__plugin_autopilot_linear__list_issue_statuses  with { "team": "<team>" }
+```
+
+Present the states via AskUserQuestion (single-select).
+
+## Phase 4: Select Labels
+
+Fetch the team's labels; pre-select the `label` from `agents.trackers` (when present):
+
+```
+mcp__plugin_autopilot_linear__list_issue_labels  with { "team": "<team>" }
+```
+
+Present via AskUserQuestion (multi-select). Only labels returned by the call may be selected — never invent a label.
+
+## Phase 5: Resolve Assignee
+
+Launch the `resolve-assignees` agent to gather candidates (CODEOWNERS + Linear team members):
+
+```
+Use the Agent tool with:
+- `subagent_type`: "autopilot:resolve-assignees"
+- `prompt`: "Resolve assignee candidates. Repository: [owner/repo]. Linear team: [team]."
+- `description`: "Resolve assignees"
+```
+
+Present the candidates via AskUserQuestion, including a `Leave unassigned` option. Assignment is best-effort — if the agent returns no candidates, default to unassigned.
+
+## Phase 6: Verify with User
+
+Present the full issue via AskUserQuestion with a `preview` carrying the title, the five-section body, and a metadata line `Team: <team> · Status: <status> · Labels: <labels> · Assignee: <assignee or unassigned>`. Options: `Create issue` / `Edit content` / `Cancel`, all sharing the same preview. Only proceed to [Phase 7](#phase-7-create-issue) after `Create issue`.
+
+## Phase 7: Create Issue
+
+This phase is mandatory. Create the ticket:
+
+```
+mcp__plugin_autopilot_linear__save_issue  with {
+  "title": "<title>",
+  "team": "<team>",
+  "description": "<five-section body>",
+  "state": "<selected status>",
+  "labels": ["<selected labels>"],
+  "assignee": "<selected assignee, omit when unassigned>"
+}
+```
+
+Output the result:
+
+```
+✓ Created Linear issue: <identifier> — <url>
+```
+
+When you generate the issue body, apply the reference-formatting rules inlined at the end of this skill (the **Reference formatting & readability** block below, RFC-0001) to every reference it contains — link files, docs, skills, and agents as absolute `<repo-blob-url>` URLs, and never leave a reference as bare text.
 
 <!-- ref-format:start -->
 
@@ -48090,7 +48309,7 @@ feature PR.
 
 Autopilot is GitHub-first: by default every issue-aware skill reads and writes GitHub issues through the `gh` CLI. A project can opt into **Linear** — on its own or alongside GitHub — through the `package.json` `agents.trackers` array. GitHub stays the zero-config default — repositories that set nothing behave exactly as before.
 
-This chapter covers configuring trackers, how a skill resolves the active provider, the two ways autopilot reaches Linear, and the branch and pull-request conventions on the write path. Issue creation and listing, and TODO links, arrive in later phases (tracked under issue #339).
+This chapter covers configuring trackers, how a skill resolves the active provider, the two ways autopilot reaches Linear, the branch and pull-request conventions on the write path, and creating and listing Linear issues. TODO links and issue-state-on-merge arrive in a later phase (tracked under issue #339).
 
 ## Configuring trackers
 
@@ -48144,6 +48363,12 @@ Once a Linear ticket is resolved, the write path mirrors the GitHub flow with Li
 - **Done on merge** — a Linear ticket auto-closes on merge only when the [GitHub↔Linear integration](https://linear.app/docs/github) is configured for the repository; otherwise the magic word is a tracked reference.
 
 The shared CI gates accept both conventions: the branch-name and semantic-PR-title checks in the [`contributing-check`](../.github/actions/contributing-check/action.yml) action — and the local [`pre-push`](../.husky/pre-push) hook — recognise the Linear `<team>-<n>-<slug>` branch and the `ENG-123:` title alongside the GitHub forms.
+
+## Creating and listing issues
+
+- **Create** — [`linear:create`](../claude-plugins/autopilot/skills/linear:create/SKILL.md) is the Linear counterpart to `issue:create`: it generates the same five-section body (Context/What/Why/Scope/Solution), then a short wizard picks the workflow status (`list_issue_statuses`), labels (`list_issue_labels`, pre-selecting the `agents.trackers` repo label), and an assignee, and creates the ticket with `save_issue`.
+- **List and run** — [`issue:run`](../claude-plugins/autopilot/skills/issue:run/SKILL.md) lists the team's recent open tickets via `list_issues` (instead of `gh issue list`) and hands the chosen `TEAM-123` identifier to `autopilot:run`.
+- **Assignees** — the [`resolve-assignees`](../claude-plugins/autopilot/agents/resolve-assignees.md) agent gathers candidates from CODEOWNERS and the Linear team's members; Linear member listing is best-effort and degrades to CODEOWNERS when the MCP user-list tool is unavailable.
 </file>
 
 <file path="docs/appendix-a-plan-skills-audit.md">
