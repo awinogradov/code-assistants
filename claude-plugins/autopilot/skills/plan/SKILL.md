@@ -95,12 +95,16 @@ Detect the input type from the arguments. Match **top-to-bottom and stop at the 
 | Pattern                                                                | Type                |
 | ---------------------------------------------------------------------- | ------------------- |
 | `…/security/code-scanning/{n}` URL, or `alert#{n}` / `alert {n}` token | Code-scanning alert |
+| Contains `linear.app`                                                  | Linear issue URL    |
+| Uppercase key + `-` + number (`ENG-123`), matching `^[A-Z]+-[0-9]+$`   | Linear issue        |
 | Number only (`123`)                                                    | GitHub issue        |
 | `#` + number (`#123`)                                                  | GitHub issue        |
 | Contains `github.com`                                                  | GitHub issue URL    |
 | Anything else                                                          | Plain description   |
 
 A **bare number stays a GitHub issue** — alerts require the alert URL or the explicit `alert#{n}` / `alert {n}` token, so there is zero collision with the issue-number rows.
+
+The **Linear rows fire only when the project is Linear-tracked** (`agents.tracker == "linear"` in `package.json`; absent ⇒ GitHub). The Linear ID is the uppercase `KEY-N` form (`^[A-Z]+-[0-9]+$`) — and when `agents.linear.keys` is set, `KEY` must be one of those prefixes — so it never collides with a bare GitHub number. A Linear-shaped argument in a project that is not Linear-tracked matches none of the GitHub numeric rows and falls through to **Plain description**, so existing GitHub repos are unaffected.
 
 Launch context-gathering calls **in parallel**. The number of parallel calls depends on input type:
 
@@ -147,6 +151,18 @@ Agent 2 (search-codebase-todos):
   - `prompt`: "Search for TODOs. Input type: github-issue. Issue ID: [id]."
   - `description`: "Search codebase TODOs"
 ```
+
+**If input type is `linear-issue` or `linear-issue-url`** — launch the same 3 calls as `github-issue` (snapshot + `resolve-issue-context` + `search-codebase-todos`), but pass Linear parameters to `resolve-issue-context` instead of the GitHub issue number/repo:
+
+```
+Agent 1 (resolve-issue-context):
+  Use the Agent tool with:
+  - `subagent_type`: "autopilot:resolve-issue-context"
+  - `prompt`: "Fetch issue context. Input type: linear-issue. Linear ID: [ENG-123]. Linear team: [from package.json agents.linear.team]. Auto-assign current user: false."
+  - `description`: "Resolve issue context"
+```
+
+If `resolve-issue-context` returns `status: "unresolved"` with a non-null `resolveError` (e.g. the Linear MCP is not authenticated and `LINEAR_API_KEY` is unset), surface the error and STOP — do not fall through or proceed against missing data. Otherwise the agent returns the same JSON contract as the GitHub path, so the Issue Context Output, Steelmanned Intent, and Assumptions blocks below are unchanged.
 
 **If input type is `plain description`** — acquire the snapshot directly (no agents needed):
 
