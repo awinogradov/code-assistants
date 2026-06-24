@@ -16,9 +16,7 @@ const issueQuery = `
       identifier
       title
       description
-      url
       state { name }
-      assignee { displayName }
       labels { nodes { name } }
       comments { nodes { user { displayName } createdAt body } }
     }
@@ -44,17 +42,19 @@ export function createLinearClient(apiKey) {
       });
 
       if (!response.ok) {
-        throw new Error(`Linear API error: ${response.status} ${response.statusText}`);
+        throw new Error("Linear API request failed", {
+          cause: { status: response.status, statusText: response.statusText },
+        });
       }
 
       const result = await response.json();
       const firstError = result.errors?.[0];
       if (firstError) {
-        const message = firstError.message;
+        const { message } = firstError;
         if (message.includes("not found") || message.includes("Entity not found")) {
           return null;
         }
-        throw new Error(`Linear API error: ${message}`);
+        throw new Error("Linear API returned a GraphQL error", { cause: { message } });
       }
 
       return result.data?.issue ?? null;
