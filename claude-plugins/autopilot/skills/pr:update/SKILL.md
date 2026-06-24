@@ -113,16 +113,20 @@ AskUserQuestion({
 
 1. Get current branch name with `git branch --show-current`
 2. Validate branch name follows convention:
-   - Standard: `issue-<number>-<short-description>` (e.g., `issue-123-add-feature`)
+   - GitHub: `issue-<number>-<short-description>` (e.g., `issue-123-add-feature`)
+   - Linear: `<team>-<number>-<short-description>` (e.g., `eng-123-add-auth`)
    - Special prefix: `<hotfix|trivial|maintenance|proposal|security>-<short-description>` (e.g., `hotfix-memory-leak-editor`, `security-tainted-format-string`)
-3. Extract the issue number from `^issue-([0-9]+)-` for use in the `**Issues:**` section as `Closes #<n>`. For special prefix branches there is no issue number — the PR title uses the uppercased prefix (e.g., `HOTFIX:`, `SECURITY:`). For a `security-` branch, emit NO `Closes #` — keep the code-scanning alert reference (see the `**Alert:**` rule below).
+3. Determine the provider and issue reference from the branch, checking **in this order**:
+   - **GitHub** — `^issue-([0-9]+)-`: extract the number; `provider = github`; link as `Closes #<n>`.
+   - **Special prefix** — `hotfix-`/`trivial-`/`maintenance-`/`proposal-`/`security-`: the PR title uses the uppercased prefix (e.g., `HOTFIX:`). For a `security-` branch, emit NO `Closes #` — keep the code-scanning alert reference (see the `**Alert:**` rule below).
+   - **Linear** — `^([a-z][a-z0-9]*)-([0-9]+)-`: uppercase to the Linear id (e.g., `eng-123-…` → `ENG-123`); `provider = linear`; the title gets the `ENG-123:` prefix and `**Issues:**` uses `Closes ENG-123`.
 
 Invoke the `analyze-pr-commits` sub-agent to gather commit history, diff summary, issue context, and change significance:
 
 ```
 Use the Agent tool with:
 - `subagent_type`: "autopilot:analyze-pr-commits"
-- `prompt`: "Analyze commits for PR. Base: [base branch from Phase 1]. Branch: [branch name]. Issue number: [number or none]. Repository: [owner/repo]. Fetch GitHub issue: [true if standard branch, false if special prefix]."
+- `prompt`: "Analyze commits for PR. Base: [base branch from Phase 1]. Branch: [branch name]. Provider: [github or linear]. Issue number: [GitHub number, Linear id, or none]. Repository: [owner/repo]. Fetch issue: [true if a GitHub or Linear issue branch, false if special prefix]."
 - `description`: "Analyze PR commits"
 ```
 
@@ -154,12 +158,14 @@ Tool parameters:
 
 ### PR Title
 
-**Standard format:** `<Business-valuable description>`
+**Standard (GitHub) format:** `<Business-valuable description>`
+**Linear format:** `<LINEAR-ID>: <Business-valuable description>` (e.g., `ENG-123: Allow theme selection`)
 **Special prefix format:** `<PREFIX>: <Business-valuable description>` where `<PREFIX>` is one of `HOTFIX`, `TRIVIAL`, `MAINTENANCE`, `PROPOSAL`, `SECURITY`
 
 **Rules:**
 
-- Standard title is the business description only — do NOT include the issue number in the title (it goes in the `**Issues:**` section via `Closes #<n>`)
+- Standard (GitHub) title is the business description only — do NOT include the issue number in the title (it goes in the `**Issues:**` section via `Closes #<n>`)
+- Linear title is prefixed with the uppercase Linear id and a colon (`ENG-123: …`) so the ticket shows in the PR list; the `**Issues:**` section still carries `Closes ENG-123`
 - Special prefixes are uppercase, followed by a colon and a space
 - Description is capitalized, business-focused, no period
 - Under 120 characters total
@@ -236,7 +242,7 @@ Content rules:
 - The section is omitted ONLY for special prefix branches (HOTFIX / TRIVIAL / MAINTENANCE / PROPOSAL / SECURITY) when no issue numbers are provided
 - For a `security-` branch (code-scanning alert fix), the `**Issues:**` section is replaced by an `**Alert:**` section recording the alert URL (a `---` separator, then `**Alert:**` on its own line, then the alert URL). Emit NO `Closes #`: code-scanning alerts close on the next scan, not via PR magic words. The `**Alert:**` section occupies the last slot, where `**Issues:**` would go.
 
-**Preserving existing links:** Parse the old PR body's `**Issues:**` section to preserve existing magic-word links (`Closes`, `Fixes`, `Resolves`, `Part of`, `Related to`) that were set during PR creation or previous updates.
+**Preserving existing links:** Parse the old PR body's `**Issues:**` section to preserve existing magic-word links (`Closes`, `Fixes`, `Resolves`, `Part of`, `Related to`) — for either a GitHub `#N` or a Linear id (e.g. `Closes ENG-123`) — that were set during PR creation or previous updates.
 
 **Adding new links:** If `--closes` or `--related` flags were provided in the command invocation, add those as additional links.
 
@@ -248,9 +254,11 @@ Content rules:
 - `Part of #N` — Plain reference (auto-linked, no close)
 - `Related to #N` — Plain reference (auto-linked, no close)
 
+For a **Linear** branch, use the Linear id in place of `#N` (e.g., `Closes ENG-123`); Linear auto-closes on merge only when the GitHub↔Linear integration is configured.
+
 **Issue linking rules:**
 
-1. Always include `Closes #<N>` for the issue number derived from the branch name (skip for special prefix branches)
+1. Always include `Closes #<N>` (GitHub) or `Closes <LINEAR-ID>` (Linear) for the issue derived from the branch name (skip for special prefix branches)
 2. Preserve any additional magic-word links from the old PR body
 3. If `--closes` provided, add `Closes #<n>` for each additional issue (dedup with existing)
 4. If `--related` provided, add `Related to #<n>` for each related issue (dedup with existing)

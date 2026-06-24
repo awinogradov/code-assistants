@@ -1,18 +1,19 @@
 ---
 name: branch:create
 description: Create and checkout a git branch following repository naming conventions with GitHub issue integration. Use when creating branches, or when invoked from other skills.
-argument-hint: <ISSUE-NUMBER> [description] [--trivial | --hotfix | --maintenance | --proposal | --security] [--autopilot]
+argument-hint: <ISSUE-ID> [description] [--start] [--trivial | --hotfix | --maintenance | --proposal | --security] [--autopilot]
 allowed-tools:
   - Bash(git *)
   - Read
   - Bash(gh *)
+  - MCP(linear:*)
   - AskUserQuestion
   - Skill(autopilot:preflight-check)
 ---
 
 # Create Branch
 
-Create a git branch following the repository's naming conventions with GitHub issue integration. Supports standard issue branches (`issue-<number>-<slug>`) and special prefix branches (hotfix, trivial, maintenance, proposal, security).
+Create a git branch following the repository's naming conventions with GitHub or Linear issue integration. Supports GitHub issue branches (`issue-<number>-<slug>`), Linear ticket branches (`<team>-<number>-<slug>`), and special prefix branches (hotfix, trivial, maintenance, proposal, security).
 
 ## When to Use
 
@@ -28,7 +29,9 @@ Arguments: `$ARGUMENTS`
 Expected forms:
 
 - `<ISSUE-NUMBER>` — GitHub issue number (e.g., `123` or `#123`). Used to fetch the issue and to build the branch name `issue-<number>-<slug>`.
-- `<ISSUE-NUMBER> "<description>"` — issue number plus custom branch slug description
+- `<LINEAR-ID>` — Linear identifier (e.g., `ENG-123`, matching `^[A-Z]+-[0-9]+$`) when the project lists a `linear` tracker in `package.json` `agents.trackers`. Builds `<team>-<number>-<slug>` (the id lowercased).
+- `<ISSUE-NUMBER|LINEAR-ID> "<description>"` — issue identifier plus custom branch slug description
+- `--start` — Linear only: also move the Linear ticket to "In Progress" after the branch is created (best-effort). Ignored for GitHub and special-prefix branches.
 - `--hotfix "<description>"` / `--trivial "<description>"` / `--maintenance "<description>"` / `--proposal "<description>"` / `--security "<description>"` — special prefix branches without a GitHub issue (use `--security` for code-scanning alert fixes → `security-<slug>`)
 - `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips the [Phase 5](#phase-5-verify-with-user) confirmation prompt and creates the branch directly with the auto-generated name. Conflict resolution ([Phase 4](#phase-4-check-for-conflicts)) and validation errors still surface.
 
@@ -50,9 +53,10 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
 
 1. **Parse `$ARGUMENTS`** (shell-quoted positional tokens):
    - Check for `--autopilot`: if present, strip it from the arguments and set `autopilotMode = true`. Otherwise `autopilotMode = false`.
+   - Check for `--start`: if present, strip it and set `startIssue = true` (Linear only; see [Phase 6](#phase-6-execute)). Otherwise `startIssue = false`.
    - Check for special prefix flags: `--trivial`, `--hotfix`, `--maintenance`, `--proposal`, `--security`
    - If flag found: extract description from remaining arguments
-   - If no flag: extract first argument as issue number, optional description
+   - If no flag: extract the first argument as the issue identifier (GitHub number or Linear id), optional description
    - If `$ARGUMENTS` is empty, fall back to Input resolution (see above).
 
 2. **If special prefix flag detected:**
@@ -61,13 +65,16 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
    - Multiple prefix flags not allowed — error: `Only one special prefix flag allowed`
    - Skip [Phase 2](#phase-2-fetch-github-issue) (no GitHub issue to fetch)
 
-3. **If no flag, validate as issue number:**
-   - Accept patterns: `^#?[0-9]+$` (strip a leading `#` if present)
-   - If invalid: `Invalid issue number. Expected: a positive integer (e.g., 123 or #123) or use --trivial, --hotfix, --maintenance, --proposal, --security`
+3. **If no flag, validate the issue identifier and resolve the provider** (read `package.json` `agents.trackers` with the Read tool):
+   - **Linear** — the identifier matches `^[A-Z]+-[0-9]+$` (e.g., `ENG-123`) AND a `linear` tracker is configured: set `provider = linear`.
+   - **GitHub** — the identifier matches `^#?[0-9]+$` (strip a leading `#`): set `provider = github`.
+   - If invalid: `Invalid issue identifier. Expected a GitHub number (e.g., 123 or #123), a Linear id (e.g., ENG-123) for a linear-tracked project, or a --trivial/--hotfix/--maintenance/--proposal/--security flag`
 
 ## Phase 2: Fetch GitHub Issue
 
 **Skip this phase entirely for special prefix flag branches (--hotfix, --trivial, --maintenance, --proposal, --security).**
+
+**If `provider` is `linear`:** fetch the ticket via `mcp__plugin_autopilot_linear__get_issue` with `{ "id": "<LINEAR-ID>" }` and read its `title` (for the slug) and `state.name`. Skip the GitHub `gh` steps below and do NOT self-assign — Linear assignment is deferred to a later phase; emit `unassigned — Linear assignment deferred`. Then continue to [Phase 3](#phase-3-generate-branch-slug). The steps below apply to **GitHub** issues only.
 
 1. **Determine the repository** and bind it to `REPO` so every `gh` call in this phase targets the same repo (important in worktrees and multi-remote checkouts):
 
@@ -179,7 +186,8 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
 
 **Construct full branch name:**
 
-- Format: `issue-<number>-<slug>`
+- **GitHub:** `issue-<number>-<slug>`
+- **Linear:** `<team>-<number>-<slug>` — the Linear id lowercased, then the slug (e.g. `ENG-123` → `eng-123-<slug>`)
 - Aim for under 60 characters; reject if over 100
 - If too long: regenerate shorter slug
 
@@ -235,6 +243,8 @@ Tool parameters:
 
 Both options use the same `preview` content since the user is choosing an action, not content. The preview enables a side-by-side layout in the UI.
 
+**For Linear ticket branches**, use the same two-option structure with the resolved `<team>-<number>-<slug>` branch name and a `Ticket: <LINEAR-ID>` line in place of `Issue:`.
+
 **For special prefix branches:**
 
 Tool parameters:
@@ -266,7 +276,9 @@ Only proceed to [Phase 6](#phase-6-execute) after user selects "Create branch". 
    git push -u origin <branch-name>
    ```
 
-3. **Output result:**
+3. **If `provider` is `linear` AND `--start` was passed:** move the ticket to "In Progress" — best-effort, never blocks the branch. Resolve the target state id with `mcp__plugin_autopilot_linear__list_issue_statuses` for the ticket's team, then call `mcp__plugin_autopilot_linear__save_issue` with `{ "id": "<LINEAR-ID>", "state": "<In Progress state>" }`. On success, emit `✓ Ticket <LINEAR-ID> moved to In Progress`; on any failure, emit `issue not started — <reason>` and continue.
+
+4. **Output result:**
 
    ```
    ✓ Branch created: <branch-name>
@@ -277,6 +289,8 @@ Only proceed to [Phase 6](#phase-6-execute) after user selects "Create branch". 
    - Use /autopilot:commits-create to create commits
    - Use /autopilot:pr-create when ready
    ```
+
+   When `--start` moved a Linear ticket (step 3 success), add a `✓ Ticket <LINEAR-ID> moved to In Progress` line after the push confirmation.
 
 ## Examples
 
@@ -325,6 +339,31 @@ User selects "Create branch".
 ```
 ✓ Branch created: issue-123-api-endpoint-only
 ✓ Pushed to origin with tracking
+```
+
+### Linear ticket (with --start)
+
+```
+/autopilot:branch-create ENG-123 --start
+```
+
+Fetches Linear ticket `ENG-123`, builds `eng-123-<slug>`, and moves the ticket to In Progress after creation.
+
+AskUserQuestion with:
+
+- `question`: "Review the branch name and choose an action."
+- `header`: "Create branch"
+- `options`: [
+  { label: "Create branch", description: "Create and push to origin with tracking", preview: "eng-123-jwt-refresh\n\nTicket: ENG-123\nFrom: origin/main" },
+  { label: "Edit slug", description: "Modify the branch name slug", preview: "eng-123-jwt-refresh\n\nTicket: ENG-123\nFrom: origin/main" }
+  ]
+
+User selects "Create branch".
+
+```
+✓ Branch created: eng-123-jwt-refresh
+✓ Pushed to origin with tracking
+✓ Ticket ENG-123 moved to In Progress
 ```
 
 ### Special prefix (--hotfix)
