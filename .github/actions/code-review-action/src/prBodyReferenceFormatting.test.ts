@@ -29,7 +29,7 @@ const startSentinel = "<!-- ref-format:start -->";
 // generation phase. Reword it only alongside this test.
 const applyInstruction = "reference-formatting rules inlined at the end";
 
-const skills = ["pr:create", "pr:update", "plan", "plan-bun", "plan-nodejs-react", "run", "issue:create"];
+const skills = ["pr:create", "pr:update", "plan", "plan-bun", "plan-nodejs-react", "run", "issue:create", "linear:create"];
 
 describe("output reference-formatting wiring", () => {
   test.each(skills)("%s instructs the body generator to apply RFC-0001", async (skill) => {
