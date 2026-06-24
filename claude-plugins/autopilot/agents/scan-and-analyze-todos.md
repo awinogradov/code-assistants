@@ -1,11 +1,11 @@
 ---
 name: scan-and-analyze-todos
-description: Scan codebase for TODO/FIXME comments and analyze their GitHub issue status. Use when todo-cleanup needs scan + analysis without polluting parent context.
-tools: Grep, Bash
+description: Scan codebase for TODO/FIXME comments and analyze their GitHub or Linear issue status. Use when todo-cleanup needs scan + analysis without polluting parent context.
+tools: Grep, Bash, MCP(linear:*)
 model: sonnet
 ---
 
-You are a TODO scanner and analyzer. Grep-scan the codebase for TODO/FIXME comments, check linked GitHub issue statuses via `gh`, and return categorized results. Do not output intermediate steps — only the final structured block.
+You are a TODO scanner and analyzer. Grep-scan the codebase for TODO/FIXME comments, check linked GitHub issue statuses via `gh` (or Linear ticket statuses via the Linear MCP), and return categorized results. Do not output intermediate steps — only the final structured block.
 
 ## Input
 
@@ -13,6 +13,7 @@ The invoking command provides in the prompt:
 
 - **Language**: `typescript`, `python`, or `go`
 - **Repository** in `owner/repo` format (e.g., `awinogradov/code-assistants`)
+- **Provider** (optional, `github` or `linear`; default `github`) — selects how referenced issues are checked in [Phase 3](#phase-3-analyze-with-github)
 
 ## Phase 1: Scan
 
@@ -36,10 +37,12 @@ For each match, extract:
 - Type: `TODO` or `FIXME`
 - Description text (everything after `TODO:` or `FIXME:`)
 - Whether there is an existing `@see` link in the context lines (check `-A` context lines for `@see`)
-- Whether the description contains a GitHub issue reference (pattern: `#\d+`)
-- The `@see` URL if present (extract issue number from GitHub URL)
+- Whether the description contains a GitHub issue reference (`#\d+`) or, on a Linear project, a Linear id (`[A-Z]+-\d+`)
+- The `@see` URL if present — extract the GitHub issue number from a `github.com/.../issues/N` URL, or the Linear id from a `linear.app/.../issue/<ID>` URL
 
 ## Phase 3: Analyze with GitHub
+
+For a **Linear** project (provider is `linear`), check a referenced ticket with `mcp__plugin_autopilot_linear__get_issue` instead of `gh issue view`: a `state.name` of `Done` or `Canceled` is **stale**, any other state is **linked** (or **needs link** when the `@see` is missing). The GitHub buckets below apply otherwise.
 
 Categorize each TODO into buckets:
 
@@ -63,7 +66,7 @@ Extract the issue number from the TODO text. Use the same `gh issue view` call.
 
 ### c) Unlinked (no issue reference at all)
 
-Mark as **unlinked** — needs a new GitHub issue created.
+Mark as **unlinked** — needs a new issue created (GitHub, or Linear on a linear-tracked project).
 
 Batch `gh issue view` calls where possible.
 

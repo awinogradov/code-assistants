@@ -13,10 +13,11 @@ allowed-tools:
   - Bash(ruff *)
   - Bash(mypy *)
   - Bash(gh *)
+  - MCP(linear:*)
   - AskUserQuestion
 ---
 
-Scan codebase for TODO and FIXME comments. Check if referenced issues are still open, remove stale comments, create GitHub issues for untracked TODOs, and link them with `@see` tags.
+Scan codebase for TODO and FIXME comments. Check if referenced issues are still open, remove stale comments, create issues for untracked TODOs (GitHub, or Linear on a linear-tracked project), and link them with `@see` tags.
 
 ## Input
 
@@ -33,7 +34,8 @@ No arguments are expected. Any supplied arguments are ignored.
 1. Read `package.json` from the repository root
 2. Extract `agents.language` field — determines file globs and comment syntax
 3. Extract `agents.rules` field — determines verification commands
-4. Determine the repository in `owner/repo` form from `gh repo view --json nameWithOwner --jq .nameWithOwner` (or `git remote get-url origin`)
+4. Extract `agents.trackers` — when a `linear` tracker is configured the provider is **Linear** (note its `team`); otherwise **GitHub**
+5. Determine the repository in `owner/repo` form from `gh repo view --json nameWithOwner --jq .nameWithOwner` (or `git remote get-url origin`)
 
 **Language-to-pattern mapping:**
 
@@ -57,7 +59,7 @@ Invoke the `scan-and-analyze-todos` sub-agent to scan the codebase for TODO/FIXM
 ```
 Use the Agent tool with:
 - `subagent_type`: "autopilot:scan-and-analyze-todos"
-- `prompt`: "Scan for TODOs. Language: [language from Phase 1]. Repository: [owner/repo from Phase 1]."
+- `prompt`: "Scan for TODOs. Language: [language from Phase 1]. Repository: [owner/repo from Phase 1]. Provider: [github or linear]."
 - `description`: "Scan and analyze TODOs"
 ```
 
@@ -143,19 +145,17 @@ For each stale TODO:
    - Surrounding code context
 
    c. Create the issue:
+   - **GitHub:** `gh issue create --title "<title>" --body "<body>"`
+   - **Linear:** `mcp__plugin_autopilot_linear__save_issue` with `{ "title": "<title>", "team": "<team>", "description": "<body>" }` (the `team` from [Phase 1](#phase-1-read-repository-context))
 
-   ```bash
-   gh issue create --title "<title>" --body "<body>"
-   ```
-
-   d. Capture the issue URL from the `gh issue create` output (it prints the URL on the last line).
+   d. Capture the created issue's URL (GitHub prints it on the last line; for Linear use the returned ticket URL).
 
    e. Use Edit tool to add `@see` link on the line after the TODO comment:
    - TypeScript/Go: `// @see <issue-url>`
 
 ### 5c. Add links for "referenced but not linked" TODOs
 
-1. Build the issue URL: `https://github.com/<owner>/<repo>/issues/<N>`
+1. Build the issue URL — GitHub: `https://github.com/<owner>/<repo>/issues/<N>`; Linear: the ticket URL (e.g. `https://linear.app/<org>/issue/<ID>`)
 2. Use Edit tool to add `@see` link on the line after the TODO:
    - TypeScript/Go: `// @see <issue-url>`
 
