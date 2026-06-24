@@ -369,6 +369,10 @@ claude-plugins/
       resolve-issue-context.md
       scan-and-analyze-todos.md
       search-codebase-todos.md
+    lib/
+      linear/
+        fetch-issue.mjs
+        linearClient.mjs
     skills/
       ascii-schemas/
         SKILL.md
@@ -504,6 +508,7 @@ docs/
   08-upstream-sync.md
   09-repomix-pack.md
   10-pdf-create-skill.md
+  11-linear-tracker.md
   appendix-a-plan-skills-audit.md
 packages/
   actions-core/
@@ -33844,27 +33849,34 @@ Emit the raw object, not the fenced form. Set `resolveError` to `null` (not the 
 <file path="claude-plugins/autopilot/agents/resolve-issue-context.md">
 ---
 name: resolve-issue-context
-description: Fetch GitHub issue context and optionally auto-assign the current user (idempotent, opt-in via caller flag). Use when commands need structured issue data without polluting parent context.
-tools: Bash, Grep
+description: Fetch issue context from GitHub (gh) or Linear (MCP, with a GraphQL fallback) and optionally auto-assign the current user (idempotent, opt-in via caller flag). Use when commands need structured issue data without polluting parent context.
+tools: Bash, Grep, MCP(linear:*)
 model: sonnet
 ---
 
-You are a GitHub issue context resolver. Fetch issue data via the `gh` CLI and return a structured summary. When the caller opts in, also auto-assign the authenticated user to the issue (idempotently). Do not output intermediate steps — only the final structured block.
+You are an issue context resolver. Fetch issue data from **GitHub** (via the `gh` CLI) or **Linear** (via the `mcp__plugin_autopilot_linear__*` tools, falling back to a bundled GraphQL helper) and return a structured summary. When the caller opts in, also auto-assign the authenticated user to the issue (idempotently; GitHub only). Do not output intermediate steps — only the final structured block.
 
 **Constraints:**
 
-- Use ONLY the `gh` CLI for issue operations.
+- For **GitHub** issues, use ONLY the `gh` CLI for issue operations.
+- For **Linear** issues, prefer the `mcp__plugin_autopilot_linear__*` tools; use the bundled GraphQL helper only as a fallback, and never `npx`/`curl`/`npm`.
 - All variable interpolations into shell commands MUST be double-quoted (`"$NUMBER"`, `"$REPO"`, `"$LOGIN"`).
 
 ## Input
 
 The invoking skill provides in the prompt:
 
-- **Issue number** (e.g., `42`)
-- **Repository name** (e.g., `awinogradov/code-assistants`)
-- **Auto-assign current user** (optional, default `false`) — when the prompt contains `Auto-assign current user: true`, run [Phase 2](#phase-2-auto-assign-current-user-opt-in) and include the `**Assignee:**` line in the [Phase 3](#phase-3-output) output. Otherwise skip [Phase 2](#phase-2-auto-assign-current-user-opt-in) entirely and omit the line. Read-only callers (e.g. `pr:review`) must NOT pass the flag.
+- **Input type** (optional, default `github-issue`) — `github-issue` or `linear-issue`. Selects the provider in [Phase 1](#phase-1-fetch-issue).
+- **Issue number** (e.g., `42`) — for `github-issue`.
+- **Repository name** (e.g., `awinogradov/code-assistants`) — for `github-issue`.
+- **Linear ID** (e.g., `ENG-123`) and **Linear team** (e.g., `ENG`) — for `linear-issue`.
+- **Auto-assign current user** (optional, default `false`) — when the prompt contains `Auto-assign current user: true`, run [Phase 2](#phase-2-auto-assign-current-user-opt-in) and include the `**Assignee:**` line in the [Phase 3](#phase-3-output) output. Otherwise skip [Phase 2](#phase-2-auto-assign-current-user-opt-in) entirely and omit the line. Read-only callers (e.g. `pr:review`) must NOT pass the flag. Auto-assign applies to **GitHub only** in this phase; for Linear, skip [Phase 2](#phase-2-auto-assign-current-user-opt-in) and set `assignee` to `null`.
 
 ## Phase 1: Fetch Issue
+
+Resolve the provider from the prompt: if **Input type** is `linear-issue`, follow the **Linear** path; otherwise follow the **GitHub** path (the default — unchanged behavior).
+
+### GitHub (default)
 
 Store the full JSON in `ISSUE_JSON` so [Phase 2](#phase-2-auto-assign-current-user-opt-in) can re-read it without another API call:
 
@@ -33872,11 +33884,26 @@ Store the full JSON in `ISSUE_JSON` so [Phase 2](#phase-2-auto-assign-current-us
 ISSUE_JSON=$(gh issue view "$NUMBER" -R "$REPO" --json title,body,comments,labels,state,author,createdAt,assignees)
 ```
 
+### Linear
+
+Use the **Linear ID** from the prompt. Try the MCP server first, then the bundled GraphQL helper, then degrade — and skip [Phase 2](#phase-2-auto-assign-current-user-opt-in) (Linear is read-only here; set `assignee` to `null`).
+
+1. **MCP (preferred).** Call `mcp__plugin_autopilot_linear__get_issue` with `{ "id": "<Linear ID>" }`, then `mcp__plugin_autopilot_linear__list_comments` with `{ "issueId": "<Linear ID>", "orderBy": "createdAt" }`. Map the fields to the [Phase 3](#phase-3-output) contract (see the Linear field mapping there).
+2. **GraphQL fallback.** If the Linear MCP tools are unavailable (server not connected) or return an auth/permission error, run the bundled helper. It prints the [Phase 3](#phase-3-output) JSON object directly (including `resolveError` on failure), so pass its stdout through unchanged:
+
+   ```bash
+   LINEAR_API_KEY="$LINEAR_API_KEY" node "${CLAUDE_PLUGIN_ROOT}/lib/linear/fetch-issue.mjs" "<Linear ID>"
+   ```
+
+   `${CLAUDE_PLUGIN_ROOT}` is the plugin root Claude Code provides to plugin components; if it is unset, the caller passes an absolute `Linear helper path` to use instead.
+
+3. **Degrade.** If MCP is unavailable AND `$LINEAR_API_KEY` is unset, emit the degraded object with `status: "unresolved"`, data fields null/empty, and `resolveError: "unresolved — Linear MCP unavailable and LINEAR_API_KEY unset"`.
+
 ## Phase 2: Auto-Assign Current User (opt-in)
 
 <!-- Canonical self-assign logic. Mirrored in [skills/branch:create/SKILL.md Phase 2](../skills/branch:create/SKILL.md#phase-2-fetch-github-issue). Keep in sync. -->
 
-Run this phase ONLY when the caller's prompt contains `Auto-assign current user: true`. Otherwise skip directly to [Phase 3](#phase-3-output) and omit the `**Assignee:**` line from the output.
+Run this phase ONLY when the caller's prompt contains `Auto-assign current user: true` **and** the provider is GitHub. Otherwise skip directly to [Phase 3](#phase-3-output) and omit the `**Assignee:**` line from the output.
 
 The agent emits exactly one of the status strings below into the [Phase 3](#phase-3-output) `**Assignee:**` line:
 
@@ -33928,16 +33955,19 @@ Resolve the status with these steps:
 
 Output ONLY a single JSON object matching the schema below — no preamble, no surrounding code fence, no commentary. The parent parses it directly, so any extra text breaks consumption.
 
-| Field         | Type           | Constraint                                                                            |
-| ------------- | -------------- | ------------------------------------------------------------------------------------- |
-| `source`      | string         | e.g. `"GitHub Issue #42"`                                                             |
-| `issueId`     | integer        | The issue number                                                                      |
-| `title`       | string         | Issue title                                                                           |
-| `status`      | string         | Issue state (e.g. `"OPEN"`, `"CLOSED"`)                                               |
-| `labels`      | string[]       | Label names; empty array when none                                                    |
-| `assignee`    | string \| null | The [Phase 2](#phase-2-auto-assign-current-user-opt-in) status string when [Phase 2](#phase-2-auto-assign-current-user-opt-in) ran; `null` for read-only callers that skip it |
-| `description` | string         | Issue body                                                                            |
-| `comments`    | object[]       | `{ "author": string, "date": string, "body": string }` per comment; empty when none   |
+| Field          | Type              | Constraint                                                                                                                                                                              |
+| -------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `source`       | string            | e.g. `"GitHub Issue #42"` or `"Linear ENG-123"`                                                                                                                                         |
+| `issueId`      | integer \| string | The GitHub issue number, or the Linear identifier (e.g. `"ENG-123"`)                                                                                                                    |
+| `title`        | string            | Issue title                                                                                                                                                                             |
+| `status`       | string            | Issue state — GitHub `"OPEN"`/`"CLOSED"`, or the Linear workflow state (e.g. `"In Progress"`, `"Done"`)                                                                                 |
+| `labels`       | string[]          | Label names; empty array when none                                                                                                                                                      |
+| `assignee`     | string \| null    | The [Phase 2](#phase-2-auto-assign-current-user-opt-in) status string when [Phase 2](#phase-2-auto-assign-current-user-opt-in) ran; `null` for read-only callers, and `null` for Linear |
+| `description`  | string            | Issue body                                                                                                                                                                              |
+| `comments`     | object[]          | `{ "author": string, "date": string, "body": string }` per comment; empty when none                                                                                                     |
+| `resolveError` | string \| null    | Linear only; `null` (or omitted) on success, a short reason when the Linear issue could not be resolved                                                                                 |
+
+**Linear field mapping** (provider is Linear): `source` → `"Linear <identifier>"`; `issueId` → the string identifier (e.g. `"ENG-123"`); `status` → the workflow `state.name`; `labels` → label names; `description` → the issue description; `comments` → each Linear comment as `{ author, date, body }`; `assignee` → `null`. The GraphQL fallback helper already emits exactly this shape, so on fallback pass its stdout through unchanged.
 
 Example:
 
@@ -34106,6 +34136,133 @@ Example:
 ```
 
 When no matches are found, emit `{ "todos": [], "total": 0 }`. Emit the raw object, not the fenced form.
+</file>
+
+<file path="claude-plugins/autopilot/lib/linear/fetch-issue.mjs">
+#!/usr/bin/env node
+// Headless/CI fallback that fetches a Linear issue and prints the
+// resolve-issue-context JSON contract to stdout. Invoked by the
+// resolve-issue-context agent only when the Linear MCP server is unavailable.
+//
+// Usage:  LINEAR_API_KEY=lin_api_xxx node fetch-issue.mjs ENG-123
+//
+// Always exits 0 and always prints a single JSON object: on any failure it
+// prints the degraded shape with a non-null `resolveError`, so the caller can
+// surface the error and STOP rather than proceed against missing data.
+
+import { createLinearClient } from "./linearClient.mjs";
+
+const degraded = (id, error) => ({
+  source: id ? `Linear ${id}` : "Linear",
+  issueId: id ?? null,
+  title: null,
+  status: "unresolved",
+  labels: [],
+  assignee: null,
+  description: null,
+  comments: [],
+  resolveError: error,
+});
+
+async function main() {
+  const id = process.argv[2];
+  const apiKey = process.env.LINEAR_API_KEY;
+
+  if (!id) return degraded(null, "unresolved — no Linear issue ID provided");
+  if (!apiKey) return degraded(id, "unresolved — LINEAR_API_KEY unset");
+
+  try {
+    const issue = await createLinearClient(apiKey).fetchIssue(id);
+    if (!issue) return degraded(id, `unresolved — Linear issue ${id} not found`);
+
+    return {
+      source: `Linear ${issue.identifier}`,
+      issueId: issue.identifier,
+      title: issue.title,
+      status: issue.state?.name ?? null,
+      labels: (issue.labels?.nodes ?? []).map((label) => label.name),
+      assignee: null,
+      description: issue.description ?? "",
+      comments: (issue.comments?.nodes ?? []).map((comment) => ({
+        author: comment.user?.displayName ?? "unknown",
+        date: (comment.createdAt ?? "").slice(0, 10),
+        body: comment.body ?? "",
+      })),
+      resolveError: null,
+    };
+  } catch (error) {
+    const detail = error.cause ? ` (${Object.values(error.cause).join(" ")})` : "";
+    return degraded(id, `unresolved — ${error.message}${detail}`);
+  }
+}
+
+process.stdout.write(JSON.stringify(await main()));
+</file>
+
+<file path="claude-plugins/autopilot/lib/linear/linearClient.mjs">
+// Zero-dependency Linear GraphQL client for the autopilot plugin.
+//
+// Ported from .github/actions/release-action/src/tickets/linearClient.ts, with the
+// IssueByIdentifier query extended to also return state, labels, assignee, and
+// comments so the output matches the resolve-issue-context JSON contract. Uses the
+// global `fetch` (Node 18+), so there is no install step and no dependency tree.
+//
+// Used only as a headless/CI fallback when the Linear MCP server is unavailable;
+// interactive sessions go through mcp__plugin_autopilot_linear__* instead.
+
+const linearApiUrl = "https://api.linear.app/graphql";
+
+const issueQuery = `
+  query IssueByIdentifier($id: String!) {
+    issue(id: $id) {
+      identifier
+      title
+      description
+      state { name }
+      labels { nodes { name } }
+      comments { nodes { user { displayName } createdAt body } }
+    }
+  }
+`;
+
+/**
+ * Create a Linear API client.
+ *
+ * @param {string} apiKey - Linear API key (starts with `lin_api_`).
+ * @returns {{ fetchIssue: (id: string) => Promise<object|null> }}
+ */
+export function createLinearClient(apiKey) {
+  return {
+    async fetchIssue(id) {
+      const response = await fetch(linearApiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: apiKey,
+        },
+        body: JSON.stringify({ query: issueQuery, variables: { id } }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Linear API request failed", {
+          cause: { status: response.status, statusText: response.statusText },
+        });
+      }
+
+      const result = await response.json();
+      const firstError = result.errors?.[0];
+      if (firstError) {
+        const { message } = firstError;
+        if (message.includes("not found") || message.includes("Entity not found")) {
+          return null;
+        }
+        throw new Error("Linear API returned a GraphQL error", { cause: { message } });
+      }
+
+      return result.data?.issue ?? null;
+    },
+  };
+}
 </file>
 
 <file path="claude-plugins/autopilot/skills/ascii-schemas/SKILL.md">
@@ -40195,12 +40352,16 @@ Detect the input type from the arguments. Match **top-to-bottom and stop at the 
 | Pattern                                                                | Type                |
 | ---------------------------------------------------------------------- | ------------------- |
 | `…/security/code-scanning/{n}` URL, or `alert#{n}` / `alert {n}` token | Code-scanning alert |
+| Contains `linear.app`                                                  | Linear issue URL    |
+| Uppercase key + `-` + number (`ENG-123`), matching `^[A-Z]+-[0-9]+$`   | Linear issue        |
 | Number only (`123`)                                                    | GitHub issue        |
 | `#` + number (`#123`)                                                  | GitHub issue        |
 | Contains `github.com`                                                  | GitHub issue URL    |
 | Anything else                                                          | Plain description   |
 
 A **bare number stays a GitHub issue** — alerts require the alert URL or the explicit `alert#{n}` / `alert {n}` token, so there is zero collision with the issue-number rows.
+
+The detection rows are gated on the project's configured trackers — `agents.trackers` in `package.json`, an array of `{ type, ... }` entries (absent ⇒ a single `github` tracker, today's behavior). **Linear rows fire only when a `linear` tracker is configured**; the Linear ID is the uppercase `KEY-N` form (`^[A-Z]+-[0-9]+$`), and when that entry's `keys` are set, `KEY` must be one of them. **GitHub rows fire when a `github` tracker is configured** (the default). A project may configure both — e.g. `linear` for internal issues and `github` for external user feedback — and each argument routes by shape: `ENG-123` → Linear, `#42` / `123` / a `github.com` URL → GitHub. A Linear-shaped argument with no matching `linear` tracker matches none of the GitHub numeric rows and falls through to **Plain description**, so existing GitHub repos are unaffected.
 
 Launch context-gathering calls **in parallel**. The number of parallel calls depends on input type:
 
@@ -40247,6 +40408,18 @@ Agent 2 (search-codebase-todos):
   - `prompt`: "Search for TODOs. Input type: github-issue. Issue ID: [id]."
   - `description`: "Search codebase TODOs"
 ```
+
+**If input type is `linear-issue` or `linear-issue-url`** — launch the same 3 calls as `github-issue` (snapshot + `resolve-issue-context` + `search-codebase-todos`), but pass Linear parameters to `resolve-issue-context` instead of the GitHub issue number/repo:
+
+```
+Agent 1 (resolve-issue-context):
+  Use the Agent tool with:
+  - `subagent_type`: "autopilot:resolve-issue-context"
+  - `prompt`: "Fetch issue context. Input type: linear-issue. Linear ID: [ENG-123]. Linear team: [from the matching linear entry in package.json agents.trackers]. Auto-assign current user: false."
+  - `description`: "Resolve issue context"
+```
+
+If `resolve-issue-context` returns `status: "unresolved"` with a non-null `resolveError` (e.g. the Linear MCP is not authenticated and `LINEAR_API_KEY` is unset), surface the error and STOP — do not fall through or proceed against missing data. Otherwise the agent returns the same JSON contract as the GitHub path, so the Issue Context Output, Steelmanned Intent, and Assumptions blocks below are unchanged.
 
 **If input type is `plain description`** — acquire the snapshot directly (no agents needed):
 
@@ -44578,12 +44751,16 @@ Detect the input type from the arguments. Match **top-to-bottom and stop at the 
 | Pattern                                                                | Type                |
 | ---------------------------------------------------------------------- | ------------------- |
 | `…/security/code-scanning/{n}` URL, or `alert#{n}` / `alert {n}` token | Code-scanning alert |
+| Contains `linear.app`                                                  | Linear issue URL    |
+| Uppercase key + `-` + number (`ENG-123`), matching `^[A-Z]+-[0-9]+$`   | Linear issue        |
 | Number only (`123`)                                                    | GitHub issue        |
 | `#` + number (`#123`)                                                  | GitHub issue        |
 | Contains `github.com`                                                  | GitHub issue URL    |
 | Anything else                                                          | Plain description   |
 
 A **bare number stays a GitHub issue** — alerts require the alert URL or the explicit `alert#{n}` / `alert {n}` token, so there is zero collision with the issue-number rows.
+
+The detection rows are gated on the project's configured trackers — `agents.trackers` in `package.json`, an array of `{ type, ... }` entries (absent ⇒ a single `github` tracker, today's behavior). **Linear rows fire only when a `linear` tracker is configured**; the Linear ID is the uppercase `KEY-N` form (`^[A-Z]+-[0-9]+$`), and when that entry's `keys` are set, `KEY` must be one of them. **GitHub rows fire when a `github` tracker is configured** (the default). A project may configure both — e.g. `linear` for internal issues and `github` for external user feedback — and each argument routes by shape: `ENG-123` → Linear, `#42` / `123` / a `github.com` URL → GitHub. A Linear-shaped argument with no matching `linear` tracker matches none of the GitHub numeric rows and falls through to **Plain description**, so existing GitHub repos are unaffected.
 
 Launch context-gathering calls **in parallel**. The number of parallel calls depends on input type:
 
@@ -44630,6 +44807,18 @@ Agent 2 (search-codebase-todos):
   - `prompt`: "Search for TODOs. Input type: github-issue. Issue ID: [id]."
   - `description`: "Search codebase TODOs"
 ```
+
+**If input type is `linear-issue` or `linear-issue-url`** — launch the same 3 calls as `github-issue` (snapshot + `resolve-issue-context` + `search-codebase-todos`), but pass Linear parameters to `resolve-issue-context` instead of the GitHub issue number/repo:
+
+```
+Agent 1 (resolve-issue-context):
+  Use the Agent tool with:
+  - `subagent_type`: "autopilot:resolve-issue-context"
+  - `prompt`: "Fetch issue context. Input type: linear-issue. Linear ID: [ENG-123]. Linear team: [from the matching linear entry in package.json agents.trackers]. Auto-assign current user: false."
+  - `description`: "Resolve issue context"
+```
+
+If `resolve-issue-context` returns `status: "unresolved"` with a non-null `resolveError` (e.g. the Linear MCP is not authenticated and `LINEAR_API_KEY` is unset), surface the error and STOP — do not fall through or proceed against missing data. Otherwise the agent returns the same JSON contract as the GitHub path, so the Issue Context Output, Steelmanned Intent, and Assumptions blocks below are unchanged.
 
 **If input type is `plain description`** — acquire the snapshot directly (no agents needed):
 
@@ -45126,6 +45315,10 @@ Write the most helpful, readable output you can: plain, direct prose; every refe
     "wiretext": {
       "command": "npx",
       "args": ["-y", "@wiretext/mcp@0.3.3"]
+    },
+    "linear": {
+      "type": "http",
+      "url": "https://mcp.linear.app/mcp"
     }
   }
 }
@@ -46174,6 +46367,8 @@ Configure in `.mcp.json` at plugin root:
 }
 ```
 
+The plugin ships two servers: `wiretext` (ASCII wireframes) and `linear` (`https://mcp.linear.app/mcp`, OAuth) for Linear issue tracking when a project lists a `linear` entry in `agents.trackers`. The Linear read path falls back to a bundled zero-dependency GraphQL helper (`lib/linear/`) keyed by `LINEAR_API_KEY` for headless/CI. See [Linear tracker support](../../docs/11-linear-tracker.md).
+
 ### Versioning
 
 Update version in `.claude-plugin/plugin.json` following [semantic versioning](https://semver.org/):
@@ -46465,6 +46660,8 @@ An object under the top-level key `agents` in a `package.json`:
 ```
 
 The field coexists with normal npm metadata. It is not consumed by npm, Bun, or any package manager — only by Autopilot skills.
+
+An optional `trackers` array (entries `{ type: "linear" | "github", ... }`; absent ⇒ a single `github` tracker) opts the project into one or more issue trackers — for example Linear for internal issues and GitHub for external feedback; see [Linear tracker support](./11-linear-tracker.md).
 
 ### Workspaces
 
@@ -47819,6 +48016,59 @@ Adding the skill is a `feat`. Per the [release field spec](./06-release-field.md
 the `claude-plugin` version source is `plugin.json` and the version bump is made
 by the conventional-commit-driven release pipeline in the release PR — not in the
 feature PR.
+</file>
+
+<file path="docs/11-linear-tracker.md">
+# Linear tracker support
+
+> Chapter 11 of the [repository docs](../README.md#repository-docs).
+
+Autopilot is GitHub-first: by default every issue-aware skill reads and writes GitHub issues through the `gh` CLI. A project can opt into **Linear** — on its own or alongside GitHub — through the `package.json` `agents.trackers` array. GitHub stays the zero-config default — repositories that set nothing behave exactly as before.
+
+This chapter covers the **foundation** (read path): how a project enables Linear, how a skill resolves the active provider, and the two ways autopilot reaches Linear. Branch and pull-request conventions, issue creation and listing, and TODO links arrive in later phases (tracked under issue #339).
+
+## Configuring trackers
+
+Add a `trackers` array to the repo-root `package.json` `agents` object (the same object that already declares `rules` and `language` — see [the `agents` field](./02-agents-field.md)). Each entry is one tracker; list more than one to run several side by side. A common setup is Linear for internal issues and GitHub for external user feedback:
+
+```json
+{
+  "agents": {
+    "rules": "Bun",
+    "language": "typescript",
+    "trackers": [
+      { "type": "linear", "team": "ENG", "keys": ["ENG"], "label": "autopilot" },
+      { "type": "github" }
+    ]
+  }
+}
+```
+
+When `trackers` is absent, autopilot behaves as if it were `[{ "type": "github" }]` — today's GitHub-only behavior. The shape mirrors `release-action`'s ticket-system config, which is also a list.
+
+| Field   | Required          | Meaning                                                             |
+| ------- | ----------------- | ------------------------------------------------------------------- |
+| `type`  | yes               | `"linear"` or `"github"`                                            |
+| `team`  | yes, for `linear` | Linear team key — the `ENG` in `ENG-123`                            |
+| `keys`  | no                | ID prefixes that route to that Linear tracker; defaults to `[team]` |
+| `label` | no                | Label applied to issues autopilot creates on that Linear tracker    |
+
+## How a skill resolves the provider
+
+A skill reads `agents.trackers` from `package.json` (via the Read tool — no extra tooling) and routes each argument to the tracker whose shape it matches, so several trackers coexist.
+
+The [`plan`](../claude-plugins/autopilot/skills/plan/SKILL.md) and `run` skills add two input-detection rows — a `linear.app` URL and the uppercase `^[A-Z]+-[0-9]+$` ID (e.g. `ENG-123`) — placed after the code-scanning-alert row and before the bare-number row. The Linear rows are active only when a `linear` tracker is configured (and, when that entry's `keys` are set, only for those prefixes); the GitHub rows are active when a `github` tracker is configured (the default). With both configured, `ENG-123` routes to Linear while `#42`, a bare `123`, or a `github.com` URL routes to GitHub — internal and external trackers side by side. A Linear-shaped argument with no matching `linear` tracker collides with no GitHub numeric row and falls through to a plain task description, so existing GitHub repos are unaffected.
+
+## Access paths: MCP first, GraphQL fallback
+
+Autopilot reaches Linear two ways:
+
+- **Linear MCP server (interactive).** The plugin ships a `linear` server in [`.mcp.json`](../claude-plugins/autopilot/.mcp.json) (`https://mcp.linear.app/mcp`, OAuth). Interactive sessions call `mcp__plugin_autopilot_linear__*` tools — no secrets to manage.
+- **GraphQL helper (headless/CI).** Where the OAuth flow cannot run, a bundled zero-dependency helper — [`fetch-issue.mjs`](../claude-plugins/autopilot/lib/linear/fetch-issue.mjs) (Node 18+, global `fetch`, no install step) — calls the Linear GraphQL API keyed by `LINEAR_API_KEY` and prints the same JSON contract as the MCP path.
+
+## The single resolution seam
+
+Every issue read flows through the [`resolve-issue-context`](../claude-plugins/autopilot/agents/resolve-issue-context.md) agent, which returns a **provider-agnostic** JSON object (`source`, `issueId`, `title`, `status`, `labels`, `assignee`, `description`, `comments`). For Linear it tries the MCP tools, falls back to the GraphQL helper, then degrades with a non-null `resolveError` that the caller surfaces before stopping. Because `plan`, `run`, and every other consumer read that JSON — never raw tracker output — GitHub and Linear share one downstream code path; only this agent and the input-detection rows are provider-aware. `issueId` is a number for GitHub and the string identifier (e.g. `"ENG-123"`) for Linear.
 </file>
 
 <file path="docs/appendix-a-plan-skills-audit.md">
@@ -51877,6 +52127,10 @@ The `docs/` guides are numbered chapters in reading order — newcomers start at
 **Part VI — Document generation.** Turning content into beautiful, branded files.
 
 10. [The `pdf:create` skill](./docs/10-pdf-create-skill.md) — how the bundled, portable `@react-pdf/renderer` pipeline turns content plus an optional `design.md` into a themed PDF, and how its Node sub-project stays decoupled from the Bun workspace
+
+**Part VII — Issue trackers.** Pointing autopilot at a non-GitHub issue tracker.
+
+11. [Linear tracker support](./docs/11-linear-tracker.md) — how the `agents.trackers` array opts a project into one or more issue trackers (e.g. Linear for internal issues, GitHub for external feedback), the Linear MCP server plus the bundled GraphQL fallback, and how `resolve-issue-context` resolves issues from any configured provider behind one JSON contract
 
 **Appendix.** Historical records — kept for context, not current guidance.
 
