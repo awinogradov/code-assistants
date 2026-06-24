@@ -50,7 +50,7 @@ The `docs/` guides are numbered chapters in reading order — newcomers start at
 
 **Part VII — Issue trackers.** Pointing autopilot at a non-GitHub issue tracker.
 
-11. [Linear tracker support](./docs/11-linear-tracker.md) — how `agents.tracker`/`agents.linear` opt a project into Linear, the Linear MCP server plus the bundled GraphQL fallback, and how `resolve-issue-context` resolves issues from either provider behind one JSON contract
+11. [Linear tracker support](./docs/11-linear-tracker.md) — how the `agents.trackers` array opts a project into one or more issue trackers (e.g. Linear for internal issues, GitHub for external feedback), the Linear MCP server plus the bundled GraphQL fallback, and how `resolve-issue-context` resolves issues from any configured provider behind one JSON contract
 
 **Appendix.** Historical records — kept for context, not current guidance.
 
