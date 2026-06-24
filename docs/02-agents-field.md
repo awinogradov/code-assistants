@@ -24,6 +24,8 @@ An object under the top-level key `agents` in a `package.json`:
 
 The field coexists with normal npm metadata. It is not consumed by npm, Bun, or any package manager — only by Autopilot skills.
 
+An optional `tracker` key (`"linear"` or `"github"`, default `"github"`) plus a `linear` block opts the project into the Linear issue tracker; see [Linear tracker support](./11-linear-tracker.md).
+
 ### Workspaces
 
 Consuming skills always read the **repository-root** `package.json` to detect stack and language; workspace members are not walked. Members may declare their own `agents` field anyway, and this repository does so on every workspace member to keep stack metadata visible at every module boundary — consistent with the per-member `docs/`, `CLAUDE.md`, and `AGENTS.md` convention recorded in `docs/01-workspace-structure.md`.
