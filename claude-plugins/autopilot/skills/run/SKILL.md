@@ -55,7 +55,7 @@ All phases MUST use Claude Code's built-in task system for progress tracking. Cr
 
 ### Task Setup (MANDATORY - do FIRST before any work)
 
-Create all 6 tasks using TaskCreate, in order, before starting any work:
+Create all 9 tasks using TaskCreate, in order, before starting any work:
 
 | #   | Subject              | ActiveForm             | Source    |
 | --- | -------------------- | ---------------------- | --------- |
@@ -65,6 +65,9 @@ Create all 6 tasks using TaskCreate, in order, before starting any work:
 | 4   | Review with experts  | Reviewing with experts | skill     |
 | 5   | Validate plan scores | Validating plan scores | skill     |
 | 6   | Output final plan    | Outputting final plan  | skill     |
+| 7   | Commit changes       | Committing changes     | autopilot |
+| 8   | Create PR            | Creating PR            | autopilot |
+| 9   | Monitor PR           | Monitoring PR          | autopilot |
 
 Create each task with:
 
@@ -90,7 +93,7 @@ $ARGUMENTS
 
 **FIRST**, set up task tracking:
 
-1. Create all 6 tasks as defined in the Task Progress Protocol above (call TaskCreate 6 times)
+1. Create all 9 tasks as defined in the Task Progress Protocol above (call TaskCreate 9 times)
 2. Call TaskUpdate to set task 1 ("Resolve input") to `status: "in_progress"`
 
 ### Codebase Context and Issue Resolution (MANDATORY - DO FIRST)
@@ -358,13 +361,15 @@ After all implementation steps and verification are complete, execute the follow
 
 ### Step 1: Auto-Commit
 
-Invoke `Skill(autopilot:commits-create)` with arguments `--autopilot`. The `--autopilot` flag suppresses commits:create's commit-strategy prompt (Phase 3), commit-message confirmation (Phase 4), and PR-update offer (Phase 5). Follow the skill's full workflow — do NOT run `git commit` directly.
+Call TaskUpdate to set task 7 ("Commit changes") to `status: "in_progress"`. Invoke `Skill(autopilot:commits-create)` with arguments `--autopilot`. The `--autopilot` flag suppresses commits:create's commit-strategy prompt (Phase 3), commit-message confirmation (Phase 4), and PR-update offer (Phase 5). Follow the skill's full workflow — do NOT run `git commit` directly.
 
 If the commit fails due to a pre-commit hook, check `git status` for modified files (hook may have auto-formatted), re-stage with `git add -u`, and retry the commit once. If still fails, report the error and stop.
 
-After committing, push: `git push -u origin <branch>`
+After committing, push: `git push -u origin <branch>`. Then set task 7 ("Commit changes") to `completed`.
 
 ### Step 2: Auto-Create PR
+
+Call TaskUpdate to set task 8 ("Create PR") to `status: "in_progress"`.
 
 **CRITICAL — direct `gh pr create` and `gh pr edit` are FORBIDDEN in autopilot.** ALL PR creation and updates MUST go through `Skill(autopilot:pr-create)` and `Skill(autopilot:pr-update)`. Direct CLI calls produce PRs in the incorrect format. If a skill call fails or times out, report the error and stop — do NOT fall back to direct CLI commands.
 
@@ -375,7 +380,7 @@ After committing, push: `git push -u origin <branch>`
 
 2. Invoke `Skill(autopilot:pr-create)` with arguments `--autopilot` (append `--release-notes` when the branch's commits include `feat:` or `fix:` types so user-facing notes are included). The `--autopilot` flag suppresses pr:create's Phase 5 confirmation. Release notes are added automatically for breaking changes regardless of the flag. NEVER run `gh pr create` directly — even if the skill fails or times out. If the skill errors, report the failure and stop. Do NOT fall back to direct CLI.
 
-Output the PR URL after creation.
+Output the PR URL after creation. Set task 8 ("Create PR") to `completed`.
 
 3. **Format check** — After creating or updating the PR, validate its format:
    - Run `gh pr view --json title,body`
@@ -392,7 +397,7 @@ Output the PR URL after creation.
 
 ### Step 3: Monitor PR
 
-Invoke `Skill(autopilot:pr-monitor)` in foreground mode (do NOT use the Agent tool with run_in_background). The skill will:
+Call TaskUpdate to set task 9 ("Monitor PR") to `status: "in_progress"`. Invoke `Skill(autopilot:pr-monitor)` in foreground mode (do NOT use the Agent tool with run_in_background). The skill will:
 - Poll every minute for review status
 - If changes requested: invoke pr:resolve interactively (user IS involved for review feedback)
 - Wait for approval or merge
@@ -403,7 +408,7 @@ Invoke `Skill(autopilot:pr-monitor)` in foreground mode (do NOT use the Agent to
 
 ### Completion
 
-Output:
+Set task 9 ("Monitor PR") to `completed`. Output:
 
 Autopilot complete.
 PR: <pr-url>
