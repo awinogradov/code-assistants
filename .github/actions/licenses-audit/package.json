@@ -1,0 +1,21 @@
+{
+  "name": "@code-assistants/licenses-audit-action",
+  "version": "0.0.0",
+  "description": "Composite GitHub Action that detects the consumer's package manager and regenerates an SPDX-grouped license report with a bundled, dependency-free generator.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "agents": {
+    "rules": "Bun",
+    "language": "typescript"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "clean": "rm -rf node_modules .turbo"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "typescript": "6.0.3"
+  }
+}
