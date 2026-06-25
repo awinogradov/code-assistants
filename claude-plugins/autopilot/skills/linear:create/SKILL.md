@@ -52,7 +52,7 @@ This workflow is not complete until [Phase 7](#phase-7-create-issue) calls `mcp_
 
 ## Phase 1: Gather Context
 
-Mirror `issue:create` so the body reflects real code, not hallucinated structure.
+Mirror `issue:create` so the body reflects real code, not hallucinated structure. Unlike `issue:create`, this skill deliberately omits related-issue/PR detection and the duplicate-warning check — Linear search is not wired through the MCP here, so surfacing related work is out of scope.
 
 1. Acquire the codebase snapshot once (prefer the committed pack): if `.repomix/pack.xml` exists at the repository root, call `mcp__repomix__attach_packed_output` with its path; otherwise `mcp__repomix__pack_codebase` with `compress: true`. Store the `outputId`.
 2. `mcp__repomix__grep_repomix_output` for files/symbols related to the hint, then `mcp__repomix__read_repomix_output` for the matched sections only.
