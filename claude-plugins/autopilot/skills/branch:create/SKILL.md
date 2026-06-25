@@ -229,35 +229,25 @@ Present branch details and confirm using **AskUserQuestion tool**.
 
 **Preview substitution rules (MANDATORY):** The `<number>`, `<slug>`, `<issue title>`, `<prefix>`, and `<PREFIX>` tokens in the templates below are PLACEHOLDERS. Before invoking AskUserQuestion, substitute each placeholder with the concrete value you resolved in earlier phases (e.g., `<number>` → `123`, `<slug>` → `jwt-refresh`, `<issue title>` → `Add JWT token refresh endpoint`). NEVER pass the literal `issue-<number>-<slug>\n\nIssue: <issue title>...` string — every option's `preview` must contain the fully resolved branch preview string. No shorthand (`"..."`, `"<same>"`, empty string) is permitted; always write out the full resolved preview for every option.
 
-**For standard branches (with GitHub issue):**
-
-Tool parameters:
+**One dialog template for every branch kind.** Tool parameters:
 
 - `question`: "Review the branch name and choose an action."
 - `header`: "Create branch"
 - `options`: [
-  { label: "Create branch", description: "Create and push to origin with tracking", preview: "issue-<number>-<slug>\n\nIssue: <issue title>\nFrom: origin/main" },
-  { label: "Edit slug", description: "Modify the branch name slug", preview: "issue-<number>-<slug>\n\nIssue: <issue title>\nFrom: origin/main" }
+  { label: "Create branch", description: "Create and push to origin with tracking", preview: "<preview>" },
+  { label: "Edit slug", description: "Modify the branch name slug", preview: "<preview>" }
   ]
 - `multiSelect`: false
 
-Both options use the same `preview` content since the user is choosing an action, not content. The preview enables a side-by-side layout in the UI.
+Both options carry the same `<preview>` content since the user is choosing an action, not content; the shared preview enables a side-by-side layout in the UI. Substitute `<preview>` with the body for the resolved branch kind:
 
-**For Linear ticket branches**, use the same two-option structure with the resolved `<team>-<number>-<slug>` branch name and a `Ticket: <LINEAR-ID>` line in place of `Issue:`.
+| Branch kind    | `<preview>` body                                                   |
+| -------------- | ------------------------------------------------------------------ |
+| GitHub issue   | `issue-<number>-<slug>\n\nIssue: <issue title>\nFrom: origin/main` |
+| Special prefix | `<prefix>-<slug>\n\nType: <PREFIX>\nFrom: origin/main`             |
+| Linear ticket  | `<team>-<number>-<slug>\n\nTicket: <LINEAR-ID>\nFrom: origin/main` |
 
-**For special prefix branches:**
-
-Tool parameters:
-
-- `question`: "Review the branch name and choose an action."
-- `header`: "Create branch"
-- `options`: [
-  { label: "Create branch", description: "Create and push to origin with tracking", preview: "<prefix>-<slug>\n\nType: <PREFIX>\nFrom: origin/main" },
-  { label: "Edit slug", description: "Modify the branch name slug", preview: "<prefix>-<slug>\n\nType: <PREFIX>\nFrom: origin/main" }
-  ]
-- `multiSelect`: false
-
-Both options use the same `preview` content since the user is choosing an action, not content.
+When a custom description was provided, drop the `Issue:` line (no issue title to show) — e.g. `issue-<number>-<slug>\n\nFrom: origin/main`.
 
 Only proceed to [Phase 6](#phase-6-execute) after user selects "Create branch". If "Edit slug" selected, ask for new slug and regenerate branch name.
 
@@ -294,7 +284,9 @@ Only proceed to [Phase 6](#phase-6-execute) after user selects "Create branch". 
 
 ## Examples
 
-### Basic usage (auto-generated slug)
+Every example uses the one [Phase 5](#phase-5-verify-with-user) dialog template — only the resolved `<preview>` body changes per branch kind (see the table there). Two worked cases below; Linear and the other special prefixes follow identically.
+
+### GitHub issue (auto-generated slug)
 
 ```
 /autopilot:branch-create 123
@@ -303,14 +295,7 @@ Fetching GitHub issue #123...
 Title: "Add JWT token refresh endpoint for authentication service"
 ```
 
-AskUserQuestion with:
-
-- `question`: "Review the branch name and choose an action."
-- `header`: "Create branch"
-- `options`: [
-  { label: "Create branch", description: "Create and push to origin with tracking", preview: "issue-123-jwt-refresh\n\nIssue: Add JWT token refresh endpoint\nFrom: origin/main" },
-  { label: "Edit slug", description: "Modify the branch name slug", preview: "issue-123-jwt-refresh\n\nIssue: Add JWT token refresh endpoint\nFrom: origin/main" }
-  ]
+AskUserQuestion with the [Phase 5](#phase-5-verify-with-user) template, both options' `<preview>` resolved to `issue-123-jwt-refresh\n\nIssue: Add JWT token refresh endpoint\nFrom: origin/main`.
 
 User selects "Create branch".
 
@@ -319,116 +304,18 @@ User selects "Create branch".
 ✓ Pushed to origin with tracking
 ```
 
-### With custom description
-
-```
-/autopilot:branch-create 123 "api endpoint only"
-```
-
-AskUserQuestion with:
-
-- `question`: "Review the branch name and choose an action."
-- `header`: "Create branch"
-- `options`: [
-  { label: "Create branch", description: "Create and push to origin with tracking", preview: "issue-123-api-endpoint-only\n\nFrom: origin/main" },
-  { label: "Edit slug", description: "Modify the branch name slug", preview: "issue-123-api-endpoint-only\n\nFrom: origin/main" }
-  ]
-
-User selects "Create branch".
-
-```
-✓ Branch created: issue-123-api-endpoint-only
-✓ Pushed to origin with tracking
-```
-
-### Linear ticket (with --start)
-
-```
-/autopilot:branch-create ENG-123 --start
-```
-
-Fetches Linear ticket `ENG-123`, builds `eng-123-<slug>`, and moves the ticket to In Progress after creation.
-
-AskUserQuestion with:
-
-- `question`: "Review the branch name and choose an action."
-- `header`: "Create branch"
-- `options`: [
-  { label: "Create branch", description: "Create and push to origin with tracking", preview: "eng-123-jwt-refresh\n\nTicket: ENG-123\nFrom: origin/main" },
-  { label: "Edit slug", description: "Modify the branch name slug", preview: "eng-123-jwt-refresh\n\nTicket: ENG-123\nFrom: origin/main" }
-  ]
-
-User selects "Create branch".
-
-```
-✓ Branch created: eng-123-jwt-refresh
-✓ Pushed to origin with tracking
-✓ Ticket ENG-123 moved to In Progress
-```
-
 ### Special prefix (--hotfix)
 
 ```
 /autopilot:branch-create --hotfix "memory leak in editor"
 ```
 
-AskUserQuestion with:
-
-- `question`: "Review the branch name and choose an action."
-- `header`: "Create branch"
-- `options`: [
-  { label: "Create branch", description: "Create and push to origin with tracking", preview: "hotfix-memory-leak-editor\n\nType: HOTFIX\nFrom: origin/main" },
-  { label: "Edit slug", description: "Modify the branch name slug", preview: "hotfix-memory-leak-editor\n\nType: HOTFIX\nFrom: origin/main" }
-  ]
+AskUserQuestion with the [Phase 5](#phase-5-verify-with-user) template, both options' `<preview>` resolved to `hotfix-memory-leak-editor\n\nType: HOTFIX\nFrom: origin/main`.
 
 User selects "Create branch".
 
 ```
 ✓ Branch created: hotfix-memory-leak-editor
-✓ Pushed to origin with tracking
-```
-
-### Special prefix (--proposal)
-
-```
-/autopilot:branch-create --proposal "add vim keybindings"
-```
-
-AskUserQuestion with:
-
-- `question`: "Review the branch name and choose an action."
-- `header`: "Create branch"
-- `options`: [
-  { label: "Create branch", description: "Create and push to origin with tracking", preview: "proposal-add-vim-keybindings\n\nType: PROPOSAL\nFrom: origin/main" },
-  { label: "Edit slug", description: "Modify the branch name slug", preview: "proposal-add-vim-keybindings\n\nType: PROPOSAL\nFrom: origin/main" }
-  ]
-
-User selects "Create branch".
-
-```
-✓ Branch created: proposal-add-vim-keybindings
-✓ Pushed to origin with tracking
-```
-
-### Special prefix (--security)
-
-```
-/autopilot:branch-create --security "tainted format string"
-```
-
-AskUserQuestion with:
-
-- `question`: "Review the branch name and choose an action."
-- `header`: "Create branch"
-- `options`: [
-  { label: "Create branch", description: "Create and push to origin with tracking", preview: "security-tainted-format-string\n\nType: SECURITY\nFrom: origin/main" },
-  { label: "Edit slug", description: "Modify the branch name slug", preview: "security-tainted-format-string\n\nType: SECURITY\nFrom: origin/main" }
-  ]
-
-User selects "Create branch".
-
-```
-✓ Branch created: security-tainted-format-string
 ✓ Pushed to origin with tracking
 ```
 
