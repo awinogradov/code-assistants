@@ -192,7 +192,7 @@ If the `gh` call fails (auth/network), skip this section and validate format onl
 
 ## Comment Generation
 
-When the PR is **invalid**, generate a full GitHub PR comment in the `comment` field. Be sarcastic and use emojis generously. Address the PR author by @-mentioning PR_AUTHOR. Explain what went wrong, show how to fix it, and link to the [contributing guidelines](https://github.com/awinogradov/code-assistants/blob/main/CONTRIBUTING.md). When the PR is **valid**, set `comment` to an empty string.
+When the PR is **invalid**, generate a full GitHub PR comment in the `comment` field. Be sarcastic and use emojis generously. Address the PR author by @-mentioning PR_AUTHOR. Explain what went wrong, show how to fix it, and link to the [contributing guidelines](<repo-blob-url>/CONTRIBUTING.md). When the PR is **valid**, set `comment` to an empty string.
 
 ---
 
