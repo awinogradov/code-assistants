@@ -168,7 +168,7 @@ Use the agent's analysis to decide the commit flow:
    - The concrete modifications made (what files, functions, values, or behaviors changed)
 3. Generate commit message following the format below — the title must name the specific thing that changed, and the body must list the concrete modifications
 4. **WHAT-not-WHY validation**: Check the generated title against the WHY signal words and vague signal words listed in the WHAT-not-WHY Rule section below. If the title contains any of those words followed by abstract goals (not technical specifics), or contains the words "review", "feedback", "comments", or "suggestions", regenerate the title using only concrete technical details from the diff. Repeat up to 3 times. If the title still fails, present it to the user with a note that it may need manual rewording.
-5. Verify the title is at most 72 characters: run `printf '%s' "<title>" | wc -m`. If the count exceeds 72, regenerate a shorter title and re-run the check. Do not present a title to the user that exceeds 72 characters.
+5. Verify two commitlint length limits (`subject-max-length` = 50, `header-max-length` = 100 in `commitlint.config.mjs`): the subject — the text after `type(scope): ` — at most 50 characters (`printf '%s' "<subject>" | wc -m`), and the whole header (`type(scope): subject`) at most 100 (`printf '%s' "<title>" | wc -m`). If either exceeds its limit, regenerate a shorter title and re-run both checks. Do not present a title to the user that exceeds these limits.
 
 **Autopilot bypass:** If `autopilotMode` is true, skip steps 6–9 below. Run `git commit -m "<message>"` directly with the generated message and continue to [Phase 5](#phase-5-offer-pr-update).
 
@@ -220,7 +220,7 @@ For each category that has files:
 2. `git add <category files>`
 3. `git diff --staged` — read the diff and identify what specifically changed (files, functions, values, behaviors)
 4. Generate commit message for this category
-5. Verify the title is at most 72 characters: run `printf '%s' "<title>" | wc -m`. If the count exceeds 72, regenerate a shorter title and re-run the check.
+5. Verify both commitlint length limits (`subject-max-length` = 50, `header-max-length` = 100): subject (text after `type(scope): `) at most 50 — `printf '%s' "<subject>" | wc -m`; full header (`type(scope): subject`) at most 100 — `printf '%s' "<title>" | wc -m`. If either exceeds, regenerate a shorter title and re-run.
 
 After analyzing all categories, `git reset HEAD` to unstage everything.
 
@@ -301,7 +301,7 @@ The body is required for `feat`, `fix`, and `refactor` commits. It may be omitte
 
 ### Rules
 
-- Title: lowercase, no period, imperative mood. MUST NOT exceed 72 characters total (including type and scope prefix) — this is enforced by commitlint and CI
+- Title: lowercase, no period, imperative mood. The subject (text after `type(scope): `) MUST NOT exceed 50 characters and the whole header line (`type(scope): subject`) MUST NOT exceed 100 characters — enforced by commitlint (`subject-max-length` / `header-max-length`) and CI
 - Title must name the specific thing that changed, not just the action
 - Body required for `feat`, `fix`, and `refactor`. Body bullet points list concrete modifications
 - Never use GitHub issue numbers or PR references in commit messages (issue linking happens on the PR via magic words)
