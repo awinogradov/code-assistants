@@ -88,7 +88,7 @@ inputs:
     required: false
     default: "/autopilot:pr-review"
   react_prompt:
-    description: "Leading slash command / prompt for react mode (comment reactions). The action appends the runtime arguments block (REPO, PR_NUMBER, REVIEWER, COMMENT_BODY, COMMENT_PATH, COMMENT_LINE, NEEDS_REVERDICT, RULES_DOC_URL) after this value, so a custom prompt still receives them. Override to run a different reply skill without forking the action."
+    description: "Leading slash command / prompt for react mode (comment reactions). The action appends the runtime arguments block (REPO, PR_NUMBER, REVIEWER, PR_AUTHOR, COMMENT_BODY, COMMENT_PATH, COMMENT_LINE, NEEDS_REVERDICT, RULES_DOC_URL) after this value, so a custom prompt still receives them. Override to run a different reply skill without forking the action."
     required: false
     default: "/autopilot:pr-answer"
 
@@ -606,7 +606,7 @@ runs:
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude_oauth_token }}
         GH_TOKEN: ${{ inputs.bot_token }}
         CLAUDE_PROMPT: |
-          ${{ inputs.react_prompt }} REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} COMMENT_BODY: ${{ steps.ctx.outputs.comment_body }} COMMENT_PATH: ${{ steps.ctx.outputs.comment_path }} COMMENT_LINE: ${{ steps.ctx.outputs.comment_line }} NEEDS_REVERDICT: ${{ steps.classify.outputs.needs_reverdict }} RULES_DOC_URL: ${{ inputs.rules_doc_url }}
+          ${{ inputs.react_prompt }} REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} PR_AUTHOR: ${{ github.event.pull_request.user.login || github.event.issue.user.login }} COMMENT_BODY: ${{ steps.ctx.outputs.comment_body }} COMMENT_PATH: ${{ steps.ctx.outputs.comment_path }} COMMENT_LINE: ${{ steps.ctx.outputs.comment_line }} NEEDS_REVERDICT: ${{ steps.classify.outputs.needs_reverdict }} RULES_DOC_URL: ${{ inputs.rules_doc_url }}
         CLAUDE_RUN_MODE: react
         CLAUDE_MODEL: ${{ inputs.model }}
         CLAUDE_ALLOWED_TOOLS: "Bash(gh:*),mcp__repomix__*,mcp__context7__*,mcp__Ref__*,mcp__exa__*,mcp__perplexity__*,Read,Glob,Grep"
