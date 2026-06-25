@@ -107,8 +107,8 @@ Agent 1 (fetch-pr-reviews):
 
 After all calls complete:
 
-- Store the `outputId` from the snapshot acquisition (attach or pack) response — use `grep_repomix_output` and `read_repomix_output` with this ID to search and read codebase content during [Phase 4](#phase-4-address-comments-code-fixes) (code fixes)
-- Store the categorized review comments from `fetch-pr-reviews` — use in [Phase 3](#phase-3-present-findings-to-user)
+- Store the `outputId` from the snapshot acquisition (attach or pack) response — use `grep_repomix_output` and `read_repomix_output` with this ID to search and read codebase content during [Phase 3](#phase-3-address-comments-code-fixes) (code fixes)
+- Store the categorized review comments from `fetch-pr-reviews` — use in [Phase 2](#phase-2-present-findings-to-user)
 
 ### 1.5 Project Rules
 
@@ -118,7 +118,7 @@ After all calls complete:
 
 ---
 
-## Phase 3: Present Findings to User
+## Phase 2: Present Findings to User
 
 **Formatting Note:** Do not use markdown formatting (bold, italic, headers) in AskUserQuestion `question` parameter — it renders as raw text. Use plain text with line breaks and simple labels instead.
 
@@ -168,7 +168,7 @@ If "Cancel", stop without changes.
 
 ---
 
-## Phase 4: Address Comments (Code Fixes)
+## Phase 3: Address Comments (Code Fixes)
 
 Process in priority order: Blockers → Suggestions → Nitpicks.
 
@@ -194,27 +194,27 @@ For each comment requiring a code change:
 For comments that do not require code changes (questions, misunderstandings):
 
 1. **Evaluate the comment** against the actual codebase — read the code, check if the reviewer's concern is valid
-2. **Draft a reply** — concise, direct, 1-5 sentences; format references per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) (the **Reference formatting & readability** rules inlined at the end of this skill; see [Phase 6](#phase-6-reply-to-review-threads)). A `CHECK-` rule code you cite — e.g. when you echo the finding you are answering — is a reference, not a code specimen: render it as a link to the rule's anchor exactly as [Phase 6](#phase-6-reply-to-review-threads) prescribes, never bare text. Reply shapes:
+2. **Draft a reply** — concise, direct, 1-5 sentences; format references per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) (the **Reference formatting & readability** rules inlined at the end of this skill; see [Phase 5](#phase-5-reply-to-review-threads)). A `CHECK-` rule code you cite — e.g. when you echo the finding you are answering — is a reference, not a code specimen: render it as a link to the rule's anchor exactly as [Phase 5](#phase-5-reply-to-review-threads) prescribes, never bare text. Reply shapes:
    - If reviewer is wrong: "You're right that [X looks concerning], but [reason it's correct]. [Evidence from code]."
    - If needs discussion: "[Acknowledge point], however [concern or alternative]."
    - If question: "[Direct answer with reference to code]."
-3. Store the reply for [Phase 6](#phase-6-reply-to-review-threads)
+3. Store the reply for [Phase 5](#phase-5-reply-to-review-threads)
 
 ---
 
-## Phase 5: Commit and Push
+## Phase 4: Commit and Push
 
-### 5.1 Check for Changes
+### 4.1 Check for Changes
 
 ```bash
 git status --porcelain
 ```
 
-If no changes (only replies needed, no code fixes), skip to [Phase 6](#phase-6-reply-to-review-threads).
+If no changes (only replies needed, no code fixes), skip to [Phase 5](#phase-5-reply-to-review-threads).
 
-### 5.2 Commit
+### 4.2 Commit
 
-Before invoking commits:create, compile a modification list from the changes made in [Phase 4](#phase-4-address-comments-code-fixes). For each code change, write one bullet naming the concrete modification (file, function, value, or behavior that changed).
+Before invoking commits:create, compile a modification list from the changes made in [Phase 3](#phase-3-address-comments-code-fixes). For each code change, write one bullet naming the concrete modification (file, function, value, or behavior that changed).
 
 Example modification list:
 
@@ -229,7 +229,7 @@ Example modification list:
 
 Invoke `Skill(autopilot:commits-create)`. Pass the modification list as the commit context in conversation text. Do NOT include any other context about why changes were made.
 
-### 5.3 Push
+### 4.3 Push
 
 ```bash
 git push
@@ -237,7 +237,7 @@ git push
 
 ---
 
-## Phase 6: Reply to Review Threads
+## Phase 5: Reply to Review Threads
 
 Compose replies for all processed comments. **Always mention the reviewer** with `@<username>` at the start of each reply.
 
@@ -246,7 +246,7 @@ Compose replies for all processed comments. **Always mention the reviewer** with
 - **Partially addressed**: "@\<reviewer\> [What was changed and why, plus what was intentionally kept]."
 - **Declined by user**: "@\<reviewer\> Considered — [explanation of why this suggestion was not applied]."
 
-Format every reply per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) — the **Reference formatting & readability** rules inlined at the end of this skill. The reference kind that recurs here is the commit SHA: when a reply cites the commit that resolved a thread (the HEAD commit after [Phase 5](#phase-5-commit-and-push)'s push, post-rebase/squash), render the SHA as a markdown link `[<sha>](<repo-commit-url>/<sha>)` built from the repo owner/name resolved in [Phase 1](#phase-1-detect-pr-and-load-context) — never a bare or backticked SHA. Because replies post as GitHub comments, link any file, doc, skill, agent, or section you cite as an absolute `<repo-blob-url>/path#anchor` URL built from the same repo owner/name — never a bare name or a repo-relative path (relative paths do not resolve in a comment). A `CHECK-` rule code (e.g. `CHECK-PR-009`) is a reference, not a code specimen: render it as a link exactly as the [`pr:review` skill's §2.5](../pr:review/SKILL.md#25-rule-codes) prescribes — `[CHECK-PR-009](<rules-doc-url>#CHECK-PR-009)` — never the bare code. Build `<rules-doc-url>` as the absolute blob URL to the `pr:review` SKILL.md from the repo owner/name resolved in [Phase 1](#phase-1-detect-pr-and-load-context) — `<repo-blob-url>/claude-plugins/autopilot/skills/pr%3Areview/SKILL.md`, whose `#CHECK-...` fragment lands on the `<a id="...">` anchor above each rule — falling back to the bare code in plain text only when no such URL is resolvable. Replies that cite no commit (e.g. questions, declines) skip the SHA rule; all other reference kinds still follow the inlined rules.
+Format every reply per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) — the **Reference formatting & readability** rules inlined at the end of this skill. The reference kind that recurs here is the commit SHA: when a reply cites the commit that resolved a thread (the HEAD commit after [Phase 4](#phase-4-commit-and-push)'s push, post-rebase/squash), render the SHA as a markdown link `[<sha>](<repo-commit-url>/<sha>)` built from the repo owner/name resolved in [Phase 1](#phase-1-detect-pr-and-load-context) — never a bare or backticked SHA. Because replies post as GitHub comments, link any file, doc, skill, agent, or section you cite as an absolute `<repo-blob-url>/path#anchor` URL built from the same repo owner/name — never a bare name or a repo-relative path (relative paths do not resolve in a comment). A `CHECK-` rule code (e.g. `CHECK-PR-009`) is a reference, not a code specimen: render it as a link exactly as the [`pr:review` skill's §2.5](../pr:review/SKILL.md#25-rule-codes) prescribes — `[CHECK-PR-009](<rules-doc-url>#CHECK-PR-009)` — never the bare code. Build `<rules-doc-url>` as the absolute blob URL to the `pr:review` SKILL.md from the repo owner/name resolved in [Phase 1](#phase-1-detect-pr-and-load-context) — `<repo-blob-url>/claude-plugins/autopilot/skills/pr%3Areview/SKILL.md`, whose `#CHECK-...` fragment lands on the `<a id="...">` anchor above each rule — falling back to the bare code in plain text only when no such URL is resolvable. Replies that cite no commit (e.g. questions, declines) skip the SHA rule; all other reference kinds still follow the inlined rules.
 
 Build a summary of all drafted replies:
 
@@ -302,13 +302,13 @@ If "Edit" selected, ask for the user's preferred reply text and use that instead
 
 ---
 
-## Phase 7: Update PR and Summary
+## Phase 6: Update PR and Summary
 
-### 7.1 Update PR
+### 6.1 Update PR
 
 Invoke `Skill(autopilot:pr-update)` — refreshes the PR description reflecting the new state.
 
-### 7.2 Summary
+### 6.2 Summary
 
 Output results:
 
@@ -362,7 +362,7 @@ These rules govern references — when you point the reader at a real file, stan
 - Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
 - Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 5](#phase-5-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
