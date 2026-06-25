@@ -2080,6 +2080,7 @@ function buildApi(overrides: Partial<GitHubApi>): GitHubApi {
   };
   return {
     readPackageJson: async () => null,
+    readPnpmWorkspaces: async () => null,
     listSubdirs: async () => [],
     listChangedFiles: notImplemented,
     listPrLabels: notImplemented,
@@ -2116,6 +2117,52 @@ describe("collectMembers", () => {
         label: "code-assistants/actions-core",
       },
     ]);
+  });
+
+  it("falls back to pnpm-workspace.yaml when package.json has no workspaces", async () => {
+    const pkgByPath: Record<string, PackageJson> = {
+      "": { name: "@fortune-os" },
+      "packages/nullable": { name: "@fortune-os/nullable" },
+    };
+    const api = buildApi({
+      readPackageJson: async (dir) => pkgByPath[dir] ?? null,
+      readPnpmWorkspaces: async () => ["packages/*"],
+      listSubdirs: async (parent) => (parent === "packages" ? ["nullable"] : []),
+    });
+
+    expect(await collectMembers(api, "headsha", "fortune-os/")).toEqual([
+      {
+        dir: "packages/nullable",
+        name: "@fortune-os/nullable",
+        label: "fortune-os/nullable",
+      },
+    ]);
+  });
+
+  it("ignores pnpm-workspace.yaml when package.json workspaces are present", async () => {
+    const pkgByPath: Record<string, PackageJson> = {
+      "": { name: "@code-assistants", workspaces: ["packages/*"] },
+      "packages/actions-core": { name: "@code-assistants/actions-core" },
+    };
+    let pnpmRead = false;
+    const api = buildApi({
+      readPackageJson: async (dir) => pkgByPath[dir] ?? null,
+      readPnpmWorkspaces: async () => {
+        pnpmRead = true;
+        return ["apps/*"];
+      },
+      listSubdirs: async (parent) => (parent === "packages" ? ["actions-core"] : []),
+    });
+
+    const members = await collectMembers(api, "headsha", "code-assistants/");
+    expect(members).toEqual([
+      {
+        dir: "packages/actions-core",
+        name: "@code-assistants/actions-core",
+        label: "code-assistants/actions-core",
+      },
+    ]);
+    expect(pnpmRead).toBe(false);
   });
 
   it("returns no members when the root manifest is absent at the ref", async () => {
@@ -2160,7 +2207,9 @@ export async function collectMembers(
   prefix: string,
 ): Promise<WorkspaceMember[]> {
   const rootPkg = (await api.readPackageJson("", ref)) ?? {};
-  const workspaces = rootPkg.workspaces ?? [];
+  const workspaces = rootPkg.workspaces?.length
+    ? rootPkg.workspaces
+    : ((await api.readPnpmWorkspaces(ref)) ?? []);
 
   const subdirEntries = await Promise.all(
     globParents(workspaces).map(
@@ -2177,7 +2226,7 @@ export async function collectMembers(
   const pkgs = new Map<string, PackageJson | null>(pkgEntries);
   const readPackageJson = (dir: string): PackageJson | null => pkgs.get(dir) ?? null;
 
-  return enumerateMembers(rootPkg, prefix, readPackageJson, listSubdirs);
+  return enumerateMembers({ ...rootPkg, workspaces }, prefix, readPackageJson, listSubdirs);
 }
 </file>
 
@@ -2189,6 +2238,7 @@ import {
   deriveLabelPrefix,
   enumerateMembers,
   memberSegment,
+  parsePnpmPackages,
   resolveWorkspaceDirs,
   type PackageJson,
 } from "./enumerateWorkspaces.ts";
@@ -2212,6 +2262,23 @@ describe("resolveWorkspaceDirs", () => {
       "actions-core",
     ]);
     expect(dirs).toEqual([".github/actions/files-sync", "packages/actions-core"]);
+  });
+});
+
+describe("parsePnpmPackages", () => {
+  it("reads the packages: globs from a pnpm-workspace.yaml", () => {
+    expect(parsePnpmPackages("packages:\n  - apps/*\n  - packages/*\n")).toEqual([
+      "apps/*",
+      "packages/*",
+    ]);
+  });
+
+  it("returns [] when packages: is absent (partial config is a no-op)", () => {
+    expect(parsePnpmPackages("onlyBuiltDependencies:\n  - esbuild\n")).toEqual([]);
+  });
+
+  it("returns [] when packages is not a list of strings", () => {
+    expect(parsePnpmPackages("packages: true\n")).toEqual([]);
   });
 });
 
@@ -2313,6 +2380,8 @@ describe("enumerateMembers", () => {
  * @see ./labelPr.ts and ./pruneLabels.ts — the two callers.
  */
 
+import { z } from "zod";
+
 /** A workspace member resolved to exactly what the labeler needs. */
 export interface WorkspaceMember {
   /** Repo-relative directory of the member (e.g. `.github/actions/files-sync`). */
@@ -2327,6 +2396,22 @@ export interface WorkspaceMember {
 export interface PackageJson {
   name?: string;
   workspaces?: string[];
+}
+
+/** The slice of a `pnpm-workspace.yaml` this module reads. */
+const pnpmWorkspaceSchema = z.object({ packages: z.array(z.string()).optional() });
+
+/**
+ * Parses the `packages:` workspace globs from a `pnpm-workspace.yaml`. pnpm repos
+ * declare members here rather than in `package.json` `workspaces`, so this is the
+ * fallback source for {@link collectMembers}. A missing or non-list `packages` field
+ * yields `[]` (no members), keeping a partial config a no-op rather than a crash; a
+ * syntactically invalid YAML file still throws from `Bun.YAML.parse`, surfacing the
+ * misconfiguration loudly.
+ */
+export function parsePnpmPackages(raw: string): string[] {
+  const parsed = pnpmWorkspaceSchema.safeParse(Bun.YAML.parse(raw));
+  return parsed.success ? (parsed.data.packages ?? []) : [];
 }
 
 /** Conservative charset for a derived label — guards against injection from a hostile member name. */
@@ -2501,7 +2586,7 @@ import { Octokit } from "@octokit/rest";
 
 import { fetchRawContent } from "@code-assistants/actions-core/fetchRawContent";
 
-import type { PackageJson } from "./enumerateWorkspaces.ts";
+import { parsePnpmPackages, type PackageJson } from "./enumerateWorkspaces.ts";
 
 /** A file changed by a pull request, with its pre-rename path when applicable. */
 export interface ChangedFile {
@@ -2520,6 +2605,8 @@ export interface LabelSpec {
 export interface GitHubApi {
   /** Parse the `package.json` inside `dir` at `ref` (`""`/`"."` → repo-root manifest). `null` when absent. */
   readPackageJson(dir: string, ref: string): Promise<PackageJson | null>;
+  /** Workspace globs from the root `pnpm-workspace.yaml` `packages:` at `ref`; `null` when the file is absent. */
+  readPnpmWorkspaces(ref: string): Promise<string[] | null>;
   /** Immediate child directory names of `parent` at `ref` (empty when the path is missing). */
   listSubdirs(parent: string, ref: string): Promise<string[]>;
   /** Files changed by the PR, including pre-rename paths. */
@@ -2549,6 +2636,11 @@ export function createGitHubApi(octokit: Octokit, owner: string, repo: string): 
     async readPackageJson(dir, ref) {
       const raw = await fetchRawContent({ octokit, owner, repo, path: packageJsonPath(dir), ref });
       return raw === null ? null : (JSON.parse(raw) as PackageJson);
+    },
+
+    async readPnpmWorkspaces(ref) {
+      const raw = await fetchRawContent({ octokit, owner, repo, path: "pnpm-workspace.yaml", ref });
+      return raw === null ? null : parsePnpmPackages(raw);
     },
 
     async listSubdirs(parent, ref) {
@@ -2640,6 +2732,7 @@ function buildApi(overrides: Partial<GitHubApi>): GitHubApi {
   };
   return {
     readPackageJson: async () => null,
+    readPnpmWorkspaces: async () => null,
     listSubdirs: async () => [],
     listChangedFiles: notImplemented,
     listPrLabels: notImplemented,
@@ -2744,6 +2837,7 @@ function buildApi(overrides: Partial<GitHubApi>): GitHubApi {
   };
   return {
     readPackageJson: async () => null,
+    readPnpmWorkspaces: async () => null,
     listSubdirs: async () => [],
     listChangedFiles: notImplemented,
     listPrLabels: notImplemented,
@@ -3073,9 +3167,11 @@ required.
 
 The label prefix is **derived** from the root `package.json` `name`'s npm scope, so the action is
 drop-in for any Bun/npm workspace (`@code-assistants` → `code-assistants/`, `@symbiot/…` →
-`symbiot/`). Pass `label-prefix` to override. Member directories are read from the `workspaces`
-field, handling **both** literal paths (`.github/actions/files-sync`) and `<parent>/*` globs
-(`packages/*`).
+`symbiot/`). Pass `label-prefix` to override. Member directories are read from the `package.json`
+`workspaces` field, falling back to the `packages:` globs in `pnpm-workspace.yaml` when
+`package.json` declares no `workspaces` (so pnpm monorepos work too). Both sources handle literal
+paths (`.github/actions/files-sync`) and `<parent>/*` globs (`packages/*`); recursive `**` globs and
+`!` exclusions are not expanded.
 
 ## How it works
 
