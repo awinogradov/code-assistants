@@ -18,7 +18,7 @@ const issueQuery = `
       description
       state { name }
       labels { nodes { name } }
-      comments { nodes { user { displayName } createdAt body } }
+      comments(orderBy: createdAt) { nodes { user { displayName } createdAt body } }
     }
   }
 `;
