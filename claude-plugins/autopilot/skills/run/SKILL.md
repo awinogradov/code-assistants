@@ -221,7 +221,7 @@ The following apply to ALL stacks before delegating to the stack-specific skill:
 
 ### Documentation Lookup Protocol (MANDATORY)
 
-Before planning, look up documentation for every technology and library relevant to the task.
+Before planning, look up documentation for every technology and library relevant to the task. **Scale the lookup to the task:** a small or well-understood change needs a single targeted lookup (or none); reserve the full multi-source fan-out below for tasks that touch unfamiliar libraries, APIs, or recent changes.
 
 **Step 1: Identify technologies** from all sources:
 
