@@ -84,4 +84,4 @@ Output ONLY the structured block. No preamble or commentary:
 [git diff --stat output, verbatim]
 ```
 
-Omit the "Issue Context" section if `fetchGithubIssue` is `false` or the fetch failed.
+Omit the "Issue Context" section if the `Fetch issue` flag is `false` or the fetch failed.
