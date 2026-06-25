@@ -20,7 +20,7 @@
     },
     ".github/actions/agents-rules-sync": {
       "name": "@code-assistants/agents-rules-sync-action",
-      "version": "2.0.1",
+      "version": "2.0.2",
       "dependencies": {
         "@actions/core": "3.0.1",
         "@code-assistants/actions-core": "workspace:*",
@@ -51,7 +51,7 @@
     },
     ".github/actions/code-review-action": {
       "name": "@code-assistants/code-review-action",
-      "version": "1.3.0",
+      "version": "1.4.1",
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "0.2.126",
         "@code-assistants/actions-core": "workspace:*",
@@ -66,7 +66,7 @@
     },
     ".github/actions/code-review-cost-monitor": {
       "name": "@code-assistants/code-review-cost-monitor-action",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "@actions/core": "3.0.1",
         "@code-assistants/actions-core": "workspace:*",
@@ -81,7 +81,7 @@
     },
     ".github/actions/files-sync": {
       "name": "@code-assistants/files-sync-action",
-      "version": "2.0.0",
+      "version": "2.0.1",
       "dependencies": {
         "@actions/core": "3.0.1",
         "@code-assistants/actions-core": "workspace:*",
@@ -95,9 +95,17 @@
         "typescript": "6.0.3",
       },
     },
+    ".github/actions/licenses-audit": {
+      "name": "@code-assistants/licenses-audit-action",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@types/bun": "1.3.14",
+        "typescript": "6.0.3",
+      },
+    },
     ".github/actions/perf-report-action": {
       "name": "@code-assistants/perf-report-action",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "zod": "4.4.3",
       },
@@ -108,7 +116,7 @@
     },
     ".github/actions/release-action": {
       "name": "@code-assistants/release-action",
-      "version": "1.1.1",
+      "version": "1.1.3",
       "dependencies": {
         "@anthropic-ai/sdk": "0.92.0",
         "@code-assistants/actions-core": "workspace:*",
@@ -128,7 +136,7 @@
     },
     ".github/actions/release-automerge": {
       "name": "@code-assistants/release-automerge",
-      "version": "0.2.0",
+      "version": "0.2.2",
       "dependencies": {
         "@code-assistants/actions-core": "workspace:*",
         "@octokit/rest": "22.0.1",
@@ -140,7 +148,7 @@
     },
     ".github/actions/validate-actions": {
       "name": "@code-assistants/validate-actions-action",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "yaml": "2.9.0",
         "zod": "4.4.3",
@@ -152,7 +160,7 @@
     },
     "claude-plugins/autopilot": {
       "name": "autopilot",
-      "version": "1.3.0",
+      "version": "1.3.1",
     },
     "packages/actions-core": {
       "name": "@code-assistants/actions-core",
@@ -213,6 +221,8 @@
     "@code-assistants/code-review-cost-monitor-action": ["@code-assistants/code-review-cost-monitor-action@workspace:.github/actions/code-review-cost-monitor"],
 
     "@code-assistants/files-sync-action": ["@code-assistants/files-sync-action@workspace:.github/actions/files-sync"],
+
+    "@code-assistants/licenses-audit-action": ["@code-assistants/licenses-audit-action@workspace:.github/actions/licenses-audit"],
 
     "@code-assistants/perf-report-action": ["@code-assistants/perf-report-action@workspace:.github/actions/perf-report-action"],
 

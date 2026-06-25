@@ -5,6 +5,10 @@ dist/
 coverage/
 .github/workflows/
 
+# Generated dependency license report — scripts/licenses-report.ts owns its
+# formatting; keep Prettier from reformatting it (and re-introducing drift).
+/LICENSES.md
+
 # Bundled, self-contained Node sub-project for the pdf:create skill — decoupled
 # from the Bun workspace and the root Prettier (.{md,json}) glob on purpose.
 claude-plugins/autopilot/skills/pdf:create/renderer/
