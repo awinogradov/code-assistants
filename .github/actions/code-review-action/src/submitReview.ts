@@ -32,6 +32,7 @@ import {
 } from "./github/githubReview.ts";
 import {
   buildReviewBody,
+  isCleanApproval,
   parseRunSummary,
   renderRunSummaryFooter,
   stripRunSummaryFooter,
@@ -151,8 +152,13 @@ const invalidComments = anchored
 // Fail-open: no footer when RUN_SUMMARY is absent or invalid.
 const reviewBody = output.reviewComment + formatInvalidComments(invalidComments);
 const runSummary = parseRunSummary(process.env.RUN_SUMMARY);
-const footer = runSummary ? renderRunSummaryFooter(runSummary, reviewer) : "";
-const finalBody = buildReviewBody(reviewBody, footer, validComments.length > 0);
+// Drop the footer's usage-hint TIP on a clean approval — the "No issues found"
+// line shouldn't be padded with a prompt to ask the bot a question.
+const hasInlineComments = validComments.length > 0;
+const footer = runSummary
+  ? renderRunSummaryFooter(runSummary, reviewer, !isCleanApproval(reviewBody, hasInlineComments))
+  : "";
+const finalBody = buildReviewBody(reviewBody, footer, hasInlineComments);
 
 // The footer carries run-varying numbers (cost, latency); strip it from both
 // bodies so the duplicate-suppression guard compares the stable content only.
