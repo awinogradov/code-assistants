@@ -43,14 +43,16 @@ No arguments are expected. Any supplied arguments are ignored.
 | ------------ | ---------------------- | -------------- | --------------- |
 | `typescript` | `**/*.{ts,tsx,js,jsx}` | `//`           | `// @see <url>` |
 | `go`         | `**/*.go`              | `//`           | `// @see <url>` |
+| `python`     | `**/*.py`              | `#`            | `# @see <url>`  |
 
 **Verification command mapping:**
 
-| Rules          | Command                             |
-| -------------- | ----------------------------------- |
-| `Bun`          | `bun run typecheck && bun run lint` |
-| `NodeJS+React` | `npm run typecheck && npm run lint` |
-| Go (fallback)  | `go build ./... && go vet ./...`    |
+| Rules             | Command                             |
+| ----------------- | ----------------------------------- |
+| `Bun`             | `bun run typecheck && bun run lint` |
+| `NodeJS+React`    | `npm run typecheck && npm run lint` |
+| Go (fallback)     | `go build ./... && go vet ./...`    |
+| Python (fallback) | `ruff check . && mypy .`            |
 
 ## Phase 2: Scan and Analyze TODOs
 
