@@ -34,28 +34,27 @@ Score the plan's domain alignment from 0 to 100:
 - **60-79**: Needs work — meaningful gaps identified
 - **Below 60**: Major issues in your domain
 
-## Phase 3: Auto-Iterate
+## Phase 3: Recommend Changes
 
-If your score is below the target (default 95):
+Score the plan AS WRITTEN — never raise your score for changes the parent has not applied. If your score is below the target (default 95):
 
 1. Identify the specific gaps that lowered your score
-2. Determine what changes to the plan would address them
-3. Re-evaluate with those changes in mind
-4. Rescore
+2. Determine the concrete changes that would address them
+3. Record them in the `revision` object as ADVISORY input for the parent (`changed` = what to change; `rescore` = the score the plan would reach with those changes)
 
-Repeat until the target is met or you determine the gaps are acceptable trade-offs.
+Do this at most once — do not loop. The parent owns the plan and applies your `findings` itself, so your `score` and `verdict` must describe the drafted plan, not a hypothetical revision.
 
 ## Phase 4: Output
 
 Output ONLY a single JSON object matching the schema below — no preamble, no surrounding code fence, no commentary. The parent parses it directly, so any extra text breaks consumption.
 
-| Field        | Type                               | Constraint                                                                                  |
-| ------------ | ---------------------------------- | ------------------------------------------------------------------------------------------- |
-| `expertRole` | string                             | Your expert role, verbatim from the prompt                                                  |
-| `score`      | integer                            | 0–100; the final score after any [Phase 3](#phase-3-auto-iterate) iteration                                          |
-| `verdict`    | `"approved"` \| `"needs-revision"` | `"approved"` when `score` meets the target, otherwise `"needs-revision"`                    |
-| `findings`   | string[]                           | 3–5 entries, strongest first; stack minor objections together rather than listing each      |
-| `revision`   | object \| null                     | `null` when no [Phase 3](#phase-3-auto-iterate) iteration ran; otherwise `{ "changed": string, "rescore": integer }` |
+| Field        | Type                               | Constraint                                                                                                                               |
+| ------------ | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `expertRole` | string                             | Your expert role, verbatim from the prompt                                                                                               |
+| `score`      | integer                            | 0–100; the score of the plan AS WRITTEN (see [Phase 3](#phase-3-recommend-changes))                                                      |
+| `verdict`    | `"approved"` \| `"needs-revision"` | `"approved"` when `score` meets the target, otherwise `"needs-revision"`                                                                 |
+| `findings`   | string[]                           | 3–5 entries, strongest first; stack minor objections together rather than listing each                                                   |
+| `revision`   | object \| null                     | `null` when no [Phase 3](#phase-3-recommend-changes) changes were needed; otherwise advisory `{ "changed": string, "rescore": integer }` |
 
 Example (illustrative — emit the raw object, not this fenced form):
 
