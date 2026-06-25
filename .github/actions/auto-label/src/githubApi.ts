@@ -12,7 +12,7 @@ import { Octokit } from "@octokit/rest";
 
 import { fetchRawContent } from "@code-assistants/actions-core/fetchRawContent";
 
-import type { PackageJson } from "./enumerateWorkspaces.ts";
+import { parsePnpmPackages, type PackageJson } from "./enumerateWorkspaces.ts";
 
 /** A file changed by a pull request, with its pre-rename path when applicable. */
 export interface ChangedFile {
@@ -31,6 +31,8 @@ export interface LabelSpec {
 export interface GitHubApi {
   /** Parse the `package.json` inside `dir` at `ref` (`""`/`"."` → repo-root manifest). `null` when absent. */
   readPackageJson(dir: string, ref: string): Promise<PackageJson | null>;
+  /** Workspace globs from the root `pnpm-workspace.yaml` `packages:` at `ref`; `null` when the file is absent. */
+  readPnpmWorkspaces(ref: string): Promise<string[] | null>;
   /** Immediate child directory names of `parent` at `ref` (empty when the path is missing). */
   listSubdirs(parent: string, ref: string): Promise<string[]>;
   /** Files changed by the PR, including pre-rename paths. */
@@ -60,6 +62,11 @@ export function createGitHubApi(octokit: Octokit, owner: string, repo: string): 
     async readPackageJson(dir, ref) {
       const raw = await fetchRawContent({ octokit, owner, repo, path: packageJsonPath(dir), ref });
       return raw === null ? null : (JSON.parse(raw) as PackageJson);
+    },
+
+    async readPnpmWorkspaces(ref) {
+      const raw = await fetchRawContent({ octokit, owner, repo, path: "pnpm-workspace.yaml", ref });
+      return raw === null ? null : parsePnpmPackages(raw);
     },
 
     async listSubdirs(parent, ref) {

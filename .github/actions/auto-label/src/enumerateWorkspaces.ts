@@ -14,6 +14,8 @@
  * @see ./labelPr.ts and ./pruneLabels.ts — the two callers.
  */
 
+import { z } from "zod";
+
 /** A workspace member resolved to exactly what the labeler needs. */
 export interface WorkspaceMember {
   /** Repo-relative directory of the member (e.g. `.github/actions/files-sync`). */
@@ -28,6 +30,22 @@ export interface WorkspaceMember {
 export interface PackageJson {
   name?: string;
   workspaces?: string[];
+}
+
+/** The slice of a `pnpm-workspace.yaml` this module reads. */
+const pnpmWorkspaceSchema = z.object({ packages: z.array(z.string()).optional() });
+
+/**
+ * Parses the `packages:` workspace globs from a `pnpm-workspace.yaml`. pnpm repos
+ * declare members here rather than in `package.json` `workspaces`, so this is the
+ * fallback source for {@link collectMembers}. A missing or non-list `packages` field
+ * yields `[]` (no members), keeping a partial config a no-op rather than a crash; a
+ * syntactically invalid YAML file still throws from `Bun.YAML.parse`, surfacing the
+ * misconfiguration loudly.
+ */
+export function parsePnpmPackages(raw: string): string[] {
+  const parsed = pnpmWorkspaceSchema.safeParse(Bun.YAML.parse(raw));
+  return parsed.success ? (parsed.data.packages ?? []) : [];
 }
 
 /** Conservative charset for a derived label — guards against injection from a hostile member name. */

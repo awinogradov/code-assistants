@@ -10,6 +10,7 @@ function buildApi(overrides: Partial<GitHubApi>): GitHubApi {
   };
   return {
     readPackageJson: async () => null,
+    readPnpmWorkspaces: async () => null,
     listSubdirs: async () => [],
     listChangedFiles: notImplemented,
     listPrLabels: notImplemented,
@@ -46,6 +47,52 @@ describe("collectMembers", () => {
         label: "code-assistants/actions-core",
       },
     ]);
+  });
+
+  it("falls back to pnpm-workspace.yaml when package.json has no workspaces", async () => {
+    const pkgByPath: Record<string, PackageJson> = {
+      "": { name: "@fortune-os" },
+      "packages/nullable": { name: "@fortune-os/nullable" },
+    };
+    const api = buildApi({
+      readPackageJson: async (dir) => pkgByPath[dir] ?? null,
+      readPnpmWorkspaces: async () => ["packages/*"],
+      listSubdirs: async (parent) => (parent === "packages" ? ["nullable"] : []),
+    });
+
+    expect(await collectMembers(api, "headsha", "fortune-os/")).toEqual([
+      {
+        dir: "packages/nullable",
+        name: "@fortune-os/nullable",
+        label: "fortune-os/nullable",
+      },
+    ]);
+  });
+
+  it("ignores pnpm-workspace.yaml when package.json workspaces are present", async () => {
+    const pkgByPath: Record<string, PackageJson> = {
+      "": { name: "@code-assistants", workspaces: ["packages/*"] },
+      "packages/actions-core": { name: "@code-assistants/actions-core" },
+    };
+    let pnpmRead = false;
+    const api = buildApi({
+      readPackageJson: async (dir) => pkgByPath[dir] ?? null,
+      readPnpmWorkspaces: async () => {
+        pnpmRead = true;
+        return ["apps/*"];
+      },
+      listSubdirs: async (parent) => (parent === "packages" ? ["actions-core"] : []),
+    });
+
+    const members = await collectMembers(api, "headsha", "code-assistants/");
+    expect(members).toEqual([
+      {
+        dir: "packages/actions-core",
+        name: "@code-assistants/actions-core",
+        label: "code-assistants/actions-core",
+      },
+    ]);
+    expect(pnpmRead).toBe(false);
   });
 
   it("returns no members when the root manifest is absent at the ref", async () => {

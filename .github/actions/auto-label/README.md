@@ -10,9 +10,11 @@ required.
 
 The label prefix is **derived** from the root `package.json` `name`'s npm scope, so the action is
 drop-in for any Bun/npm workspace (`@code-assistants` → `code-assistants/`, `@symbiot/…` →
-`symbiot/`). Pass `label-prefix` to override. Member directories are read from the `workspaces`
-field, handling **both** literal paths (`.github/actions/files-sync`) and `<parent>/*` globs
-(`packages/*`).
+`symbiot/`). Pass `label-prefix` to override. Member directories are read from the `package.json`
+`workspaces` field, falling back to the `packages:` globs in `pnpm-workspace.yaml` when
+`package.json` declares no `workspaces` (so pnpm monorepos work too). Both sources handle literal
+paths (`.github/actions/files-sync`) and `<parent>/*` globs (`packages/*`); recursive `**` globs and
+`!` exclusions are not expanded.
 
 ## How it works
 

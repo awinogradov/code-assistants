@@ -10,6 +10,7 @@ function buildApi(overrides: Partial<GitHubApi>): GitHubApi {
   };
   return {
     readPackageJson: async () => null,
+    readPnpmWorkspaces: async () => null,
     listSubdirs: async () => [],
     listChangedFiles: notImplemented,
     listPrLabels: notImplemented,
