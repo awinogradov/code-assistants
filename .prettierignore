@@ -5,7 +5,7 @@ dist/
 coverage/
 .github/workflows/
 
-# Generated dependency license report — scripts/licenses-report.ts owns its
+# Generated dependency license report — the licenses-audit action owns its
 # formatting; keep Prettier from reformatting it (and re-introducing drift).
 /LICENSES.md
 
