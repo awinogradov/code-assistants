@@ -164,7 +164,8 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/). Motivati
 - **Type**: Required. One of: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`
 - **Scope**: Optional. Component or module name
 - **Subject**: Required. Lowercase, imperative mood, no period. Must describe WHAT changed (the technical modification), not WHY (the motivation). Bad: "close coverage gaps". Good: "add null-check to auth handler"
-- **Header length**: Total line (`type(scope): subject`) must not exceed 72 characters
+- **Subject length**: The subject (text after `type(scope): `) must not exceed 50 characters (commitlint `subject-max-length`)
+- **Header length**: The whole header line (`type(scope): subject`) must not exceed 100 characters (commitlint `header-max-length`)
 - **Issue numbers**: Do NOT include in commit messages (the PR description links the issue via [Magic Words](#magic-words))
 - **PR References**: Do NOT reference PRs, review comments, or feedback in commit messages. Commits must be self-contained and understandable without viewing any PR
 - **AI Co-authorship**: Do NOT include AI agent `Co-authored-by` trailers (e.g., Claude, ChatGPT, Copilot, Codex). Disable co-authorship in your AI tool settings.
