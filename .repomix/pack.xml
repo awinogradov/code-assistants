@@ -7713,6 +7713,7 @@ import {
   loadMcpServers,
   mcpConfigFileSchema,
   parseConfig,
+  parsePluginInstall,
   resolveClaudeBinary,
   resolveRunMode,
   safeParseJson,
@@ -7898,6 +7899,56 @@ describe("loadMcpServers", () => {
 
     const result = await loadMcpServers(filePath);
     expect(result).toEqual({});
+  });
+});
+
+describe("parsePluginInstall", () => {
+  test("returns undefined when both inputs are empty", () => {
+    expect(parsePluginInstall(undefined, undefined, "/work")).toBeUndefined();
+    expect(parsePluginInstall("  ", "", "/work")).toBeUndefined();
+  });
+
+  test("registers the workspace via '.' as an absolute directory source", () => {
+    expect(parsePluginInstall("platform-engineering=.", undefined, "/work")).toEqual({
+      extraKnownMarketplaces: {
+        "platform-engineering": { source: { source: "directory", path: "/work" } },
+      },
+    });
+  });
+
+  test("infers github, url, npm, and local sources", () => {
+    const result = parsePluginInstall(
+      "shared=acclaim-ai/plugins@v2\nsite=https://x.test/m.json\npkg=npm:@scope/mkt\nlocal=./vendor",
+      undefined,
+      "/work"
+    );
+    expect(result?.extraKnownMarketplaces).toEqual({
+      shared: { source: { source: "github", repo: "acclaim-ai/plugins", ref: "v2" } },
+      site: { source: { source: "url", url: "https://x.test/m.json" } },
+      pkg: { source: { source: "npm", package: "@scope/mkt" } },
+      local: { source: { source: "directory", path: "/work/vendor" } },
+    });
+  });
+
+  test("treats a local .json path as a file source", () => {
+    expect(parsePluginInstall("m=/abs/marketplace.json", undefined, "/work")).toEqual({
+      extraKnownMarketplaces: {
+        m: { source: { source: "file", path: "/abs/marketplace.json" } },
+      },
+    });
+  });
+
+  test("collects plugins into enabledPlugins", () => {
+    expect(
+      parsePluginInstall(undefined, "platform@platform-engineering, deploy@shared", "/work")
+    ).toEqual({
+      enabledPlugins: { "platform@platform-engineering": true, "deploy@shared": true },
+    });
+  });
+
+  test("skips entries with a blank name or an unresolvable source", () => {
+    expect(parsePluginInstall("=.", undefined, "/work")).toBeUndefined();
+    expect(parsePluginInstall("m=.", undefined, undefined)).toBeUndefined();
   });
 });
 
@@ -8169,7 +8220,7 @@ describe("buildSdkEnv", () => {
  */
 import { access, mkdir } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -8324,13 +8375,41 @@ export async function loadMcpServers(
  * Write Claude Code settings to a temporary directory.
  * Uses $RUNNER_TEMP to avoid polluting the runner's home directory.
  */
-async function writeSettings(settingsJson: string | undefined): Promise<string[]> {
-  if (!settingsJson) return ["project"];
+/**
+ * Validate the consumer-supplied `settings` JSON (external `CLAUDE_SETTINGS` input) before the
+ * action merges its marketplaces/plugins into it. `passthrough()` preserves every other Claude
+ * settings key the consumer set; the two plugin keys are checked as objects when present.
+ */
+const settingsSchema = z
+  .object({
+    extraKnownMarketplaces: z.record(z.string(), z.unknown()).optional(),
+    enabledPlugins: z.record(z.string(), z.unknown()).optional(),
+  })
+  .passthrough();
+
+async function writeSettings(
+  settingsJson: string | undefined,
+  pluginInstall: PluginInstallConfig | undefined
+): Promise<string[]> {
+  if (!settingsJson && !pluginInstall) return ["project"];
+
+  const base: z.infer<typeof settingsSchema> = settingsJson
+    ? settingsSchema.parse(JSON.parse(settingsJson))
+    : {};
+  // The action's marketplaces/plugins inputs are defaults; a consumer's own `settings` wins.
+  if (pluginInstall?.extraKnownMarketplaces) {
+    base.extraKnownMarketplaces = {
+      ...pluginInstall.extraKnownMarketplaces,
+      ...base.extraKnownMarketplaces,
+    };
+  }
+  if (pluginInstall?.enabledPlugins) {
+    base.enabledPlugins = { ...pluginInstall.enabledPlugins, ...base.enabledPlugins };
+  }
 
   const dir = `${process.env.RUNNER_TEMP ?? "/tmp"}/.claude`;
   await mkdir(dir, { recursive: true });
-  await Bun.write(`${dir}/settings.json`, settingsJson);
-
+  await Bun.write(`${dir}/settings.json`, JSON.stringify(base));
   process.env.CLAUDE_CONFIG_DIR = dir;
   return ["user", "project"];
 }
@@ -8342,6 +8421,91 @@ async function pathExists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** A marketplace source as accepted by the SDK's `extraKnownMarketplaces`. */
+type MarketplaceSource =
+  | { source: "directory"; path: string }
+  | { source: "file"; path: string }
+  | { source: "url"; url: string }
+  | { source: "github"; repo: string; ref?: string }
+  | { source: "npm"; package: string };
+
+/** The plugin-install slice of Claude settings the action injects from its inputs. */
+interface PluginInstallConfig {
+  extraKnownMarketplaces?: Record<string, { source: MarketplaceSource }>;
+  enabledPlugins?: Record<string, boolean>;
+}
+
+/** Split a newline/comma-separated list input into trimmed, non-empty entries. */
+function splitListInput(value: string | undefined): string[] {
+  return (value ?? "")
+    .split(/[\n,]/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Infer a marketplace source from a `marketplaces` input value, following the `claude plugin
+ * marketplace add` convention: `.` is the checked-out workspace, `owner/repo[@ref]` is GitHub,
+ * `http(s)://…` a URL, `npm:<pkg>` an npm package, and a `/`, `./`, or `../` path is a local
+ * directory (or `file` when it ends in `.json`). Relative local paths resolve against the
+ * workspace, so a consumer never hardcodes the runner's absolute checkout path.
+ */
+function marketplaceSource(
+  spec: string,
+  workspace: string | undefined
+): MarketplaceSource | undefined {
+  if (spec === "" || spec === ".") {
+    return workspace ? { source: "directory", path: workspace } : undefined;
+  }
+  if (/^https?:\/\//.test(spec)) return { source: "url", url: spec };
+  if (spec.startsWith("npm:")) return { source: "npm", package: spec.slice("npm:".length) };
+  if (/^\.{0,2}\//.test(spec)) {
+    const path = isAbsolute(spec) ? spec : join(workspace ?? ".", spec);
+    return spec.endsWith(".json") ? { source: "file", path } : { source: "directory", path };
+  }
+  const [repo, ref] = spec.split("@");
+  return ref ? { source: "github", repo, ref } : { source: "github", repo };
+}
+
+/**
+ * Build the plugin-install config from the action's `marketplaces`/`plugins` inputs so the
+ * SDK's headless install (`CLAUDE_CODE_SYNC_PLUGIN_INSTALL`) can register arbitrary
+ * marketplaces and install the plugins a workflow asks for. `marketplaces` lines are
+ * `name=source` (see {@link marketplaceSource}); `plugins` lines are `plugin@marketplace`.
+ *
+ * @param marketplacesInput - Raw `marketplaces` input (newline/comma list of `name=source`).
+ * @param pluginsInput - Raw `plugins` input (newline/comma list of `plugin@marketplace`).
+ * @param workspace - Repo root for resolving local sources (typically `$GITHUB_WORKSPACE`).
+ * @returns The merged config, or `undefined` when neither input contributes anything.
+ */
+export function parsePluginInstall(
+  marketplacesInput: string | undefined,
+  pluginsInput: string | undefined,
+  workspace: string | undefined
+): PluginInstallConfig | undefined {
+  const extraKnownMarketplaces: Record<string, { source: MarketplaceSource }> = {};
+  for (const entry of splitListInput(marketplacesInput)) {
+    const separator = entry.indexOf("=");
+    const name = (separator === -1 ? entry : entry.slice(0, separator)).trim();
+    const source = marketplaceSource(
+      (separator === -1 ? "" : entry.slice(separator + 1)).trim(),
+      workspace
+    );
+    if (name && source) extraKnownMarketplaces[name] = { source };
+  }
+
+  const enabledPlugins: Record<string, boolean> = {};
+  for (const plugin of splitListInput(pluginsInput)) enabledPlugins[plugin] = true;
+
+  const hasMarketplaces = Object.keys(extraKnownMarketplaces).length > 0;
+  const hasPlugins = Object.keys(enabledPlugins).length > 0;
+  if (!hasMarketplaces && !hasPlugins) return undefined;
+  return {
+    ...(hasMarketplaces ? { extraKnownMarketplaces } : {}),
+    ...(hasPlugins ? { enabledPlugins } : {}),
+  };
 }
 
 /**
@@ -8464,7 +8628,12 @@ let log: pino.Logger | undefined;
 async function run(): Promise<void> {
   log = await createLogger();
   const config = parseConfig();
-  const settingSources = await writeSettings(config.settingsJson);
+  const pluginInstall = parsePluginInstall(
+    process.env.CLAUDE_INSTALL_MARKETPLACES,
+    process.env.CLAUDE_INSTALL_PLUGINS,
+    process.env.GITHUB_WORKSPACE
+  );
+  const settingSources = await writeSettings(config.settingsJson, pluginInstall);
   const mcpServers = await loadMcpServers(config.mcpConfigPath);
 
   const abortController = new AbortController();
@@ -9964,6 +10133,14 @@ inputs:
     description: "Leading slash command / prompt for react mode (comment reactions). The action appends the runtime arguments block (REPO, PR_NUMBER, REVIEWER, PR_AUTHOR, COMMENT_BODY, COMMENT_PATH, COMMENT_LINE, NEEDS_REVERDICT, RULES_DOC_URL) after this value, so a custom prompt still receives them. Override to run a different reply skill without forking the action."
     required: false
     default: "/autopilot:pr-answer"
+  marketplaces:
+    description: "Plugin marketplaces to register before the run, one `name=source` per line. `source` follows `claude plugin marketplace add`: `.` is the checked-out repo, `owner/repo[@ref]` is GitHub, `https://…` a URL, `npm:<pkg>` an npm package, and a `./` or `/` path is a local directory (or a `.json` file). Relative paths resolve against the workspace."
+    required: false
+    default: ""
+  plugins:
+    description: "Plugins to install before the run, one `plugin@marketplace` per line; the marketplace must be registered via `marketplaces` (or the consumer repo's own settings). Their slash commands then resolve for `review_prompt` / `react_prompt`."
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -10418,8 +10595,10 @@ runs:
         CLAUDE_DISALLOWED_TOOLS: "Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh issue comment:*),Bash(gh api * -X *:*),Bash(gh api * --method *:*),Bash(gh api * -f *:*),Bash(gh api * -F *:*),Bash(gh api * --field *:*),Bash(gh api * --raw-field *:*),Bash(gh api * --input *:*),Bash(gh api graphql:*)"
         CLAUDE_JSON_SCHEMA: '{"type":"object","properties":{"verdict":{"type":"string","enum":["approve","requestChanges","comment"]},"reviewComment":{"type":"string"},"inlineComments":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"},"body":{"type":"string"},"startLine":{"type":"integer"},"suggestion":{"type":"string"}},"required":["path","line","body"]}}},"required":["verdict","reviewComment"]}'
         CLAUDE_PLUGIN_DIR: ${{ steps.plugin.outputs.dir }}
-        # Install plugins the consumer repo declares in enabledPlugins; the SDK is cache-only without this.
+        # Register/install the marketplaces + plugins requested via inputs; the SDK is cache-only without this.
         CLAUDE_CODE_SYNC_PLUGIN_INSTALL: "1"
+        CLAUDE_INSTALL_MARKETPLACES: ${{ inputs.marketplaces }}
+        CLAUDE_INSTALL_PLUGINS: ${{ inputs.plugins }}
         CLAUDE_MCP_CONFIG: ${{ steps.mcp.outputs.path }}
         CLAUDE_SETTINGS: ${{ inputs.settings }}
         EXECUTION_OUTPUT_FILE: ${{ runner.temp }}/claude-execution-output.json
@@ -10488,8 +10667,10 @@ runs:
         CLAUDE_DISALLOWED_TOOLS: "Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh issue comment:*),Bash(gh api * -X *:*),Bash(gh api * --method *:*),Bash(gh api * -f *:*),Bash(gh api * -F *:*),Bash(gh api * --field *:*),Bash(gh api * --raw-field *:*),Bash(gh api * --input *:*),Bash(gh api graphql:*)"
         CLAUDE_JSON_SCHEMA: '{"type":"object","properties":{"reply":{"type":"string"},"resolveComments":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"}},"required":["path","line"]}},"updatedVerdict":{"type":["string","null"],"enum":["approve","requestChanges","comment",null]},"updatedReviewComment":{"type":["string","null"]}},"required":["reply"]}'
         CLAUDE_PLUGIN_DIR: ${{ steps.plugin.outputs.dir }}
-        # Install plugins the consumer repo declares in enabledPlugins; the SDK is cache-only without this.
+        # Register/install the marketplaces + plugins requested via inputs; the SDK is cache-only without this.
         CLAUDE_CODE_SYNC_PLUGIN_INSTALL: "1"
+        CLAUDE_INSTALL_MARKETPLACES: ${{ inputs.marketplaces }}
+        CLAUDE_INSTALL_PLUGINS: ${{ inputs.plugins }}
         CLAUDE_MCP_CONFIG: ${{ steps.mcp.outputs.path }}
         CLAUDE_SETTINGS: ${{ inputs.settings }}
         EXECUTION_OUTPUT_FILE: ${{ runner.temp }}/claude-reaction-output.json
@@ -11269,6 +11450,8 @@ The `if` condition prevents runner provisioning for non-PR issue comments. All o
 | `rules_doc_url`        | no       | see `action.yml`         | Canonical blob URL of the `pr:review` SKILL.md (literal default in `action.yml`); skills build `CHECK-*` links from it. Override only for forks.                              |
 | `review_prompt`        | no       | `/autopilot:pr-review`   | Slash command for `review` mode; override to run a different review skill. Appends runtime args (REPO, PR_NUMBER, REVIEWER, PR_AUTHOR, RULES_DOC_URL).                        |
 | `react_prompt`         | no       | `/autopilot:pr-answer`   | Slash command for `react` mode; override to run a different reply skill. Appends runtime args (REPO, PR_NUMBER, REVIEWER, comment fields, NEEDS_REVERDICT, RULES_DOC_URL).    |
+| `marketplaces`         | no       | —                        | Plugin marketplaces to register, one `name=source` per line. See [Installing plugins](#installing-plugins).                                                                   |
+| `plugins`              | no       | —                        | Plugins to install, one `plugin@marketplace` per line. See [Installing plugins](#installing-plugins).                                                                         |
 | `debug_logs`           | no       | `false`                  | Enable DEBUG-level Claude trace logging and always upload the execution artifact.                                                                                             |
 | `pr_number`            | no       | event context            | Override auto-detected PR number.                                                                                                                                             |
 | `pr_head_sha`          | no       | event context            | Override auto-detected PR head SHA.                                                                                                                                           |
@@ -11295,6 +11478,24 @@ The action invokes Claude Code with the local `claude-plugins/autopilot` plugin 
 - `/autopilot:pr-answer` — reply to a PR comment thread and optionally resolve / update the existing review
 
 The `pr:review` skill carries the full review rubric (all `CHECK-*` rules) inline and reviews every dimension itself in one model pass — no review sub-agents and no orchestrator fan-out.
+
+To run a different repo's skills instead — e.g. a consumer's own `pr:review` — point `review_prompt` / `react_prompt` at them and install the plugin that provides them (see below).
+
+## Installing plugins
+
+`marketplaces` and `plugins` install Claude Code plugins before the run, so `review_prompt` / `react_prompt` can target a skill the bundled `autopilot` plugin doesn't provide. Each `marketplaces` line is `name=source` and each `plugins` line is `plugin@marketplace`; the action registers the marketplaces (`extraKnownMarketplaces`) and installs the plugins (`enabledPlugins`), then Claude Code's headless install resolves their slash commands.
+
+```yaml
+with:
+  review_prompt: "/platform:pr-review"
+  react_prompt: "/platform:pr-react"
+  marketplaces: |
+    platform-engineering=.
+  plugins: |
+    platform@platform-engineering
+```
+
+`source` follows `claude plugin marketplace add`: `.` is the checked-out repo (resolved to its absolute `$GITHUB_WORKSPACE`), `owner/repo[@ref]` is a GitHub repo, `https://…` a marketplace URL, `npm:<pkg>` an npm package, and a `./` / `/` path is a local directory (or a `.json` file). A consumer's own `extraKnownMarketplaces` / `enabledPlugins` in `.claude/settings.json` still win on key collisions.
 
 ## Review run-summary footer
 
