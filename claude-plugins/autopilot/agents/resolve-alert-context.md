@@ -24,41 +24,48 @@ The invoking skill provides in the prompt:
 
 ## Phase 1: Fetch Alert
 
-Store the full JSON so [Phase 2](#phase-2-degradation) can read every field without another API call:
+Probe auth, then fetch the alert capturing the HTTP status and stderr separately, so [Phase 2](#phase-2-degradation) can classify a failure instead of seeing an empty string:
 
 ```bash
-ALERT_JSON=$(gh api "repos/$REPO/code-scanning/alerts/$NUMBER" 2>/dev/null)
+# Auth probe first — an empty login means gh is not authenticated.
+LOGIN=$(gh api user --jq .login 2>/dev/null)
+
+# Fetch with response headers (--include) so the HTTP status line is observable; keep stderr for the generic-error case.
+STDERR_FILE=$(mktemp)
+RESPONSE=$(gh api --include "repos/$REPO/code-scanning/alerts/$NUMBER" 2>"$STDERR_FILE")
+ALERT_EXIT=$?
+HTTP_CODE=$(printf '%s\n' "$RESPONSE" | awk 'NR==1 {print $2; exit}')
+ALERT_JSON=$(printf '%s\n' "$RESPONSE" | awk 'body {print} /^\r?$/ {body=1}')
 ```
 
 Extract (with `jq`): `.number`, `.state`, `.rule.id`, `.rule.severity` (fall back to `.rule.security_severity_level` when `severity` is null), `.rule.description`, `.most_recent_instance.location.path`, `.most_recent_instance.location.start_line`, `.most_recent_instance.message.text`, and `.html_url`.
 
 ## Phase 2: Degradation
 
-The code-scanning API fails in predictable ways. On ANY failure, do not crash — return the [Phase 3](#phase-3-output) object with `state: "unresolved"` and a `resolveError` string so the parent can surface it and STOP rather than misroute. Emit exactly one of:
+The code-scanning API fails in predictable ways. On ANY failure, do not crash — return the [Phase 3](#phase-3-output) object with `state: "unresolved"` and a `resolveError` string so the parent can surface it and STOP rather than misroute. Resolve `resolveError` with these steps, stopping at the first match, using the variables captured in [Phase 1](#phase-1-fetch-alert):
 
-- `unresolved — gh not authenticated` — `gh api user` returns empty.
-- `unresolved — security_events scope required` — the alerts call returns 403 (token lacks `security_events`).
-- `unresolved — alert #<n> not found` — the alerts call returns 404 (no such alert, or code scanning not enabled for the repo).
-- `unresolved — gh api error: <first line of stderr>` — any other non-zero exit.
-
-On success, set `resolveError` to `null`.
+1. `LOGIN` is empty → `unresolved — gh not authenticated`.
+2. `HTTP_CODE` is `403` → `unresolved — security_events scope required` (token lacks `security_events`).
+3. `HTTP_CODE` is `404` → `unresolved — alert #<n> not found` (no such alert, or code scanning not enabled for the repo).
+4. `ALERT_EXIT` is non-zero or `HTTP_CODE` is not a `2xx` → `unresolved — gh api error: <first line of "$STDERR_FILE">`.
+5. Otherwise success: set `resolveError` to `null` and populate the [Phase 3](#phase-3-output) fields from `ALERT_JSON`.
 
 ## Phase 3: Output
 
 Output ONLY a single JSON object matching the schema below.
 
-| Field          | Type            | Constraint                                                         |
-| -------------- | --------------- | ------------------------------------------------------------------ |
-| `source`       | string          | e.g. `"Code-scanning alert #6"`                                    |
-| `alertNumber`  | integer         | The alert number                                                   |
-| `ruleId`       | string \| null  | e.g. `"js/tainted-format-string"`; `null` when unresolved          |
-| `severity`     | string \| null  | e.g. `"error"`, `"high"`; `null` when unresolved                   |
-| `state`        | string          | `"open"`, `"fixed"`, `"dismissed"`, or `"unresolved"` (on failure) |
-| `file`         | string \| null  | `most_recent_instance.location.path`; `null` when unresolved       |
-| `line`         | integer \| null | `most_recent_instance.location.start_line`; `null` when unresolved |
-| `message`      | string \| null  | `most_recent_instance.message.text`; `null` when unresolved        |
-| `htmlUrl`      | string \| null  | The API's canonical `html_url`; `null` when unresolved             |
-| `resolveError` | string \| null  | One of the [Phase 2](#phase-2-degradation) status strings on failure; `null` on success    |
+| Field          | Type            | Constraint                                                                              |
+| -------------- | --------------- | --------------------------------------------------------------------------------------- |
+| `source`       | string          | e.g. `"Code-scanning alert #6"`                                                         |
+| `alertNumber`  | integer         | The alert number                                                                        |
+| `ruleId`       | string \| null  | e.g. `"js/tainted-format-string"`; `null` when unresolved                               |
+| `severity`     | string \| null  | e.g. `"error"`, `"high"`; `null` when unresolved                                        |
+| `state`        | string          | `"open"`, `"fixed"`, `"dismissed"`, or `"unresolved"` (on failure)                      |
+| `file`         | string \| null  | `most_recent_instance.location.path`; `null` when unresolved                            |
+| `line`         | integer \| null | `most_recent_instance.location.start_line`; `null` when unresolved                      |
+| `message`      | string \| null  | `most_recent_instance.message.text`; `null` when unresolved                             |
+| `htmlUrl`      | string \| null  | The API's canonical `html_url`; `null` when unresolved                                  |
+| `resolveError` | string \| null  | One of the [Phase 2](#phase-2-degradation) status strings on failure; `null` on success |
 
 Example (success):
 
