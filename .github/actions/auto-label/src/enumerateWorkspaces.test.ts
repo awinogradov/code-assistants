@@ -5,6 +5,7 @@ import {
   deriveLabelPrefix,
   enumerateMembers,
   memberSegment,
+  parsePnpmPackages,
   resolveWorkspaceDirs,
   type PackageJson,
 } from "./enumerateWorkspaces.ts";
@@ -28,6 +29,23 @@ describe("resolveWorkspaceDirs", () => {
       "actions-core",
     ]);
     expect(dirs).toEqual([".github/actions/files-sync", "packages/actions-core"]);
+  });
+});
+
+describe("parsePnpmPackages", () => {
+  it("reads the packages: globs from a pnpm-workspace.yaml", () => {
+    expect(parsePnpmPackages("packages:\n  - apps/*\n  - packages/*\n")).toEqual([
+      "apps/*",
+      "packages/*",
+    ]);
+  });
+
+  it("returns [] when packages: is absent (partial config is a no-op)", () => {
+    expect(parsePnpmPackages("onlyBuiltDependencies:\n  - esbuild\n")).toEqual([]);
+  });
+
+  it("returns [] when packages is not a list of strings", () => {
+    expect(parsePnpmPackages("packages: true\n")).toEqual([]);
   });
 });
 

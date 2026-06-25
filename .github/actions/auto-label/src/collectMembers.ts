@@ -32,7 +32,9 @@ export async function collectMembers(
   prefix: string,
 ): Promise<WorkspaceMember[]> {
   const rootPkg = (await api.readPackageJson("", ref)) ?? {};
-  const workspaces = rootPkg.workspaces ?? [];
+  const workspaces = rootPkg.workspaces?.length
+    ? rootPkg.workspaces
+    : ((await api.readPnpmWorkspaces(ref)) ?? []);
 
   const subdirEntries = await Promise.all(
     globParents(workspaces).map(
@@ -49,5 +51,5 @@ export async function collectMembers(
   const pkgs = new Map<string, PackageJson | null>(pkgEntries);
   const readPackageJson = (dir: string): PackageJson | null => pkgs.get(dir) ?? null;
 
-  return enumerateMembers(rootPkg, prefix, readPackageJson, listSubdirs);
+  return enumerateMembers({ ...rootPkg, workspaces }, prefix, readPackageJson, listSubdirs);
 }
