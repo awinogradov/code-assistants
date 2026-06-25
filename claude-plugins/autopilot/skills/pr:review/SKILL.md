@@ -69,6 +69,8 @@ Extract the linked issue ID from PR metadata. Check in order, stop at first matc
 
 Load the remaining context in parallel — the codebase snapshot, the prior inline review threads, and (when an issue is linked) the linked-issue context plus the related TODOs / issue references in the codebase. Prior-review verdicts and summary bodies already come from the [§1.1](#11-pr-context) `gh pr view` output; the `fetch-pr-reviews` agent adds the per-line inline annotations via read-only `gh api`, returning a categorized summary (raw API output stays out of this context).
 
+<!-- Canonical snapshot-acquire recipe (carries includePatterns); pr:answer and pr:resolve mirror it byte-for-byte — keep in sync. -->
+
 ```
 Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
   Check whether `.repomix/pack.xml` exists at the repository root.

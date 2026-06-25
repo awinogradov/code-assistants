@@ -52,6 +52,8 @@ Do not call any skill not listed in `allowed-tools` above. The title and descrip
 
 ## AskUserQuestion Contract (MANDATORY)
 
+<!-- Canonical AskUserQuestion contract. The same 8-rule block in pr:update, commits:create, and issue:create mirrors this one — keep them in sync. -->
+
 **Autopilot bypass:** When `autopilotMode` is true (from [Phase 1](#phase-1-validate-current-state)), this contract is moot — the [Phase 5](#phase-5-verify-with-user) confirmation prompt is skipped. Generate the title and body, then proceed directly to [Phase 6](#phase-6-create-pull-request).
 
 Every AskUserQuestion call that presents content for review (PR previews in [Phase 5](#phase-5-verify-with-user)) MUST follow these exact rules. Simple choice dialogs ([Phase 1](#phase-1-validate-current-state) uncommitted changes) are exempt from the preview requirement.
