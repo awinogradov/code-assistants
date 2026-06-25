@@ -9810,7 +9810,7 @@ inputs:
     required: false
     default: "/autopilot:pr-review"
   react_prompt:
-    description: "Leading slash command / prompt for react mode (comment reactions). The action appends the runtime arguments block (REPO, PR_NUMBER, REVIEWER, COMMENT_BODY, COMMENT_PATH, COMMENT_LINE, NEEDS_REVERDICT, RULES_DOC_URL) after this value, so a custom prompt still receives them. Override to run a different reply skill without forking the action."
+    description: "Leading slash command / prompt for react mode (comment reactions). The action appends the runtime arguments block (REPO, PR_NUMBER, REVIEWER, PR_AUTHOR, COMMENT_BODY, COMMENT_PATH, COMMENT_LINE, NEEDS_REVERDICT, RULES_DOC_URL) after this value, so a custom prompt still receives them. Override to run a different reply skill without forking the action."
     required: false
     default: "/autopilot:pr-answer"
 
@@ -10328,7 +10328,7 @@ runs:
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude_oauth_token }}
         GH_TOKEN: ${{ inputs.bot_token }}
         CLAUDE_PROMPT: |
-          ${{ inputs.react_prompt }} REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} COMMENT_BODY: ${{ steps.ctx.outputs.comment_body }} COMMENT_PATH: ${{ steps.ctx.outputs.comment_path }} COMMENT_LINE: ${{ steps.ctx.outputs.comment_line }} NEEDS_REVERDICT: ${{ steps.classify.outputs.needs_reverdict }} RULES_DOC_URL: ${{ inputs.rules_doc_url }}
+          ${{ inputs.react_prompt }} REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} PR_AUTHOR: ${{ github.event.pull_request.user.login || github.event.issue.user.login }} COMMENT_BODY: ${{ steps.ctx.outputs.comment_body }} COMMENT_PATH: ${{ steps.ctx.outputs.comment_path }} COMMENT_LINE: ${{ steps.ctx.outputs.comment_line }} NEEDS_REVERDICT: ${{ steps.classify.outputs.needs_reverdict }} RULES_DOC_URL: ${{ inputs.rules_doc_url }}
         CLAUDE_RUN_MODE: react
         CLAUDE_MODEL: ${{ inputs.model }}
         CLAUDE_ALLOWED_TOOLS: "Bash(gh:*),mcp__repomix__*,mcp__context7__*,mcp__Ref__*,mcp__exa__*,mcp__perplexity__*,Read,Glob,Grep"
@@ -33755,12 +33755,28 @@ Also fetch PR metadata:
 gh pr view <PR_NUMBER> -R <OWNER>/<REPO> --json title,author,reviewDecision,reviewRequests
 ```
 
+Fetch review-thread resolution state — this is the source of truth for "is this comment resolved", paginating past the 100-node page so long PRs don't silently drop threads (`--paginate` follows `$endCursor` automatically):
+
+```bash
+gh api graphql --paginate -F owner=<OWNER> -F repo=<REPO> -F pr=<PR_NUMBER> -f query='
+  query($owner: String!, $repo: String!, $pr: Int!, $endCursor: String) {
+    repository(owner: $owner, name: $repo) {
+      pullRequest(number: $pr) {
+        reviewThreads(first: 100, after: $endCursor) {
+          nodes { path line isResolved isOutdated comments(first: 1) { nodes { author { login } body } } }
+          pageInfo { hasNextPage endCursor }
+        }
+      }
+    }
+  }'
+```
+
 ## Phase 2: Filter
 
 Remove from processing:
 
-- **Resolved/outdated threads** — comments where `position` is null or thread is resolved
-- **Bot comments** — comments from users with `[bot]` suffix or known CI bots
+- **Resolved threads** — drop a comment when its review thread has `isResolved: true`. Match the REST comment to a `reviewThreads` node by `path` + `line`, disambiguating with the thread's first-comment author/body when several threads share a file (outdated threads report `line: null`, so never merge distinct threads on a `(path, null)` key). Treat `isOutdated: true` as **informational only** — the diff line moved, but an unresolved outdated comment is still actionable, so keep it. Do NOT use REST `position: null` as a resolved signal (it only means the line is outdated).
+- **CI/automation bots only** — drop a comment only when its author login is in the CI-bot denylist: `github-actions[bot]`, `dependabot[bot]`, `codecov[bot]`, `coderabbitai[bot]` (extend as the repo needs). Do NOT drop by the generic `[bot]` suffix — real review bots such as `cubic-dev-ai[bot]` and `symbiot-bot` must survive.
 - **PR author's own comments** — these are responses, not review items
 - **Already-addressed comments** — threads where the PR author has replied acknowledging the fix
 
@@ -33816,7 +33832,7 @@ Output ONLY the structured block. No preamble or commentary:
 - `[file]:[line]` - @[reviewer]: [comment summary] (comment_id: [id])
 ```
 
-Include `comment_id` for each comment so the parent skill can reply to specific threads.
+Include `comment_id` for each comment so the parent skill can reply to specific threads. `comment_id` is the REST review-comment `id` from the `/comments` payload — the GraphQL `reviewThreads` query is used only to read `isResolved`/`isOutdated`, not for comment IDs.
 
 If no unresolved comments found, output:
 
@@ -35785,7 +35801,7 @@ Use the agent's analysis to decide the commit flow:
    - The concrete modifications made (what files, functions, values, or behaviors changed)
 3. Generate commit message following the format below — the title must name the specific thing that changed, and the body must list the concrete modifications
 4. **WHAT-not-WHY validation**: Check the generated title against the WHY signal words and vague signal words listed in the WHAT-not-WHY Rule section below. If the title contains any of those words followed by abstract goals (not technical specifics), or contains the words "review", "feedback", "comments", or "suggestions", regenerate the title using only concrete technical details from the diff. Repeat up to 3 times. If the title still fails, present it to the user with a note that it may need manual rewording.
-5. Verify the title is at most 72 characters: run `printf '%s' "<title>" | wc -m`. If the count exceeds 72, regenerate a shorter title and re-run the check. Do not present a title to the user that exceeds 72 characters.
+5. Verify two commitlint length limits (`subject-max-length` = 50, `header-max-length` = 100 in `commitlint.config.mjs`): the subject — the text after `type(scope): ` — at most 50 characters (`printf '%s' "<subject>" | wc -m`), and the whole header (`type(scope): subject`) at most 100 (`printf '%s' "<title>" | wc -m`). If either exceeds its limit, regenerate a shorter title and re-run both checks. Do not present a title to the user that exceeds these limits.
 
 **Autopilot bypass:** If `autopilotMode` is true, skip steps 6–9 below. Run `git commit -m "<message>"` directly with the generated message and continue to [Phase 5](#phase-5-offer-pr-update).
 
@@ -35837,7 +35853,7 @@ For each category that has files:
 2. `git add <category files>`
 3. `git diff --staged` — read the diff and identify what specifically changed (files, functions, values, behaviors)
 4. Generate commit message for this category
-5. Verify the title is at most 72 characters: run `printf '%s' "<title>" | wc -m`. If the count exceeds 72, regenerate a shorter title and re-run the check.
+5. Verify both commitlint length limits (`subject-max-length` = 50, `header-max-length` = 100): subject (text after `type(scope): `) at most 50 — `printf '%s' "<subject>" | wc -m`; full header (`type(scope): subject`) at most 100 — `printf '%s' "<title>" | wc -m`. If either exceeds, regenerate a shorter title and re-run.
 
 After analyzing all categories, `git reset HEAD` to unstage everything.
 
@@ -35918,7 +35934,7 @@ The body is required for `feat`, `fix`, and `refactor` commits. It may be omitte
 
 ### Rules
 
-- Title: lowercase, no period, imperative mood. MUST NOT exceed 72 characters total (including type and scope prefix) — this is enforced by commitlint and CI
+- Title: lowercase, no period, imperative mood. The subject (text after `type(scope): `) MUST NOT exceed 50 characters and the whole header line (`type(scope): subject`) MUST NOT exceed 100 characters — enforced by commitlint (`subject-max-length` / `header-max-length`) and CI
 - Title must name the specific thing that changed, not just the action
 - Body required for `feat`, `fix`, and `refactor`. Body bullet points list concrete modifications
 - Never use GitHub issue numbers or PR references in commit messages (issue linking happens on the PR via magic words)
@@ -36264,13 +36280,7 @@ This handles:
 - Creating proper conventional commit messages
 - User confirmation for each commit
 
-**Commit message rules (per CONTRIBUTING.md):**
-
-- Title: lowercase, imperative, no period, ≤72 chars (`type(scope): subject`)
-- Subject describes WHAT changed (technical specifics), not WHY (motivation)
-- Body required for `feat`/`fix`/`refactor`
-- No GitHub issue numbers or PR references in commit messages
-- No AI agent `Co-authored-by` trailers
+**Commit message rules:** `commits:create` owns and enforces the full set — subject (text after `type(scope): `) ≤ 50 and whole header ≤ 100 (commitlint `subject-max-length` / `header-max-length`), lowercase imperative no-period title, WHAT-not-WHY subject, body required for `feat`/`fix`/`refactor`, no issue/PR numbers, no AI `Co-authored-by` trailers. See [commits:create Rules](../commits:create/SKILL.md#rules); this skill restages the changes and delegates the message creation to it.
 
 ## Phase 7: Success Output
 
@@ -41372,7 +41382,7 @@ Write the most helpful, readable output you can: plain, direct prose; every refe
 ---
 name: pr:answer
 description: Answer a user comment on a PR review and update review state if needed
-argument-hint: "REPO: <owner/repo> PR_NUMBER: <number> REVIEWER: <bot-login> COMMENT_BODY: <text> COMMENT_PATH: <path> COMMENT_LINE: <line> RULES_DOC_URL: <url>"
+argument-hint: "REPO: <owner/repo> PR_NUMBER: <number> REVIEWER: <bot-login> PR_AUTHOR: <author-login> COMMENT_BODY: <text> COMMENT_PATH: <path> COMMENT_LINE: <line> NEEDS_REVERDICT: <true|false> RULES_DOC_URL: <url>"
 allowed-tools:
   - Read
   - Glob
@@ -41729,6 +41739,8 @@ If the agent reports breaking changes, treat `--release-notes` as mandatory — 
 
 ## Phase 3: Generate PR Title
 
+> **Canonical:** title/branch grammar is owned by [pr:validate Rules](../pr:validate/SKILL.md#rules); the title rules here mirror it — keep in sync.
+
 **Standard (GitHub) format:** `<Business-valuable description>`
 **Linear format:** `<LINEAR-ID>: <Business-valuable description>` (e.g., `ENG-123: Allow theme selection`)
 **Special prefix format:** `<PREFIX>: <Business-valuable description>` where `<PREFIX>` is one of `HOTFIX`, `TRIVIAL`, `MAINTENANCE`, `PROPOSAL`, `SECURITY`
@@ -41751,6 +41763,8 @@ If the agent reports breaking changes, treat `--release-notes` as mandatory — 
 - Avoids technical jargon without context
 
 ## Phase 4: Generate PR Description
+
+> **Canonical:** this section is the canonical PR-body grammar (sections, ordering, formatting, magic words); [pr:update Phase 5](../pr:update/SKILL.md#phase-5-generate-updated-pr-title-and-body) mirrors it — keep the two in sync.
 
 **Reference formatting (MANDATORY):** The generated body — both the description and the release-notes section — MUST follow the reference-formatting rules inlined at the end of this skill. The rule that keeps regressing: render every mention of a standard consistently as a link to its versioned RFC by stable ID (e.g., `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`), never a mix of bare text and links in the same body.
 
@@ -41781,7 +41795,7 @@ Each section is separated by `---`. The `**Issues:**` section is ALWAYS last. Pl
 Include this section (titled `**Release notes:**`) with a `---` separator when:
 
 - `--release-notes` flag is present, OR
-- Breaking changes were detected ([Phase 2](#phase-2-gather-context) step 8 — mandatory)
+- Breaking changes were detected by the [analyze-pr-commits](../../agents/analyze-pr-commits.md#phase-3-analyze-change-significance) agent in [Phase 2](#phase-2-gather-context) (mandatory)
 
 Content rules:
 
@@ -41873,7 +41887,7 @@ Closes #<issue-from-branch>
 
 **Autopilot bypass:** If `autopilotMode` is true, skip the AskUserQuestion confirmation below. Before proceeding to [Phase 6](#phase-6-create-pull-request):
 
-- If meaningful changes are detected ([Phase 2](#phase-2-gather-context) step 7) AND neither `--release-notes` nor breaking changes triggered the release notes section, auto-generate the `**Release notes:**` section using the rules in [Phase 4](#phase-4-generate-pr-description) and insert it between the description and the `**Issues:**` section (with `---` separators).
+- If meaningful changes are detected (per the [analyze-pr-commits](../../agents/analyze-pr-commits.md#phase-3-analyze-change-significance) significance from [Phase 2](#phase-2-gather-context)) AND neither `--release-notes` nor breaking changes triggered the release notes section, auto-generate the `**Release notes:**` section using the rules in [Phase 4](#phase-4-generate-pr-description) and insert it between the description and the `**Issues:**` section (with `---` separators).
 - Then proceed directly to [Phase 6](#phase-6-create-pull-request) with the resulting title and body.
 
 Present PR details using **AskUserQuestion tool** with preview.
@@ -41889,7 +41903,7 @@ Present PR details using **AskUserQuestion tool** with preview.
    - `header`: "Create PR"
    - `options`:
 
-     **If `--release-notes` was NOT used AND no breaking changes AND meaningful changes detected ([Phase 2](#phase-2-gather-context) step 7):**
+     **If `--release-notes` was NOT used AND no breaking changes AND meaningful changes detected (per the [analyze-pr-commits](../../agents/analyze-pr-commits.md#phase-3-analyze-change-significance) significance from [Phase 2](#phase-2-gather-context)):**
      [
      { label: "Create PR", description: "Create pull request ready for review", preview: "<full PR content>" },
      { label: "Add release notes", description: "Generate a release notes section for the changelog", preview: "<full PR content>" },
@@ -44148,6 +44162,8 @@ Tool parameters:
 
 ## Phase 5: Generate Updated PR Title and Body
 
+> **Canonical:** the body grammar is canonical in [pr:create Phase 4](../pr:create/SKILL.md#phase-4-generate-pr-description) and the title/branch grammar in [pr:validate Rules](../pr:validate/SKILL.md#rules) — keep in sync. The clauses below unique to updating (preserving existing links, dedup) are intentional, not drift.
+
 ### PR Title
 
 **Standard (GitHub) format:** `<Business-valuable description>`
@@ -44202,7 +44218,7 @@ Each section is separated by `---`. The `**Issues:**` section is ALWAYS last. Pl
 Include this section (titled `**Release notes:**`) with a `---` separator when:
 
 - `--release-notes` flag is present in the command invocation, OR
-- Breaking changes were detected ([Phase 3](#phase-3-gather-context) step 10 — mandatory)
+- Breaking changes were detected by the [analyze-pr-commits](../../agents/analyze-pr-commits.md#phase-3-analyze-change-significance) agent in [Phase 3](#phase-3-gather-context) (mandatory)
 
 Content rules:
 
@@ -51865,7 +51881,8 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/). Motivati
 - **Type**: Required. One of: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`
 - **Scope**: Optional. Component or module name
 - **Subject**: Required. Lowercase, imperative mood, no period. Must describe WHAT changed (the technical modification), not WHY (the motivation). Bad: "close coverage gaps". Good: "add null-check to auth handler"
-- **Header length**: Total line (`type(scope): subject`) must not exceed 72 characters
+- **Subject length**: The subject (text after `type(scope): `) must not exceed 50 characters (commitlint `subject-max-length`)
+- **Header length**: The whole header line (`type(scope): subject`) must not exceed 100 characters (commitlint `header-max-length`)
 - **Issue numbers**: Do NOT include in commit messages (the PR description links the issue via [Magic Words](#magic-words))
 - **PR References**: Do NOT reference PRs, review comments, or feedback in commit messages. Commits must be self-contained and understandable without viewing any PR
 - **AI Co-authorship**: Do NOT include AI agent `Co-authored-by` trailers (e.g., Claude, ChatGPT, Copilot, Codex). Disable co-authorship in your AI tool settings.
