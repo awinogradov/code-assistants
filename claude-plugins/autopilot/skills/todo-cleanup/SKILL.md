@@ -111,7 +111,7 @@ If user selects "Cancel", stop without changes.
 
 ## Phase 4: Execute
 
-### 5a. Remove stale TODOs
+### 4a. Remove stale TODOs
 
 For each stale TODO:
 
@@ -129,7 +129,7 @@ For each stale TODO:
      ]
    - `multiSelect`: false
 
-### 5b. Create GitHub issues for unlinked TODOs
+### 4b. Create GitHub issues for unlinked TODOs
 
 1. **Group related TODOs** when possible:
    - TODOs in the same file within 10 lines of each other
@@ -155,7 +155,7 @@ For each stale TODO:
    e. Use Edit tool to add `@see` link on the line after the TODO comment:
    - TypeScript/Go: `// @see <issue-url>`
 
-### 5c. Add links for "referenced but not linked" TODOs
+### 4c. Add links for "referenced but not linked" TODOs
 
 1. Build the issue URL — GitHub: `https://github.com/<owner>/<repo>/issues/<N>`; Linear: the ticket URL (e.g. `https://linear.app/<org>/issue/<ID>`)
 2. Use Edit tool to add `@see` link on the line after the TODO:
