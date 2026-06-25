@@ -43853,19 +43853,7 @@ Map `severity` to its emoji when rendering in [Phase 3](#phase-3-submit-review):
 
 **SKIP empty sections entirely. Do NOT write "None" or "N/A" - just omit the section.**
 
-**WHEN TO USE EMPTY reviewComment (`""`):**
-
-- Approve with no findings (no blockers, no suggestions, no nitpicks)
-- Follow-up approve after all blockers fixed, no new findings
-- Consecutive approve with no new issues
-
-The `verdict` field drives the GitHub review event. An empty `reviewComment` means no body text is posted — the approval/rejection event speaks for itself.
-
-**WHEN TO USE NON-EMPTY reviewComment:**
-
-- Any review with findings (blockers, suggestions, or nitpicks)
-- `requestChanges` verdict (always needs explanation)
-- Nothing new to report → no structured output at all (skip review entirely)
+**Empty vs non-empty `reviewComment`** follows the canonical [Verdict Decision Rules](#verdict-decision-rules): use empty `""` for an approval with no findings (rule 3) — the `verdict` field drives the GitHub event, so no body text is needed; use a non-empty body for any review with findings or a `requestChanges` verdict; and when there is nothing new to report, emit no structured output at all (rule 0).
 
 **If reviewComment is non-empty, use these verdict headers at the END:**
 
