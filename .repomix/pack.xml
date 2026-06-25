@@ -33681,28 +33681,27 @@ Score the plan's domain alignment from 0 to 100:
 - **60-79**: Needs work — meaningful gaps identified
 - **Below 60**: Major issues in your domain
 
-## Phase 3: Auto-Iterate
+## Phase 3: Recommend Changes
 
-If your score is below the target (default 95):
+Score the plan AS WRITTEN — never raise your score for changes the parent has not applied. If your score is below the target (default 95):
 
 1. Identify the specific gaps that lowered your score
-2. Determine what changes to the plan would address them
-3. Re-evaluate with those changes in mind
-4. Rescore
+2. Determine the concrete changes that would address them
+3. Record them in the `revision` object as ADVISORY input for the parent (`changed` = what to change; `rescore` = the score the plan would reach with those changes)
 
-Repeat until the target is met or you determine the gaps are acceptable trade-offs.
+Do this at most once — do not loop. The parent owns the plan and applies your `findings` itself, so your `score` and `verdict` must describe the drafted plan, not a hypothetical revision.
 
 ## Phase 4: Output
 
 Output ONLY a single JSON object matching the schema below — no preamble, no surrounding code fence, no commentary. The parent parses it directly, so any extra text breaks consumption.
 
-| Field        | Type                               | Constraint                                                                                  |
-| ------------ | ---------------------------------- | ------------------------------------------------------------------------------------------- |
-| `expertRole` | string                             | Your expert role, verbatim from the prompt                                                  |
-| `score`      | integer                            | 0–100; the final score after any [Phase 3](#phase-3-auto-iterate) iteration                                          |
-| `verdict`    | `"approved"` \| `"needs-revision"` | `"approved"` when `score` meets the target, otherwise `"needs-revision"`                    |
-| `findings`   | string[]                           | 3–5 entries, strongest first; stack minor objections together rather than listing each      |
-| `revision`   | object \| null                     | `null` when no [Phase 3](#phase-3-auto-iterate) iteration ran; otherwise `{ "changed": string, "rescore": integer }` |
+| Field        | Type                               | Constraint                                                                                                                               |
+| ------------ | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `expertRole` | string                             | Your expert role, verbatim from the prompt                                                                                               |
+| `score`      | integer                            | 0–100; the score of the plan AS WRITTEN (see [Phase 3](#phase-3-recommend-changes))                                                      |
+| `verdict`    | `"approved"` \| `"needs-revision"` | `"approved"` when `score` meets the target, otherwise `"needs-revision"`                                                                 |
+| `findings`   | string[]                           | 3–5 entries, strongest first; stack minor objections together rather than listing each                                                   |
+| `revision`   | object \| null                     | `null` when no [Phase 3](#phase-3-recommend-changes) changes were needed; otherwise advisory `{ "changed": string, "rescore": integer }` |
 
 Example (illustrative — emit the raw object, not this fenced form):
 
@@ -33886,41 +33885,48 @@ The invoking skill provides in the prompt:
 
 ## Phase 1: Fetch Alert
 
-Store the full JSON so [Phase 2](#phase-2-degradation) can read every field without another API call:
+Probe auth, then fetch the alert capturing the HTTP status and stderr separately, so [Phase 2](#phase-2-degradation) can classify a failure instead of seeing an empty string:
 
 ```bash
-ALERT_JSON=$(gh api "repos/$REPO/code-scanning/alerts/$NUMBER" 2>/dev/null)
+# Auth probe first — an empty login means gh is not authenticated.
+LOGIN=$(gh api user --jq .login 2>/dev/null)
+
+# Fetch with response headers (--include) so the HTTP status line is observable; keep stderr for the generic-error case.
+STDERR_FILE=$(mktemp)
+RESPONSE=$(gh api --include "repos/$REPO/code-scanning/alerts/$NUMBER" 2>"$STDERR_FILE")
+ALERT_EXIT=$?
+HTTP_CODE=$(printf '%s\n' "$RESPONSE" | awk 'NR==1 {print $2; exit}')
+ALERT_JSON=$(printf '%s\n' "$RESPONSE" | awk 'body {print} /^\r?$/ {body=1}')
 ```
 
 Extract (with `jq`): `.number`, `.state`, `.rule.id`, `.rule.severity` (fall back to `.rule.security_severity_level` when `severity` is null), `.rule.description`, `.most_recent_instance.location.path`, `.most_recent_instance.location.start_line`, `.most_recent_instance.message.text`, and `.html_url`.
 
 ## Phase 2: Degradation
 
-The code-scanning API fails in predictable ways. On ANY failure, do not crash — return the [Phase 3](#phase-3-output) object with `state: "unresolved"` and a `resolveError` string so the parent can surface it and STOP rather than misroute. Emit exactly one of:
+The code-scanning API fails in predictable ways. On ANY failure, do not crash — return the [Phase 3](#phase-3-output) object with `state: "unresolved"` and a `resolveError` string so the parent can surface it and STOP rather than misroute. Resolve `resolveError` with these steps, stopping at the first match, using the variables captured in [Phase 1](#phase-1-fetch-alert):
 
-- `unresolved — gh not authenticated` — `gh api user` returns empty.
-- `unresolved — security_events scope required` — the alerts call returns 403 (token lacks `security_events`).
-- `unresolved — alert #<n> not found` — the alerts call returns 404 (no such alert, or code scanning not enabled for the repo).
-- `unresolved — gh api error: <first line of stderr>` — any other non-zero exit.
-
-On success, set `resolveError` to `null`.
+1. `LOGIN` is empty → `unresolved — gh not authenticated`.
+2. `HTTP_CODE` is `403` → `unresolved — security_events scope required` (token lacks `security_events`).
+3. `HTTP_CODE` is `404` → `unresolved — alert #<n> not found` (no such alert, or code scanning not enabled for the repo).
+4. `ALERT_EXIT` is non-zero or `HTTP_CODE` is not a `2xx` → `unresolved — gh api error: <first line of "$STDERR_FILE">`.
+5. Otherwise success: set `resolveError` to `null` and populate the [Phase 3](#phase-3-output) fields from `ALERT_JSON`.
 
 ## Phase 3: Output
 
 Output ONLY a single JSON object matching the schema below.
 
-| Field          | Type            | Constraint                                                         |
-| -------------- | --------------- | ------------------------------------------------------------------ |
-| `source`       | string          | e.g. `"Code-scanning alert #6"`                                    |
-| `alertNumber`  | integer         | The alert number                                                   |
-| `ruleId`       | string \| null  | e.g. `"js/tainted-format-string"`; `null` when unresolved          |
-| `severity`     | string \| null  | e.g. `"error"`, `"high"`; `null` when unresolved                   |
-| `state`        | string          | `"open"`, `"fixed"`, `"dismissed"`, or `"unresolved"` (on failure) |
-| `file`         | string \| null  | `most_recent_instance.location.path`; `null` when unresolved       |
-| `line`         | integer \| null | `most_recent_instance.location.start_line`; `null` when unresolved |
-| `message`      | string \| null  | `most_recent_instance.message.text`; `null` when unresolved        |
-| `htmlUrl`      | string \| null  | The API's canonical `html_url`; `null` when unresolved             |
-| `resolveError` | string \| null  | One of the [Phase 2](#phase-2-degradation) status strings on failure; `null` on success    |
+| Field          | Type            | Constraint                                                                              |
+| -------------- | --------------- | --------------------------------------------------------------------------------------- |
+| `source`       | string          | e.g. `"Code-scanning alert #6"`                                                         |
+| `alertNumber`  | integer         | The alert number                                                                        |
+| `ruleId`       | string \| null  | e.g. `"js/tainted-format-string"`; `null` when unresolved                               |
+| `severity`     | string \| null  | e.g. `"error"`, `"high"`; `null` when unresolved                                        |
+| `state`        | string          | `"open"`, `"fixed"`, `"dismissed"`, or `"unresolved"` (on failure)                      |
+| `file`         | string \| null  | `most_recent_instance.location.path`; `null` when unresolved                            |
+| `line`         | integer \| null | `most_recent_instance.location.start_line`; `null` when unresolved                      |
+| `message`      | string \| null  | `most_recent_instance.message.text`; `null` when unresolved                             |
+| `htmlUrl`      | string \| null  | The API's canonical `html_url`; `null` when unresolved                                  |
+| `resolveError` | string \| null  | One of the [Phase 2](#phase-2-degradation) status strings on failure; `null` on success |
 
 Example (success):
 
@@ -34252,22 +34258,22 @@ All TODOs are properly linked to open GitHub issues. No cleanup needed.
 <file path="claude-plugins/autopilot/agents/search-codebase-todos.md">
 ---
 name: search-codebase-todos
-description: Search for TODOs and GitHub issue references in the codebase. Use when plan command needs TODO search in parallel with other context agents.
+description: Search for TODOs and GitHub/Linear issue references in the codebase. Use when plan command needs TODO search in parallel with other context agents.
 tools: Grep
 model: haiku
 ---
 
-You are a TODO searcher. Search the codebase for TODOs and references to a specific GitHub issue. Return a structured summary. Do not output intermediate steps — only the final structured block.
+You are a TODO searcher. Search the codebase for TODOs and references to a specific GitHub or Linear issue. Return a structured summary. Do not output intermediate steps — only the final structured block.
 
 ## Input
 
 The invoking skill provides in the prompt:
 
-- **Issue number**: GitHub issue number (e.g., `42`)
+- **Issue identifier**: a GitHub issue number (e.g., `42`) or a Linear issue id (e.g., `ENG-123`)
 
 ## Phase 1: Search
 
-Search for both `issues/<NUMBER>` and `#<NUMBER>` across source files using Grep.
+For a GitHub number `N`, search both `issues/N` and `#N`. For a Linear id `ID` (e.g. `ENG-123`), search both `issue/ID` (the Linear URL form) and the bare `ID` token. Search across source files using Grep.
 
 ## Phase 2: Output
 
@@ -35256,7 +35262,7 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
 
 5. **Self-assign the current user** — idempotent and best-effort; it must never block branch creation.
 
-   <!-- Mirrors resolve-issue-context.md Phase 2 (canonical). Keep in sync. -->
+   <!-- Canonical: [resolve-issue-context.md Phase 2](../../agents/resolve-issue-context.md#phase-2-auto-assign-current-user-opt-in) — keep this self-assign algorithm (statuses + steps) in sync with it. -->
 
    Assigning the issue the moment work starts keeps "who is working on what" accurate. This runs on every issue branch (special-prefix branches skip [Phase 2](#phase-2-fetch-github-issue), so they never assign). On ANY failure, emit the status line and continue to [Phase 3](#phase-3-generate-branch-slug) — the branch is the deliverable; assignment is a side effect.
 
@@ -36223,6 +36229,7 @@ Parse the argument string:
 4. Get the current branch name: `git branch --show-current`
 5. If the branch name is empty (detached HEAD), store `remoteBranchExists = false` and skip step 6
 6. Check if the branch exists on the remote: `git ls-remote --heads origin <branch>`. If the command returns output, store `remoteBranchExists = true`. If no output, store `remoteBranchExists = false`.
+7. Verify the working tree is clean before restructuring: `git status --porcelain`. The soft reset in [Phase 5](#phase-5-soft-reset) restages the whole `<base>..HEAD` diff and [Phase 6](#phase-6-invoke-commitscreate) re-commits it, so any pre-existing uncommitted change would be mixed into the restructured commits. If the output is non-empty, abort: "You have uncommitted changes that would be mixed into the restructured commits. Commit or stash them first, then re-run."
 
 ## Phase 4: Confirm Reset
 
@@ -37146,7 +37153,13 @@ If `$ARGUMENTS` already supplies an issue identifier (a GitHub number or a Linea
 
 ## Phase 1: Fetch Recent Open Issues
 
-**If the provider is Linear:** list the team's recent open issues via `mcp__plugin_autopilot_linear__list_issues` (open only, ordered by most-recently-updated; without `--all`, prefer unassigned). Map each to a picker option `{ label: "<identifier> <title>", description: "<labels or 'no labels'>" }` and continue at [Phase 2](#phase-2-select-an-issue). The GitHub steps below apply to **GitHub** projects.
+**If the provider is Linear:** list the team's recent open issues via `mcp__plugin_autopilot_linear__list_issues` (open only, ordered by most-recently-updated; without `--all`, prefer unassigned when the tool exposes an assignee filter). Then mirror the GitHub empty-state handling:
+
+- Non-empty — map each to a picker option `{ label: "<identifier> <title>", description: "<labels or 'no labels'>" }` and continue at [Phase 2](#phase-2-select-an-issue).
+- Empty with `--all` — there are genuinely no open issues to pick from; tell the user and stop (they can re-invoke as `/issue:run <id>`).
+- Empty without `--all` — re-list once without the unassigned preference; if still empty, stop with the same message.
+
+The GitHub steps below apply to **GitHub** projects.
 
 Build the search string from the `--all` flag, then list the four most-recently-updated matching open issues:
 
@@ -43837,7 +43850,7 @@ Map `severity` to its emoji when rendering in [Phase 3](#phase-3-submit-review):
   "inlineComments": [
     {"path": "src/file.ts", "line": 42, "body": "🚧 Issue description"},
     {"path": "src/other.ts", "line": 15, "body": "🙋‍♂️ Suggestion here"},
-    {"path": "src/calc.ts", "line": 8, "startLine": 7, "body": "🚧 Off-by-one in the running sum [CHECK-BUG-003](<RULES_DOC_URL>#CHECK-BUG-003)", "suggestion": "    for (let i = 0; i < n; i++)\n        total += items[i];"}
+    {"path": "src/calc.ts", "line": 8, "startLine": 7, "body": "🚧 Off-by-one in the running sum [CHECK-BUG-001](<RULES_DOC_URL>#CHECK-BUG-001)", "suggestion": "    for (let i = 0; i < n; i++)\n        total += items[i];"}
   ]
 }
 ```
@@ -45511,14 +45524,16 @@ No arguments are expected. Any supplied arguments are ignored.
 | ------------ | ---------------------- | -------------- | --------------- |
 | `typescript` | `**/*.{ts,tsx,js,jsx}` | `//`           | `// @see <url>` |
 | `go`         | `**/*.go`              | `//`           | `// @see <url>` |
+| `python`     | `**/*.py`              | `#`            | `# @see <url>`  |
 
 **Verification command mapping:**
 
-| Rules          | Command                             |
-| -------------- | ----------------------------------- |
-| `Bun`          | `bun run typecheck && bun run lint` |
-| `NodeJS+React` | `npm run typecheck && npm run lint` |
-| Go (fallback)  | `go build ./... && go vet ./...`    |
+| Rules             | Command                             |
+| ----------------- | ----------------------------------- |
+| `Bun`             | `bun run typecheck && bun run lint` |
+| `NodeJS+React`    | `npm run typecheck && npm run lint` |
+| Go (fallback)     | `go build ./... && go vet ./...`    |
+| Python (fallback) | `ruff check . && mypy .`            |
 
 ## Phase 2: Scan and Analyze TODOs
 
@@ -46407,6 +46422,8 @@ code-assistants/
         │   ├── analyze-staged-changes.md
         │   ├── expert-review.md
         │   ├── fetch-pr-reviews.md
+        │   ├── resolve-alert-context.md
+        │   ├── resolve-assignees.md
         │   ├── resolve-issue-context.md
         │   ├── scan-and-analyze-todos.md
         │   ├── search-codebase-todos.md
@@ -46666,19 +46683,21 @@ Specialized review sub-agents launched in parallel by the `pr:review` skill. Eac
 | `pr:review:surface-testing`     | haiku  | Missing tests, flaky indicators, placeholders           |
 | `pr:review:surface-naming`      | haiku  | Duplication, file naming, directory placement           |
 
-### Helper sub-agents (7 agents)
+### Helper sub-agents (9 agents)
 
 Context-isolating workers invoked by other skills to keep the parent conversation small. Each returns a structured summary only.
 
-| Agent                    | Model   | Used by                   | Purpose                                                                               |
-| ------------------------ | ------- | ------------------------- | ------------------------------------------------------------------------------------- |
-| `analyze-pr-commits`     | sonnet  | `pr:create`, `pr:update`  | Summarize branch commits, diff, and linked issue for PR context                       |
-| `analyze-staged-changes` | haiku   | `commits:create`          | Categorize staged files and recommend a commit strategy                               |
-| `expert-review`          | inherit | `plan`, `plan-*`          | Score an implementation plan as a domain expert                                       |
-| `fetch-pr-reviews`       | sonnet  | `pr:answer`, `pr:resolve` | Fetch, filter, and categorize PR review comments by severity                          |
-| `resolve-issue-context`  | sonnet  | `plan`, `run`             | Fetch GitHub issue context; optionally auto-assign current user (idempotent) via `gh` |
-| `scan-and-analyze-todos` | sonnet  | `todo-cleanup`            | Scan codebase for TODOs and check linked GitHub issue statuses                        |
-| `search-codebase-todos`  | haiku   | `plan`                    | Search the codebase for TODOs and references to a specific issue                      |
+| Agent                    | Model   | Used by                                | Purpose                                                                                      |
+| ------------------------ | ------- | -------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `analyze-pr-commits`     | sonnet  | `pr:create`, `pr:update`               | Summarize branch commits, diff, and linked issue for PR context                              |
+| `analyze-staged-changes` | haiku   | `commits:create`                       | Categorize staged files and recommend a commit strategy                                      |
+| `expert-review`          | inherit | `plan`, `plan-*`                       | Score an implementation plan as a domain expert                                              |
+| `fetch-pr-reviews`       | sonnet  | `pr:answer`, `pr:resolve`, `pr:review` | Fetch, filter, and categorize PR review comments by severity                                 |
+| `resolve-alert-context`  | sonnet  | `plan`, `run`                          | Fetch GitHub code-scanning alert context via the code-scanning API                           |
+| `resolve-assignees`      | sonnet  | `linear:create`                        | Resolve candidate assignees from CODEOWNERS and Linear team members                          |
+| `resolve-issue-context`  | sonnet  | `plan`, `run`, `pr:review`             | Fetch GitHub/Linear issue context; optionally auto-assign current user (idempotent) via `gh` |
+| `scan-and-analyze-todos` | sonnet  | `todo-cleanup`                         | Scan codebase for TODOs and check linked GitHub issue statuses                               |
+| `search-codebase-todos`  | haiku   | `plan`, `run`, `pr:review`             | Search the codebase for TODOs and references to a specific issue                             |
 
 ## Internal Skills (not in slash menu)
 
