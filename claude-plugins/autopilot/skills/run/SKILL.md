@@ -415,18 +415,6 @@ PR: <pr-url>
 Status: <approved/merged>
 ```
 
-## Quiz Mode Format
-
-When clarification needed:
-
-```
-**Q[N]**: [Clear question]
-A) [Option with brief explanation]
-B) [Option with brief explanation]
-C) [Option with brief explanation]
-D) Other: ___
-```
-
 When you write the plan file, apply the reference-formatting rules inlined at the end of this skill (the **Reference formatting & readability** block below, RFC-0001 v3) to every reference it contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
 
 <!-- ref-format:start -->
