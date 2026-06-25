@@ -49,6 +49,7 @@ Parse the argument string:
 4. Get the current branch name: `git branch --show-current`
 5. If the branch name is empty (detached HEAD), store `remoteBranchExists = false` and skip step 6
 6. Check if the branch exists on the remote: `git ls-remote --heads origin <branch>`. If the command returns output, store `remoteBranchExists = true`. If no output, store `remoteBranchExists = false`.
+7. Verify the working tree is clean before restructuring: `git status --porcelain`. The soft reset in [Phase 5](#phase-5-soft-reset) restages the whole `<base>..HEAD` diff and [Phase 6](#phase-6-invoke-commitscreate) re-commits it, so any pre-existing uncommitted change would be mixed into the restructured commits. If the output is non-empty, abort: "You have uncommitted changes that would be mixed into the restructured commits. Commit or stash them first, then re-run."
 
 ## Phase 4: Confirm Reset
 
