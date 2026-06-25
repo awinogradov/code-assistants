@@ -201,8 +201,6 @@ A variable from an outer scope, a similarly-named variable, or a copy-paste left
 
 Multiple async tasks reading/writing the same mutable object (array, object, or instance field) without synchronization; interleaved awaits can cause inconsistent state even in single-threaded async runtimes.
 
-- Example: two async tasks pushing to the same array with awaits between read and write.
-
 <a id="CHECK-BUG-004"></a>
 **CHECK-BUG-004: Incorrect serialization/deserialization** — Severity: blocker
 
@@ -260,8 +258,6 @@ A broken algorithm (MD5/SHA1 for security), a non-constant-time secret compariso
 **CHECK-SEC-005: Unsafe deserialization or dynamic evaluation of untrusted input** — Severity: blocker
 
 `eval`/`Function`, dynamic `import()`/`require()` with a user-controlled path, or deserializing attacker-controlled data into executable structures.
-
-- Example: `eval(req.body.expr)`; `require(userSuppliedPath)`.
 
 <a id="CHECK-SEC-006"></a>
 **CHECK-SEC-006: Secrets or PII written to logs or responses** — Severity: suggestion
@@ -373,8 +369,6 @@ Any code file longer than 1000 lines. Long files must be split.
 
 Name implies different behavior than the code does. `get*` that mutates state, `is*` that returns non-boolean, `validate*` that also transforms.
 
-- Example: `getUser()` that creates the user if not found.
-
 <a id="CHECK-CPLX-006"></a>
 **CHECK-CPLX-006: Inconsistent naming within module** — Severity: suggestion
 
@@ -399,8 +393,6 @@ Function accepts more than 9 total parameters or more than 6 positional, indicat
 
 Comments describing what the code does (obvious from the code) instead of why.
 
-- Example: `// increment counter` above `counter += 1`.
-
 #### Platform Standards
 
 <a id="CHECK-PLAT-001"></a>
@@ -414,8 +406,6 @@ GitHub issue references (`#123`, `Closes #123`) must NOT appear in commit messag
 **CHECK-PLAT-002: Lint or type suppression comment (@ts-ignore / @ts-expect-error / eslint-disable)** — Severity: blocker
 
 Zero tolerance for lint/type suppression comments. Any `@ts-ignore`, `@ts-expect-error`, `@ts-nocheck`, `eslint-disable`, `eslint-disable-next-line` is a blocker.
-
-- Example: `// @ts-ignore — TODO fix later`.
 
 <a id="CHECK-PLAT-003"></a>
 **CHECK-PLAT-003: Wrong validation library** — Severity: suggestion
@@ -501,8 +491,6 @@ Function mutates a passed-in object to "return" data through it instead of using
 
 Function marked `async` with no `await` — synchronous code wearing an async costume.
 
-- Example: `async function getConfig() { return { key: "value" }; }`.
-
 <a id="CHECK-AI-004"></a>
 **CHECK-AI-004: Logging every line of execution** — Severity: suggestion
 
@@ -513,14 +501,10 @@ Debug logging at entry, exit, and every intermediate step. Logs should capture d
 
 Type annotations on every local variable, including trivially obvious ones, adding noise without aiding understanding.
 
-- Example: `const items: string[] = []; const count: number = 0;`.
-
 <a id="CHECK-AI-006"></a>
 **CHECK-AI-006: Placeholder implementation left in production code** — Severity: blocker
 
 An empty stub body, a `throw new Error("Not implemented")`, or a `// TODO` placeholder in code that should be fully implemented.
-
-- Example: `function handleError(error: Error) { throw new Error("Not implemented"); }` in production.
 
 <a id="CHECK-DEAD-001"></a>
 **CHECK-DEAD-001: Dead code introduced by the diff** — Severity: suggestion
@@ -557,8 +541,6 @@ A data structure that grows without bound (cache, in-memory queue, log buffer) w
 **CHECK-CS-004: Error message doesn't help debugging** — Severity: suggestion
 
 An error message lacking enough context to diagnose — missing which value failed, what was expected, or what operation was attempted.
-
-- Example: `throw new Error("invalid input")` instead of including the offending value.
 
 <a id="CHECK-CS-005"></a>
 **CHECK-CS-005: Log message at wrong level** — Severity: suggestion
@@ -716,8 +698,6 @@ The string passed to an error constructor or `throw` must be static; put dynamic
 **CHECK-LOG-004: Asynchronous or fire-and-forget logging** — Severity: suggestion
 
 Log calls must be synchronous. Wrapping them in `setImmediate`, `process.nextTick`, a `Promise` callback, or `await`-ing them solely to defer risks dropping records on shutdown and makes ordering non-deterministic.
-
-- Example: `setImmediate(() => logger.info("Request processed."))` → call `logger.info(...)` directly.
 
 <a id="CHECK-LOG-005"></a>
 **CHECK-LOG-005: Logging an error at the throw site** — Severity: suggestion
