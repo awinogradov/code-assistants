@@ -84,9 +84,10 @@ export function isPackageManifest(relativePath: string): boolean {
 export function renderLicensesMarkdown(records: LicenseRecord[]): string {
   const groups = new Map<string, string[]>();
   for (const record of records) {
-    const group = groups.get(record.license) ?? [];
-    group.push(`${record.name}@${record.version}`);
-    groups.set(record.license, group);
+    const id = `${record.name}@${record.version}`;
+    const group = groups.get(record.license);
+    if (group) group.push(id);
+    else groups.set(record.license, [id]);
   }
   const licenses = [...groups.keys()].sort();
   const sections = licenses.map((license) => {
@@ -98,7 +99,7 @@ export function renderLicensesMarkdown(records: LicenseRecord[]): string {
     return `## ${license}\n\n${bullets}`;
   });
   const summary = `${records.length} packages across ${licenses.length} licenses.`;
-  return `# Licenses\n\n${preamble}\n\n${summary}\n\n${sections.join("\n\n")}\n`;
+  return `${["# Licenses", preamble, summary, ...sections].join("\n\n")}\n`;
 }
 
 /** Parse one manifest leniently; `null` when it is unreadable. */
