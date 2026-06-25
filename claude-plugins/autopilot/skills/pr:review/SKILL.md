@@ -1,7 +1,7 @@
 ---
 name: pr:review
 description: Review a pull request and provide constructive feedback with structured verdict. Used by awinogradov/code-review-action
-argument-hint: "REPO: <owner/repo> PR_NUMBER: <number> REVIEWER: <bot-login> PR_AUTHOR: <author-login> RULES_DOC_URL: <url>"
+argument-hint: "REPO: <owner/repo> PR_NUMBER: <number> REVIEWER: <bot-login> PR_AUTHOR: <author-login> RULES_DOC_URL: <url> (all but RULES_DOC_URL fall back to gh when omitted)"
 allowed-tools:
   - Read
   - Glob
