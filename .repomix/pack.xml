@@ -32786,6 +32786,7 @@ on:
       - "pnpm-lock.yaml"
       - "package-lock.json"
       - "LICENSES.md"
+  workflow_dispatch:
 
 concurrency:
   group: licenses-${{ github.workflow }}-${{ github.head_ref }}
