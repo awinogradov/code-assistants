@@ -71,14 +71,14 @@ Expected form:
 
 - **Issue number** — if `$ARGUMENTS` contains an issue number, skip Phases 1-2 and hand it straight to [Phase 3](#phase-3-hand-off-to-autopilot). Otherwise list and prompt.
 - **`--all` flag** — parse `$ARGUMENTS` for `--all` independently of the issue number (order does not matter). The skill consumes the flag itself: it only toggles the [Phase 1](#phase-1-fetch-recent-open-issues) search string and is never forwarded to a `gh` call. Because a bare issue number skips Phases 1-2, `--all` is a no-op when an issue number is also supplied.
-- **Repository** — `gh repo view --json nameWithOwner -q .nameWithOwner`. No prompt. Pass `--repo <owner/repo>` to every `gh` call so the skill is correct inside git worktrees.
+- **Repository** — `gh repo view --json nameWithOwner --jq .nameWithOwner`. No prompt. Pass `--repo <owner/repo>` to every `gh` call so the skill is correct inside git worktrees.
 
 ## Phase 0: Resolve Repository and Provider
 
 Resolve the repository once and store it as `<repo>` (format `owner/name`):
 
 ```bash
-gh repo view --json nameWithOwner -q .nameWithOwner
+gh repo view --json nameWithOwner --jq .nameWithOwner
 ```
 
 Determine the provider: read `agents.trackers` from `package.json` (via the Read tool). When a `linear` tracker is configured, the provider is **Linear** (note its `team`); otherwise **GitHub** (the default).

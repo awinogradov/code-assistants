@@ -37,7 +37,7 @@ Expected form:
 ## Input resolution
 
 - **Title hint** — `$ARGUMENTS` → if empty, prompt once via AskUserQuestion: "What is this issue about?" with a free-form slot. Do not abort silently.
-- **Repository** — `gh repo view --json nameWithOwner -q .nameWithOwner`. No prompt.
+- **Repository** — `gh repo view --json nameWithOwner --jq .nameWithOwner`. No prompt.
 
 ## Completion Requirement
 
@@ -61,7 +61,7 @@ Every AskUserQuestion call that presents content for review (the issue preview i
 1. Parse `$ARGUMENTS` as an optional title hint. If empty, prompt the user via AskUserQuestion ("What is this issue about?") with a free-form slot.
 2. Resolve the repository:
    ```bash
-   gh repo view --json nameWithOwner -q .nameWithOwner
+   gh repo view --json nameWithOwner --jq .nameWithOwner
    ```
    Store as `<repo>` (format: `owner/name`).
 3. **No preflight-check is invoked.** Issue creation does not depend on git branch state — the user may file an issue from any branch including `main`.
