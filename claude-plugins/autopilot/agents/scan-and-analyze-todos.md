@@ -13,7 +13,7 @@ The invoking command provides in the prompt:
 
 - **Language**: `typescript`, `python`, or `go`
 - **Repository** in `owner/repo` format (e.g., `awinogradov/code-assistants`)
-- **Provider** (optional, `github` or `linear`; default `github`) — selects how referenced issues are checked in [Phase 3](#phase-3-analyze-with-github)
+- **Provider** (optional, `github` or `linear`; default `github`) — selects how referenced issues are checked in [Phase 3](#phase-3-analyze-issue-status)
 
 ## Phase 1: Scan
 
@@ -40,7 +40,7 @@ For each match, extract:
 - Whether the description contains a GitHub issue reference (`#\d+`) or, on a Linear project, a Linear id (`[A-Z]+-\d+`)
 - The `@see` URL if present — extract the GitHub issue number from a `github.com/.../issues/N` URL, or the Linear id from a `linear.app/.../issue/<ID>` URL
 
-## Phase 3: Analyze with GitHub
+## Phase 3: Analyze Issue Status
 
 For a **Linear** project (provider is `linear`), check a referenced ticket with `mcp__plugin_autopilot_linear__get_issue` instead of `gh issue view`: a `state.name` of `Done` or `Canceled` is **stale**, any other state is **linked** (or **needs link** when the `@see` is missing). The GitHub buckets below apply otherwise.
 
