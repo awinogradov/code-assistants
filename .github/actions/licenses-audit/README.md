@@ -1,24 +1,44 @@
 # Licenses audit
 
 Composite GitHub Action that keeps a repository's license report in sync with its dependency
-tree. On a pull request that changes dependencies, it regenerates the report, auto-commits the
-result on same-repo PRs, and fails fork PRs that ship a stale report. When the consumer has no
-license-audit script or report file, the action skips gracefully so it is safe to run anywhere.
+tree. On a pull request that changes dependencies, it detects the consumer's package manager
+(pnpm, npm, or bun), installs with the matching frozen-lockfile command, regenerates the report
+with its **bundled** generator, auto-commits the result on same-repo PRs, and fails fork PRs that
+ship a stale report. When no lockfile is present it skips gracefully, so it is safe to run anywhere.
 
 It is the logic behind the synced [`licenses.yml`](../../workflows/licenses.yml) workflow,
 distributed to consumers by [`contributing-sync`](../contributing-sync/README.md). The action
 itself stays in the upstream repository — consumers reference it via `@main` and do not vendor a
-local copy.
+local copy, so they get the generator (and any later fix to it) for free.
 
-## Requirements
+## How it works for a consumer
 
-The consumer must expose, in its own repository:
+A consumer does not write or copy any generator: it ships **inside** this action. Enable the synced
+`licenses.yml` workflow, and on every dependency-changing PR the action:
 
-- a `package.json` script (default name `licenses:audit`) that regenerates the report, and
-- a committed report file (default `LICENSES.md`).
+1. installs the consumer's dependencies with their own package manager, then
+2. runs the bundled generator against the installed tree to regenerate `LICENSES.md`.
 
-When either is missing, the action emits a `::notice::` and exits successfully without auditing.
-Porting a report generator into a consumer is out of scope for this action.
+On a same-repo PR the regenerated report is committed back to the branch; on a fork PR a stale
+report fails the check. The only requirement is a lockfile at the repository root
+(`pnpm-lock.yaml`, `package-lock.json`, or `bun.lock`) — without one the action cannot run a
+reproducible install, so it skips with a `::notice::`.
+
+The action does not assume a package manager: it picks the installer from the lockfile —
+`pnpm-lock.yaml` → `pnpm install --frozen-lockfile`, `package-lock.json` → `npm ci`, `bun.lock` →
+`bun install --frozen-lockfile`. This matters because many pnpm repos run a
+`preinstall: npx only-allow pnpm` guard that hard-fails any non-pnpm installer (including Bun), so
+the audit must install with the consumer's actual package manager to get past it.
+
+### Bundled generator
+
+The generator lives at [`src/licenses-report.ts`](./src/licenses-report.ts) and runs under the
+action's own Bun. It walks `node_modules` and reads each package's declared license, so it is
+package-manager-agnostic and emits a deterministic, SPDX-grouped report with no machine-specific
+paths — drift-stable across machines and CI. It has zero runtime dependencies (only `node:`
+built-ins), tolerates the legacy `license` object and `licenses` array shapes, and skips private
+packages (a consumer's own workspace members). The action ships the generator, not the report's
+content — that is generated from each repo's own dependency tree.
 
 ## Usage
 
@@ -32,7 +52,8 @@ on:
       - "package.json"
       - "**/package.json"
       - "bun.lock"
-      - "scripts/licenses-report.ts"
+      - "pnpm-lock.yaml"
+      - "package-lock.json"
       - "LICENSES.md"
 
 concurrency:
@@ -60,17 +81,15 @@ jobs:
 | ------------------- | -------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `bot_token`         | Yes      | —                     | PAT or GitHub App token used to check out the PR branch and push the regenerated report. Pass `${{ secrets.BOT_TOKEN }}`; `GITHUB_TOKEN` is not used (see Permissions). An empty value fails the push with no fallback. |
 | `bot_username`      | No       | `github-actions[bot]` | Git author/committer login for the auto-commit. Pass `${{ vars.BOT_USERNAME }}` for a dedicated bot identity.                                                                                                           |
-| `script`            | No       | `licenses:audit`      | Name of the `package.json` script that regenerates the report.                                                                                                                                                          |
-| `licenses-file`     | No       | `LICENSES.md`         | Path to the generated report checked for drift.                                                                                                                                                                         |
+| `licenses-file`     | No       | `LICENSES.md`         | Path the bundled generator writes and the action checks for drift.                                                                                                                                                      |
 | `node-version-file` | No       | `.nvmrc`              | File `actions/setup-node` reads the Node version from.                                                                                                                                                                  |
-| `bun-version-file`  | No       | `package.json`        | File `oven-sh/setup-bun` reads the Bun version from.                                                                                                                                                                    |
 
 ## Outputs
 
-| Output    | Description                                                                         |
-| --------- | ----------------------------------------------------------------------------------- |
-| `skipped` | `true` when no license-audit script or report file was found and the audit skipped. |
-| `drifted` | `true` when the regenerated report differed from the committed one.                 |
+| Output    | Description                                                         |
+| --------- | ------------------------------------------------------------------- |
+| `skipped` | `true` when no lockfile was found and the audit skipped.            |
+| `drifted` | `true` when the regenerated report differed from the committed one. |
 
 ## Permissions
 
@@ -93,19 +112,20 @@ would never be re-validated. `bot_token` fixes both. Consumers of the sync syste
 2. **Checkout** — same-repo PRs check out the head branch writable (`persist-credentials: true`)
    so the report can be pushed; fork PRs check out the head SHA read-only
    (`persist-credentials: false`) so the base token is never written into a fork-controlled tree.
-3. **Detect capability** — skips the rest with a `::notice::` (and `skipped=true`) when the
-   `script` is absent from `package.json` or the `licenses-file` is missing.
-4. **Setup and regenerate** — sets up Node and Bun from the version files, runs
-   `bun install --frozen-lockfile`, then `bun run <script>`.
+3. **Detect package manager** — picks pnpm, npm, or bun from the root lockfile; skips the rest with
+   a `::notice::` (and `skipped=true`) when none is present.
+4. **Setup and regenerate** — sets up Node from `node-version-file` (always), enables Corepack for
+   pnpm, and sets up Bun (always — the action runs its bundled generator under Bun). It installs the
+   consumer's dependencies with the matching frozen-lockfile command (`pnpm install --frozen-lockfile`
+   / `npm ci` / `bun install --frozen-lockfile`), then runs `src/licenses-report.ts` to write the
+   `licenses-file`.
 5. **Detect drift** — `git diff --quiet` on the report file.
 6. **Resolve drift** — on a same-repo PR, commits and pushes the regenerated report to the head
-   branch; on a fork PR, prints the diff and fails with an actionable `::error::` so the
-   contributor regenerates it locally.
+   branch; on a fork PR, prints the diff and fails with an actionable `::error::`.
 
-The `script` name and `head_ref` are passed via environment variables (never shell-interpolated)
-to avoid command injection from a hostile script name or branch name. Third-party action
-references (`actions/checkout`, `actions/setup-node`, `oven-sh/setup-bun`) are pinned to major
-versions.
+The report path (`licenses-file`) and `head_ref` are passed via environment variables (never
+shell-interpolated). Third-party action references (`actions/checkout`, `actions/setup-node`,
+`oven-sh/setup-bun`) are pinned to major versions.
 
 ## Versioning
 
