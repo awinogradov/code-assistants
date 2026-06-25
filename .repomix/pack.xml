@@ -7508,10 +7508,11 @@ describe("reference-formatting block sync", () => {
 
 <file path=".github/actions/code-review-action/src/replyReferenceFormatting.test.ts">
 /**
- * Structural guard (issues #259, #334): asserts the reply-composition steps of the
+ * Structural guard (issues #259, #334, #347): asserts the reply-composition steps of the
  * pr:resolve and pr:answer skills carry the reference-formatting instructions, so
  * review-thread replies and PR comments render references per RFC-0001 v3 — commit
- * SHAs AND any file/doc/skill/agent/section they cite as links rather than bare text.
+ * SHAs, any file/doc/skill/agent/section they cite, AND `CHECK-` rule codes (linked to
+ * their anchor in the pr:review skill's §2.5, #347) as links rather than bare text.
  * The canonical standard lives in rfc/0001-reference-formatting.md and is inlined
  * verbatim into every skill (guarded by referenceFormattingSync); this test checks only
  * that the actionable instructions are PRESENT — the distinctive phrases below — not that
@@ -7540,6 +7541,12 @@ describe("reply reference-formatting wiring", () => {
   test.each(replySkillFiles)("%s instructs replies to link doc and section references", async (file) => {
     const content = await readFile(file, "utf8");
     expect(content).toContain("link any file, doc, skill, agent, or section you cite");
+  });
+
+  test.each(replySkillFiles)("%s instructs replies to link CHECK- rule codes per pr:review §2.5", async (file) => {
+    const content = await readFile(file, "utf8");
+    expect(content).toContain("`CHECK-` rule code");
+    expect(content).toContain("pr:review/SKILL.md#25-rule-codes");
   });
 });
 </file>
@@ -42789,7 +42796,7 @@ For each comment requiring a code change:
 For comments that do not require code changes (questions, misunderstandings):
 
 1. **Evaluate the comment** against the actual codebase — read the code, check if the reviewer's concern is valid
-2. **Draft a reply** — concise, direct, 1-5 sentences; format references per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) (the **Reference formatting & readability** rules inlined at the end of this skill; see [Phase 6](#phase-6-reply-to-review-threads)):
+2. **Draft a reply** — concise, direct, 1-5 sentences; format references per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) (the **Reference formatting & readability** rules inlined at the end of this skill; see [Phase 6](#phase-6-reply-to-review-threads)). A `CHECK-` rule code you cite — e.g. when you echo the finding you are answering — is a reference, not a code specimen: render it as a link to the rule's anchor exactly as [Phase 6](#phase-6-reply-to-review-threads) prescribes, never bare text. Reply shapes:
    - If reviewer is wrong: "You're right that [X looks concerning], but [reason it's correct]. [Evidence from code]."
    - If needs discussion: "[Acknowledge point], however [concern or alternative]."
    - If question: "[Direct answer with reference to code]."
@@ -42841,7 +42848,7 @@ Compose replies for all processed comments. **Always mention the reviewer** with
 - **Partially addressed**: "@\<reviewer\> [What was changed and why, plus what was intentionally kept]."
 - **Declined by user**: "@\<reviewer\> Considered — [explanation of why this suggestion was not applied]."
 
-Format every reply per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) — the **Reference formatting & readability** rules inlined at the end of this skill. The reference kind that recurs here is the commit SHA: when a reply cites the commit that resolved a thread (the HEAD commit after [Phase 5](#phase-5-commit-and-push)'s push, post-rebase/squash), render the SHA as a markdown link `[<sha>](<repo-commit-url>/<sha>)` built from the repo owner/name resolved in [Phase 1](#phase-1-detect-pr-and-load-context) — never a bare or backticked SHA. Because replies post as GitHub comments, link any file, doc, skill, agent, or section you cite as an absolute `<repo-blob-url>/path#anchor` URL built from the same repo owner/name — never a bare name or a repo-relative path (relative paths do not resolve in a comment). Replies that cite no commit (e.g. questions, declines) skip the SHA rule; all other reference kinds still follow the inlined rules.
+Format every reply per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) — the **Reference formatting & readability** rules inlined at the end of this skill. The reference kind that recurs here is the commit SHA: when a reply cites the commit that resolved a thread (the HEAD commit after [Phase 5](#phase-5-commit-and-push)'s push, post-rebase/squash), render the SHA as a markdown link `[<sha>](<repo-commit-url>/<sha>)` built from the repo owner/name resolved in [Phase 1](#phase-1-detect-pr-and-load-context) — never a bare or backticked SHA. Because replies post as GitHub comments, link any file, doc, skill, agent, or section you cite as an absolute `<repo-blob-url>/path#anchor` URL built from the same repo owner/name — never a bare name or a repo-relative path (relative paths do not resolve in a comment). A `CHECK-` rule code (e.g. `CHECK-PR-009`) is a reference, not a code specimen: render it as a link exactly as the [`pr:review` skill's §2.5](../pr:review/SKILL.md#25-rule-codes) prescribes — `[CHECK-PR-009](<rules-doc-url>#CHECK-PR-009)` — never the bare code. Build `<rules-doc-url>` as the absolute blob URL to the `pr:review` SKILL.md from the repo owner/name resolved in [Phase 1](#phase-1-detect-pr-and-load-context) — `<repo-blob-url>/claude-plugins/autopilot/skills/pr%3Areview/SKILL.md`, whose `#CHECK-...` fragment lands on the `<a id="...">` anchor above each rule — falling back to the bare code in plain text only when no such URL is resolvable. Replies that cite no commit (e.g. questions, declines) skip the SHA rule; all other reference kinds still follow the inlined rules.
 
 Build a summary of all drafted replies:
 
