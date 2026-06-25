@@ -52,7 +52,7 @@ The code-scanning API fails in predictable ways. On ANY failure, do not crash â€
 
 ## Phase 3: Output
 
-Output ONLY a single JSON object matching the schema below.
+Output ONLY a single JSON object matching the schema below â€” no preamble, no surrounding code fence, no commentary. The parent parses it directly, so any extra text breaks consumption.
 
 | Field          | Type            | Constraint                                                                              |
 | -------------- | --------------- | --------------------------------------------------------------------------------------- |

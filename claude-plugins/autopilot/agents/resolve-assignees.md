@@ -31,7 +31,7 @@ Best-effort: list the team's members via `mcp__plugin_autopilot_linear__list_use
 
 ## Phase 3: Output
 
-Output ONLY a single JSON object matching the schema below — no preamble, no code fence, no commentary. The parent parses it directly.
+Output ONLY a single JSON object matching the schema below — no preamble, no surrounding code fence, no commentary. The parent parses it directly, so any extra text breaks consumption.
 
 | Field        | Type           | Constraint                                                                                     |
 | ------------ | -------------- | ---------------------------------------------------------------------------------------------- |
