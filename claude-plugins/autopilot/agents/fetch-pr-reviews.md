@@ -33,12 +33,28 @@ Also fetch PR metadata:
 gh pr view <PR_NUMBER> -R <OWNER>/<REPO> --json title,author,reviewDecision,reviewRequests
 ```
 
+Fetch review-thread resolution state — this is the source of truth for "is this comment resolved", paginating past the 100-node page so long PRs don't silently drop threads (`--paginate` follows `$endCursor` automatically):
+
+```bash
+gh api graphql --paginate -F owner=<OWNER> -F repo=<REPO> -F pr=<PR_NUMBER> -f query='
+  query($owner: String!, $repo: String!, $pr: Int!, $endCursor: String) {
+    repository(owner: $owner, name: $repo) {
+      pullRequest(number: $pr) {
+        reviewThreads(first: 100, after: $endCursor) {
+          nodes { path line isResolved isOutdated comments(first: 1) { nodes { author { login } body } } }
+          pageInfo { hasNextPage endCursor }
+        }
+      }
+    }
+  }'
+```
+
 ## Phase 2: Filter
 
 Remove from processing:
 
-- **Resolved/outdated threads** — comments where `position` is null or thread is resolved
-- **Bot comments** — comments from users with `[bot]` suffix or known CI bots
+- **Resolved threads** — drop a comment when its review thread has `isResolved: true`. Match the REST comment to a `reviewThreads` node by `path` + `line`, disambiguating with the thread's first-comment author/body when several threads share a file (outdated threads report `line: null`, so never merge distinct threads on a `(path, null)` key). Treat `isOutdated: true` as **informational only** — the diff line moved, but an unresolved outdated comment is still actionable, so keep it. Do NOT use REST `position: null` as a resolved signal (it only means the line is outdated).
+- **CI/automation bots only** — drop a comment only when its author login is in the CI-bot denylist: `github-actions[bot]`, `dependabot[bot]`, `codecov[bot]`, `coderabbitai[bot]` (extend as the repo needs). Do NOT drop by the generic `[bot]` suffix — real review bots such as `cubic-dev-ai[bot]` and `symbiot-bot` must survive.
 - **PR author's own comments** — these are responses, not review items
 - **Already-addressed comments** — threads where the PR author has replied acknowledging the fix
 
@@ -94,7 +110,7 @@ Output ONLY the structured block. No preamble or commentary:
 - `[file]:[line]` - @[reviewer]: [comment summary] (comment_id: [id])
 ```
 
-Include `comment_id` for each comment so the parent skill can reply to specific threads.
+Include `comment_id` for each comment so the parent skill can reply to specific threads. `comment_id` is the REST review-comment `id` from the `/comments` payload — the GraphQL `reviewThreads` query is used only to read `isResolved`/`isOutdated`, not for comment IDs.
 
 If no unresolved comments found, output:
 
