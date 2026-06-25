@@ -98,7 +98,7 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
 
 5. **Self-assign the current user** — idempotent and best-effort; it must never block branch creation.
 
-   <!-- Mirrors resolve-issue-context.md Phase 2 (canonical). Keep in sync. -->
+   <!-- Canonical: [resolve-issue-context.md Phase 2](../../agents/resolve-issue-context.md#phase-2-auto-assign-current-user-opt-in) — keep this self-assign algorithm (statuses + steps) in sync with it. -->
 
    Assigning the issue the moment work starts keeps "who is working on what" accurate. This runs on every issue branch (special-prefix branches skip [Phase 2](#phase-2-fetch-github-issue), so they never assign). On ANY failure, emit the status line and continue to [Phase 3](#phase-3-generate-branch-slug) — the branch is the deliverable; assignment is a side effect.
 
