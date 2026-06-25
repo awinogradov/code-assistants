@@ -12,7 +12,8 @@ on:
       - "package.json"
       - "**/package.json"
       - "bun.lock"
-      - "scripts/licenses-report.ts"
+      - "pnpm-lock.yaml"
+      - "package-lock.json"
       - "LICENSES.md"
 
 concurrency:
