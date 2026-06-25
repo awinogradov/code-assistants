@@ -63,7 +63,7 @@ Mirror `issue:create` so the body reflects real code, not hallucinated structure
 
 **Title:** capitalized, ≤ 80 characters, no trailing period, business-focused, NOT Conventional Commits, no prefix.
 
-**Body — section ordering is MANDATORY** (exact `## ` headings, no trailing colon, no bold):
+**Body — section ordering is MANDATORY** (exact `## ` headings, no trailing colon, no bold). The five-section spec is canonical in [issue:create Phase 5](../issue:create/SKILL.md#phase-5-generate-body) — keep this list in sync with it:
 
 1. `## Context` — 1-2 paragraphs on the situation and why it matters now.
 2. `## What` — the deliverable in plain terms.
