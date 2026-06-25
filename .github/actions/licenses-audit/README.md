@@ -35,10 +35,14 @@ the audit must install with the consumer's actual package manager to get past it
 The generator lives at [`src/licenses-report.ts`](./src/licenses-report.ts) and runs under the
 action's own Bun. It walks `node_modules` and reads each package's declared license, so it is
 package-manager-agnostic and emits a deterministic, SPDX-grouped report with no machine-specific
-paths — drift-stable across machines and CI. It has zero runtime dependencies (only `node:`
+paths or timestamps. It has zero runtime dependencies (only `node:`
 built-ins), tolerates the legacy `license` object and `licenses` array shapes, and skips private
 packages (a consumer's own workspace members). The action ships the generator, not the report's
 content — that is generated from each repo's own dependency tree.
+
+Optional dependencies are platform-specific, so the report reflects the platform it was generated
+on. The committed report tracks the CI runner (`ubuntu-latest`); regenerating on another OS swaps
+those entries, and the action re-syncs the report on its next run.
 
 ## Usage
 
