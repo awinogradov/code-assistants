@@ -33913,7 +33913,7 @@ The code-scanning API fails in predictable ways. On ANY failure, do not crash �
 
 ## Phase 3: Output
 
-Output ONLY a single JSON object matching the schema below.
+Output ONLY a single JSON object matching the schema below — no preamble, no surrounding code fence, no commentary. The parent parses it directly, so any extra text breaks consumption.
 
 | Field          | Type            | Constraint                                                                              |
 | -------------- | --------------- | --------------------------------------------------------------------------------------- |
@@ -33982,7 +33982,7 @@ Best-effort: list the team's members via `mcp__plugin_autopilot_linear__list_use
 
 ## Phase 3: Output
 
-Output ONLY a single JSON object matching the schema below — no preamble, no code fence, no commentary. The parent parses it directly.
+Output ONLY a single JSON object matching the schema below — no preamble, no surrounding code fence, no commentary. The parent parses it directly, so any extra text breaks consumption.
 
 | Field        | Type           | Constraint                                                                                     |
 | ------------ | -------------- | ---------------------------------------------------------------------------------------------- |
@@ -35302,7 +35302,7 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
       EDIT_EXIT=$?
       ```
 
-   5. Post-verify with a fresh read, because `gh issue edit --add-assignee` returns exit 0 even when GitHub silently drops the addition (caller lacks `triage`/`write` permission, or the issue is at the 10-assignee limit):
+   5. **Only when `EDIT_EXIT == 0`**, post-verify with a fresh read, because `gh issue edit --add-assignee` returns exit 0 even when GitHub silently drops the addition (caller lacks `triage`/`write` permission, or the issue is at the 10-assignee limit). When `EDIT_EXIT != 0` the edit never landed, so skip this read and emit `unassigned — gh edit error: <first line of $STDERR>` directly:
 
       ```bash
       VERIFIED=$(gh issue view <ISSUE-NUMBER> -R "$REPO" --json assignees --jq "any(.assignees[]?; .login==\"$LOGIN\")" 2>/dev/null)
@@ -36336,7 +36336,7 @@ For each PR, create a report:
 For major/minor updates, fetch changelog summary:
 
 ```bash
-gh pr view [number] --json body -q '.body'
+gh pr view [number] --json body --jq '.body'
 ```
 
 ## Phase 3: Approval Flow
@@ -36394,7 +36394,7 @@ If checks fail → analyze and report fix plan:
 ### 4.2 Conflict check
 
 ```bash
-gh pr view [number] --json mergeable -q '.mergeable'
+gh pr view [number] --json mergeable --jq '.mergeable'
 ```
 
 If not mergeable → request rebase from dependabot:
@@ -36507,7 +36507,7 @@ Expected form:
 ## Input resolution
 
 - **Title hint** — `$ARGUMENTS` → if empty, prompt once via AskUserQuestion: "What is this issue about?" with a free-form slot. Do not abort silently.
-- **Repository** — `gh repo view --json nameWithOwner -q .nameWithOwner`. No prompt.
+- **Repository** — `gh repo view --json nameWithOwner --jq .nameWithOwner`. No prompt.
 
 ## Completion Requirement
 
@@ -36531,7 +36531,7 @@ Every AskUserQuestion call that presents content for review (the issue preview i
 1. Parse `$ARGUMENTS` as an optional title hint. If empty, prompt the user via AskUserQuestion ("What is this issue about?") with a free-form slot.
 2. Resolve the repository:
    ```bash
-   gh repo view --json nameWithOwner -q .nameWithOwner
+   gh repo view --json nameWithOwner --jq .nameWithOwner
    ```
    Store as `<repo>` (format: `owner/name`).
 3. **No preflight-check is invoked.** Issue creation does not depend on git branch state — the user may file an issue from any branch including `main`.
@@ -37026,14 +37026,14 @@ Expected form:
 
 - **Issue number** — if `$ARGUMENTS` contains an issue number, skip Phases 1-2 and hand it straight to [Phase 3](#phase-3-hand-off-to-autopilot). Otherwise list and prompt.
 - **`--all` flag** — parse `$ARGUMENTS` for `--all` independently of the issue number (order does not matter). The skill consumes the flag itself: it only toggles the [Phase 1](#phase-1-fetch-recent-open-issues) search string and is never forwarded to a `gh` call. Because a bare issue number skips Phases 1-2, `--all` is a no-op when an issue number is also supplied.
-- **Repository** — `gh repo view --json nameWithOwner -q .nameWithOwner`. No prompt. Pass `--repo <owner/repo>` to every `gh` call so the skill is correct inside git worktrees.
+- **Repository** — `gh repo view --json nameWithOwner --jq .nameWithOwner`. No prompt. Pass `--repo <owner/repo>` to every `gh` call so the skill is correct inside git worktrees.
 
 ## Phase 0: Resolve Repository and Provider
 
 Resolve the repository once and store it as `<repo>` (format `owner/name`):
 
 ```bash
-gh repo view --json nameWithOwner -q .nameWithOwner
+gh repo view --json nameWithOwner --jq .nameWithOwner
 ```
 
 Determine the provider: read `agents.trackers` from `package.json` (via the Read tool). When a `linear` tracker is configured, the provider is **Linear** (note its `team`); otherwise **GitHub** (the default).
@@ -41551,6 +41551,8 @@ Do not call any skill not listed in `allowed-tools` above. The title and descrip
 
 ## AskUserQuestion Contract (MANDATORY)
 
+<!-- Canonical AskUserQuestion contract. The same 8-rule block in pr:update, commits:create, and issue:create mirrors this one — keep them in sync. -->
+
 **Autopilot bypass:** When `autopilotMode` is true (from [Phase 1](#phase-1-validate-current-state)), this contract is moot — the [Phase 5](#phase-5-verify-with-user) confirmation prompt is skipped. Generate the title and body, then proceed directly to [Phase 6](#phase-6-create-pull-request).
 
 Every AskUserQuestion call that presents content for review (PR previews in [Phase 5](#phase-5-verify-with-user)) MUST follow these exact rules. Simple choice dialogs ([Phase 1](#phase-1-validate-current-state) uncommitted changes) are exempt from the preview requirement.
@@ -42197,7 +42199,7 @@ When invoked via the Agent tool with `run_in_background: true` (spawned by [Phas
 
 - For approved/merged/closed, return the same [Phase 3](#phase-3-exit) exit message as foreground mode
 
-**Detect background mode:** If the prompt contains "background mode" — use background behavior. Otherwise, use foreground behavior.
+**Detect background mode** per [Phase 0](#phase-0-mode-dispatch): use background behavior when the skill was launched with `--background`, when it runs inside an Agent subprocess, or when this prompt contains "background mode"; otherwise use foreground behavior.
 
 ## Context
 
@@ -42613,8 +42615,8 @@ Agent 1 (fetch-pr-reviews):
 
 After all calls complete:
 
-- Store the `outputId` from the snapshot acquisition (attach or pack) response — use `grep_repomix_output` and `read_repomix_output` with this ID to search and read codebase content during [Phase 4](#phase-4-address-comments-code-fixes) (code fixes)
-- Store the categorized review comments from `fetch-pr-reviews` — use in [Phase 3](#phase-3-present-findings-to-user)
+- Store the `outputId` from the snapshot acquisition (attach or pack) response — use `grep_repomix_output` and `read_repomix_output` with this ID to search and read codebase content during [Phase 3](#phase-3-address-comments-code-fixes) (code fixes)
+- Store the categorized review comments from `fetch-pr-reviews` — use in [Phase 2](#phase-2-present-findings-to-user)
 
 ### 1.5 Project Rules
 
@@ -42624,7 +42626,7 @@ After all calls complete:
 
 ---
 
-## Phase 3: Present Findings to User
+## Phase 2: Present Findings to User
 
 **Formatting Note:** Do not use markdown formatting (bold, italic, headers) in AskUserQuestion `question` parameter — it renders as raw text. Use plain text with line breaks and simple labels instead.
 
@@ -42674,7 +42676,7 @@ If "Cancel", stop without changes.
 
 ---
 
-## Phase 4: Address Comments (Code Fixes)
+## Phase 3: Address Comments (Code Fixes)
 
 Process in priority order: Blockers → Suggestions → Nitpicks.
 
@@ -42700,27 +42702,27 @@ For each comment requiring a code change:
 For comments that do not require code changes (questions, misunderstandings):
 
 1. **Evaluate the comment** against the actual codebase — read the code, check if the reviewer's concern is valid
-2. **Draft a reply** — concise, direct, 1-5 sentences; format references per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) (the **Reference formatting & readability** rules inlined at the end of this skill; see [Phase 6](#phase-6-reply-to-review-threads)). A `CHECK-` rule code you cite — e.g. when you echo the finding you are answering — is a reference, not a code specimen: render it as a link to the rule's anchor exactly as [Phase 6](#phase-6-reply-to-review-threads) prescribes, never bare text. Reply shapes:
+2. **Draft a reply** — concise, direct, 1-5 sentences; format references per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) (the **Reference formatting & readability** rules inlined at the end of this skill; see [Phase 5](#phase-5-reply-to-review-threads)). A `CHECK-` rule code you cite — e.g. when you echo the finding you are answering — is a reference, not a code specimen: render it as a link to the rule's anchor exactly as [Phase 5](#phase-5-reply-to-review-threads) prescribes, never bare text. Reply shapes:
    - If reviewer is wrong: "You're right that [X looks concerning], but [reason it's correct]. [Evidence from code]."
    - If needs discussion: "[Acknowledge point], however [concern or alternative]."
    - If question: "[Direct answer with reference to code]."
-3. Store the reply for [Phase 6](#phase-6-reply-to-review-threads)
+3. Store the reply for [Phase 5](#phase-5-reply-to-review-threads)
 
 ---
 
-## Phase 5: Commit and Push
+## Phase 4: Commit and Push
 
-### 5.1 Check for Changes
+### 4.1 Check for Changes
 
 ```bash
 git status --porcelain
 ```
 
-If no changes (only replies needed, no code fixes), skip to [Phase 6](#phase-6-reply-to-review-threads).
+If no changes (only replies needed, no code fixes), skip to [Phase 5](#phase-5-reply-to-review-threads).
 
-### 5.2 Commit
+### 4.2 Commit
 
-Before invoking commits:create, compile a modification list from the changes made in [Phase 4](#phase-4-address-comments-code-fixes). For each code change, write one bullet naming the concrete modification (file, function, value, or behavior that changed).
+Before invoking commits:create, compile a modification list from the changes made in [Phase 3](#phase-3-address-comments-code-fixes). For each code change, write one bullet naming the concrete modification (file, function, value, or behavior that changed).
 
 Example modification list:
 
@@ -42735,7 +42737,7 @@ Example modification list:
 
 Invoke `Skill(autopilot:commits-create)`. Pass the modification list as the commit context in conversation text. Do NOT include any other context about why changes were made.
 
-### 5.3 Push
+### 4.3 Push
 
 ```bash
 git push
@@ -42743,7 +42745,7 @@ git push
 
 ---
 
-## Phase 6: Reply to Review Threads
+## Phase 5: Reply to Review Threads
 
 Compose replies for all processed comments. **Always mention the reviewer** with `@<username>` at the start of each reply.
 
@@ -42752,7 +42754,7 @@ Compose replies for all processed comments. **Always mention the reviewer** with
 - **Partially addressed**: "@\<reviewer\> [What was changed and why, plus what was intentionally kept]."
 - **Declined by user**: "@\<reviewer\> Considered — [explanation of why this suggestion was not applied]."
 
-Format every reply per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) — the **Reference formatting & readability** rules inlined at the end of this skill. The reference kind that recurs here is the commit SHA: when a reply cites the commit that resolved a thread (the HEAD commit after [Phase 5](#phase-5-commit-and-push)'s push, post-rebase/squash), render the SHA as a markdown link `[<sha>](<repo-commit-url>/<sha>)` built from the repo owner/name resolved in [Phase 1](#phase-1-detect-pr-and-load-context) — never a bare or backticked SHA. Because replies post as GitHub comments, link any file, doc, skill, agent, or section you cite as an absolute `<repo-blob-url>/path#anchor` URL built from the same repo owner/name — never a bare name or a repo-relative path (relative paths do not resolve in a comment). A `CHECK-` rule code (e.g. `CHECK-PR-009`) is a reference, not a code specimen: render it as a link exactly as the [`pr:review` skill's §2.5](../pr:review/SKILL.md#25-rule-codes) prescribes — `[CHECK-PR-009](<rules-doc-url>#CHECK-PR-009)` — never the bare code. Build `<rules-doc-url>` as the absolute blob URL to the `pr:review` SKILL.md from the repo owner/name resolved in [Phase 1](#phase-1-detect-pr-and-load-context) — `<repo-blob-url>/claude-plugins/autopilot/skills/pr%3Areview/SKILL.md`, whose `#CHECK-...` fragment lands on the `<a id="...">` anchor above each rule — falling back to the bare code in plain text only when no such URL is resolvable. Replies that cite no commit (e.g. questions, declines) skip the SHA rule; all other reference kinds still follow the inlined rules.
+Format every reply per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) — the **Reference formatting & readability** rules inlined at the end of this skill. The reference kind that recurs here is the commit SHA: when a reply cites the commit that resolved a thread (the HEAD commit after [Phase 4](#phase-4-commit-and-push)'s push, post-rebase/squash), render the SHA as a markdown link `[<sha>](<repo-commit-url>/<sha>)` built from the repo owner/name resolved in [Phase 1](#phase-1-detect-pr-and-load-context) — never a bare or backticked SHA. Because replies post as GitHub comments, link any file, doc, skill, agent, or section you cite as an absolute `<repo-blob-url>/path#anchor` URL built from the same repo owner/name — never a bare name or a repo-relative path (relative paths do not resolve in a comment). A `CHECK-` rule code (e.g. `CHECK-PR-009`) is a reference, not a code specimen: render it as a link exactly as the [`pr:review` skill's §2.5](../pr:review/SKILL.md#25-rule-codes) prescribes — `[CHECK-PR-009](<rules-doc-url>#CHECK-PR-009)` — never the bare code. Build `<rules-doc-url>` as the absolute blob URL to the `pr:review` SKILL.md from the repo owner/name resolved in [Phase 1](#phase-1-detect-pr-and-load-context) — `<repo-blob-url>/claude-plugins/autopilot/skills/pr%3Areview/SKILL.md`, whose `#CHECK-...` fragment lands on the `<a id="...">` anchor above each rule — falling back to the bare code in plain text only when no such URL is resolvable. Replies that cite no commit (e.g. questions, declines) skip the SHA rule; all other reference kinds still follow the inlined rules.
 
 Build a summary of all drafted replies:
 
@@ -42808,13 +42810,13 @@ If "Edit" selected, ask for the user's preferred reply text and use that instead
 
 ---
 
-## Phase 7: Update PR and Summary
+## Phase 6: Update PR and Summary
 
-### 7.1 Update PR
+### 6.1 Update PR
 
 Invoke `Skill(autopilot:pr-update)` — refreshes the PR description reflecting the new state.
 
-### 7.2 Summary
+### 6.2 Summary
 
 Output results:
 
@@ -42868,7 +42870,7 @@ These rules govern references — when you point the reader at a real file, stan
 - Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
 - Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve.
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
+- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 5](#phase-5-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
 - Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
 
@@ -42950,6 +42952,8 @@ Extract the linked issue ID from PR metadata. Check in order, stop at first matc
 2. **Branch name** — leading `[a-z]+-[0-9]+` segment, convert to UPPERCASE
 
 Load the remaining context in parallel — the codebase snapshot, the prior inline review threads, and (when an issue is linked) the linked-issue context plus the related TODOs / issue references in the codebase. Prior-review verdicts and summary bodies already come from the [§1.1](#11-pr-context) `gh pr view` output; the `fetch-pr-reviews` agent adds the per-line inline annotations via read-only `gh api`, returning a categorized summary (raw API output stays out of this context).
+
+<!-- Canonical snapshot-acquire recipe (carries includePatterns); pr:answer and pr:resolve mirror it byte-for-byte — keep in sync. -->
 
 ```
 Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
@@ -45093,7 +45097,7 @@ The following apply to ALL stacks before delegating to the stack-specific skill:
 
 ### Documentation Lookup Protocol (MANDATORY)
 
-Before planning, look up documentation for every technology and library relevant to the task.
+Before planning, look up documentation for every technology and library relevant to the task. **Scale the lookup to the task:** a small or well-understood change needs a single targeted lookup (or none); reserve the full multi-source fan-out below for tasks that touch unfamiliar libraries, APIs, or recent changes.
 
 **Step 1: Identify technologies** from all sources:
 
