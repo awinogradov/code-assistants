@@ -1,7 +1,7 @@
 ---
 name: resolve-assignees
 description: Resolve candidate assignees for an issue from CODEOWNERS and Linear team members. Use when a creation skill needs an assignee picklist without polluting parent context.
-tools: Bash, Grep, MCP(linear:*)
+tools: Bash, MCP(linear:*)
 model: sonnet
 ---
 

@@ -1,7 +1,7 @@
 ---
 name: resolve-issue-context
 description: Fetch issue context from GitHub (gh) or Linear (MCP, with a GraphQL fallback) and optionally auto-assign the current user (idempotent, opt-in via caller flag). Use when commands need structured issue data without polluting parent context.
-tools: Bash, Grep, MCP(linear:*)
+tools: Bash, MCP(linear:*)
 model: sonnet
 ---
 
