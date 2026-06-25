@@ -1,5 +1,5 @@
 name: Licenses audit
-description: Regenerate the license report on dependency-changing pull requests, auto-commit drift on same-repo PRs, and fail fork PRs that ship stale license data. Skips gracefully when the consumer has no license-audit script or report file.
+description: Detect the consumer's package manager (pnpm, npm, or bun), install dependencies, and regenerate an SPDX-grouped license report with the action's bundled generator. Auto-commits drift on same-repo PRs and fails fork PRs that ship stale license data. Skips when no lockfile is present.
 
 inputs:
   bot_token:
@@ -11,10 +11,6 @@ inputs:
       Git author/committer login for the auto-commit. Defaults to `github-actions[bot]` when unset. Pass the `vars.BOT_USERNAME` repository variable to attribute the commit to a dedicated bot identity.
     required: false
     default: ""
-  script:
-    description: Name of the `package.json` script that regenerates the license report.
-    required: false
-    default: "licenses:audit"
   licenses-file:
     description: Path to the generated license report checked for drift.
     required: false
@@ -23,15 +19,11 @@ inputs:
     description: File `actions/setup-node` reads the Node version from.
     required: false
     default: .nvmrc
-  bun-version-file:
-    description: File `oven-sh/setup-bun` reads the Bun version from.
-    required: false
-    default: package.json
 
 outputs:
   skipped:
-    description: "`true` when the consumer exposes no license-audit script or report file and the audit was skipped."
-    value: ${{ steps.capability.outputs.skip }}
+    description: "`true` when no lockfile was found and the audit was skipped."
+    value: ${{ steps.pm.outputs.skip }}
   drifted:
     description: "`true` when the regenerated license report differed from the committed one."
     value: ${{ steps.drift.outputs.drifted }}
@@ -65,53 +57,71 @@ runs:
         ref: ${{ github.event.pull_request.head.sha }}
         persist-credentials: false
 
-    - name: Detect audit capability
-      id: capability
+    - name: Detect package manager
+      id: pm
       shell: bash
-      env:
-        SCRIPT_NAME: ${{ inputs.script }}
-        LICENSES_FILE: ${{ inputs.licenses-file }}
       run: |
         set -euo pipefail
-        if [ ! -f package.json ] || ! jq -e --arg s "$SCRIPT_NAME" '(.scripts // {}) | has($s)' package.json >/dev/null 2>&1; then
-          echo "::notice::No \"$SCRIPT_NAME\" script in package.json — skipping license audit."
+        if [ -f pnpm-lock.yaml ]; then
+          manager=pnpm
+        elif [ -f package-lock.json ]; then
+          manager=npm
+        elif [ -f bun.lock ] || [ -f bun.lockb ]; then
+          manager=bun
+        else
+          echo "::notice::No lockfile (pnpm-lock.yaml, package-lock.json, or bun.lock) found — skipping license audit."
           echo "skip=true" >> "$GITHUB_OUTPUT"
           exit 0
         fi
-        if [ ! -f "$LICENSES_FILE" ]; then
-          echo "::notice::$LICENSES_FILE not found — skipping license audit."
-          echo "skip=true" >> "$GITHUB_OUTPUT"
-          exit 0
-        fi
-        echo "skip=false" >> "$GITHUB_OUTPUT"
+        {
+          echo "skip=false"
+          echo "manager=${manager}"
+        } >> "$GITHUB_OUTPUT"
+        echo "::notice::Detected package manager: ${manager}"
 
     - name: Setup Node
-      if: steps.capability.outputs.skip == 'false'
+      if: steps.pm.outputs.skip == 'false'
       uses: actions/setup-node@v4
       with:
         node-version-file: ${{ inputs.node-version-file }}
 
-    - name: Setup Bun
-      if: steps.capability.outputs.skip == 'false'
-      uses: oven-sh/setup-bun@v2
-      with:
-        bun-version-file: ${{ inputs.bun-version-file }}
-
-    - name: Install dependencies
-      if: steps.capability.outputs.skip == 'false'
-      shell: bash
-      run: bun install --frozen-lockfile
-
-    - name: Regenerate license report
-      if: steps.capability.outputs.skip == 'false'
+    - name: Enable Corepack (pnpm)
+      if: steps.pm.outputs.skip == 'false' && steps.pm.outputs.manager == 'pnpm'
       shell: bash
       env:
-        SCRIPT_NAME: ${{ inputs.script }}
-      run: bun run "$SCRIPT_NAME"
+        COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      run: corepack enable
+
+    - name: Setup Bun
+      if: steps.pm.outputs.skip == 'false'
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: 1.x
+
+    - name: Install dependencies
+      if: steps.pm.outputs.skip == 'false'
+      shell: bash
+      env:
+        PACKAGE_MANAGER: ${{ steps.pm.outputs.manager }}
+      run: |
+        set -euo pipefail
+        case "$PACKAGE_MANAGER" in
+          pnpm) pnpm install --frozen-lockfile ;;
+          npm) npm ci ;;
+          bun) bun install --frozen-lockfile ;;
+          *) echo "::error::Unsupported package manager: ${PACKAGE_MANAGER}"; exit 1 ;;
+        esac
+
+    - name: Regenerate license report
+      if: steps.pm.outputs.skip == 'false'
+      shell: bash
+      env:
+        LICENSES_FILE: ${{ inputs.licenses-file }}
+      run: bun "${{ github.action_path }}/src/licenses-report.ts"
 
     - name: Detect drift
       id: drift
-      if: steps.capability.outputs.skip == 'false'
+      if: steps.pm.outputs.skip == 'false'
       shell: bash
       env:
         LICENSES_FILE: ${{ inputs.licenses-file }}
@@ -142,8 +152,7 @@ runs:
       shell: bash
       env:
         LICENSES_FILE: ${{ inputs.licenses-file }}
-        SCRIPT_NAME: ${{ inputs.script }}
       run: |
-        echo "::error::$LICENSES_FILE is out of date. Run 'bun run $SCRIPT_NAME' locally and commit the result."
+        echo "::error::$LICENSES_FILE is out of date for the updated dependencies. A maintainer will regenerate it after merge, or run the licenses-audit generator and commit the result to this branch."
         git diff -- "$LICENSES_FILE"
         exit 1
