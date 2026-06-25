@@ -251,6 +251,11 @@ describe("parsePluginInstall", () => {
       enabledPlugins: { "platform@platform-engineering": true, "deploy@shared": true },
     });
   });
+
+  test("skips entries with a blank name or an unresolvable source", () => {
+    expect(parsePluginInstall("=.", undefined, "/work")).toBeUndefined();
+    expect(parsePluginInstall("m=.", undefined, undefined)).toBeUndefined();
+  });
 });
 
 describe("deriveMode", () => {
