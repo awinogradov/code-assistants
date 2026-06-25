@@ -1,7 +1,7 @@
 ---
 name: pr:answer
 description: Answer a user comment on a PR review and update review state if needed
-argument-hint: "REPO: <owner/repo> PR_NUMBER: <number> REVIEWER: <bot-login> COMMENT_BODY: <text> COMMENT_PATH: <path> COMMENT_LINE: <line> RULES_DOC_URL: <url>"
+argument-hint: "REPO: <owner/repo> PR_NUMBER: <number> REVIEWER: <bot-login> PR_AUTHOR: <author-login> COMMENT_BODY: <text> COMMENT_PATH: <path> COMMENT_LINE: <line> NEEDS_REVERDICT: <true|false> RULES_DOC_URL: <url>"
 allowed-tools:
   - Read
   - Glob

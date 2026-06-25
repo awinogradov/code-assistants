@@ -142,6 +142,8 @@ If the agent reports breaking changes, treat `--release-notes` as mandatory — 
 
 ## Phase 3: Generate PR Title
 
+> **Canonical:** title/branch grammar is owned by [pr:validate Rules](../pr:validate/SKILL.md#rules); the title rules here mirror it — keep in sync.
+
 **Standard (GitHub) format:** `<Business-valuable description>`
 **Linear format:** `<LINEAR-ID>: <Business-valuable description>` (e.g., `ENG-123: Allow theme selection`)
 **Special prefix format:** `<PREFIX>: <Business-valuable description>` where `<PREFIX>` is one of `HOTFIX`, `TRIVIAL`, `MAINTENANCE`, `PROPOSAL`, `SECURITY`
@@ -164,6 +166,8 @@ If the agent reports breaking changes, treat `--release-notes` as mandatory — 
 - Avoids technical jargon without context
 
 ## Phase 4: Generate PR Description
+
+> **Canonical:** this section is the canonical PR-body grammar (sections, ordering, formatting, magic words); [pr:update Phase 5](../pr:update/SKILL.md#phase-5-generate-updated-pr-title-and-body) mirrors it — keep the two in sync.
 
 **Reference formatting (MANDATORY):** The generated body — both the description and the release-notes section — MUST follow the reference-formatting rules inlined at the end of this skill. The rule that keeps regressing: render every mention of a standard consistently as a link to its versioned RFC by stable ID (e.g., `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`), never a mix of bare text and links in the same body.
 
@@ -194,7 +198,7 @@ Each section is separated by `---`. The `**Issues:**` section is ALWAYS last. Pl
 Include this section (titled `**Release notes:**`) with a `---` separator when:
 
 - `--release-notes` flag is present, OR
-- Breaking changes were detected ([Phase 2](#phase-2-gather-context) step 8 — mandatory)
+- Breaking changes were detected by the [analyze-pr-commits](../../agents/analyze-pr-commits.md#phase-3-analyze-change-significance) agent in [Phase 2](#phase-2-gather-context) (mandatory)
 
 Content rules:
 
@@ -286,7 +290,7 @@ Closes #<issue-from-branch>
 
 **Autopilot bypass:** If `autopilotMode` is true, skip the AskUserQuestion confirmation below. Before proceeding to [Phase 6](#phase-6-create-pull-request):
 
-- If meaningful changes are detected ([Phase 2](#phase-2-gather-context) step 7) AND neither `--release-notes` nor breaking changes triggered the release notes section, auto-generate the `**Release notes:**` section using the rules in [Phase 4](#phase-4-generate-pr-description) and insert it between the description and the `**Issues:**` section (with `---` separators).
+- If meaningful changes are detected (per the [analyze-pr-commits](../../agents/analyze-pr-commits.md#phase-3-analyze-change-significance) significance from [Phase 2](#phase-2-gather-context)) AND neither `--release-notes` nor breaking changes triggered the release notes section, auto-generate the `**Release notes:**` section using the rules in [Phase 4](#phase-4-generate-pr-description) and insert it between the description and the `**Issues:**` section (with `---` separators).
 - Then proceed directly to [Phase 6](#phase-6-create-pull-request) with the resulting title and body.
 
 Present PR details using **AskUserQuestion tool** with preview.
@@ -302,7 +306,7 @@ Present PR details using **AskUserQuestion tool** with preview.
    - `header`: "Create PR"
    - `options`:
 
-     **If `--release-notes` was NOT used AND no breaking changes AND meaningful changes detected ([Phase 2](#phase-2-gather-context) step 7):**
+     **If `--release-notes` was NOT used AND no breaking changes AND meaningful changes detected (per the [analyze-pr-commits](../../agents/analyze-pr-commits.md#phase-3-analyze-change-significance) significance from [Phase 2](#phase-2-gather-context)):**
      [
      { label: "Create PR", description: "Create pull request ready for review", preview: "<full PR content>" },
      { label: "Add release notes", description: "Generate a release notes section for the changelog", preview: "<full PR content>" },

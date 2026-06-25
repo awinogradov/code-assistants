@@ -156,6 +156,8 @@ Tool parameters:
 
 ## Phase 5: Generate Updated PR Title and Body
 
+> **Canonical:** the body grammar is canonical in [pr:create Phase 4](../pr:create/SKILL.md#phase-4-generate-pr-description) and the title/branch grammar in [pr:validate Rules](../pr:validate/SKILL.md#rules) — keep in sync. The clauses below unique to updating (preserving existing links, dedup) are intentional, not drift.
+
 ### PR Title
 
 **Standard (GitHub) format:** `<Business-valuable description>`
@@ -210,7 +212,7 @@ Each section is separated by `---`. The `**Issues:**` section is ALWAYS last. Pl
 Include this section (titled `**Release notes:**`) with a `---` separator when:
 
 - `--release-notes` flag is present in the command invocation, OR
-- Breaking changes were detected ([Phase 3](#phase-3-gather-context) step 10 — mandatory)
+- Breaking changes were detected by the [analyze-pr-commits](../../agents/analyze-pr-commits.md#phase-3-analyze-change-significance) agent in [Phase 3](#phase-3-gather-context) (mandatory)
 
 Content rules:
 
