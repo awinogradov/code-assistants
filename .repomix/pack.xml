@@ -33567,7 +33567,7 @@ Output ONLY the structured block. No preamble or commentary:
 [git diff --stat output, verbatim]
 ```
 
-Omit the "Issue Context" section if `fetchGithubIssue` is `false` or the fetch failed.
+Omit the "Issue Context" section if the `Fetch issue` flag is `false` or the fetch failed.
 </file>
 
 <file path="claude-plugins/autopilot/agents/analyze-staged-changes.md">
@@ -33952,7 +33952,7 @@ Emit the raw object, not the fenced form. Set `resolveError` to `null` (not the 
 ---
 name: resolve-assignees
 description: Resolve candidate assignees for an issue from CODEOWNERS and Linear team members. Use when a creation skill needs an assignee picklist without polluting parent context.
-tools: Bash, Grep, MCP(linear:*)
+tools: Bash, MCP(linear:*)
 model: sonnet
 ---
 
@@ -34008,7 +34008,7 @@ Emit the raw object, not the fenced form.
 ---
 name: resolve-issue-context
 description: Fetch issue context from GitHub (gh) or Linear (MCP, with a GraphQL fallback) and optionally auto-assign the current user (idempotent, opt-in via caller flag). Use when commands need structured issue data without polluting parent context.
-tools: Bash, Grep, MCP(linear:*)
+tools: Bash, MCP(linear:*)
 model: sonnet
 ---
 
@@ -34161,7 +34161,7 @@ The invoking command provides in the prompt:
 
 - **Language**: `typescript`, `python`, or `go`
 - **Repository** in `owner/repo` format (e.g., `awinogradov/code-assistants`)
-- **Provider** (optional, `github` or `linear`; default `github`) — selects how referenced issues are checked in [Phase 3](#phase-3-analyze-with-github)
+- **Provider** (optional, `github` or `linear`; default `github`) — selects how referenced issues are checked in [Phase 3](#phase-3-analyze-issue-status)
 
 ## Phase 1: Scan
 
@@ -34188,7 +34188,7 @@ For each match, extract:
 - Whether the description contains a GitHub issue reference (`#\d+`) or, on a Linear project, a Linear id (`[A-Z]+-\d+`)
 - The `@see` URL if present — extract the GitHub issue number from a `github.com/.../issues/N` URL, or the Linear id from a `linear.app/.../issue/<ID>` URL
 
-## Phase 3: Analyze with GitHub
+## Phase 3: Analyze Issue Status
 
 For a **Linear** project (provider is `linear`), check a referenced ticket with `mcp__plugin_autopilot_linear__get_issue` instead of `gh issue view`: a `state.name` of `Done` or `Canceled` is **stale**, any other state is **linked** (or **needs link** when the `@see` is missing). The GitHub buckets below apply otherwise.
 
@@ -34381,7 +34381,7 @@ const issueQuery = `
       description
       state { name }
       labels { nodes { name } }
-      comments { nodes { user { displayName } createdAt body } }
+      comments(orderBy: createdAt) { nodes { user { displayName } createdAt body } }
     }
   }
 `;
@@ -37204,7 +37204,7 @@ This workflow is not complete until [Phase 7](#phase-7-create-issue) calls `mcp_
 
 ## Phase 1: Gather Context
 
-Mirror `issue:create` so the body reflects real code, not hallucinated structure.
+Mirror `issue:create` so the body reflects real code, not hallucinated structure. Unlike `issue:create`, this skill deliberately omits related-issue/PR detection and the duplicate-warning check — Linear search is not wired through the MCP here, so surfacing related work is out of scope.
 
 1. Acquire the codebase snapshot once (prefer the committed pack): if `.repomix/pack.xml` exists at the repository root, call `mcp__repomix__attach_packed_output` with its path; otherwise `mcp__repomix__pack_codebase` with `compress: true`. Store the `outputId`.
 2. `mcp__repomix__grep_repomix_output` for files/symbols related to the hint, then `mcp__repomix__read_repomix_output` for the matched sections only.
@@ -42883,7 +42883,7 @@ Write the most helpful, readable output you can: plain, direct prose; every refe
 ---
 name: pr:review
 description: Review a pull request and provide constructive feedback with structured verdict. Used by awinogradov/code-review-action
-argument-hint: "REPO: <owner/repo> PR_NUMBER: <number> REVIEWER: <bot-login> PR_AUTHOR: <author-login> RULES_DOC_URL: <url>"
+argument-hint: "REPO: <owner/repo> PR_NUMBER: <number> REVIEWER: <bot-login> PR_AUTHOR: <author-login> RULES_DOC_URL: <url> (all but RULES_DOC_URL fall back to gh when omitted)"
 allowed-tools:
   - Read
   - Glob
@@ -43049,10 +43049,7 @@ Review the diff against **all** checks below in a single pass and collect findin
 
 ### 2.1 Detect Stack
 
-Read `package.json` in the repository root (use Read tool or `grep_repomix_output`). Extract the `agents.rules` field value as the stack identifier.
-
-- If the file exists: store the `rules` value (e.g., `Bun`, `NodeJS+React`, `Bun+React+Tailwind`, `NodeJS+React+Tailwind`)
-- If the file does not exist or `rules` is missing: set stack to `unknown`
+Use the **Stack** already recorded in the [§1.5 Context Map](#15-context-map) — the `agents.rules` value (e.g. `Bun`, `NodeJS+React`, `Bun+React+Tailwind`, `NodeJS+React+Tailwind`), or `unknown` when `package.json` or the field is missing. Do not re-read `package.json` here; §1.5 already captured it.
 
 ### 2.2 Review Principles
 
@@ -43837,7 +43834,7 @@ Add an optional `suggestion` to an inline comment when the fix is concrete and m
 - "🔁 Follow-up review" prefix or any round-labeling preamble
 - CLAUDE.md compliance checklists
 - File/line change statistics
-- Hedging words: "should", "could", "might", "consider"
+- Hedging words: "should", "could", "might"
 - Duplicate content between reviewComment and inlineComments
 - Empty sections with "None", "N/A", or similar placeholders
 
@@ -44542,7 +44539,7 @@ If the `gh` call fails (auth/network), skip this section and validate format onl
 
 ## Comment Generation
 
-When the PR is **invalid**, generate a full GitHub PR comment in the `comment` field. Be sarcastic and use emojis generously. Address the PR author by @-mentioning PR_AUTHOR. Explain what went wrong, show how to fix it, and link to the [contributing guidelines](https://github.com/awinogradov/code-assistants/blob/main/CONTRIBUTING.md). When the PR is **valid**, set `comment` to an empty string.
+When the PR is **invalid**, generate a full GitHub PR comment in the `comment` field. Be sarcastic and use emojis generously. Address the PR author by @-mentioning PR_AUTHOR. Explain what went wrong, show how to fix it, and link to the [contributing guidelines](<repo-blob-url>/CONTRIBUTING.md). When the PR is **valid**, set `comment` to an empty string.
 
 ---
 
@@ -44618,11 +44615,7 @@ Run:
 git branch --show-current
 ```
 
-Store the result as `currentBranch`.
-
-- If `currentBranch` is `main` or `master`, go to [Phase 1.5](#phase-15-detect-git-worktree).
-- If empty (detached HEAD), treat as not-main with no branch issue ID — go to [Phase 1.5](#phase-15-detect-git-worktree).
-- Otherwise, go to [Phase 1.5](#phase-15-detect-git-worktree).
+Store the result as `currentBranch`. An empty value means detached HEAD — treat it as not-`main` with no branch issue ID. Continue to [Phase 1.5](#phase-15-detect-git-worktree); the main-vs-feature decision happens there.
 
 ## Phase 1.5: Detect Git Worktree
 
@@ -44880,7 +44873,7 @@ Write the most helpful, readable output you can: plain, direct prose; every refe
 ---
 name: run
 description: Plan, implement, commit, create PR, and monitor until approved
-argument-hint: "<task description, GitHub issue number, or GitHub issue URL>"
+argument-hint: "<task, GitHub/Linear issue (123, #123, ENG-123, or URL), or code-scanning alert (alert#N or URL)>"
 allowed-tools:
   - TaskCreate
   - TaskUpdate
@@ -44923,6 +44916,8 @@ Expected forms (same as `plan`):
 
 - `<task description>` — free-form description
 - `<GitHub-issue-number>` / `<GitHub-issue-URL>`
+- `<Linear-issue-id>` (e.g. `ENG-123`) or a Linear issue URL — when a `linear` tracker is configured
+- `<code-scanning-alert>` — `alert#<n>` or a code-scanning alert URL
 
 ## Input resolution
 
@@ -45294,18 +45289,6 @@ PR: <pr-url>
 Status: <approved/merged>
 ```
 
-## Quiz Mode Format
-
-When clarification needed:
-
-```
-**Q[N]**: [Clear question]
-A) [Option with brief explanation]
-B) [Option with brief explanation]
-C) [Option with brief explanation]
-D) Other: ___
-```
-
 When you write the plan file, apply the reference-formatting rules inlined at the end of this skill (the **Reference formatting & readability** block below, RFC-0001 v3) to every reference it contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
 
 <!-- ref-format:start -->
@@ -45442,7 +45425,7 @@ If user selects "Cancel", stop without changes.
 
 ## Phase 4: Execute
 
-### 5a. Remove stale TODOs
+### 4a. Remove stale TODOs
 
 For each stale TODO:
 
@@ -45460,7 +45443,7 @@ For each stale TODO:
      ]
    - `multiSelect`: false
 
-### 5b. Create GitHub issues for unlinked TODOs
+### 4b. Create GitHub issues for unlinked TODOs
 
 1. **Group related TODOs** when possible:
    - TODOs in the same file within 10 lines of each other
@@ -45486,7 +45469,7 @@ For each stale TODO:
    e. Use Edit tool to add `@see` link on the line after the TODO comment:
    - TypeScript/Go: `// @see <issue-url>`
 
-### 5c. Add links for "referenced but not linked" TODOs
+### 4c. Add links for "referenced but not linked" TODOs
 
 1. Build the issue URL — GitHub: `https://github.com/<owner>/<repo>/issues/<N>`; Linear: the ticket URL (e.g. `https://linear.app/<org>/issue/<ID>`)
 2. Use Edit tool to add `@see` link on the line after the TODO:
