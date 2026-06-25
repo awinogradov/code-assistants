@@ -62,6 +62,8 @@ code-assistants/
         │   ├── analyze-staged-changes.md
         │   ├── expert-review.md
         │   ├── fetch-pr-reviews.md
+        │   ├── resolve-alert-context.md
+        │   ├── resolve-assignees.md
         │   ├── resolve-issue-context.md
         │   ├── scan-and-analyze-todos.md
         │   ├── search-codebase-todos.md
@@ -321,19 +323,21 @@ Specialized review sub-agents launched in parallel by the `pr:review` skill. Eac
 | `pr:review:surface-testing`     | haiku  | Missing tests, flaky indicators, placeholders           |
 | `pr:review:surface-naming`      | haiku  | Duplication, file naming, directory placement           |
 
-### Helper sub-agents (7 agents)
+### Helper sub-agents (9 agents)
 
 Context-isolating workers invoked by other skills to keep the parent conversation small. Each returns a structured summary only.
 
-| Agent                    | Model   | Used by                   | Purpose                                                                               |
-| ------------------------ | ------- | ------------------------- | ------------------------------------------------------------------------------------- |
-| `analyze-pr-commits`     | sonnet  | `pr:create`, `pr:update`  | Summarize branch commits, diff, and linked issue for PR context                       |
-| `analyze-staged-changes` | haiku   | `commits:create`          | Categorize staged files and recommend a commit strategy                               |
-| `expert-review`          | inherit | `plan`, `plan-*`          | Score an implementation plan as a domain expert                                       |
-| `fetch-pr-reviews`       | sonnet  | `pr:answer`, `pr:resolve` | Fetch, filter, and categorize PR review comments by severity                          |
-| `resolve-issue-context`  | sonnet  | `plan`, `run`             | Fetch GitHub issue context; optionally auto-assign current user (idempotent) via `gh` |
-| `scan-and-analyze-todos` | sonnet  | `todo-cleanup`            | Scan codebase for TODOs and check linked GitHub issue statuses                        |
-| `search-codebase-todos`  | haiku   | `plan`                    | Search the codebase for TODOs and references to a specific issue                      |
+| Agent                    | Model   | Used by                                | Purpose                                                                                      |
+| ------------------------ | ------- | -------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `analyze-pr-commits`     | sonnet  | `pr:create`, `pr:update`               | Summarize branch commits, diff, and linked issue for PR context                              |
+| `analyze-staged-changes` | haiku   | `commits:create`                       | Categorize staged files and recommend a commit strategy                                      |
+| `expert-review`          | inherit | `plan`, `plan-*`                       | Score an implementation plan as a domain expert                                              |
+| `fetch-pr-reviews`       | sonnet  | `pr:answer`, `pr:resolve`, `pr:review` | Fetch, filter, and categorize PR review comments by severity                                 |
+| `resolve-alert-context`  | sonnet  | `plan`, `run`                          | Fetch GitHub code-scanning alert context via the code-scanning API                           |
+| `resolve-assignees`      | sonnet  | `linear:create`                        | Resolve candidate assignees from CODEOWNERS and Linear team members                          |
+| `resolve-issue-context`  | sonnet  | `plan`, `run`, `pr:review`             | Fetch GitHub/Linear issue context; optionally auto-assign current user (idempotent) via `gh` |
+| `scan-and-analyze-todos` | sonnet  | `todo-cleanup`                         | Scan codebase for TODOs and check linked GitHub issue statuses                               |
+| `search-codebase-todos`  | haiku   | `plan`, `run`, `pr:review`             | Search the codebase for TODOs and references to a specific issue                             |
 
 ## Internal Skills (not in slash menu)
 
