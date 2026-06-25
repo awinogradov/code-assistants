@@ -167,10 +167,7 @@ Review the diff against **all** checks below in a single pass and collect findin
 
 ### 2.1 Detect Stack
 
-Read `package.json` in the repository root (use Read tool or `grep_repomix_output`). Extract the `agents.rules` field value as the stack identifier.
-
-- If the file exists: store the `rules` value (e.g., `Bun`, `NodeJS+React`, `Bun+React+Tailwind`, `NodeJS+React+Tailwind`)
-- If the file does not exist or `rules` is missing: set stack to `unknown`
+Use the **Stack** already recorded in the [§1.5 Context Map](#15-context-map) — the `agents.rules` value (e.g. `Bun`, `NodeJS+React`, `Bun+React+Tailwind`, `NodeJS+React+Tailwind`), or `unknown` when `package.json` or the field is missing. Do not re-read `package.json` here; §1.5 already captured it.
 
 ### 2.2 Review Principles
 
@@ -955,7 +952,7 @@ Add an optional `suggestion` to an inline comment when the fix is concrete and m
 - "🔁 Follow-up review" prefix or any round-labeling preamble
 - CLAUDE.md compliance checklists
 - File/line change statistics
-- Hedging words: "should", "could", "might", "consider"
+- Hedging words: "should", "could", "might"
 - Duplicate content between reviewComment and inlineComments
 - Empty sections with "None", "N/A", or similar placeholders
 
