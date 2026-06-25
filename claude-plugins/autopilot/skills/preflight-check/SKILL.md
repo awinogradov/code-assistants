@@ -40,11 +40,7 @@ Run:
 git branch --show-current
 ```
 
-Store the result as `currentBranch`.
-
-- If `currentBranch` is `main` or `master`, go to [Phase 1.5](#phase-15-detect-git-worktree).
-- If empty (detached HEAD), treat as not-main with no branch issue ID — go to [Phase 1.5](#phase-15-detect-git-worktree).
-- Otherwise, go to [Phase 1.5](#phase-15-detect-git-worktree).
+Store the result as `currentBranch`. An empty value means detached HEAD — treat it as not-`main` with no branch issue ID. Continue to [Phase 1.5](#phase-15-detect-git-worktree); the main-vs-feature decision happens there.
 
 ## Phase 1.5: Detect Git Worktree
 
