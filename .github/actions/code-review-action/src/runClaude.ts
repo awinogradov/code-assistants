@@ -167,13 +167,27 @@ export async function loadMcpServers(
  * Write Claude Code settings to a temporary directory.
  * Uses $RUNNER_TEMP to avoid polluting the runner's home directory.
  */
+/**
+ * Validate the consumer-supplied `settings` JSON (external `CLAUDE_SETTINGS` input) before the
+ * action merges its marketplaces/plugins into it. `passthrough()` preserves every other Claude
+ * settings key the consumer set; the two plugin keys are checked as objects when present.
+ */
+const settingsSchema = z
+  .object({
+    extraKnownMarketplaces: z.record(z.string(), z.unknown()).optional(),
+    enabledPlugins: z.record(z.string(), z.unknown()).optional(),
+  })
+  .passthrough();
+
 async function writeSettings(
   settingsJson: string | undefined,
   pluginInstall: PluginInstallConfig | undefined
 ): Promise<string[]> {
   if (!settingsJson && !pluginInstall) return ["project"];
 
-  const base = (settingsJson ? JSON.parse(settingsJson) : {}) as PluginInstallConfig;
+  const base: z.infer<typeof settingsSchema> = settingsJson
+    ? settingsSchema.parse(JSON.parse(settingsJson))
+    : {};
   // The action's marketplaces/plugins inputs are defaults; a consumer's own `settings` wins.
   if (pluginInstall?.extraKnownMarketplaces) {
     base.extraKnownMarketplaces = {
