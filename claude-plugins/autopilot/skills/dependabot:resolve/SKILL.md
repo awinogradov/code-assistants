@@ -49,7 +49,7 @@ For each PR, create a report:
 For major/minor updates, fetch changelog summary:
 
 ```bash
-gh pr view [number] --json body -q '.body'
+gh pr view [number] --json body --jq '.body'
 ```
 
 ## Phase 3: Approval Flow
@@ -107,7 +107,7 @@ If checks fail → analyze and report fix plan:
 ### 4.2 Conflict check
 
 ```bash
-gh pr view [number] --json mergeable -q '.mergeable'
+gh pr view [number] --json mergeable --jq '.mergeable'
 ```
 
 If not mergeable → request rebase from dependabot:
