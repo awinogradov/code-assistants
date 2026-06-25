@@ -1,7 +1,7 @@
 ---
 name: run
 description: Plan, implement, commit, create PR, and monitor until approved
-argument-hint: "<task description, GitHub issue number, or GitHub issue URL>"
+argument-hint: "<task, GitHub/Linear issue (123, #123, ENG-123, or URL), or code-scanning alert (alert#N or URL)>"
 allowed-tools:
   - TaskCreate
   - TaskUpdate
@@ -44,6 +44,8 @@ Expected forms (same as `plan`):
 
 - `<task description>` — free-form description
 - `<GitHub-issue-number>` / `<GitHub-issue-URL>`
+- `<Linear-issue-id>` (e.g. `ENG-123`) or a Linear issue URL — when a `linear` tracker is configured
+- `<code-scanning-alert>` — `alert#<n>` or a code-scanning alert URL
 
 ## Input resolution
 
