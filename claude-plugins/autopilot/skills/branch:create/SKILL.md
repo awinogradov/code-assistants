@@ -136,7 +136,7 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
       EDIT_EXIT=$?
       ```
 
-   5. Post-verify with a fresh read, because `gh issue edit --add-assignee` returns exit 0 even when GitHub silently drops the addition (caller lacks `triage`/`write` permission, or the issue is at the 10-assignee limit):
+   5. **Only when `EDIT_EXIT == 0`**, post-verify with a fresh read, because `gh issue edit --add-assignee` returns exit 0 even when GitHub silently drops the addition (caller lacks `triage`/`write` permission, or the issue is at the 10-assignee limit). When `EDIT_EXIT != 0` the edit never landed, so skip this read and emit `unassigned — gh edit error: <first line of $STDERR>` directly:
 
       ```bash
       VERIFIED=$(gh issue view <ISSUE-NUMBER> -R "$REPO" --json assignees --jq "any(.assignees[]?; .login==\"$LOGIN\")" 2>/dev/null)
