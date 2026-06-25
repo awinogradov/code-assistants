@@ -70,6 +70,8 @@ The `if` condition prevents runner provisioning for non-PR issue comments. All o
 | `rules_doc_url`        | no       | see `action.yml`         | Canonical blob URL of the `pr:review` SKILL.md (literal default in `action.yml`); skills build `CHECK-*` links from it. Override only for forks.                              |
 | `review_prompt`        | no       | `/autopilot:pr-review`   | Slash command for `review` mode; override to run a different review skill. Appends runtime args (REPO, PR_NUMBER, REVIEWER, PR_AUTHOR, RULES_DOC_URL).                        |
 | `react_prompt`         | no       | `/autopilot:pr-answer`   | Slash command for `react` mode; override to run a different reply skill. Appends runtime args (REPO, PR_NUMBER, REVIEWER, comment fields, NEEDS_REVERDICT, RULES_DOC_URL).    |
+| `marketplaces`         | no       | —                        | Plugin marketplaces to register, one `name=source` per line. See [Installing plugins](#installing-plugins).                                                                   |
+| `plugins`              | no       | —                        | Plugins to install, one `plugin@marketplace` per line. See [Installing plugins](#installing-plugins).                                                                         |
 | `debug_logs`           | no       | `false`                  | Enable DEBUG-level Claude trace logging and always upload the execution artifact.                                                                                             |
 | `pr_number`            | no       | event context            | Override auto-detected PR number.                                                                                                                                             |
 | `pr_head_sha`          | no       | event context            | Override auto-detected PR head SHA.                                                                                                                                           |
@@ -96,6 +98,24 @@ The action invokes Claude Code with the local `claude-plugins/autopilot` plugin 
 - `/autopilot:pr-answer` — reply to a PR comment thread and optionally resolve / update the existing review
 
 The `pr:review` skill carries the full review rubric (all `CHECK-*` rules) inline and reviews every dimension itself in one model pass — no review sub-agents and no orchestrator fan-out.
+
+To run a different repo's skills instead — e.g. a consumer's own `pr:review` — point `review_prompt` / `react_prompt` at them and install the plugin that provides them (see below).
+
+## Installing plugins
+
+`marketplaces` and `plugins` install Claude Code plugins before the run, so `review_prompt` / `react_prompt` can target a skill the bundled `autopilot` plugin doesn't provide. Each `marketplaces` line is `name=source` and each `plugins` line is `plugin@marketplace`; the action registers the marketplaces (`extraKnownMarketplaces`) and installs the plugins (`enabledPlugins`), then Claude Code's headless install resolves their slash commands.
+
+```yaml
+with:
+  review_prompt: "/platform:pr-review"
+  react_prompt: "/platform:pr-react"
+  marketplaces: |
+    platform-engineering=.
+  plugins: |
+    platform@platform-engineering
+```
+
+`source` follows `claude plugin marketplace add`: `.` is the checked-out repo (resolved to its absolute `$GITHUB_WORKSPACE`), `owner/repo[@ref]` is a GitHub repo, `https://…` a marketplace URL, `npm:<pkg>` an npm package, and a `./` / `/` path is a local directory (or a `.json` file). A consumer's own `extraKnownMarketplaces` / `enabledPlugins` in `.claude/settings.json` still win on key collisions.
 
 ## Review run-summary footer
 

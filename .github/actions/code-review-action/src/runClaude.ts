@@ -12,7 +12,7 @@
  */
 import { access, mkdir } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -167,13 +167,27 @@ export async function loadMcpServers(
  * Write Claude Code settings to a temporary directory.
  * Uses $RUNNER_TEMP to avoid polluting the runner's home directory.
  */
-async function writeSettings(settingsJson: string | undefined): Promise<string[]> {
-  if (!settingsJson) return ["project"];
+async function writeSettings(
+  settingsJson: string | undefined,
+  pluginInstall: PluginInstallConfig | undefined
+): Promise<string[]> {
+  if (!settingsJson && !pluginInstall) return ["project"];
+
+  const base = (settingsJson ? JSON.parse(settingsJson) : {}) as PluginInstallConfig;
+  // The action's marketplaces/plugins inputs are defaults; a consumer's own `settings` wins.
+  if (pluginInstall?.extraKnownMarketplaces) {
+    base.extraKnownMarketplaces = {
+      ...pluginInstall.extraKnownMarketplaces,
+      ...base.extraKnownMarketplaces,
+    };
+  }
+  if (pluginInstall?.enabledPlugins) {
+    base.enabledPlugins = { ...pluginInstall.enabledPlugins, ...base.enabledPlugins };
+  }
 
   const dir = `${process.env.RUNNER_TEMP ?? "/tmp"}/.claude`;
   await mkdir(dir, { recursive: true });
-  await Bun.write(`${dir}/settings.json`, settingsJson);
-
+  await Bun.write(`${dir}/settings.json`, JSON.stringify(base));
   process.env.CLAUDE_CONFIG_DIR = dir;
   return ["user", "project"];
 }
@@ -185,6 +199,91 @@ async function pathExists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** A marketplace source as accepted by the SDK's `extraKnownMarketplaces`. */
+type MarketplaceSource =
+  | { source: "directory"; path: string }
+  | { source: "file"; path: string }
+  | { source: "url"; url: string }
+  | { source: "github"; repo: string; ref?: string }
+  | { source: "npm"; package: string };
+
+/** The plugin-install slice of Claude settings the action injects from its inputs. */
+interface PluginInstallConfig {
+  extraKnownMarketplaces?: Record<string, { source: MarketplaceSource }>;
+  enabledPlugins?: Record<string, boolean>;
+}
+
+/** Split a newline/comma-separated list input into trimmed, non-empty entries. */
+function splitListInput(value: string | undefined): string[] {
+  return (value ?? "")
+    .split(/[\n,]/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Infer a marketplace source from a `marketplaces` input value, following the `claude plugin
+ * marketplace add` convention: `.` is the checked-out workspace, `owner/repo[@ref]` is GitHub,
+ * `http(s)://…` a URL, `npm:<pkg>` an npm package, and a `/`, `./`, or `../` path is a local
+ * directory (or `file` when it ends in `.json`). Relative local paths resolve against the
+ * workspace, so a consumer never hardcodes the runner's absolute checkout path.
+ */
+function marketplaceSource(
+  spec: string,
+  workspace: string | undefined
+): MarketplaceSource | undefined {
+  if (spec === "" || spec === ".") {
+    return workspace ? { source: "directory", path: workspace } : undefined;
+  }
+  if (/^https?:\/\//.test(spec)) return { source: "url", url: spec };
+  if (spec.startsWith("npm:")) return { source: "npm", package: spec.slice("npm:".length) };
+  if (/^\.{0,2}\//.test(spec)) {
+    const path = isAbsolute(spec) ? spec : join(workspace ?? ".", spec);
+    return spec.endsWith(".json") ? { source: "file", path } : { source: "directory", path };
+  }
+  const [repo, ref] = spec.split("@");
+  return ref ? { source: "github", repo, ref } : { source: "github", repo };
+}
+
+/**
+ * Build the plugin-install config from the action's `marketplaces`/`plugins` inputs so the
+ * SDK's headless install (`CLAUDE_CODE_SYNC_PLUGIN_INSTALL`) can register arbitrary
+ * marketplaces and install the plugins a workflow asks for. `marketplaces` lines are
+ * `name=source` (see {@link marketplaceSource}); `plugins` lines are `plugin@marketplace`.
+ *
+ * @param marketplacesInput - Raw `marketplaces` input (newline/comma list of `name=source`).
+ * @param pluginsInput - Raw `plugins` input (newline/comma list of `plugin@marketplace`).
+ * @param workspace - Repo root for resolving local sources (typically `$GITHUB_WORKSPACE`).
+ * @returns The merged config, or `undefined` when neither input contributes anything.
+ */
+export function parsePluginInstall(
+  marketplacesInput: string | undefined,
+  pluginsInput: string | undefined,
+  workspace: string | undefined
+): PluginInstallConfig | undefined {
+  const extraKnownMarketplaces: Record<string, { source: MarketplaceSource }> = {};
+  for (const entry of splitListInput(marketplacesInput)) {
+    const separator = entry.indexOf("=");
+    const name = (separator === -1 ? entry : entry.slice(0, separator)).trim();
+    const source = marketplaceSource(
+      (separator === -1 ? "" : entry.slice(separator + 1)).trim(),
+      workspace
+    );
+    if (name && source) extraKnownMarketplaces[name] = { source };
+  }
+
+  const enabledPlugins: Record<string, boolean> = {};
+  for (const plugin of splitListInput(pluginsInput)) enabledPlugins[plugin] = true;
+
+  const hasMarketplaces = Object.keys(extraKnownMarketplaces).length > 0;
+  const hasPlugins = Object.keys(enabledPlugins).length > 0;
+  if (!hasMarketplaces && !hasPlugins) return undefined;
+  return {
+    ...(hasMarketplaces ? { extraKnownMarketplaces } : {}),
+    ...(hasPlugins ? { enabledPlugins } : {}),
+  };
 }
 
 /**
@@ -307,7 +406,12 @@ let log: pino.Logger | undefined;
 async function run(): Promise<void> {
   log = await createLogger();
   const config = parseConfig();
-  const settingSources = await writeSettings(config.settingsJson);
+  const pluginInstall = parsePluginInstall(
+    process.env.CLAUDE_INSTALL_MARKETPLACES,
+    process.env.CLAUDE_INSTALL_PLUGINS,
+    process.env.GITHUB_WORKSPACE
+  );
+  const settingSources = await writeSettings(config.settingsJson, pluginInstall);
   const mcpServers = await loadMcpServers(config.mcpConfigPath);
 
   const abortController = new AbortController();

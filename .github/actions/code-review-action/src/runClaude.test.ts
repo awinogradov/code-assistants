@@ -19,6 +19,7 @@ import {
   loadMcpServers,
   mcpConfigFileSchema,
   parseConfig,
+  parsePluginInstall,
   resolveClaudeBinary,
   resolveRunMode,
   safeParseJson,
@@ -204,6 +205,51 @@ describe("loadMcpServers", () => {
 
     const result = await loadMcpServers(filePath);
     expect(result).toEqual({});
+  });
+});
+
+describe("parsePluginInstall", () => {
+  test("returns undefined when both inputs are empty", () => {
+    expect(parsePluginInstall(undefined, undefined, "/work")).toBeUndefined();
+    expect(parsePluginInstall("  ", "", "/work")).toBeUndefined();
+  });
+
+  test("registers the workspace via '.' as an absolute directory source", () => {
+    expect(parsePluginInstall("platform-engineering=.", undefined, "/work")).toEqual({
+      extraKnownMarketplaces: {
+        "platform-engineering": { source: { source: "directory", path: "/work" } },
+      },
+    });
+  });
+
+  test("infers github, url, npm, and local sources", () => {
+    const result = parsePluginInstall(
+      "shared=acclaim-ai/plugins@v2\nsite=https://x.test/m.json\npkg=npm:@scope/mkt\nlocal=./vendor",
+      undefined,
+      "/work"
+    );
+    expect(result?.extraKnownMarketplaces).toEqual({
+      shared: { source: { source: "github", repo: "acclaim-ai/plugins", ref: "v2" } },
+      site: { source: { source: "url", url: "https://x.test/m.json" } },
+      pkg: { source: { source: "npm", package: "@scope/mkt" } },
+      local: { source: { source: "directory", path: "/work/vendor" } },
+    });
+  });
+
+  test("treats a local .json path as a file source", () => {
+    expect(parsePluginInstall("m=/abs/marketplace.json", undefined, "/work")).toEqual({
+      extraKnownMarketplaces: {
+        m: { source: { source: "file", path: "/abs/marketplace.json" } },
+      },
+    });
+  });
+
+  test("collects plugins into enabledPlugins", () => {
+    expect(
+      parsePluginInstall(undefined, "platform@platform-engineering, deploy@shared", "/work")
+    ).toEqual({
+      enabledPlugins: { "platform@platform-engineering": true, "deploy@shared": true },
+    });
   });
 });
 
