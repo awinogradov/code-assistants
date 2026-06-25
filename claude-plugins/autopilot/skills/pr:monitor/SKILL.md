@@ -145,7 +145,7 @@ Store PR number, owner/repo (extract from url), title, and state.
    - Exit: "PR #N is already approved with all checks passing. No monitoring needed."
 6. If HEAD unchanged AND checks are not all passing:
    - Output: "PR #N is approved but has failing CI checks. Attempting to fix..."
-   - Run the **CI Fix Workflow** (see Phase 2.2a)
+   - Run the **CI Fix Workflow** (see [§2.2a](#22a-check-ci-status))
    - After fix, output: "CI fixes pushed. Starting monitoring..."
    - Continue to Phase 1.2
 
@@ -159,7 +159,7 @@ Store PR number, owner/repo (extract from url), title, and state.
 **If checks are failing** (any check in `statusCheckRollup` with `state` that is not `SUCCESS` and not `PENDING` and not `EXPECTED`):
 
 1. Output: "PR #N has failing CI checks. Attempting to fix..."
-2. Run the **CI Fix Workflow** (see Phase 2.2a)
+2. Run the **CI Fix Workflow** (see [§2.2a](#22a-check-ci-status))
 3. After fix, output: "CI fixes pushed. Starting monitoring..."
 4. Continue to Phase 1.2
 
@@ -296,19 +296,7 @@ For each failing check, extract the run-id from the `link` field: parse the URL 
 
 1. Output: "PR #N: All CI checks passing."
 
-**If `reviewDecision` is `APPROVED` AND all checks pass:**
-
-1. Record current HEAD: `git rev-parse HEAD` → store as `headBefore`
-2. Invoke `Skill(autopilot:pr-resolve)` to evaluate unresolved suggestions and nitpicks. The skill will exit early if no actionable comments remain. For each suggestion:
-   - If reasonable and improves the code → fix it
-   - If not applicable or doesn't make sense → reply explaining why
-3. Check if HEAD changed: `git rev-parse HEAD` → compare with `headBefore`
-4. If HEAD changed (pr:resolve pushed new commits):
-   - Output: "pr:resolve pushed fixes. Resuming monitoring for new CI and approval..."
-   - Set `cooldownRemaining = 3`
-   - Continue polling loop (go to 2.1)
-5. If HEAD unchanged:
-   - Exit to [Phase 3](#phase-3-exit) with status "approved"
+Approval is handled once per cycle by [§2.2](#22-check-pr-state), which runs before this phase: when it sees `APPROVED` with all checks passing it evaluates suggestions and exits. If approval landed here while CI was still pending in §2.2, the next poll's §2.2 catches it — this phase needs no duplicate approval handler.
 
 ### 2.3 Check for New Reviews
 
