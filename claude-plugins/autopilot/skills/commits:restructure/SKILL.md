@@ -106,13 +106,7 @@ This handles:
 - Creating proper conventional commit messages
 - User confirmation for each commit
 
-**Commit message rules (per CONTRIBUTING.md):**
-
-- Title: lowercase, imperative, no period, ≤72 chars (`type(scope): subject`)
-- Subject describes WHAT changed (technical specifics), not WHY (motivation)
-- Body required for `feat`/`fix`/`refactor`
-- No GitHub issue numbers or PR references in commit messages
-- No AI agent `Co-authored-by` trailers
+**Commit message rules:** `commits:create` owns and enforces the full set — subject (text after `type(scope): `) ≤ 50 and whole header ≤ 100 (commitlint `subject-max-length` / `header-max-length`), lowercase imperative no-period title, WHAT-not-WHY subject, body required for `feat`/`fix`/`refactor`, no issue/PR numbers, no AI `Co-authored-by` trailers. See [commits:create Rules](../commits:create/SKILL.md#rules); this skill restages the changes and delegates the message creation to it.
 
 ## Phase 7: Success Output
 
