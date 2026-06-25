@@ -8657,6 +8657,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildReviewBody,
   cleanApprovalBody,
+  isCleanApproval,
   parseRunSummary,
   renderRunSummaryFooter,
   stripRunSummaryFooter,
@@ -8729,6 +8730,14 @@ describe("renderRunSummaryFooter", () => {
     );
   });
 
+  test("omits the usage-hint TIP but keeps the metrics block when includeUsageHint is false", () => {
+    const footer = renderRunSummaryFooter(coreSummary, reviewer, false);
+    expect(footer).not.toContain("> [!TIP]");
+    expect(footer).not.toContain(`@${reviewer} <comment>`);
+    expect(footer).toContain("<!-- run-summary-start -->");
+    expect(footer).toContain("<summary>Review run summary 🤖</summary>");
+  });
+
   test("keeps the blank line after <br /> so the table renders inside <details>", () => {
     expect(renderRunSummaryFooter(coreSummary, reviewer)).toContain("<br />\n\n| Metric | Value |");
   });
@@ -8791,6 +8800,21 @@ describe("stripRunSummaryFooter", () => {
       reviewComment +
       renderRunSummaryFooter({ ...coreSummary, cost_usd: 0.99, model_ms: 1 }, reviewer);
     expect(stripRunSummaryFooter(first)).toBe(stripRunSummaryFooter(second));
+  });
+});
+
+describe("isCleanApproval", () => {
+  test("is true for an empty or whitespace-only body with no inline comments", () => {
+    expect(isCleanApproval("", false)).toBe(true);
+    expect(isCleanApproval("   \n", false)).toBe(true);
+  });
+
+  test("is false when the body carries content", () => {
+    expect(isCleanApproval("### Review\n\nLGTM", false)).toBe(false);
+  });
+
+  test("is false when inline comments exist, even with an empty body", () => {
+    expect(isCleanApproval("", true)).toBe(false);
   });
 });
 
@@ -8946,24 +8970,32 @@ function renderDataComment(summary: RunSummary): string {
 }
 
 /**
- * Render the run-summary footer: a visible `@<reviewer>` usage hint followed by
- * the marker-wrapped, collapsible metrics block (built from the shared
- * {@link buildMarkedDetailsBlock} helper).
+ * Render the run-summary footer: an optional visible `@<reviewer>` usage hint
+ * followed by the marker-wrapped, collapsible metrics block (built from the
+ * shared {@link buildMarkedDetailsBlock} helper).
  *
  * The hint is stable text and sits *outside* the strip markers so it survives
  * {@link stripRunSummaryFooter} and stays in the comment after dedup; only the
  * run-varying metrics are marker-bounded — including the machine-readable
  * {@link renderDataComment} block appended after the table. The two leading
  * blank lines separate the footer from the preceding review body.
+ *
+ * `includeUsageHint` defaults to `true`; pass `false` to drop the TIP for a
+ * clean approval (`✅ No issues found.`), where prompting the reader to ask the
+ * bot a question adds noise to a no-issues result. The metrics block always
+ * renders.
  */
-export function renderRunSummaryFooter(summary: RunSummary, reviewer: string): string {
+export function renderRunSummaryFooter(
+  summary: RunSummary,
+  reviewer: string,
+  includeUsageHint = true,
+): string {
   const usageHint = `> [!TIP]\n> \`@${reviewer} <comment>\` — Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.`;
 
   return [
     "",
     "",
-    usageHint,
-    "",
+    ...(includeUsageHint ? [usageHint, ""] : []),
     buildMarkedDetailsBlock({
       startMarker: footerStartMarker,
       endMarker: footerEndMarker,
@@ -8983,20 +9015,31 @@ export function renderRunSummaryFooter(summary: RunSummary, reviewer: string): s
 export const cleanApprovalBody = "✅ No issues found.";
 
 /**
+ * A clean approval — an empty review body with no inline comments. The single
+ * source of truth for the no-issues case: it drives both the
+ * {@link cleanApprovalBody} substitution in {@link buildReviewBody} and the
+ * caller's decision to drop the footer's usage-hint TIP (via
+ * `renderRunSummaryFooter`'s `includeUsageHint`).
+ */
+export function isCleanApproval(reviewBody: string, hasInlineComments: boolean): boolean {
+  return reviewBody.trim() === "" && !hasInlineComments;
+}
+
+/**
  * Assemble the main review body, then append the run-summary footer.
  *
- * A clean approval — an empty review body with no inline comments — gets the
- * {@link cleanApprovalBody} line so the action never posts a footer-only,
- * stats-only comment that reads as an empty (or broken) review. The pr:review
- * skill deliberately returns an empty `reviewComment` for this case, so the
- * minimal line is substituted here rather than in the model output.
+ * A clean approval gets the {@link cleanApprovalBody} line so the action never
+ * posts a footer-only, stats-only comment that reads as an empty (or broken)
+ * review. The pr:review skill deliberately returns an empty `reviewComment` for
+ * this case, so the minimal line is substituted here rather than in the model
+ * output.
  */
 export function buildReviewBody(
   reviewBody: string,
   footer: string,
   hasInlineComments: boolean,
 ): string {
-  const body = reviewBody.trim() === "" && !hasInlineComments ? cleanApprovalBody : reviewBody;
+  const body = isCleanApproval(reviewBody, hasInlineComments) ? cleanApprovalBody : reviewBody;
   return body + footer;
 }
 
@@ -9516,6 +9559,7 @@ import {
 } from "./github/githubReview.ts";
 import {
   buildReviewBody,
+  isCleanApproval,
   parseRunSummary,
   renderRunSummaryFooter,
   stripRunSummaryFooter,
@@ -9635,8 +9679,13 @@ const invalidComments = anchored
 // Fail-open: no footer when RUN_SUMMARY is absent or invalid.
 const reviewBody = output.reviewComment + formatInvalidComments(invalidComments);
 const runSummary = parseRunSummary(process.env.RUN_SUMMARY);
-const footer = runSummary ? renderRunSummaryFooter(runSummary, reviewer) : "";
-const finalBody = buildReviewBody(reviewBody, footer, validComments.length > 0);
+// Drop the footer's usage-hint TIP on a clean approval — the "No issues found"
+// line shouldn't be padded with a prompt to ask the bot a question.
+const hasInlineComments = validComments.length > 0;
+const footer = runSummary
+  ? renderRunSummaryFooter(runSummary, reviewer, !isCleanApproval(reviewBody, hasInlineComments))
+  : "";
+const finalBody = buildReviewBody(reviewBody, footer, hasInlineComments);
 
 // The footer carries run-varying numbers (cost, latency); strip it from both
 // bodies so the duplicate-suppression guard compares the stable content only.
@@ -47459,7 +47508,7 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 
 ## Clean approvals
 
-The pr:review skill returns an empty `reviewComment` for an approval with no findings — by contract no review prose is written, the APPROVE event speaks for itself. Posting a comment that is _only_ the stats footer reads as an empty (or broken) review and is indistinguishable from a genuine content-free-approval failure, so `submitReview.ts` builds the body through `buildReviewBody`: when the review body is empty and there are no inline comments, it substitutes a minimal `✅ No issues found.` line before appending the footer. Reviews that carry findings are unchanged. The dedup and consecutive-approval guards still compare the raw (empty) `reviewComment`, so repeat clean approvals are skipped rather than re-posted.
+The pr:review skill returns an empty `reviewComment` for an approval with no findings — by contract no review prose is written, the APPROVE event speaks for itself. Posting a comment that is _only_ the stats footer reads as an empty (or broken) review and is indistinguishable from a genuine content-free-approval failure, so `submitReview.ts` builds the body through `buildReviewBody`: when the review body is empty and there are no inline comments, it substitutes a minimal `✅ No issues found.` line before appending the footer. The shared `isCleanApproval` predicate detects this case, and `submitReview.ts` also passes `includeUsageHint: false` to `renderRunSummaryFooter` for it — the `> [!TIP]` usage hint is dropped so a no-issues result isn't padded with a prompt to ask the bot a question; only the metrics block remains. Reviews that carry findings (and the preflight skip comment below) keep the TIP. The dedup and consecutive-approval guards still compare the raw (empty) `reviewComment`, so repeat clean approvals are skipped rather than re-posted.
 
 ## Preflight skip comments
 
