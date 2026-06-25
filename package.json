@@ -28,6 +28,7 @@
     ".github/actions/auto-label",
     ".github/actions/validate-actions",
     ".github/actions/perf-report-action",
+    ".github/actions/licenses-audit",
     "claude-plugins/*",
     "packages/*",
     "!claude-plugins/autopilot/skills/**"
@@ -37,6 +38,7 @@
     "format": "prettier --write \"**/*.{md,json}\"",
     "format:check": "prettier --check \"**/*.{md,json}\"",
     "validate": "bun scripts/validate-plugins.ts",
+    "licenses:audit": "bun .github/actions/licenses-audit/src/licenses-report.ts",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "lint": "bun run format:check && bun run validate && turbo run typecheck"
