@@ -63,6 +63,8 @@ Parse `$ARGUMENTS` for an optional task description and optional `--model` / `--
 
 ## Critical Evaluation of Gemini Output
 
+<!-- The model-agnostic peer-evaluation guidance below (the four bullets and the colleague framing) is shared with [ask:codex](../ask:codex/SKILL.md#critical-evaluation-of-codex-output); keep the two in sync. -->
+
 Gemini is powered by Google models with their own knowledge cutoffs and limitations. Treat Gemini as a **colleague, not an authority**.
 
 - **Trust your own knowledge** when confident. If Gemini claims something you know is wrong, push back directly.
