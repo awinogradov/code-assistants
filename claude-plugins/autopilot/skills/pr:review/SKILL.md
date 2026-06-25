@@ -845,7 +845,7 @@ Map `severity` to its emoji when rendering in [Phase 3](#phase-3-submit-review):
   "inlineComments": [
     {"path": "src/file.ts", "line": 42, "body": "🚧 Issue description"},
     {"path": "src/other.ts", "line": 15, "body": "🙋‍♂️ Suggestion here"},
-    {"path": "src/calc.ts", "line": 8, "startLine": 7, "body": "🚧 Off-by-one in the running sum [CHECK-BUG-003](<RULES_DOC_URL>#CHECK-BUG-003)", "suggestion": "    for (let i = 0; i < n; i++)\n        total += items[i];"}
+    {"path": "src/calc.ts", "line": 8, "startLine": 7, "body": "🚧 Off-by-one in the running sum [CHECK-BUG-001](<RULES_DOC_URL>#CHECK-BUG-001)", "suggestion": "    for (let i = 0; i < n; i++)\n        total += items[i];"}
   ]
 }
 ```
