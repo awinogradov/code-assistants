@@ -100,7 +100,7 @@ When invoked via the Agent tool with `run_in_background: true` (spawned by [Phas
 
 - For approved/merged/closed, return the same [Phase 3](#phase-3-exit) exit message as foreground mode
 
-**Detect background mode:** If the prompt contains "background mode" — use background behavior. Otherwise, use foreground behavior.
+**Detect background mode** per [Phase 0](#phase-0-mode-dispatch): use background behavior when the skill was launched with `--background`, when it runs inside an Agent subprocess, or when this prompt contains "background mode"; otherwise use foreground behavior.
 
 ## Context
 
