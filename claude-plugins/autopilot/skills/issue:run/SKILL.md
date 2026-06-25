@@ -87,7 +87,13 @@ If `$ARGUMENTS` already supplies an issue identifier (a GitHub number or a Linea
 
 ## Phase 1: Fetch Recent Open Issues
 
-**If the provider is Linear:** list the team's recent open issues via `mcp__plugin_autopilot_linear__list_issues` (open only, ordered by most-recently-updated; without `--all`, prefer unassigned). Map each to a picker option `{ label: "<identifier> <title>", description: "<labels or 'no labels'>" }` and continue at [Phase 2](#phase-2-select-an-issue). The GitHub steps below apply to **GitHub** projects.
+**If the provider is Linear:** list the team's recent open issues via `mcp__plugin_autopilot_linear__list_issues` (open only, ordered by most-recently-updated; without `--all`, prefer unassigned when the tool exposes an assignee filter). Then mirror the GitHub empty-state handling:
+
+- Non-empty — map each to a picker option `{ label: "<identifier> <title>", description: "<labels or 'no labels'>" }` and continue at [Phase 2](#phase-2-select-an-issue).
+- Empty with `--all` — there are genuinely no open issues to pick from; tell the user and stop (they can re-invoke as `/issue:run <id>`).
+- Empty without `--all` — re-list once without the unassigned preference; if still empty, stop with the same message.
+
+The GitHub steps below apply to **GitHub** projects.
 
 Build the search string from the `--all` flag, then list the four most-recently-updated matching open issues:
 
