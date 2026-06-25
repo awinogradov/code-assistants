@@ -65,4 +65,11 @@ describe("renderLicensesMarkdown", () => {
     const records = [{ name: "alpha", version: "1.0.0", license: "MIT" }];
     expect(renderLicensesMarkdown(records)).toBe(renderLicensesMarkdown(records));
   });
+
+  it("emits a single trailing newline for an empty report", () => {
+    const markdown = renderLicensesMarkdown([]);
+    expect(markdown).toContain("0 packages across 0 licenses.");
+    expect(markdown.endsWith("\n")).toBe(true);
+    expect(markdown.endsWith("\n\n")).toBe(false);
+  });
 });
