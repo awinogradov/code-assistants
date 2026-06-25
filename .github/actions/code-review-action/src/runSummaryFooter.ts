@@ -117,24 +117,32 @@ function renderDataComment(summary: RunSummary): string {
 }
 
 /**
- * Render the run-summary footer: a visible `@<reviewer>` usage hint followed by
- * the marker-wrapped, collapsible metrics block (built from the shared
- * {@link buildMarkedDetailsBlock} helper).
+ * Render the run-summary footer: an optional visible `@<reviewer>` usage hint
+ * followed by the marker-wrapped, collapsible metrics block (built from the
+ * shared {@link buildMarkedDetailsBlock} helper).
  *
  * The hint is stable text and sits *outside* the strip markers so it survives
  * {@link stripRunSummaryFooter} and stays in the comment after dedup; only the
  * run-varying metrics are marker-bounded — including the machine-readable
  * {@link renderDataComment} block appended after the table. The two leading
  * blank lines separate the footer from the preceding review body.
+ *
+ * `includeUsageHint` defaults to `true`; pass `false` to drop the TIP for a
+ * clean approval (`✅ No issues found.`), where prompting the reader to ask the
+ * bot a question adds noise to a no-issues result. The metrics block always
+ * renders.
  */
-export function renderRunSummaryFooter(summary: RunSummary, reviewer: string): string {
+export function renderRunSummaryFooter(
+  summary: RunSummary,
+  reviewer: string,
+  includeUsageHint = true,
+): string {
   const usageHint = `> [!TIP]\n> \`@${reviewer} <comment>\` — Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.`;
 
   return [
     "",
     "",
-    usageHint,
-    "",
+    ...(includeUsageHint ? [usageHint, ""] : []),
     buildMarkedDetailsBlock({
       startMarker: footerStartMarker,
       endMarker: footerEndMarker,
@@ -154,20 +162,31 @@ export function renderRunSummaryFooter(summary: RunSummary, reviewer: string): s
 export const cleanApprovalBody = "✅ No issues found.";
 
 /**
+ * A clean approval — an empty review body with no inline comments. The single
+ * source of truth for the no-issues case: it drives both the
+ * {@link cleanApprovalBody} substitution in {@link buildReviewBody} and the
+ * caller's decision to drop the footer's usage-hint TIP (via
+ * `renderRunSummaryFooter`'s `includeUsageHint`).
+ */
+export function isCleanApproval(reviewBody: string, hasInlineComments: boolean): boolean {
+  return reviewBody.trim() === "" && !hasInlineComments;
+}
+
+/**
  * Assemble the main review body, then append the run-summary footer.
  *
- * A clean approval — an empty review body with no inline comments — gets the
- * {@link cleanApprovalBody} line so the action never posts a footer-only,
- * stats-only comment that reads as an empty (or broken) review. The pr:review
- * skill deliberately returns an empty `reviewComment` for this case, so the
- * minimal line is substituted here rather than in the model output.
+ * A clean approval gets the {@link cleanApprovalBody} line so the action never
+ * posts a footer-only, stats-only comment that reads as an empty (or broken)
+ * review. The pr:review skill deliberately returns an empty `reviewComment` for
+ * this case, so the minimal line is substituted here rather than in the model
+ * output.
  */
 export function buildReviewBody(
   reviewBody: string,
   footer: string,
   hasInlineComments: boolean,
 ): string {
-  const body = reviewBody.trim() === "" && !hasInlineComments ? cleanApprovalBody : reviewBody;
+  const body = isCleanApproval(reviewBody, hasInlineComments) ? cleanApprovalBody : reviewBody;
   return body + footer;
 }
 

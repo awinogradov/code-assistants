@@ -8,6 +8,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildReviewBody,
   cleanApprovalBody,
+  isCleanApproval,
   parseRunSummary,
   renderRunSummaryFooter,
   stripRunSummaryFooter,
@@ -80,6 +81,14 @@ describe("renderRunSummaryFooter", () => {
     );
   });
 
+  test("omits the usage-hint TIP but keeps the metrics block when includeUsageHint is false", () => {
+    const footer = renderRunSummaryFooter(coreSummary, reviewer, false);
+    expect(footer).not.toContain("> [!TIP]");
+    expect(footer).not.toContain(`@${reviewer} <comment>`);
+    expect(footer).toContain("<!-- run-summary-start -->");
+    expect(footer).toContain("<summary>Review run summary 🤖</summary>");
+  });
+
   test("keeps the blank line after <br /> so the table renders inside <details>", () => {
     expect(renderRunSummaryFooter(coreSummary, reviewer)).toContain("<br />\n\n| Metric | Value |");
   });
@@ -142,6 +151,21 @@ describe("stripRunSummaryFooter", () => {
       reviewComment +
       renderRunSummaryFooter({ ...coreSummary, cost_usd: 0.99, model_ms: 1 }, reviewer);
     expect(stripRunSummaryFooter(first)).toBe(stripRunSummaryFooter(second));
+  });
+});
+
+describe("isCleanApproval", () => {
+  test("is true for an empty or whitespace-only body with no inline comments", () => {
+    expect(isCleanApproval("", false)).toBe(true);
+    expect(isCleanApproval("   \n", false)).toBe(true);
+  });
+
+  test("is false when the body carries content", () => {
+    expect(isCleanApproval("### Review\n\nLGTM", false)).toBe(false);
+  });
+
+  test("is false when inline comments exist, even with an empty body", () => {
+    expect(isCleanApproval("", true)).toBe(false);
   });
 });
 
