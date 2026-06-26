@@ -12,11 +12,13 @@ import {
   callAnthropicApi,
   generateWithApi,
   resolveAnthropicClientOptions,
+  resolveAnthropicModel,
   runReleaseNotes,
   verifyReleaseNotes,
 } from "./generateReleaseNotes.ts";
 import {
   buildUserMessage,
+  defaultAnthropicModel,
   filterChangelogForAi,
   readServiceContext,
   systemPrompt,
@@ -342,6 +344,7 @@ describe("callAnthropicApi", () => {
       { apiKey: "test-key" },
       "test prompt",
       "system prompt",
+      defaultAnthropicModel,
       mockMessages
     );
 
@@ -359,10 +362,30 @@ describe("callAnthropicApi", () => {
       },
     };
 
-    await callAnthropicApi({ apiKey: "test-key" }, "user msg", "my system prompt", mockMessages);
+    await callAnthropicApi(
+      { apiKey: "test-key" },
+      "user msg",
+      "my system prompt",
+      defaultAnthropicModel,
+      mockMessages
+    );
 
     expect(capturedSystem).toBe("my system prompt");
     expect(capturedUserContent).toBe("user msg");
+  });
+
+  test("forwards the model to the client", async () => {
+    let capturedModel: string | undefined;
+    const mockMessages: AnthropicMessages = {
+      create: async (params) => {
+        capturedModel = params.model;
+        return { content: [{ type: "text", text: "notes" }] };
+      },
+    };
+
+    await callAnthropicApi({ apiKey: "test-key" }, "user msg", "system", "my-model", mockMessages);
+
+    expect(capturedModel).toBe("my-model");
   });
 
   test("throws when API returns no text content", async () => {
@@ -373,7 +396,7 @@ describe("callAnthropicApi", () => {
     };
 
     await expect(
-      callAnthropicApi({ apiKey: "test-key" }, "test prompt", "system", mockMessages)
+      callAnthropicApi({ apiKey: "test-key" }, "test prompt", "system", defaultAnthropicModel, mockMessages)
     ).rejects.toThrow("Anthropic API returned no text content");
   });
 });
@@ -458,7 +481,7 @@ describe("generateWithApi", () => {
       const notesPath = join(dir, "release_notes.md");
       const bodyPath = join(dir, "missing-body");
 
-      await generateWithApi({ apiKey: "fake-key" }, notesPath, bodyPath, dir);
+      await generateWithApi({ apiKey: "fake-key" }, notesPath, bodyPath, defaultAnthropicModel, dir);
 
       expect(await Bun.file(notesPath).exists()).toBe(false);
     }));
@@ -473,7 +496,14 @@ describe("generateWithApi", () => {
         create: async () => ({ content: [{ type: "text", text: "Summary" }] }),
       };
 
-      await generateWithApi({ apiKey: "test-key" }, notesPath, bodyPath, dir, mockMessages);
+      await generateWithApi(
+        { apiKey: "test-key" },
+        notesPath,
+        bodyPath,
+        defaultAnthropicModel,
+        dir,
+        mockMessages
+      );
 
       const notes = await Bun.file(notesPath).text();
       expect(notes).toBe("Summary");
@@ -497,6 +527,7 @@ describe("generateWithApi", () => {
         { apiKey: "test-key" },
         join(dir, "notes.md"),
         join(dir, "body.md"),
+        defaultAnthropicModel,
         dir,
         mockMessages,
       );
@@ -531,6 +562,20 @@ describe("resolveAnthropicClientOptions", () => {
     expect(() =>
       resolveAnthropicClientOptions({ ANTHROPIC_API_KEY: "k", ANTHROPIC_AUTH_TOKEN: "t" })
     ).toThrow("not both");
+  });
+});
+
+describe("resolveAnthropicModel", () => {
+  test("returns the default when ANTHROPIC_MODEL is unset", () => {
+    expect(resolveAnthropicModel({})).toBe(defaultAnthropicModel);
+  });
+
+  test("treats a blank ANTHROPIC_MODEL as unset", () => {
+    expect(resolveAnthropicModel({ ANTHROPIC_MODEL: "   " })).toBe(defaultAnthropicModel);
+  });
+
+  test("returns the trimmed override when set", () => {
+    expect(resolveAnthropicModel({ ANTHROPIC_MODEL: " claude-custom-1 " })).toBe("claude-custom-1");
   });
 });
 

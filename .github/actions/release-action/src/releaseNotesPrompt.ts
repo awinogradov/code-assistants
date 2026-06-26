@@ -17,7 +17,7 @@
  *   filterChangelogForAi,
  *   readServiceContext,
  *   buildUserMessage,
- *   anthropicModel,
+ *   defaultAnthropicModel,
  * } from "./releaseNotesPrompt.ts";
  *
  * const filtered = filterChangelogForAi(changelog);
@@ -29,8 +29,8 @@ import { join } from "node:path";
 
 import { Glob } from "bun";
 
-/** Anthropic model used for release notes generation */
-export const anthropicModel = "claude-opus-4-20250514";
+/** Default Anthropic model for release notes generation, used when the `model` action input (env `ANTHROPIC_MODEL`) is unset. */
+export const defaultAnthropicModel = "claude-sonnet-4-6";
 
 /** Maximum output tokens for the API response */
 export const maxOutputTokens = 4096;

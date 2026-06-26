@@ -87,6 +87,7 @@ jobs:
 | `anthropic_api_key`    | no       | —                     | Anthropic API key. When set, generates human-readable release-note summaries.                                                             |
 | `anthropic_base_url`   | no       | —                     | Custom Anthropic API base URL for a gateway/proxy/compatible endpoint (full URL with scheme). Unset uses the default `api.anthropic.com`. |
 | `anthropic_auth_token` | no       | —                     | Bearer token for a custom Anthropic host (`Authorization: Bearer`). Alternative to `anthropic_api_key` — set one, not both.               |
+| `model`                | no       | `claude-sonnet-4-6`   | Anthropic model for AI-generated release notes. Overrides the built-in default; leave unset to use it.                                    |
 | `name`                 | no       | —                     | Service or library name for PR titles (e.g. `Dialog Manager` → `Release Dialog Manager 1.2.0`).                                           |
 | `branch`               | no       | `release-{version}`   | Release branch template. `{version}` is substituted. `create` mode only.                                                                  |
 | `linear_api_key`       | no       | —                     | Linear API key for ticket integration.                                                                                                    |

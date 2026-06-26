@@ -17,8 +17,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { assertExclusiveAnthropicAuth } from "@code-assistants/actions-core/anthropicAuth";
 
 import {
-  anthropicModel,
   buildUserMessage,
+  defaultAnthropicModel,
   filterChangelogForAi,
   maxOutputTokens,
   readServiceContext,
@@ -72,11 +72,26 @@ export function resolveAnthropicClientOptions(
 }
 
 /**
+ * Resolve the Anthropic model from the environment, falling back to the default.
+ *
+ * GitHub renders an unset optional action input as `""`, so a blank
+ * `ANTHROPIC_MODEL` is treated as unset and the built-in
+ * {@link defaultAnthropicModel} applies — keeping the default in one place.
+ *
+ * @param env - Source environment, typically `process.env`.
+ * @returns The configured model id, or the default when unset/blank.
+ */
+export function resolveAnthropicModel(env: Record<string, string | undefined>): string {
+  return env.ANTHROPIC_MODEL?.trim() || defaultAnthropicModel;
+}
+
+/**
  * Call the Anthropic Messages API to generate release notes.
  *
  * @param clientOptions - Resolved Anthropic client auth/host options
  * @param userMessage - User message with changelog and context
  * @param system - System prompt with stable instructions
+ * @param model - Anthropic model id to call
  * @param messages - Optional messages client (for testing)
  * @returns Generated release notes text
  * @throws On API error or timeout
@@ -85,12 +100,13 @@ export async function callAnthropicApi(
   clientOptions: AnthropicClientOptions,
   userMessage: string,
   system: string,
+  model: string,
   messages?: AnthropicMessages
 ): Promise<string> {
   const client = messages ?? new Anthropic({ ...clientOptions, timeout: 120_000 }).messages;
 
   const message = await client.create({
-    model: anthropicModel,
+    model,
     max_tokens: maxOutputTokens,
     system,
     messages: [{ role: "user", content: userMessage }],
@@ -146,6 +162,7 @@ export async function generateWithApi(
   clientOptions: AnthropicClientOptions,
   notesPath: string,
   bodyPath: string,
+  model: string,
   cwd = process.cwd(),
   messages?: AnthropicMessages,
 ): Promise<void> {
@@ -166,7 +183,7 @@ export async function generateWithApi(
 
     const filtered = filterChangelogForAi(changelog);
     const userMessage = buildUserMessage(filtered, serviceContext, tickets, prDescriptions);
-    const notes = await callAnthropicApi(clientOptions, userMessage, systemPrompt, messages);
+    const notes = await callAnthropicApi(clientOptions, userMessage, systemPrompt, model, messages);
 
     await Bun.write(notesPath, notes, { createPath: true });
     console.log("Release notes generated");
@@ -190,6 +207,7 @@ export async function runReleaseNotes(
   messages?: AnthropicMessages,
 ): Promise<void> {
   const clientOptions = resolveAnthropicClientOptions(process.env);
+  const model = resolveAnthropicModel(process.env);
   // GitHub renders an unset optional action input as ""; strip a blank host/token so
   // the SDK's own env fallback cannot read it as a configured (blank) host.
   if (!process.env.ANTHROPIC_BASE_URL?.trim()) delete process.env.ANTHROPIC_BASE_URL;
@@ -198,7 +216,7 @@ export async function runReleaseNotes(
   const bodyPath = join(cwd, ".release_bot/body");
 
   if (clientOptions.apiKey || clientOptions.authToken) {
-    await generateWithApi(clientOptions, notesPath, bodyPath, cwd, messages);
+    await generateWithApi(clientOptions, notesPath, bodyPath, model, cwd, messages);
   }
 
   await verifyReleaseNotes(notesPath, bodyPath);
