@@ -1,6 +1,6 @@
 {
   "name": "@code-assistants/auto-label-action",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Composite GitHub Action that labels pull requests with `<scope>/<workspace-member>` labels and prunes orphan labels on the default branch.",
   "private": true,
   "type": "module",
