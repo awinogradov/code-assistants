@@ -10497,6 +10497,15 @@ runs:
       run: |
         echo "dir=${{ github.action_path }}/../../../claude-plugins/autopilot" >> "$GITHUB_OUTPUT"
 
+    # github `marketplaces`/`plugins` sources clone over HTTPS in CI (no SSH key); the gh credential
+    # helper lets that clone authenticate to a private repo with bot_token.
+    - name: Authenticate git for private plugin marketplaces
+      if: steps.ctx.outputs.skip != 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.bot_token }}
+      run: gh auth setup-git
+
     # ── Review mode ──
 
     - name: Force AI reviewer
