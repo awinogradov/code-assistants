@@ -2,6 +2,63 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [0.2.0](https://github.com/awinogradov/code-assistants/compare/code-review-cost-monitor-action@v0.1.0...code-review-cost-monitor-action@v0.2.0) (2026-06-26)
+
+## Release Notes
+
+The cost-monitor's optional attribution step now works correctly when run against a custom Anthropic endpoint, and both the base URL and auth token can be configured to route through a gateway or proxy.
+
+## ✨ What's New
+
+### Custom Anthropic Endpoint Support
+
+The monitor's optional attribution step (which names the change that caused a cost regression) can now be routed through an Anthropic-compatible gateway or proxy instead of hitting the Anthropic API directly. Two new optional inputs cover the common gateway patterns: `anthropic_base_url` sets the target host, and `anthropic_auth_token` handles hosts that expect a bearer token rather than the standard `x-api-key` header. When neither input is set, behaviour is identical to before — this is purely additive.
+
+<details><summary>Related issues</summary>
+
+- [#27: Support a custom Anthropic host (base URL) for SDK-backed actions](https://github.com/awinogradov/code-assistants/issues/27)
+- [#326: Support a custom Anthropic host (base URL) for SDK-backed actions](https://github.com/awinogradov/code-assistants/pull/326)
+</details>
+
+## 🐛 Bug Fixes
+
+### Attribution Step Now Authenticates Correctly
+
+When the optional attribution analysis was enabled, it was being invoked without passing the authentication token through to the Anthropic SDK, causing it to fail silently or error out. The token is now forwarded correctly, so cost-regression reports that include attribution (the "what changed" analysis) will produce results reliably.
+
+<details><summary>Related issues</summary>
+
+- [#326: Support a custom Anthropic host (base URL) for SDK-backed actions](https://github.com/awinogradov/code-assistants/pull/326)
+</details>
+
+## ⚙️ Configuration Required
+
+### `anthropic_base_url` — Custom API Host (Optional)
+
+Points the Anthropic SDK at a gateway, proxy, or compatible endpoint instead of the default Anthropic API. Set this if your organisation routes model calls through an internal gateway or a third-party Anthropic-compatible service. Has no effect when left unset.
+
+### `anthropic_auth_token` — Bearer Token Authentication (Optional)
+
+Supplies a bearer token for hosts that authenticate with `Authorization: Bearer <token>` rather than the standard `x-api-key` header. Only relevant when `anthropic_base_url` is also set and your gateway requires bearer auth. Has no effect when left unset.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #27 | [#326](https://github.com/awinogradov/code-assistants/pull/326) | @awinogradov |
+
+### Features
+
+* support custom anthropic host for sdk ([3f53bde](https://github.com/awinogradov/code-assistants/commit/3f53bde9f8dab8fabfa3f08c30addeac1bd8b097))
+
+### Bug Fixes
+
+* run cost-monitor attribution with auth token ([ce9cdd4](https://github.com/awinogradov/code-assistants/commit/ce9cdd43b34028912ee412b02c2c236cf47eb0c7))
+
+### Documentation
+
+* document anthropic base-url and auth inputs ([f902894](https://github.com/awinogradov/code-assistants/commit/f902894ab4c791545b720152ee8d730485584b4a))
 ## 0.1.0 (2026-06-13)
 
 ## Release Notes

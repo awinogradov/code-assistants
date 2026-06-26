@@ -1,6 +1,6 @@
 {
   "name": "@code-assistants/code-review-cost-monitor-action",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Composite GitHub Action that watches the code-review run-summary footers for cost regressions and opens (or updates) a deduplicated cost-report issue.",
   "private": true,
   "type": "module",
