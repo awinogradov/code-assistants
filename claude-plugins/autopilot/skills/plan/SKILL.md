@@ -104,7 +104,7 @@ Detect the input type from the arguments. Match **top-to-bottom and stop at the 
 
 A **bare number stays a GitHub issue** — alerts require the alert URL or the explicit `alert#{n}` / `alert {n}` token, so there is zero collision with the issue-number rows.
 
-The detection rows are gated on the project's configured trackers — `agents.trackers` in `package.json`, an array of `{ type, ... }` entries (absent ⇒ a single `github` tracker, today's behavior). **Linear rows fire only when a `linear` tracker is configured**; the Linear ID is the uppercase `KEY-N` form (`^[A-Z]+-[0-9]+$`), and when that entry's `keys` are set, `KEY` must be one of them. **GitHub rows fire when a `github` tracker is configured** (the default). A project may configure both — e.g. `linear` for internal issues and `github` for external user feedback — and each argument routes by shape: `ENG-123` → Linear, `#42` / `123` / a `github.com` URL → GitHub. A Linear-shaped argument with no matching `linear` tracker matches none of the GitHub numeric rows and falls through to **Plain description**, so existing GitHub repos are unaffected.
+The detection rows are gated on the project's configured trackers — `agents.trackers` in `package.json`, an array of `{ type, ... }` entries (absent ⇒ a single `github` tracker, today's behavior). **Linear rows fire only when at least one `linear` tracker is configured**; the Linear ID is the uppercase `KEY-N` form (`^[A-Z]+-[0-9]+$`), and its `KEY` must match the **union of every** `linear` tracker's effective keys (each entry's `keys`, defaulting to `[team]`). Several `linear` teams may coexist — `FRTNS-3` routes to the `FRTNS` tracker and `ENG-12` to `ENG` — and the matched entry supplies the `team` passed to `resolve-issue-context`. **GitHub rows fire when a `github` tracker is configured** (the default). A project may configure both — e.g. `linear` for internal issues and `github` for external user feedback — and each argument routes by shape: `ENG-123` → Linear, `#42` / `123` / a `github.com` URL → GitHub. A Linear-shaped argument with no matching `linear` tracker matches none of the GitHub numeric rows and falls through to **Plain description**, so existing GitHub repos are unaffected.
 
 Launch context-gathering calls **in parallel**. The number of parallel calls depends on input type:
 
@@ -158,7 +158,7 @@ Agent 2 (search-codebase-todos):
 Agent 1 (resolve-issue-context):
   Use the Agent tool with:
   - `subagent_type`: "autopilot:resolve-issue-context"
-  - `prompt`: "Fetch issue context. Input type: linear-issue. Linear ID: [ENG-123]. Linear team: [from the matching linear entry in package.json agents.trackers]. Auto-assign current user: false."
+  - `prompt`: "Fetch issue context. Input type: linear-issue. Linear ID: [ENG-123]. Linear team: [the `team` of the `linear` entry in package.json agents.trackers whose keys matched the ID's KEY]. Auto-assign current user: false."
   - `description`: "Resolve issue context"
 ```
 
