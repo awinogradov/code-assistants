@@ -2,6 +2,90 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.2.0](https://github.com/awinogradov/code-assistants/compare/release-action@v1.1.3...release-action@v1.2.0) (2026-06-26)
+
+## Release Notes
+
+The AI-generated release notes are working again after the hardcoded deprecated model was replaced with a configurable input.
+
+## ✨ What's New
+
+### Custom Anthropic Host and Auth Token Support
+
+The release action can now route its Anthropic SDK calls through a gateway, proxy, or any API-compatible endpoint. Two new optional inputs — `anthropic_base_url` and `anthropic_auth_token` — let you point the action at an internal endpoint and authenticate with a bearer token instead of the standard `x-api-key` header. When these inputs are left unset, the action behaves exactly as before.
+
+<details><summary>Related issues</summary>
+
+- [#27: Support a custom Anthropic host (base URL) for SDK-backed actions](https://github.com/awinogradov/code-assistants/issues/27)
+</details>
+
+### Configurable Release Notes Model
+
+The AI model used to generate release notes is now an explicit input rather than a hardcoded value. You can override which Claude model the action calls without touching code — useful if you need to pin to a specific model version or roll forward when a model is retired.
+
+<details><summary>Related issues</summary>
+
+- [#369: Release notes fail to generate because the AI model is hardcoded and deprecated](https://github.com/awinogradov/code-assistants/issues/369)
+</details>
+
+## 🐛 Bug Fixes
+
+### AI Release Notes Restored
+
+Release note generation was silently failing because the action was calling a deprecated Claude model. The default model has been updated to `claude-sonnet-4-6` and the action now accepts a `release_notes_model` input so future model changes won't require a code release.
+
+<details><summary>Related issues</summary>
+
+- [#369: Release notes fail to generate because the AI model is hardcoded and deprecated](https://github.com/awinogradov/code-assistants/issues/369)
+</details>
+
+## ⚙️ Configuration Required
+
+### `anthropic_base_url` (Optional)
+
+Specifies a custom base URL for the Anthropic SDK — useful for routing through a corporate gateway, API proxy, or a self-hosted compatible endpoint. Leave unset to use the default Anthropic API host. Applies to `release-action`, `code-review-action`, and `code-review-cost-monitor`.
+
+### `anthropic_auth_token` (Optional)
+
+A bearer token used to authenticate against a custom Anthropic host. Required only when `anthropic_base_url` points to an endpoint that expects `Authorization: Bearer <token>` instead of the standard `x-api-key` header. Has no effect when `anthropic_base_url` is unset.
+
+### `release_notes_model` (Optional)
+
+Overrides the Claude model used during the **create** phase to generate the AI release summary. Defaults to `claude-sonnet-4-6`. Set this if you need to pin to a specific model version or want to test a newer model without waiting for an action release.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #369 | [#370](https://github.com/awinogradov/code-assistants/pull/370) | @awinogradov |
+| #334 | [#335](https://github.com/awinogradov/code-assistants/pull/335) | @awinogradov |
+| #27 | [#326](https://github.com/awinogradov/code-assistants/pull/326) | @awinogradov |
+
+### Features
+
+* **rfc:** link cross-document references ([46e5d6f](https://github.com/awinogradov/code-assistants/commit/46e5d6f7b5d6c7e62453f751c71faf6145499851))
+* support custom anthropic host for sdk ([3f53bde](https://github.com/awinogradov/code-assistants/commit/3f53bde9f8dab8fabfa3f08c30addeac1bd8b097))
+
+### Bug Fixes
+
+* **release-action:** make release-notes model a configurable input ([9291872](https://github.com/awinogradov/code-assistants/commit/9291872515dc5a0fcd05e7669ae2ddd951059cac))
+
+### Documentation
+
+* document anthropic base-url and auth inputs ([f902894](https://github.com/awinogradov/code-assistants/commit/f902894ab4c791545b720152ee8d730485584b4a))
+
+### Refactoring
+
+* share anthropic auth-exclusion guard ([d207c07](https://github.com/awinogradov/code-assistants/commit/d207c070410ff1081c142255c4615a33a656b6a1))
+
+### Tests
+
+* cover sdk env and client-option helpers ([0a669d0](https://github.com/awinogradov/code-assistants/commit/0a669d01bb5c27bf51a250a18b244822c6fcf637))
+
+### CI
+
+* read version via redirection, not cat pipe ([0450108](https://github.com/awinogradov/code-assistants/commit/0450108bb23944ceb852c1c8f191782429107f93))
 ## [1.1.3](https://github.com/awinogradov/code-assistants/compare/release-action@v1.1.2...release-action@v1.1.3) (2026-06-15)
 
 ## Release Notes
