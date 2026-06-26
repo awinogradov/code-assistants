@@ -129,9 +129,9 @@ Each inline finding can carry a one-click GitHub **`suggestion`** block (the aut
 
 See [Inline suggestions and AI-agent prompts](../../../docs/04-code-review-suggestions.md) for the full data flow, a rendered example, and the source map.
 
-## Labels
+## Skipping bot-authored PRs
 
-PRs authored by the configured `bot_username` (or `reviewer` if `bot_username` is unset) and carrying the `ci-skip-review` label are skipped — useful for automated CI updates that don't need review.
+PRs authored by the configured `bot_username` (or `reviewer` if `bot_username` is unset) skip AI review: the reviewer identity is the bot itself, and GitHub forbids a PR's author from being its own reviewer or approver, so there is no verdict the review could land.
 
 ## Release PR auto-approval
 
