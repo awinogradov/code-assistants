@@ -104,6 +104,7 @@ The content is organized as follows:
         1.3.0.md
         1.4.0.md
         1.4.1.md
+        1.5.0.md
       src/
         github/
           githubReview.test.ts
@@ -4191,6 +4192,173 @@ The usage hint at the bottom of AI code reviews now appears as a native GitHub "
 ### Documentation
 
 * adopt github alert syntax for callouts ([151e57b](https://github.com/awinogradov/code-assistants/commit/151e57bd2694b5df626833d3243cdded6f77eef9))
+</file>
+
+<file path=".github/actions/code-review-action/.release_notes/1.5.0.md">
+## [1.5.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.4.1...code-review-action@v1.5.0) (2026-06-26)
+
+## Release Notes
+
+The biggest change in this release is the new plugin and marketplace system, which lets you point the code reviewer at custom skills from your own repositories without forking the action.
+
+## ✨ What's New
+
+### Custom Review and React Prompts
+
+The code-review action now accepts `review_prompt` and `react_prompt` inputs, so you can run a completely different skill for review or comment-reply without forking or modifying the action itself. The defaults are unchanged, so existing deployments continue to work as-is.
+
+<details><summary>Related issues</summary>
+
+- [#349: Make the code-review-action review prompt a configurable action input](https://github.com/awinogradov/code-assistants/issues/349)
+</details>
+
+### Plugin Marketplaces Support
+
+Two new inputs — `marketplaces` and `plugins` — let a workflow register any plugin source and install specific plugins before the review runs. This is what makes `review_prompt`/`react_prompt` point at consumer-owned skills (like `/platform:pr-review`) work in practice. Without this, the SDK would run in cache-only mode and fail with "Unknown command" for any skill not bundled with autopilot.
+
+`marketplaces` takes one `name=source` entry per line, where the source can be the checked-out repo (`.`), a GitHub repo (`owner/repo[@ref]`), a URL, or an npm package. `plugins` takes one `plugin@marketplace` entry per line.
+
+Example configuration for a consumer workflow:
+
+```yaml
+with:
+  review_prompt: "/platform:pr-review"
+  react_prompt: "/platform:pr-react"
+  marketplaces: |
+    platform-engineering=.
+  plugins: |
+    platform@platform-engineering
+```
+
+### Private Plugin Marketplace Authentication
+
+When a `marketplaces` entry points at a private GitHub repository, the SDK now has a git credential helper configured before it attempts to clone the plugin source. Previously, with no SSH key in CI, the clone would fail with an authentication error. The action uses the existing `bot_token` to set up credentials, so no additional secrets are needed.
+
+<details><summary>Related issues</summary>
+
+- [#336: Add pdf:create autopilot skill for beautiful, brand-themed PDFs](https://github.com/awinogradov/code-assistants/issues/336)
+</details>
+
+### Custom Anthropic Host / Gateway Support
+
+The action now accepts two optional inputs — `anthropic_base_url` and `anthropic_auth_token` — for routing API calls through a proxy, gateway, or any Anthropic-compatible endpoint. `anthropic_auth_token` covers hosts that use a bearer token instead of the standard `x-api-key` header. When neither input is set, behaviour is identical to before.
+
+<details><summary>Related issues</summary>
+
+- [#27: Support a custom Anthropic host (base URL) for SDK-backed actions](https://github.com/awinogradov/code-assistants/issues/27)
+</details>
+
+## 🐛 Bug Fixes
+
+### Bot-Authored PRs Are Now Fully Skipped
+
+The reviewer previously only skipped PRs with a `ci-skip-review` label when a bot authored them. It now skips every PR authored by the configured bot, which prevents unnecessary review runs on automated PRs (dependency updates, release commits, etc.).
+
+<details><summary>Related issues</summary>
+
+- [#339: Support Linear as an issue tracker across the autopilot skills](https://github.com/awinogradov/code-assistants/issues/339)
+</details>
+
+### PR Author Passed Correctly to Comment-Reply Flow
+
+When the action responded to a PR comment (the `react` mode), it wasn't passing the PR author's login to the reply skill. This could produce replies that misidentified or omitted the original author. The author context is now correctly forwarded.
+
+<details><summary>Related issues</summary>
+
+- [#347: Autopilot review replies show CHECK rule codes as bare text instead of links](https://github.com/awinogradov/code-assistants/issues/347)
+</details>
+
+### Rule Codes in Review Replies Now Link to Their Definitions
+
+When the autopilot replied to a review thread, `CHECK-` rule codes appeared as plain text. They now render as clickable links to their rule definition, matching the behaviour already present in main review comments.
+
+<details><summary>Related issues</summary>
+
+- [#347: Autopilot review replies show CHECK rule codes as bare text instead of links](https://github.com/awinogradov/code-assistants/issues/347)
+</details>
+
+### "Ask the Reviewer" Tip Removed from Clean Approvals
+
+A usage-hint tip ("you can ask the reviewer…") was being appended to approval reviews even when there were no issues at all, which looked out of place on a clean pass. Approvals with no findings no longer include it.
+
+### Settings File Now Validated Before Being Applied
+
+The action validates the repo's settings JSON with a strict schema check before merging it with action defaults. Previously a malformed settings file could cause silent misconfiguration; now it produces a clear error early in the run.
+
+## ⚙️ Configuration Required
+
+### `review_prompt` (Optional)
+
+The skill command the action runs for pull request reviews. Defaults to the current built-in autopilot review skill. Set this if you want to use a custom or team-specific review skill from your own plugin.
+
+### `react_prompt` (Optional)
+
+The skill command the action runs when replying to a PR comment. Defaults to the current built-in autopilot reply skill. Set this alongside `review_prompt` when switching to a custom skill set.
+
+### `marketplaces` (Optional)
+
+A newline-separated list of `name=source` entries declaring plugin marketplaces the action should register before running. Required when `plugins` or your custom prompts reference skills that aren't part of the bundled autopilot plugin.
+
+### `plugins` (Optional)
+
+A newline-separated list of `plugin@marketplace` entries declaring which plugins to install. The marketplace name must match an entry in `marketplaces`. Consumers with no custom plugins are unaffected — this is a no-op when left unset.
+
+### `anthropic_base_url` (Optional)
+
+The base URL for the Anthropic SDK client. Leave unset to use the standard Anthropic API. Set this when routing through an internal gateway or a compatible third-party endpoint.
+
+### `anthropic_auth_token` (Optional)
+
+A bearer token used instead of `x-api-key` for hosts that require it. Only needed alongside `anthropic_base_url` when the target endpoint uses bearer-token authentication.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #347 | [#351](https://github.com/awinogradov/code-assistants/pull/351) | @awinogradov |
+| #349 | [#350](https://github.com/awinogradov/code-assistants/pull/350) | @awinogradov |
+| #340 | [#346](https://github.com/awinogradov/code-assistants/pull/346) | @awinogradov |
+| #341 | [#346](https://github.com/awinogradov/code-assistants/pull/346) | @awinogradov |
+| #342 | [#346](https://github.com/awinogradov/code-assistants/pull/346) | @awinogradov |
+| #339 | [#346](https://github.com/awinogradov/code-assistants/pull/346) | @awinogradov |
+| #336 | [#337](https://github.com/awinogradov/code-assistants/pull/337) | @awinogradov |
+| #334 | [#335](https://github.com/awinogradov/code-assistants/pull/335) | @awinogradov |
+| #27 | [#326](https://github.com/awinogradov/code-assistants/pull/326) | @awinogradov |
+
+### Features
+
+* **code-review-action:** add review_prompt and react_prompt inputs ([d4f4158](https://github.com/awinogradov/code-assistants/commit/d4f415868b87c66ad2fa14c6147b040a4400afc6))
+* **code-review:** add plugins and marketplaces inputs ([67d38d6](https://github.com/awinogradov/code-assistants/commit/67d38d6f0bacf19ba04a2179708ed61f0abeccbd))
+* support custom anthropic host for sdk ([3f53bde](https://github.com/awinogradov/code-assistants/commit/3f53bde9f8dab8fabfa3f08c30addeac1bd8b097))
+
+### Bug Fixes
+
+* **autopilot:** link rule codes in review replies ([657d8e0](https://github.com/awinogradov/code-assistants/commit/657d8e03f606d853b2fd4f1c46ba18aba09a7d70))
+* **code-review-action:** pass author login to react step prompt ([318282a](https://github.com/awinogradov/code-assistants/commit/318282a6368c3224edf7a22908f77181d9cc1c5d))
+* **code-review:** authenticate git for private plugin marketplaces ([9263bbe](https://github.com/awinogradov/code-assistants/commit/9263bbe5bdae2d8e9eb1e67e26b39c2f6787f2c1))
+* **code-review:** drop usage-hint tip on clean approvals ([4f23ef7](https://github.com/awinogradov/code-assistants/commit/4f23ef78aa6c8a48d56cb79e8d7473a53efb091d))
+* **code-review:** install enabled plugins in headless review ([842e7d9](https://github.com/awinogradov/code-assistants/commit/842e7d976a069c1dc0cbe4294634cba4893a3029))
+* **code-review:** skip ai review for all bot-authored prs ([a980413](https://github.com/awinogradov/code-assistants/commit/a98041330877fc8b1dc4bd8a7176a84f2c3dec5d))
+* **code-review:** validate settings json with zod before merge ([5cbb209](https://github.com/awinogradov/code-assistants/commit/5cbb2093af948ebfcd9e6df26a21edfecd3bff37))
+
+### Documentation
+
+* **code-review-action:** document review_prompt and react_prompt inputs ([c9c92a7](https://github.com/awinogradov/code-assistants/commit/c9c92a7a9d098d836f4d928cd61010f46c210975))
+* document anthropic base-url and auth inputs ([f902894](https://github.com/awinogradov/code-assistants/commit/f902894ab4c791545b720152ee8d730485584b4a))
+
+### Refactoring
+
+* share anthropic auth-exclusion guard ([d207c07](https://github.com/awinogradov/code-assistants/commit/d207c070410ff1081c142255c4615a33a656b6a1))
+
+### Tests
+
+* **code-review-action:** assert prompt input defaults and wiring ([a3a4cc0](https://github.com/awinogradov/code-assistants/commit/a3a4cc09cf227344cf6483b9ea74a007e8a63771))
+* **code-review:** add linear:create to format guard ([8eb1228](https://github.com/awinogradov/code-assistants/commit/8eb1228f35e001f59afb4e0adefd38d9cf30d0f1))
+* **code-review:** cover blank name and unresolved source skips ([c0414e6](https://github.com/awinogradov/code-assistants/commit/c0414e6e84912a9f205537f523c215f682511839))
+* **code-review:** guard link resolution ([591330a](https://github.com/awinogradov/code-assistants/commit/591330a4a2a2f116ace34d02967b4f1f16510461))
+* **code-review:** skip node_modules in link walk ([1208232](https://github.com/awinogradov/code-assistants/commit/120823228f998782643d510d65ba8887ad0b8094))
+* cover sdk env and client-option helpers ([0a669d0](https://github.com/awinogradov/code-assistants/commit/0a669d01bb5c27bf51a250a18b244822c6fcf637))
 </file>
 
 <file path=".github/actions/code-review-action/src/github/githubReview.test.ts">
@@ -10723,6 +10891,170 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.5.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.4.1...code-review-action@v1.5.0) (2026-06-26)
+
+## Release Notes
+
+The biggest change in this release is the new plugin and marketplace system, which lets you point the code reviewer at custom skills from your own repositories without forking the action.
+
+## ✨ What's New
+
+### Custom Review and React Prompts
+
+The code-review action now accepts `review_prompt` and `react_prompt` inputs, so you can run a completely different skill for review or comment-reply without forking or modifying the action itself. The defaults are unchanged, so existing deployments continue to work as-is.
+
+<details><summary>Related issues</summary>
+
+- [#349: Make the code-review-action review prompt a configurable action input](https://github.com/awinogradov/code-assistants/issues/349)
+</details>
+
+### Plugin Marketplaces Support
+
+Two new inputs — `marketplaces` and `plugins` — let a workflow register any plugin source and install specific plugins before the review runs. This is what makes `review_prompt`/`react_prompt` point at consumer-owned skills (like `/platform:pr-review`) work in practice. Without this, the SDK would run in cache-only mode and fail with "Unknown command" for any skill not bundled with autopilot.
+
+`marketplaces` takes one `name=source` entry per line, where the source can be the checked-out repo (`.`), a GitHub repo (`owner/repo[@ref]`), a URL, or an npm package. `plugins` takes one `plugin@marketplace` entry per line.
+
+Example configuration for a consumer workflow:
+
+```yaml
+with:
+  review_prompt: "/platform:pr-review"
+  react_prompt: "/platform:pr-react"
+  marketplaces: |
+    platform-engineering=.
+  plugins: |
+    platform@platform-engineering
+```
+
+### Private Plugin Marketplace Authentication
+
+When a `marketplaces` entry points at a private GitHub repository, the SDK now has a git credential helper configured before it attempts to clone the plugin source. Previously, with no SSH key in CI, the clone would fail with an authentication error. The action uses the existing `bot_token` to set up credentials, so no additional secrets are needed.
+
+<details><summary>Related issues</summary>
+
+- [#336: Add pdf:create autopilot skill for beautiful, brand-themed PDFs](https://github.com/awinogradov/code-assistants/issues/336)
+</details>
+
+### Custom Anthropic Host / Gateway Support
+
+The action now accepts two optional inputs — `anthropic_base_url` and `anthropic_auth_token` — for routing API calls through a proxy, gateway, or any Anthropic-compatible endpoint. `anthropic_auth_token` covers hosts that use a bearer token instead of the standard `x-api-key` header. When neither input is set, behaviour is identical to before.
+
+<details><summary>Related issues</summary>
+
+- [#27: Support a custom Anthropic host (base URL) for SDK-backed actions](https://github.com/awinogradov/code-assistants/issues/27)
+</details>
+
+## 🐛 Bug Fixes
+
+### Bot-Authored PRs Are Now Fully Skipped
+
+The reviewer previously only skipped PRs with a `ci-skip-review` label when a bot authored them. It now skips every PR authored by the configured bot, which prevents unnecessary review runs on automated PRs (dependency updates, release commits, etc.).
+
+<details><summary>Related issues</summary>
+
+- [#339: Support Linear as an issue tracker across the autopilot skills](https://github.com/awinogradov/code-assistants/issues/339)
+</details>
+
+### PR Author Passed Correctly to Comment-Reply Flow
+
+When the action responded to a PR comment (the `react` mode), it wasn't passing the PR author's login to the reply skill. This could produce replies that misidentified or omitted the original author. The author context is now correctly forwarded.
+
+<details><summary>Related issues</summary>
+
+- [#347: Autopilot review replies show CHECK rule codes as bare text instead of links](https://github.com/awinogradov/code-assistants/issues/347)
+</details>
+
+### Rule Codes in Review Replies Now Link to Their Definitions
+
+When the autopilot replied to a review thread, `CHECK-` rule codes appeared as plain text. They now render as clickable links to their rule definition, matching the behaviour already present in main review comments.
+
+<details><summary>Related issues</summary>
+
+- [#347: Autopilot review replies show CHECK rule codes as bare text instead of links](https://github.com/awinogradov/code-assistants/issues/347)
+</details>
+
+### "Ask the Reviewer" Tip Removed from Clean Approvals
+
+A usage-hint tip ("you can ask the reviewer…") was being appended to approval reviews even when there were no issues at all, which looked out of place on a clean pass. Approvals with no findings no longer include it.
+
+### Settings File Now Validated Before Being Applied
+
+The action validates the repo's settings JSON with a strict schema check before merging it with action defaults. Previously a malformed settings file could cause silent misconfiguration; now it produces a clear error early in the run.
+
+## ⚙️ Configuration Required
+
+### `review_prompt` (Optional)
+
+The skill command the action runs for pull request reviews. Defaults to the current built-in autopilot review skill. Set this if you want to use a custom or team-specific review skill from your own plugin.
+
+### `react_prompt` (Optional)
+
+The skill command the action runs when replying to a PR comment. Defaults to the current built-in autopilot reply skill. Set this alongside `review_prompt` when switching to a custom skill set.
+
+### `marketplaces` (Optional)
+
+A newline-separated list of `name=source` entries declaring plugin marketplaces the action should register before running. Required when `plugins` or your custom prompts reference skills that aren't part of the bundled autopilot plugin.
+
+### `plugins` (Optional)
+
+A newline-separated list of `plugin@marketplace` entries declaring which plugins to install. The marketplace name must match an entry in `marketplaces`. Consumers with no custom plugins are unaffected — this is a no-op when left unset.
+
+### `anthropic_base_url` (Optional)
+
+The base URL for the Anthropic SDK client. Leave unset to use the standard Anthropic API. Set this when routing through an internal gateway or a compatible third-party endpoint.
+
+### `anthropic_auth_token` (Optional)
+
+A bearer token used instead of `x-api-key` for hosts that require it. Only needed alongside `anthropic_base_url` when the target endpoint uses bearer-token authentication.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #347 | [#351](https://github.com/awinogradov/code-assistants/pull/351) | @awinogradov |
+| #349 | [#350](https://github.com/awinogradov/code-assistants/pull/350) | @awinogradov |
+| #340 | [#346](https://github.com/awinogradov/code-assistants/pull/346) | @awinogradov |
+| #341 | [#346](https://github.com/awinogradov/code-assistants/pull/346) | @awinogradov |
+| #342 | [#346](https://github.com/awinogradov/code-assistants/pull/346) | @awinogradov |
+| #339 | [#346](https://github.com/awinogradov/code-assistants/pull/346) | @awinogradov |
+| #336 | [#337](https://github.com/awinogradov/code-assistants/pull/337) | @awinogradov |
+| #334 | [#335](https://github.com/awinogradov/code-assistants/pull/335) | @awinogradov |
+| #27 | [#326](https://github.com/awinogradov/code-assistants/pull/326) | @awinogradov |
+
+### Features
+
+* **code-review-action:** add review_prompt and react_prompt inputs ([d4f4158](https://github.com/awinogradov/code-assistants/commit/d4f415868b87c66ad2fa14c6147b040a4400afc6))
+* **code-review:** add plugins and marketplaces inputs ([67d38d6](https://github.com/awinogradov/code-assistants/commit/67d38d6f0bacf19ba04a2179708ed61f0abeccbd))
+* support custom anthropic host for sdk ([3f53bde](https://github.com/awinogradov/code-assistants/commit/3f53bde9f8dab8fabfa3f08c30addeac1bd8b097))
+
+### Bug Fixes
+
+* **autopilot:** link rule codes in review replies ([657d8e0](https://github.com/awinogradov/code-assistants/commit/657d8e03f606d853b2fd4f1c46ba18aba09a7d70))
+* **code-review-action:** pass author login to react step prompt ([318282a](https://github.com/awinogradov/code-assistants/commit/318282a6368c3224edf7a22908f77181d9cc1c5d))
+* **code-review:** authenticate git for private plugin marketplaces ([9263bbe](https://github.com/awinogradov/code-assistants/commit/9263bbe5bdae2d8e9eb1e67e26b39c2f6787f2c1))
+* **code-review:** drop usage-hint tip on clean approvals ([4f23ef7](https://github.com/awinogradov/code-assistants/commit/4f23ef78aa6c8a48d56cb79e8d7473a53efb091d))
+* **code-review:** install enabled plugins in headless review ([842e7d9](https://github.com/awinogradov/code-assistants/commit/842e7d976a069c1dc0cbe4294634cba4893a3029))
+* **code-review:** skip ai review for all bot-authored prs ([a980413](https://github.com/awinogradov/code-assistants/commit/a98041330877fc8b1dc4bd8a7176a84f2c3dec5d))
+* **code-review:** validate settings json with zod before merge ([5cbb209](https://github.com/awinogradov/code-assistants/commit/5cbb2093af948ebfcd9e6df26a21edfecd3bff37))
+
+### Documentation
+
+* **code-review-action:** document review_prompt and react_prompt inputs ([c9c92a7](https://github.com/awinogradov/code-assistants/commit/c9c92a7a9d098d836f4d928cd61010f46c210975))
+* document anthropic base-url and auth inputs ([f902894](https://github.com/awinogradov/code-assistants/commit/f902894ab4c791545b720152ee8d730485584b4a))
+
+### Refactoring
+
+* share anthropic auth-exclusion guard ([d207c07](https://github.com/awinogradov/code-assistants/commit/d207c070410ff1081c142255c4615a33a656b6a1))
+
+### Tests
+
+* **code-review-action:** assert prompt input defaults and wiring ([a3a4cc0](https://github.com/awinogradov/code-assistants/commit/a3a4cc09cf227344cf6483b9ea74a007e8a63771))
+* **code-review:** add linear:create to format guard ([8eb1228](https://github.com/awinogradov/code-assistants/commit/8eb1228f35e001f59afb4e0adefd38d9cf30d0f1))
+* **code-review:** cover blank name and unresolved source skips ([c0414e6](https://github.com/awinogradov/code-assistants/commit/c0414e6e84912a9f205537f523c215f682511839))
+* **code-review:** guard link resolution ([591330a](https://github.com/awinogradov/code-assistants/commit/591330a4a2a2f116ace34d02967b4f1f16510461))
+* **code-review:** skip node_modules in link walk ([1208232](https://github.com/awinogradov/code-assistants/commit/120823228f998782643d510d65ba8887ad0b8094))
+* cover sdk env and client-option helpers ([0a669d0](https://github.com/awinogradov/code-assistants/commit/0a669d01bb5c27bf51a250a18b244822c6fcf637))
 ## [1.4.1](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.4.0...code-review-action@v1.4.1) (2026-06-15)
 
 ## Release Notes
@@ -11356,7 +11688,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/package.json">
 {
   "name": "@code-assistants/code-review-action",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "description": "Composite GitHub Action that runs AI code review on pull requests via Claude Code.",
   "private": true,
   "type": "module",
@@ -11390,7 +11722,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/README.md">
 # Code review action
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.4.1-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.5.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that runs AI code review on pull requests using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Has two modes:
@@ -11559,7 +11891,7 @@ uses: awinogradov/code-assistants/.github/actions/code-review-action@v1
 </file>
 
 <file path=".github/actions/code-review-action/version">
-1.4.1
+1.5.0
 </file>
 
 <file path=".github/actions/code-review-cost-monitor/.release_notes/0.1.0.md">
