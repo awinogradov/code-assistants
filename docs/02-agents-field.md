@@ -24,7 +24,7 @@ An object under the top-level key `agents` in a `package.json`:
 
 The field coexists with normal npm metadata. It is not consumed by npm, Bun, or any package manager — only by Autopilot skills.
 
-An optional `trackers` array (entries `{ type: "linear" | "github", ... }`; absent ⇒ a single `github` tracker) opts the project into one or more issue trackers — for example Linear for internal issues and GitHub for external feedback; see [Linear tracker support](./11-linear-tracker.md).
+An optional `trackers` array (entries `{ type: "linear" | "github", ... }`; absent ⇒ a single `github` tracker) opts the project into one or more issue trackers — for example Linear for internal issues and GitHub for external feedback, or several `linear` teams sharing one repo; see [Linear tracker support](./11-linear-tracker.md).
 
 ### Workspaces
 
@@ -75,14 +75,16 @@ Only consumed by `/todo-cleanup` today.
 
 ## Consumers
 
-The matrix below lists every skill that reads `agents`, the key(s) it reads, and what it does with the value. Line numbers point at the canonical detection block in each skill.
+The matrix below lists every skill that reads `agents`, the key(s) it reads, and what it does with the value. Line numbers point at the canonical detection block in each skill. `/plan` and `/run` additionally read `agents.trackers` to route a Linear `KEY-N` id to its team by key prefix — see [Linear tracker support](./11-linear-tracker.md#how-a-skill-resolves-the-provider). The `agents.trackers` array is validated by the [`agents-rules-sync`](../.github/actions/agents-rules-sync/README.md) action.
 
-| Skill           | Reads                              | Behavior                                                                                   | Source                                                                                     |
-| --------------- | ---------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| `/plan`         | `agents.rules`                     | Delegates to `Skill(autopilot:plan-bun)` or `Skill(autopilot:plan-nodejs-react)`           | `claude-plugins/autopilot/skills/plan/SKILL.md` (Phase 1: Detect Stack and Delegate)       |
-| `/run`          | `agents.rules`                     | Same delegation as `/plan`, plus embedded post-implementation autopilot                    | `claude-plugins/autopilot/skills/run/SKILL.md` (Phase 1: Detect Stack and Delegate)        |
-| `/pr:review`    | `agents.rules`                     | Tags the review with the stack identifier; falls back to `unknown` if missing              | `claude-plugins/autopilot/skills/pr:review/SKILL.md` (Phase 2.1: Detect Stack)             |
-| `/todo-cleanup` | `agents.language` + `agents.rules` | Picks file globs + comment syntax from `language`, picks verification command from `rules` | `claude-plugins/autopilot/skills/todo-cleanup/SKILL.md` (Phase 1: Read Repository Context) |
+| Skill            | Reads                                                  | Behavior                                                                                                                                       | Source                                                                                          |
+| ---------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `/plan`          | `agents.rules`                                         | Delegates to `Skill(autopilot:plan-bun)` or `Skill(autopilot:plan-nodejs-react)`                                                               | `claude-plugins/autopilot/skills/plan/SKILL.md` (Phase 1: Detect Stack and Delegate)            |
+| `/run`           | `agents.rules`                                         | Same delegation as `/plan`, plus embedded post-implementation autopilot                                                                        | `claude-plugins/autopilot/skills/run/SKILL.md` (Phase 1: Detect Stack and Delegate)             |
+| `/pr:review`     | `agents.rules`                                         | Tags the review with the stack identifier; falls back to `unknown` if missing                                                                  | `claude-plugins/autopilot/skills/pr:review/SKILL.md` (Phase 2.1: Detect Stack)                  |
+| `/todo-cleanup`  | `agents.language` + `agents.rules` + `agents.trackers` | Picks file globs + comment syntax from `language`, verification command from `rules`; routes new-TODO issues to GitHub or a chosen Linear team | `claude-plugins/autopilot/skills/todo-cleanup/SKILL.md` (Phase 1: Read Repository Context)      |
+| `/linear:create` | `agents.trackers`                                      | Files a Linear issue on the configured `team`; prompts to choose when 2+ `linear` trackers exist                                               | `claude-plugins/autopilot/skills/linear:create/SKILL.md` (Phase 0: Resolve Team and Hint)       |
+| `/issue:run`     | `agents.trackers`                                      | Resolves the provider and Linear team; prompts to choose the team when 2+ `linear` trackers exist                                              | `claude-plugins/autopilot/skills/issue:run/SKILL.md` (Phase 0: Resolve Repository and Provider) |
 
 ### Stack → planning skill (used by `/plan` and `/run`)
 
