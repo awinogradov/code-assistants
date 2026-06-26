@@ -10075,7 +10075,7 @@ inputs:
     description: "GitHub username to add as reviewer. Required — no default."
     required: true
   bot_username:
-    description: "Bot username for skipping CI-author PRs. When set, PRs authored by this user with the 'ci-skip-review' label are skipped. Falls back to reviewer if omitted."
+    description: "Bot username whose authored PRs skip AI review (the reviewer cannot review its own PR). Falls back to reviewer if omitted."
     required: false
   release_pr_authors:
     description: "Comma-separated list of trusted authors whose release-branch PRs get an auto-approval after review is skipped. Empty (default) disables auto-approval; the action still skips review for any release-branch PR. Set this only to identities you trust to open release PRs (e.g., 'github-actions[bot]', 'my-org-bot')."
@@ -10198,7 +10198,6 @@ runs:
         EVENT_PR_DRAFT: ${{ github.event.pull_request.draft }}
         EVENT_PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
         EVENT_PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-        EVENT_PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
         EVENT_ISSUE_NUMBER: ${{ github.event.issue.number }}
         EVENT_COMMENT_ID: ${{ github.event.comment.id }}
         EVENT_COMMENT_PATH: ${{ github.event.comment.path }}
@@ -10278,9 +10277,11 @@ runs:
           exit 0
         fi
 
-        # Skip CI-author PRs labeled ci-skip-review (bot_username input, falls back to reviewer)
-        if [[ "$EVENT_NAME" == "pull_request" && "$EVENT_PR_AUTHOR" == "${INPUT_BOT_USERNAME:-$INPUT_REVIEWER}" && ",$EVENT_PR_LABELS," == *",ci-skip-review,"* ]]; then
-          echo "Skipping: ci-skip-review PR by $EVENT_PR_AUTHOR"
+        # Skip PRs authored by the bot itself (bot_username input, falls back to reviewer).
+        # The reviewer identity is the bot, and GitHub forbids a PR's author from being its
+        # own reviewer or self-approving, so the AI review can never land a verdict here.
+        if [[ "$EVENT_NAME" == "pull_request" && "$EVENT_PR_AUTHOR" == "${INPUT_BOT_USERNAME:-$INPUT_REVIEWER}" ]]; then
+          echo "Skipping: PR authored by bot $EVENT_PR_AUTHOR"
           echo "skip=true" >> "$GITHUB_OUTPUT"
           exit 0
         fi
@@ -11518,9 +11519,9 @@ Each inline finding can carry a one-click GitHub **`suggestion`** block (the aut
 
 See [Inline suggestions and AI-agent prompts](../../../docs/04-code-review-suggestions.md) for the full data flow, a rendered example, and the source map.
 
-## Labels
+## Skipping bot-authored PRs
 
-PRs authored by the configured `bot_username` (or `reviewer` if `bot_username` is unset) and carrying the `ci-skip-review` label are skipped — useful for automated CI updates that don't need review.
+PRs authored by the configured `bot_username` (or `reviewer` if `bot_username` is unset) skip AI review: the reviewer identity is the bot itself, and GitHub forbids a PR's author from being its own reviewer or approver, so there is no verdict the review could land.
 
 ## Release PR auto-approval
 
