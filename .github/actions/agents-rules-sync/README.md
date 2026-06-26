@@ -107,6 +107,11 @@ See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/a
 - If `package.json` is missing, malformed, or lacks `agents.rules` (or its value is
   unrecognized), the action fails with a link to `docs/02-agents-field.md` and the list of
   accepted values.
+- Also validates the optional `agents.trackers` array (see
+  [Linear tracker support](../../../docs/11-linear-tracker.md)): a `linear` entry missing
+  `team`, a key prefix that routes to more than one tracker, or a second `github` entry fails
+  the run with a docs-linked error. An absent array is treated as GitHub-only, so existing
+  consumers are unaffected.
 
 ## Flow
 

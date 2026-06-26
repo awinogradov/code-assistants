@@ -32,11 +32,49 @@ When `trackers` is absent, autopilot behaves as if it were `[{ "type": "github" 
 | `keys`  | no                | ID prefixes that route to that Linear tracker; defaults to `[team]` |
 | `label` | no                | Label applied to issues autopilot creates on that Linear tracker    |
 
+Several `linear` entries may be listed so multiple teams can share one repo. Each issue id routes to its team by key prefix:
+
+```json
+{
+  "agents": {
+    "trackers": [
+      { "type": "linear", "team": "FRTNS", "keys": ["FRTNS"] },
+      { "type": "linear", "team": "ENG", "keys": ["ENG"] },
+      { "type": "github" }
+    ]
+  }
+}
+```
+
+The array is validated when the [`agents-rules-sync`](../.github/actions/agents-rules-sync/README.md) action syncs a repository: a `linear` entry missing `team`, a key prefix that routes to more than one tracker, or a second `github` entry fails the sync with a docs-linked error. Absent or single-tracker configs are unaffected.
+
 ## How a skill resolves the provider
 
 A skill reads `agents.trackers` from `package.json` (via the Read tool — no extra tooling) and routes each argument to the tracker whose shape it matches, so several trackers coexist.
 
 The [`plan`](../claude-plugins/autopilot/skills/plan/SKILL.md) and `run` skills add two input-detection rows — a `linear.app` URL and the uppercase `^[A-Z]+-[0-9]+$` ID (e.g. `ENG-123`) — placed after the code-scanning-alert row and before the bare-number row. The Linear rows are active only when a `linear` tracker is configured (and, when that entry's `keys` are set, only for those prefixes); the GitHub rows are active when a `github` tracker is configured (the default). With both configured, `ENG-123` routes to Linear while `#42`, a bare `123`, or a `github.com` URL routes to GitHub — internal and external trackers side by side. A Linear-shaped argument with no matching `linear` tracker collides with no GitHub numeric row and falls through to a plain task description, so existing GitHub repos are unaffected.
+
+When several `linear` trackers are configured, an incoming `KEY-N` id is matched against the **union of every** `linear` tracker's effective keys (an entry's `keys`, or `[team]` when `keys` is omitted), and the matched entry supplies the `team`. With `FRTNS` and `ENG` side by side, `FRTNS-12` routes to the FRTNS team and `ENG-3` to ENG, while a bare number or `github.com` URL still routes to GitHub:
+
+```text
+  FRTNS-12  ──▶ key FRTNS ──▶ linear FRTNS ─┐
+  ENG-3     ──▶ key ENG   ──▶ linear ENG   ─┼──▶ resolve-issue-context
+  #42 / 123 ──▶ number    ──▶ github       ─┘    → provider-agnostic JSON
+  add-cache ──▶ no match  ──▶ plain description (planned directly)
+```
+
+**Flow Legend:**
+
+- `FRTNS-12` — its `FRTNS` key matches the FRTNS tracker; resolved on team FRTNS.
+- `ENG-3` — its `ENG` key matches the ENG tracker; resolved on team ENG.
+- `#42` / a bare `123` / a `github.com` URL — numeric shape; resolved on GitHub.
+- `add-cache` (or a `KEY` matching no configured tracker) — falls through to a plain task description and is planned directly, with no issue lookup.
+
+The three tracker branches converge on the single [`resolve-issue-context`](#the-single-resolution-seam) seam, so everything downstream stays provider-agnostic regardless of which team an id belonged to.
+
+### Choosing a team on the write path
+
+Reading an issue never prompts — the id's key prefix already names the team. Creating or listing does, because the team is not given by an id: when two or more `linear` trackers are configured, [`linear:create`](../claude-plugins/autopilot/skills/linear:create/SKILL.md), [`issue:run`](../claude-plugins/autopilot/skills/issue:run/SKILL.md), and [`todo-cleanup`](../claude-plugins/autopilot/skills/todo-cleanup/SKILL.md) ask once via `AskUserQuestion` which team to file on or browse, then proceed against the chosen team. A single `linear` tracker auto-selects with no prompt, so existing one-team repos are unchanged.
 
 ## Access paths: MCP first, GraphQL fallback
 
