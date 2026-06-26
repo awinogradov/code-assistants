@@ -18,43 +18,21 @@ See the [plugin README](./claude-plugins/autopilot/README.md#installation) for s
 
 ## Repository docs
 
-The `docs/` guides are numbered chapters in reading order — newcomers start at chapter 1 and read on; agents and returning readers jump to the part they need.
+The `docs/` guides are numbered chapters in reading order — start at chapter 1 and read on, or jump to the chapter you need.
 
-**Part I — Orientation.** Read this first: how the monorepo is laid out and how repositories declare their stack.
-
-1. [Workspace structure](./docs/01-workspace-structure.md) — where new actions, packages, and apps go, and how they wire into Turbo
-2. [`agents` field spec](./docs/02-agents-field.md) — how skills detect a repository's tech stack from `package.json`
-
-**Part II — Code review.** How the AI review action presents findings and reports its cost.
-
-3. [Review run-summary footer](./docs/03-code-review-run-summary.md) — how `code-review-action` surfaces per-run cost/latency/token metrics in a collapsible footer on the main review comment and on preflight skip comments
-4. [Inline suggestions and AI-agent prompts](./docs/04-code-review-suggestions.md) — how `code-review-action` adds one-click GitHub suggestion blocks and a "Prompt for AI agents" block to each inline finding
-
-**Part III — Autopilot skills.** How the plugin's planning skills turn a task into a reviewed plan.
-
-5. [Plan and run skills](./docs/05-plan-run-skills.md) — how the `plan` and `run` skills work end to end: phases, orchestrator↔stack delegation, sub-agent fan-out, and run's automated post-implementation, with ASCII diagrams
-
-**Part IV — Release pipeline.** How workspace members version, release, and auto-merge.
-
-6. [`release` field spec](./docs/06-release-field.md) — how `release-action` picks the right artifacts for npm packages, GitHub Actions, and Claude plugins
-7. [Release auto-merge flow](./docs/07-release-automerge.md) — the event-driven action that merges approved, all-green release PRs, and how its workflow is propagated downstream
-
-**Part V — Maintenance automation.** The machinery that keeps this repo and its consumers in sync.
-
-8. [Upstream sync](./docs/08-upstream-sync.md) — the one-action `upstream-sync` aggregator and the thin `upstream.yml` consumers run, with per-kind opt-out
-9. [Committed Repomix pack](./docs/09-repomix-pack.md) — the `.repomix/pack.xml` snapshot, the merge-triggered workflow that refreshes it, and the snapshot-first contract skills follow
-
-**Part VI — Document generation.** Turning content into beautiful, branded files.
-
-10. [The `pdf:create` skill](./docs/10-pdf-create-skill.md) — how the bundled, portable `@react-pdf/renderer` pipeline turns content plus an optional `design.md` into a themed PDF, and how its Node sub-project stays decoupled from the Bun workspace
-
-**Part VII — Issue trackers.** Pointing autopilot at a non-GitHub issue tracker.
-
-11. [Linear tracker support](./docs/11-linear-tracker.md) — how the `agents.trackers` array opts a project into one or more issue trackers (e.g. Linear for internal issues, GitHub for external feedback), the Linear MCP server plus the bundled GraphQL fallback, and how `resolve-issue-context` resolves issues from any configured provider behind one JSON contract
-
-**Appendix.** Historical records — kept for context, not current guidance.
-
-- [Plan skills audit](./docs/appendix-a-plan-skills-audit.md) — a dimension-by-dimension audit of the `plan`, `plan-bun`, and `plan-nodejs-react` skills; most of its recommendations have since shipped
+| #   | Document                                                                        | What it covers                                                                                      |
+| --- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| 1   | [Workspace structure](./docs/01-workspace-structure.md)                         | where new actions, packages, and apps go, and how they wire into Turbo                              |
+| 2   | [`agents` field spec](./docs/02-agents-field.md)                                | how skills detect a repository's tech stack from `package.json`                                     |
+| 3   | [Review run-summary footer](./docs/03-code-review-run-summary.md)               | how `code-review-action` surfaces per-run cost/latency/token metrics in a collapsible footer        |
+| 4   | [Inline suggestions and AI-agent prompts](./docs/04-code-review-suggestions.md) | one-click GitHub suggestion blocks and a "Prompt for AI agents" block on each inline finding        |
+| 5   | [Plan and run skills](./docs/05-plan-run-skills.md)                             | how the `plan` and `run` skills go from task to reviewed plan to merged PR, with ASCII diagrams     |
+| 6   | [`release` field spec](./docs/06-release-field.md)                              | how `release-action` picks the right artifacts for npm packages, GitHub Actions, and plugins        |
+| 7   | [Release auto-merge flow](./docs/07-release-automerge.md)                       | the event-driven action that merges approved, all-green release PRs and propagates downstream       |
+| 8   | [Upstream sync](./docs/08-upstream-sync.md)                                     | the one-action `upstream-sync` aggregator and the thin `upstream.yml` consumers run, per-kind       |
+| 9   | [Committed Repomix pack](./docs/09-repomix-pack.md)                             | the `.repomix/pack.xml` snapshot, its merge-triggered refresh, and the snapshot-first contract      |
+| 10  | [The `pdf:create` skill](./docs/10-pdf-create-skill.md)                         | the portable `@react-pdf/renderer` pipeline that renders a themed PDF, decoupled from the workspace |
+| 11  | [Linear tracker support](./docs/11-linear-tracker.md)                           | how `agents.trackers` opts a project into Linear and other issue trackers behind one JSON contract  |
 
 **Standards.**
 
