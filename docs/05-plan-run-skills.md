@@ -139,7 +139,7 @@ If the stack cannot be detected, the skill asks the user via `AskUserQuestion`. 
 
 ## Phase 2 — Embed branch creation
 
-Before handing the plan to the user, the skill embeds the branch step so it runs first after approval. The exact block depends on the input type and current branch/worktree state:
+The skill embeds the branch step into the plan file so it runs first, before any code changes — in `plan` this is after the user approves the plan; in `run` it runs straight away (see [How run differs](#how-run-differs-automated-post-implementation)). The exact block depends on the input type and current branch/worktree state:
 
 - **GitHub issue** → invoke `Skill(autopilot:branch-create)` with the issue number; it produces an `issue-<number>-<slug>` branch so the PR can `Closes #<number>`.
 - **Code-scanning alert** → invoke `Skill(autopilot:branch-create)` with `--security "<slug>"`; it produces a `security-<slug>` branch (no issue number, no `Closes #`).
@@ -208,7 +208,7 @@ Three sub-agents isolate work from the parent's context. Each returns a single s
 
 ## How run differs: automated post-implementation
 
-`run` shares Phases 0–2 and the pipeline with `plan`, but **replaces** the plan's "what's next?" prompt with an automated chain that proceeds without pausing. The user has pre-authorized the recommended choices, so each sub-skill takes its default path.
+`run` shares Phases 0–2 and the pipeline with `plan`, but never stops for plan approval — invoking `/autopilot:run` is itself the authorization, so there is **no plan-approval gate**; run implements the moment the plan file is written. It then **replaces** the plan's "what's next?" prompt with an automated chain that proceeds without pausing. The user has pre-authorized the recommended choices, so each sub-skill takes its default path.
 
 ```text
  ┌────────────┐   ┌──────────────┐   ┌──────────────┐   ┌───────────────┐

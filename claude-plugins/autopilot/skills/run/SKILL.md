@@ -34,7 +34,7 @@ allowed-tools:
 
 Plan, implement, commit, create PR, and monitor until approved. Extended version of `/autopilot:plan` that automates post-implementation steps.
 
-**Difference from `/autopilot:plan`:** After the user confirms the plan and implementation is complete, autopilot automatically commits, creates a PR, and monitors for review approval — without asking the user for confirmation at each step.
+**Difference from `/autopilot:plan`:** invoking `/autopilot:run` authorizes the entire flow up front — there is **no plan-approval gate**. Autopilot plans, implements, commits, creates a PR, and monitors for review approval, without ever pausing for plan confirmation or per-step approval. (`/autopilot:plan`, by contrast, has two gates: it stops to get the plan approved, then asks again before creating a PR.)
 
 ## Input
 
@@ -286,7 +286,7 @@ Tool parameters:
 
 ## Phase 2: Embed Branch Creation + Autopilot Post-Implementation
 
-**BEFORE calling ExitPlanMode**, embed branch creation and autopilot post-implementation into the plan file.
+Embed branch creation and autopilot post-implementation into the plan file, then proceed directly to implementing it. **Do NOT call `ExitPlanMode`, and do NOT pause for plan approval** — invoking `/autopilot:run` is the approval. Never tell the user "after you approve I'll implement"; that is `/autopilot:plan` behavior, not run's.
 
 ### Pre-Implementation (Branch Creation)
 
@@ -418,6 +418,16 @@ Status: <approved/merged>
 ```
 
 When you write the plan file, apply the reference-formatting rules inlined at the end of this skill (the **Reference formatting & readability** block below, RFC-0001 v3) to every reference it contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
+
+## Phase 3: Implement and Proceed
+
+Once the plan file is written (with `## Pre-Implementation` and `## Post-Implementation (Autopilot)` embedded), proceed straight through with no approval gate:
+
+1. Run the `## Pre-Implementation` branch creation.
+2. Implement every step in the plan, verifying each as you go.
+3. Execute the `## Post-Implementation (Autopilot)` chain — commit → push → PR → monitor — without prompting.
+
+The only user prompts in the entire run are the branch-type pick for plain-description inputs ([Phase 2](#phase-2-embed-branch-creation--autopilot-post-implementation)) and review-feedback handling during PR monitoring. There is no plan-approval step — do not call `ExitPlanMode` and do not ask the user to confirm the plan before implementing.
 
 <!-- ref-format:start -->
 
