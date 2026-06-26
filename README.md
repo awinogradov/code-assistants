@@ -1,3 +1,6 @@
+<img width="1768" height="649" alt="image" src="https://github.com/user-attachments/assets/d66366df-7bf3-4c0a-8e33-465f6d2ffa3b" />
+
+
 # Code Assistants
 
 Skills and agents for AI-assisted development workflows — plan, implement, commit, PR, and monitor.
