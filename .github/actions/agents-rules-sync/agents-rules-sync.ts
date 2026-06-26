@@ -14,6 +14,7 @@ import { fetchRawContent } from '@code-assistants/actions-core/fetchRawContent';
 
 import { buildSyncEntries } from './src/buildSyncEntries.ts';
 import { resolvePackageAgentsRules } from './src/resolvePackageAgentsRules.ts';
+import { resolvePackageAgentsTrackers } from './src/resolvePackageAgentsTrackers.ts';
 
 interface Env {
   token: string;
@@ -113,6 +114,7 @@ async function main(): Promise<void> {
   }
 
   const rules = resolvePackageAgentsRules(raw);
+  const trackers = resolvePackageAgentsTrackers(raw);
   const entries = buildSyncEntries({
     sourceRepo: env.sourceRepo,
     rules,
@@ -122,7 +124,12 @@ async function main(): Promise<void> {
 
   const filesYaml = stringifyYaml(entries);
 
+  const trackerSummary = trackers
+    .map((tracker) => (tracker.type === 'linear' ? `linear:${tracker.keys.join('/')}` : tracker.type))
+    .join(', ');
+
   core.info(`Resolved agents.rules=${rules}; syncing rules/${rules}.md → CLAUDE.md from ${env.sourceRepo}`);
+  core.info(`Validated agents.trackers: ${trackerSummary}`);
   if (env.agentsMd) {
     core.info('Also publishing AGENTS.md as a symlink to CLAUDE.md.');
   }
