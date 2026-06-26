@@ -69,6 +69,7 @@ The content is organized as follows:
       .release_notes/
         0.2.0.md
         0.2.1.md
+        0.2.2.md
       src/
         autoLabel.ts
         collectMembers.test.ts
@@ -149,6 +150,7 @@ The content is organized as follows:
     code-review-cost-monitor/
       .release_notes/
         0.1.0.md
+        0.2.0.md
       src/
         buildReport.test.ts
         buildReport.ts
@@ -1971,6 +1973,25 @@ The auto-label action now requires a `BOT_TOKEN` secret. Downstream repositories
 * **auto-label:** drop ${{ }} expression from token description ([e36649a](https://github.com/awinogradov/code-assistants/commit/e36649a180d8e706cddd3628e9ef5cfc99aa2af7))
 </file>
 
+<file path=".github/actions/auto-label/.release_notes/0.2.2.md">
+## [0.2.2](https://github.com/awinogradov/code-assistants/compare/auto-label-action@v0.2.1...auto-label-action@v0.2.2) (2026-06-26)
+
+## Release Notes
+
+The `auto-label` action now correctly labels pull requests in pnpm-based monorepos, where it was previously applying no labels at all.
+
+## 🐛 Bug Fixes
+
+### Workspace Labels Now Applied in pnpm Monorepos
+
+Consumer repos that use `pnpm-workspace.yaml` to declare their workspace members were silently receiving no `<scope>/<member>` labels on pull requests. The action was only reading workspace members from the `workspaces` field in `package.json`, which pnpm repos typically leave empty. It now falls back to parsing `packages:` globs from `pnpm-workspace.yaml` when `package.json` declares no workspaces, so pnpm monorepos get the same labelling behaviour as npm/Bun workspace repos.
+
+
+### Bug Fixes
+
+* **auto-label:** read workspace members from pnpm-workspace.yaml ([f1b9df6](https://github.com/awinogradov/code-assistants/commit/f1b9df6ff8bf54ecdd5923818e7def3fd57438b2))
+</file>
+
 <file path=".github/actions/auto-label/src/autoLabel.ts">
 /**
  * Entry point for the auto-label composite action. Reads the GitHub Actions
@@ -3026,6 +3047,22 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [0.2.2](https://github.com/awinogradov/code-assistants/compare/auto-label-action@v0.2.1...auto-label-action@v0.2.2) (2026-06-26)
+
+## Release Notes
+
+The `auto-label` action now correctly labels pull requests in pnpm-based monorepos, where it was previously applying no labels at all.
+
+## 🐛 Bug Fixes
+
+### Workspace Labels Now Applied in pnpm Monorepos
+
+Consumer repos that use `pnpm-workspace.yaml` to declare their workspace members were silently receiving no `<scope>/<member>` labels on pull requests. The action was only reading workspace members from the `workspaces` field in `package.json`, which pnpm repos typically leave empty. It now falls back to parsing `packages:` globs from `pnpm-workspace.yaml` when `package.json` declares no workspaces, so pnpm monorepos get the same labelling behaviour as npm/Bun workspace repos.
+
+
+### Bug Fixes
+
+* **auto-label:** read workspace members from pnpm-workspace.yaml ([f1b9df6](https://github.com/awinogradov/code-assistants/commit/f1b9df6ff8bf54ecdd5923818e7def3fd57438b2))
 ## [0.2.1](https://github.com/awinogradov/code-assistants/compare/auto-label-action@v0.2.0...auto-label-action@v0.2.1) (2026-06-08)
 
 ## Release Notes
@@ -3124,7 +3161,7 @@ Add the auto-label workflow to your repository's `.github/workflows/` directory.
 <file path=".github/actions/auto-label/package.json">
 {
   "name": "@code-assistants/auto-label-action",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Composite GitHub Action that labels pull requests with `<scope>/<workspace-member>` labels and prunes orphan labels on the default branch.",
   "private": true,
   "type": "module",
@@ -3158,7 +3195,7 @@ Add the auto-label workflow to your repository's `.github/workflows/` directory.
 <file path=".github/actions/auto-label/README.md">
 # Auto label
 
-[![GitHub Release](https://img.shields.io/badge/release-v0.2.1-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v0.2.2-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that keeps `<scope>/<workspace-member>` labels in sync with the workspace
@@ -3349,7 +3386,7 @@ the latest behavior. Pin to a tag if you want explicit control.
 </file>
 
 <file path=".github/actions/auto-label/version">
-0.2.1
+0.2.2
 </file>
 
 <file path=".github/actions/ban-patterns/action.yml">
@@ -11977,6 +12014,66 @@ If you're using the code-review upstream sync, the cost monitor workflow (`code-
 * **cost-monitor:** pin report annotation format ([63fdf46](https://github.com/awinogradov/code-assistants/commit/63fdf465dea478f45001f421eedf5df7aa965f9f))
 </file>
 
+<file path=".github/actions/code-review-cost-monitor/.release_notes/0.2.0.md">
+## [0.2.0](https://github.com/awinogradov/code-assistants/compare/code-review-cost-monitor-action@v0.1.0...code-review-cost-monitor-action@v0.2.0) (2026-06-26)
+
+## Release Notes
+
+The cost-monitor's optional attribution step now works correctly when run against a custom Anthropic endpoint, and both the base URL and auth token can be configured to route through a gateway or proxy.
+
+## ✨ What's New
+
+### Custom Anthropic Endpoint Support
+
+The monitor's optional attribution step (which names the change that caused a cost regression) can now be routed through an Anthropic-compatible gateway or proxy instead of hitting the Anthropic API directly. Two new optional inputs cover the common gateway patterns: `anthropic_base_url` sets the target host, and `anthropic_auth_token` handles hosts that expect a bearer token rather than the standard `x-api-key` header. When neither input is set, behaviour is identical to before — this is purely additive.
+
+<details><summary>Related issues</summary>
+
+- [#27: Support a custom Anthropic host (base URL) for SDK-backed actions](https://github.com/awinogradov/code-assistants/issues/27)
+- [#326: Support a custom Anthropic host (base URL) for SDK-backed actions](https://github.com/awinogradov/code-assistants/pull/326)
+</details>
+
+## 🐛 Bug Fixes
+
+### Attribution Step Now Authenticates Correctly
+
+When the optional attribution analysis was enabled, it was being invoked without passing the authentication token through to the Anthropic SDK, causing it to fail silently or error out. The token is now forwarded correctly, so cost-regression reports that include attribution (the "what changed" analysis) will produce results reliably.
+
+<details><summary>Related issues</summary>
+
+- [#326: Support a custom Anthropic host (base URL) for SDK-backed actions](https://github.com/awinogradov/code-assistants/pull/326)
+</details>
+
+## ⚙️ Configuration Required
+
+### `anthropic_base_url` — Custom API Host (Optional)
+
+Points the Anthropic SDK at a gateway, proxy, or compatible endpoint instead of the default Anthropic API. Set this if your organisation routes model calls through an internal gateway or a third-party Anthropic-compatible service. Has no effect when left unset.
+
+### `anthropic_auth_token` — Bearer Token Authentication (Optional)
+
+Supplies a bearer token for hosts that authenticate with `Authorization: Bearer <token>` rather than the standard `x-api-key` header. Only relevant when `anthropic_base_url` is also set and your gateway requires bearer auth. Has no effect when left unset.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #27 | [#326](https://github.com/awinogradov/code-assistants/pull/326) | @awinogradov |
+
+### Features
+
+* support custom anthropic host for sdk ([3f53bde](https://github.com/awinogradov/code-assistants/commit/3f53bde9f8dab8fabfa3f08c30addeac1bd8b097))
+
+### Bug Fixes
+
+* run cost-monitor attribution with auth token ([ce9cdd4](https://github.com/awinogradov/code-assistants/commit/ce9cdd43b34028912ee412b02c2c236cf47eb0c7))
+
+### Documentation
+
+* document anthropic base-url and auth inputs ([f902894](https://github.com/awinogradov/code-assistants/commit/f902894ab4c791545b720152ee8d730485584b4a))
+</file>
+
 <file path=".github/actions/code-review-cost-monitor/src/buildReport.test.ts">
 /**
  * Tests for buildReport.ts.
@@ -13982,6 +14079,63 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [0.2.0](https://github.com/awinogradov/code-assistants/compare/code-review-cost-monitor-action@v0.1.0...code-review-cost-monitor-action@v0.2.0) (2026-06-26)
+
+## Release Notes
+
+The cost-monitor's optional attribution step now works correctly when run against a custom Anthropic endpoint, and both the base URL and auth token can be configured to route through a gateway or proxy.
+
+## ✨ What's New
+
+### Custom Anthropic Endpoint Support
+
+The monitor's optional attribution step (which names the change that caused a cost regression) can now be routed through an Anthropic-compatible gateway or proxy instead of hitting the Anthropic API directly. Two new optional inputs cover the common gateway patterns: `anthropic_base_url` sets the target host, and `anthropic_auth_token` handles hosts that expect a bearer token rather than the standard `x-api-key` header. When neither input is set, behaviour is identical to before — this is purely additive.
+
+<details><summary>Related issues</summary>
+
+- [#27: Support a custom Anthropic host (base URL) for SDK-backed actions](https://github.com/awinogradov/code-assistants/issues/27)
+- [#326: Support a custom Anthropic host (base URL) for SDK-backed actions](https://github.com/awinogradov/code-assistants/pull/326)
+</details>
+
+## 🐛 Bug Fixes
+
+### Attribution Step Now Authenticates Correctly
+
+When the optional attribution analysis was enabled, it was being invoked without passing the authentication token through to the Anthropic SDK, causing it to fail silently or error out. The token is now forwarded correctly, so cost-regression reports that include attribution (the "what changed" analysis) will produce results reliably.
+
+<details><summary>Related issues</summary>
+
+- [#326: Support a custom Anthropic host (base URL) for SDK-backed actions](https://github.com/awinogradov/code-assistants/pull/326)
+</details>
+
+## ⚙️ Configuration Required
+
+### `anthropic_base_url` — Custom API Host (Optional)
+
+Points the Anthropic SDK at a gateway, proxy, or compatible endpoint instead of the default Anthropic API. Set this if your organisation routes model calls through an internal gateway or a third-party Anthropic-compatible service. Has no effect when left unset.
+
+### `anthropic_auth_token` — Bearer Token Authentication (Optional)
+
+Supplies a bearer token for hosts that authenticate with `Authorization: Bearer <token>` rather than the standard `x-api-key` header. Only relevant when `anthropic_base_url` is also set and your gateway requires bearer auth. Has no effect when left unset.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #27 | [#326](https://github.com/awinogradov/code-assistants/pull/326) | @awinogradov |
+
+### Features
+
+* support custom anthropic host for sdk ([3f53bde](https://github.com/awinogradov/code-assistants/commit/3f53bde9f8dab8fabfa3f08c30addeac1bd8b097))
+
+### Bug Fixes
+
+* run cost-monitor attribution with auth token ([ce9cdd4](https://github.com/awinogradov/code-assistants/commit/ce9cdd43b34028912ee412b02c2c236cf47eb0c7))
+
+### Documentation
+
+* document anthropic base-url and auth inputs ([f902894](https://github.com/awinogradov/code-assistants/commit/f902894ab4c791545b720152ee8d730485584b4a))
 ## 0.1.0 (2026-06-13)
 
 ## Release Notes
@@ -14067,7 +14221,7 @@ If you're using the code-review upstream sync, the cost monitor workflow (`code-
 <file path=".github/actions/code-review-cost-monitor/package.json">
 {
   "name": "@code-assistants/code-review-cost-monitor-action",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Composite GitHub Action that watches the code-review run-summary footers for cost regressions and opens (or updates) a deduplicated cost-report issue.",
   "private": true,
   "type": "module",
@@ -14101,7 +14255,7 @@ If you're using the code-review upstream sync, the cost monitor workflow (`code-
 <file path=".github/actions/code-review-cost-monitor/README.md">
 # Code review cost monitor
 
-[![GitHub Release](https://img.shields.io/badge/release-v0.1.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v0.2.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that watches the per-run cost of [`code-review-action`](../code-review-action/README.md) and opens (or updates) a single deduplicated cost-report issue when it regresses. The data source is the "Review run summary" footer the review action appends to every review comment — a durable, per-run record of cost, tokens, and round-trips — so the monitor needs no extra instrumentation and no time-series store.
@@ -14216,7 +14370,7 @@ GH_TOKEN=$(gh auth token) GITHUB_REPOSITORY=owner/repo \
 </file>
 
 <file path=".github/actions/code-review-cost-monitor/version">
-0.1.0
+0.2.0
 </file>
 
 <file path=".github/actions/code-review-sync/action.yml">
