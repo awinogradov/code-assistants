@@ -34,7 +34,7 @@ No arguments are expected. Any supplied arguments are ignored.
 1. Read `package.json` from the repository root
 2. Extract `agents.language` field — determines file globs and comment syntax
 3. Extract `agents.rules` field — determines verification commands
-4. Extract `agents.trackers` — when a `linear` tracker is configured the provider is **Linear** (note its `team`); otherwise **GitHub**
+4. Extract `agents.trackers` — when at least one `linear` tracker is configured the provider is **Linear** (note **every** configured `team` and its `keys`); otherwise **GitHub**. Existing `TEAM-123` TODO ids resolve to their team automatically by key prefix, so checking their state needs no team prompt
 5. Determine the repository in `owner/repo` form from `gh repo view --json nameWithOwner --jq .nameWithOwner` (or `git remote get-url origin`)
 
 **Language-to-pattern mapping:**
@@ -131,11 +131,13 @@ For each stale TODO:
 
 ### 4b. Create GitHub issues for unlinked TODOs
 
-1. **Group related TODOs** when possible:
+1. **Resolve the destination team for new Linear tickets** (Linear provider only): with exactly one `linear` tracker, use its `team` (no prompt); with two or more, ask once via AskUserQuestion (single-select) which team new tickets go on — one option per team, `{ label: "<team>", description: "<comma-joined keys>" }` — and reuse the chosen `team` for every unlinked TODO below.
+
+2. **Group related TODOs** when possible:
    - TODOs in the same file within 10 lines of each other
    - Present grouping to user for confirmation if "Review individually" was selected
 
-2. **For each TODO or group of TODOs:**
+3. **For each TODO or group of TODOs:**
 
    a. Generate an issue title from the TODO description:
    - Single TODO: use the description directly, cleaned up and capitalized
@@ -148,7 +150,7 @@ For each stale TODO:
 
    c. Create the issue:
    - **GitHub:** `gh issue create --title "<title>" --body "<body>"`
-   - **Linear:** `mcp__plugin_autopilot_linear__save_issue` with `{ "title": "<title>", "team": "<team>", "description": "<body>" }` (the `team` from [Phase 1](#phase-1-read-repository-context))
+   - **Linear:** `mcp__plugin_autopilot_linear__save_issue` with `{ "title": "<title>", "team": "<team>", "description": "<body>" }` (the `team` resolved in step 1 above)
 
    d. Capture the created issue's URL (GitHub prints it on the last line; for Linear use the returned ticket URL).
 

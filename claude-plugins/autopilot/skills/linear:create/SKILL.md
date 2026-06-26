@@ -38,8 +38,8 @@ Expected form:
 ## Input resolution
 
 - **Title hint** — `$ARGUMENTS` → if empty, prompt once via AskUserQuestion: "What is this issue about?" with a free-form slot. Do not abort silently.
-- **Linear team** — read the `linear` entry of `agents.trackers` in the repo-root `package.json` (via the Read tool); use its `team`. REQUIRED. If no `linear` tracker is configured, stop and tell the user to file a GitHub issue with `/autopilot:issue-create` instead.
-- **Repo label** — the `linear` entry's optional `label`, pre-selected in [Phase 4](#phase-4-select-labels).
+- **Linear team** — collect every `linear` entry of `agents.trackers` in the repo-root `package.json` (via the Read tool) and resolve a single target `team` in [Phase 0](#phase-0-resolve-team-and-hint). REQUIRED. If no `linear` tracker is configured, stop and tell the user to file a GitHub issue with `/autopilot:issue-create` instead.
+- **Repo label** — the chosen `linear` entry's optional `label`, pre-selected in [Phase 4](#phase-4-select-labels).
 
 ## Completion Requirement
 
@@ -48,7 +48,10 @@ This workflow is not complete until [Phase 7](#phase-7-create-issue) calls `mcp_
 ## Phase 0: Resolve Team and Hint
 
 1. Parse `$ARGUMENTS` as an optional title hint; if empty, prompt once via AskUserQuestion.
-2. Read `package.json` and extract the `linear` entry from `agents.trackers`. If absent, stop: `This project is not Linear-tracked. Use /autopilot:issue-create for a GitHub issue.`
+2. Read `package.json` and collect **all** `linear` entries from `agents.trackers`, then resolve a single target `team`:
+   - **None** ⇒ stop: `This project is not Linear-tracked. Use /autopilot:issue-create for a GitHub issue.`
+   - **Exactly one** ⇒ use its `team` (and `label`) — no prompt.
+   - **Two or more** ⇒ ask the user which team to file on via AskUserQuestion (single-select): one option per `linear` entry, `{ label: "<team>", description: "<comma-joined keys, or 'no keys'>" }`. Bind the chosen entry's `team` and optional `label` for the rest of the wizard.
 
 ## Phase 1: Gather Context
 

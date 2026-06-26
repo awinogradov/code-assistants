@@ -81,13 +81,13 @@ Resolve the repository once and store it as `<repo>` (format `owner/name`):
 gh repo view --json nameWithOwner --jq .nameWithOwner
 ```
 
-Determine the provider: read `agents.trackers` from `package.json` (via the Read tool). When a `linear` tracker is configured, the provider is **Linear** (note its `team`); otherwise **GitHub** (the default).
+Determine the provider: read `agents.trackers` from `package.json` (via the Read tool). When at least one `linear` tracker is configured, the provider is **Linear** (note **every** configured `team`); otherwise **GitHub** (the default).
 
 If `$ARGUMENTS` already supplies an issue identifier (a GitHub number or a Linear id), skip directly to [Phase 3](#phase-3-hand-off-to-autopilot).
 
 ## Phase 1: Fetch Recent Open Issues
 
-**If the provider is Linear:** list the team's recent open issues via `mcp__plugin_autopilot_linear__list_issues` (open only, ordered by most-recently-updated; without `--all`, prefer unassigned when the tool exposes an assignee filter). Then mirror the GitHub empty-state handling:
+**If the provider is Linear:** first pick the team to browse. With exactly one `linear` tracker, use its `team` (no prompt). With two or more, ask via AskUserQuestion (single-select) — one option per team, `{ label: "<team>", description: "<comma-joined keys, or 'no keys'>" }` — and use the chosen `team`. Then list that team's recent open issues via `mcp__plugin_autopilot_linear__list_issues` (open only, ordered by most-recently-updated; without `--all`, prefer unassigned when the tool exposes an assignee filter). Then mirror the GitHub empty-state handling:
 
 - Non-empty — map each to a picker option `{ label: "<identifier> <title>", description: "<labels or 'no labels'>" }` and continue at [Phase 2](#phase-2-select-an-issue).
 - Empty with `--all` — there are genuinely no open issues to pick from; tell the user and stop (they can re-invoke as `/issue:run <id>`).
