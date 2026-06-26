@@ -24763,11 +24763,13 @@ import {
   callAnthropicApi,
   generateWithApi,
   resolveAnthropicClientOptions,
+  resolveAnthropicModel,
   runReleaseNotes,
   verifyReleaseNotes,
 } from "./generateReleaseNotes.ts";
 import {
   buildUserMessage,
+  defaultAnthropicModel,
   filterChangelogForAi,
   readServiceContext,
   systemPrompt,
@@ -25093,6 +25095,7 @@ describe("callAnthropicApi", () => {
       { apiKey: "test-key" },
       "test prompt",
       "system prompt",
+      defaultAnthropicModel,
       mockMessages
     );
 
@@ -25110,10 +25113,30 @@ describe("callAnthropicApi", () => {
       },
     };
 
-    await callAnthropicApi({ apiKey: "test-key" }, "user msg", "my system prompt", mockMessages);
+    await callAnthropicApi(
+      { apiKey: "test-key" },
+      "user msg",
+      "my system prompt",
+      defaultAnthropicModel,
+      mockMessages
+    );
 
     expect(capturedSystem).toBe("my system prompt");
     expect(capturedUserContent).toBe("user msg");
+  });
+
+  test("forwards the model to the client", async () => {
+    let capturedModel: string | undefined;
+    const mockMessages: AnthropicMessages = {
+      create: async (params) => {
+        capturedModel = params.model;
+        return { content: [{ type: "text", text: "notes" }] };
+      },
+    };
+
+    await callAnthropicApi({ apiKey: "test-key" }, "user msg", "system", "my-model", mockMessages);
+
+    expect(capturedModel).toBe("my-model");
   });
 
   test("throws when API returns no text content", async () => {
@@ -25124,7 +25147,7 @@ describe("callAnthropicApi", () => {
     };
 
     await expect(
-      callAnthropicApi({ apiKey: "test-key" }, "test prompt", "system", mockMessages)
+      callAnthropicApi({ apiKey: "test-key" }, "test prompt", "system", defaultAnthropicModel, mockMessages)
     ).rejects.toThrow("Anthropic API returned no text content");
   });
 });
@@ -25209,7 +25232,7 @@ describe("generateWithApi", () => {
       const notesPath = join(dir, "release_notes.md");
       const bodyPath = join(dir, "missing-body");
 
-      await generateWithApi({ apiKey: "fake-key" }, notesPath, bodyPath, dir);
+      await generateWithApi({ apiKey: "fake-key" }, notesPath, bodyPath, defaultAnthropicModel, dir);
 
       expect(await Bun.file(notesPath).exists()).toBe(false);
     }));
@@ -25224,7 +25247,14 @@ describe("generateWithApi", () => {
         create: async () => ({ content: [{ type: "text", text: "Summary" }] }),
       };
 
-      await generateWithApi({ apiKey: "test-key" }, notesPath, bodyPath, dir, mockMessages);
+      await generateWithApi(
+        { apiKey: "test-key" },
+        notesPath,
+        bodyPath,
+        defaultAnthropicModel,
+        dir,
+        mockMessages
+      );
 
       const notes = await Bun.file(notesPath).text();
       expect(notes).toBe("Summary");
@@ -25248,6 +25278,7 @@ describe("generateWithApi", () => {
         { apiKey: "test-key" },
         join(dir, "notes.md"),
         join(dir, "body.md"),
+        defaultAnthropicModel,
         dir,
         mockMessages,
       );
@@ -25282,6 +25313,20 @@ describe("resolveAnthropicClientOptions", () => {
     expect(() =>
       resolveAnthropicClientOptions({ ANTHROPIC_API_KEY: "k", ANTHROPIC_AUTH_TOKEN: "t" })
     ).toThrow("not both");
+  });
+});
+
+describe("resolveAnthropicModel", () => {
+  test("returns the default when ANTHROPIC_MODEL is unset", () => {
+    expect(resolveAnthropicModel({})).toBe(defaultAnthropicModel);
+  });
+
+  test("treats a blank ANTHROPIC_MODEL as unset", () => {
+    expect(resolveAnthropicModel({ ANTHROPIC_MODEL: "   " })).toBe(defaultAnthropicModel);
+  });
+
+  test("returns the trimmed override when set", () => {
+    expect(resolveAnthropicModel({ ANTHROPIC_MODEL: " claude-custom-1 " })).toBe("claude-custom-1");
   });
 });
 
@@ -25329,8 +25374,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { assertExclusiveAnthropicAuth } from "@code-assistants/actions-core/anthropicAuth";
 
 import {
-  anthropicModel,
   buildUserMessage,
+  defaultAnthropicModel,
   filterChangelogForAi,
   maxOutputTokens,
   readServiceContext,
@@ -25384,11 +25429,26 @@ export function resolveAnthropicClientOptions(
 }
 
 /**
+ * Resolve the Anthropic model from the environment, falling back to the default.
+ *
+ * GitHub renders an unset optional action input as `""`, so a blank
+ * `ANTHROPIC_MODEL` is treated as unset and the built-in
+ * {@link defaultAnthropicModel} applies — keeping the default in one place.
+ *
+ * @param env - Source environment, typically `process.env`.
+ * @returns The configured model id, or the default when unset/blank.
+ */
+export function resolveAnthropicModel(env: Record<string, string | undefined>): string {
+  return env.ANTHROPIC_MODEL?.trim() || defaultAnthropicModel;
+}
+
+/**
  * Call the Anthropic Messages API to generate release notes.
  *
  * @param clientOptions - Resolved Anthropic client auth/host options
  * @param userMessage - User message with changelog and context
  * @param system - System prompt with stable instructions
+ * @param model - Anthropic model id to call
  * @param messages - Optional messages client (for testing)
  * @returns Generated release notes text
  * @throws On API error or timeout
@@ -25397,12 +25457,13 @@ export async function callAnthropicApi(
   clientOptions: AnthropicClientOptions,
   userMessage: string,
   system: string,
+  model: string,
   messages?: AnthropicMessages
 ): Promise<string> {
   const client = messages ?? new Anthropic({ ...clientOptions, timeout: 120_000 }).messages;
 
   const message = await client.create({
-    model: anthropicModel,
+    model,
     max_tokens: maxOutputTokens,
     system,
     messages: [{ role: "user", content: userMessage }],
@@ -25458,6 +25519,7 @@ export async function generateWithApi(
   clientOptions: AnthropicClientOptions,
   notesPath: string,
   bodyPath: string,
+  model: string,
   cwd = process.cwd(),
   messages?: AnthropicMessages,
 ): Promise<void> {
@@ -25478,7 +25540,7 @@ export async function generateWithApi(
 
     const filtered = filterChangelogForAi(changelog);
     const userMessage = buildUserMessage(filtered, serviceContext, tickets, prDescriptions);
-    const notes = await callAnthropicApi(clientOptions, userMessage, systemPrompt, messages);
+    const notes = await callAnthropicApi(clientOptions, userMessage, systemPrompt, model, messages);
 
     await Bun.write(notesPath, notes, { createPath: true });
     console.log("Release notes generated");
@@ -25502,6 +25564,7 @@ export async function runReleaseNotes(
   messages?: AnthropicMessages,
 ): Promise<void> {
   const clientOptions = resolveAnthropicClientOptions(process.env);
+  const model = resolveAnthropicModel(process.env);
   // GitHub renders an unset optional action input as ""; strip a blank host/token so
   // the SDK's own env fallback cannot read it as a configured (blank) host.
   if (!process.env.ANTHROPIC_BASE_URL?.trim()) delete process.env.ANTHROPIC_BASE_URL;
@@ -25510,7 +25573,7 @@ export async function runReleaseNotes(
   const bodyPath = join(cwd, ".release_bot/body");
 
   if (clientOptions.apiKey || clientOptions.authToken) {
-    await generateWithApi(clientOptions, notesPath, bodyPath, cwd, messages);
+    await generateWithApi(clientOptions, notesPath, bodyPath, model, cwd, messages);
   }
 
   await verifyReleaseNotes(notesPath, bodyPath);
@@ -27461,7 +27524,7 @@ if (import.meta.main) {
  *   filterChangelogForAi,
  *   readServiceContext,
  *   buildUserMessage,
- *   anthropicModel,
+ *   defaultAnthropicModel,
  * } from "./releaseNotesPrompt.ts";
  *
  * const filtered = filterChangelogForAi(changelog);
@@ -27473,8 +27536,8 @@ import { join } from "node:path";
 
 import { Glob } from "bun";
 
-/** Anthropic model used for release notes generation */
-export const anthropicModel = "claude-opus-4-20250514";
+/** Default Anthropic model for release notes generation, used when the `model` action input (env `ANTHROPIC_MODEL`) is unset. */
+export const defaultAnthropicModel = "claude-sonnet-4-6";
 
 /** Maximum output tokens for the API response */
 export const maxOutputTokens = 4096;
@@ -28997,6 +29060,10 @@ inputs:
     description: |
       Bearer auth token for a custom Anthropic host (sent as Authorization: Bearer). Alternative to anthropic_api_key — set one, not both.
     required: false
+  model:
+    description: |
+      Anthropic model for AI-generated release notes (e.g. claude-sonnet-4-6). Overrides the built-in default; leave unset to use it.
+    required: false
   name:
     description: |
       Service or library name for PR titles.
@@ -29103,6 +29170,7 @@ runs:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
         ANTHROPIC_AUTH_TOKEN: ${{ inputs.anthropic_auth_token }}
         ANTHROPIC_BASE_URL: ${{ inputs.anthropic_base_url }}
+        ANTHROPIC_MODEL: ${{ inputs.model }}
         GH_TOKEN: ${{ inputs.bot_token }}
         LINEAR_API_KEY: ${{ inputs.linear_api_key }}
         LINEAR_KEYS: ${{ inputs.linear_keys }}
@@ -29154,6 +29222,7 @@ runs:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
         ANTHROPIC_AUTH_TOKEN: ${{ inputs.anthropic_auth_token }}
         ANTHROPIC_BASE_URL: ${{ inputs.anthropic_base_url }}
+        ANTHROPIC_MODEL: ${{ inputs.model }}
       run: bun "${{ github.action_path }}/src/generateReleaseNotes.ts"
 
     - name: Update Release Notes File
@@ -29796,6 +29865,7 @@ jobs:
 | `anthropic_api_key`    | no       | —                     | Anthropic API key. When set, generates human-readable release-note summaries.                                                             |
 | `anthropic_base_url`   | no       | —                     | Custom Anthropic API base URL for a gateway/proxy/compatible endpoint (full URL with scheme). Unset uses the default `api.anthropic.com`. |
 | `anthropic_auth_token` | no       | —                     | Bearer token for a custom Anthropic host (`Authorization: Bearer`). Alternative to `anthropic_api_key` — set one, not both.               |
+| `model`                | no       | `claude-sonnet-4-6`   | Anthropic model for AI-generated release notes. Overrides the built-in default; leave unset to use it.                                    |
 | `name`                 | no       | —                     | Service or library name for PR titles (e.g. `Dialog Manager` → `Release Dialog Manager 1.2.0`).                                           |
 | `branch`               | no       | `release-{version}`   | Release branch template. `{version}` is substituted. `create` mode only.                                                                  |
 | `linear_api_key`       | no       | —                     | Linear API key for ticket integration.                                                                                                    |
