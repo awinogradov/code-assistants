@@ -35,6 +35,10 @@ inputs:
     description: |
       Bearer auth token for a custom Anthropic host (sent as Authorization: Bearer). Alternative to anthropic_api_key — set one, not both.
     required: false
+  model:
+    description: |
+      Anthropic model for AI-generated release notes (e.g. claude-sonnet-4-6). Overrides the built-in default; leave unset to use it.
+    required: false
   name:
     description: |
       Service or library name for PR titles.
@@ -141,6 +145,7 @@ runs:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
         ANTHROPIC_AUTH_TOKEN: ${{ inputs.anthropic_auth_token }}
         ANTHROPIC_BASE_URL: ${{ inputs.anthropic_base_url }}
+        ANTHROPIC_MODEL: ${{ inputs.model }}
         GH_TOKEN: ${{ inputs.bot_token }}
         LINEAR_API_KEY: ${{ inputs.linear_api_key }}
         LINEAR_KEYS: ${{ inputs.linear_keys }}
@@ -192,6 +197,7 @@ runs:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
         ANTHROPIC_AUTH_TOKEN: ${{ inputs.anthropic_auth_token }}
         ANTHROPIC_BASE_URL: ${{ inputs.anthropic_base_url }}
+        ANTHROPIC_MODEL: ${{ inputs.model }}
       run: bun "${{ github.action_path }}/src/generateReleaseNotes.ts"
 
     - name: Update Release Notes File
