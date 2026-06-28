@@ -9,6 +9,13 @@ import { createSyncPullRequest } from './createSyncPullRequest.ts';
 interface MockOverrides {
   listOpenPrs?: () => Promise<{ data: Array<{ number: number; html_url: string }> }>;
   createPr?: () => Promise<{ data: { number: number; html_url: string } }>;
+  updatePr?: (args: {
+    owner: string;
+    repo: string;
+    pull_number: number;
+    title: string;
+    body: string;
+  }) => Promise<{ data: unknown }>;
   createCommit?: (args: {
     author: BotIdentity;
     committer: BotIdentity;
@@ -21,6 +28,7 @@ function makeOctokit(overrides: MockOverrides = {}): Octokit {
     overrides.createPr ??
     (async () => ({ data: { number: 42, html_url: 'https://github.com/owner/repo/pull/42' } }));
   const createCommit = overrides.createCommit ?? (async () => ({ data: { sha: 'new-commit-sha' } }));
+  const updatePr = overrides.updatePr ?? (async () => ({ data: {} }));
 
   return {
     rest: {
@@ -36,6 +44,7 @@ function makeOctokit(overrides: MockOverrides = {}): Octokit {
       pulls: {
         list: listOpenPrs,
         create: createPr,
+        update: updatePr,
       },
     },
   } as unknown as Octokit;
@@ -62,6 +71,33 @@ describe('createSyncPullRequest', () => {
     const pr = await createSyncPullRequest({ octokit, ...baseArgs });
 
     expect(pr).toEqual({ number: 42, htmlUrl: 'https://github.com/owner/repo/pull/42' });
+  });
+
+  test('updates the existing PR title and body when an open PR is reused', async () => {
+    let captured: unknown;
+    const octokit = makeOctokit({
+      listOpenPrs: async () => ({
+        data: [{ number: 7, html_url: 'https://github.com/owner/repo/pull/7' }],
+      }),
+      updatePr: async (args) => {
+        captured = args;
+        return { data: {} };
+      },
+      createPr: async () => {
+        throw new Error('must not create a PR when reusing an open one');
+      },
+    });
+
+    const pr = await createSyncPullRequest({ octokit, ...baseArgs });
+
+    expect(pr).toEqual({ number: 7, htmlUrl: 'https://github.com/owner/repo/pull/7' });
+    expect(captured).toEqual({
+      owner: 'owner',
+      repo: 'repo',
+      pull_number: 7,
+      title: 'Sync',
+      body: 'body',
+    });
   });
 
   test('authors and commits as the resolved bot identity', async () => {

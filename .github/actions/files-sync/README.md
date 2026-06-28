@@ -106,6 +106,7 @@ See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/a
 - A single PR with all changed files is created (or reused if `branch` already has an open PR).
 - The PR link is surfaced on the run page as a `::notice` annotation (titled with the PR title) in addition to the step-summary link, so a scheduled sync run leads straight to its PR.
 - The head `branch` is force-updated on every run.
+- A reused PR's title and body are refreshed on every run, so the `**Updated files:**` list always reflects the current diff — not just the files that differed when the PR was first opened.
 - If no files differ between source and destination, no PR is created and the action exits cleanly.
 - A missing source path fails the run with `Source not found at <repo>:<path>`.
 - The destination path may not exist yet — it will be created in the PR.
