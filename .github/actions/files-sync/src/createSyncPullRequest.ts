@@ -173,6 +173,16 @@ async function upsertPullRequest({
   const open = existing.data[0];
 
   if (open !== undefined) {
+    // The branch is force-updated every run, but a reused PR keeps its original
+    // title/body — refresh them so the `Updated files` list matches the current diff.
+    await octokit.rest.pulls.update({
+      owner,
+      repo,
+      pull_number: open.number,
+      title,
+      body,
+    });
+
     return { number: open.number, htmlUrl: open.html_url };
   }
 
