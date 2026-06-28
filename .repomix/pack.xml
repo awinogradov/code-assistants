@@ -15991,6 +15991,13 @@ import { createSyncPullRequest } from './createSyncPullRequest.ts';
 interface MockOverrides {
   listOpenPrs?: () => Promise<{ data: Array<{ number: number; html_url: string }> }>;
   createPr?: () => Promise<{ data: { number: number; html_url: string } }>;
+  updatePr?: (args: {
+    owner: string;
+    repo: string;
+    pull_number: number;
+    title: string;
+    body: string;
+  }) => Promise<{ data: unknown }>;
   createCommit?: (args: {
     author: BotIdentity;
     committer: BotIdentity;
@@ -16003,6 +16010,7 @@ function makeOctokit(overrides: MockOverrides = {}): Octokit {
     overrides.createPr ??
     (async () => ({ data: { number: 42, html_url: 'https://github.com/owner/repo/pull/42' } }));
   const createCommit = overrides.createCommit ?? (async () => ({ data: { sha: 'new-commit-sha' } }));
+  const updatePr = overrides.updatePr ?? (async () => ({ data: {} }));
 
   return {
     rest: {
@@ -16018,6 +16026,7 @@ function makeOctokit(overrides: MockOverrides = {}): Octokit {
       pulls: {
         list: listOpenPrs,
         create: createPr,
+        update: updatePr,
       },
     },
   } as unknown as Octokit;
@@ -16044,6 +16053,33 @@ describe('createSyncPullRequest', () => {
     const pr = await createSyncPullRequest({ octokit, ...baseArgs });
 
     expect(pr).toEqual({ number: 42, htmlUrl: 'https://github.com/owner/repo/pull/42' });
+  });
+
+  test('updates the existing PR title and body when an open PR is reused', async () => {
+    let captured: unknown;
+    const octokit = makeOctokit({
+      listOpenPrs: async () => ({
+        data: [{ number: 7, html_url: 'https://github.com/owner/repo/pull/7' }],
+      }),
+      updatePr: async (args) => {
+        captured = args;
+        return { data: {} };
+      },
+      createPr: async () => {
+        throw new Error('must not create a PR when reusing an open one');
+      },
+    });
+
+    const pr = await createSyncPullRequest({ octokit, ...baseArgs });
+
+    expect(pr).toEqual({ number: 7, htmlUrl: 'https://github.com/owner/repo/pull/7' });
+    expect(captured).toEqual({
+      owner: 'owner',
+      repo: 'repo',
+      pull_number: 7,
+      title: 'Sync',
+      body: 'body',
+    });
   });
 
   test('authors and commits as the resolved bot identity', async () => {
@@ -16272,6 +16308,16 @@ async function upsertPullRequest({
   const open = existing.data[0];
 
   if (open !== undefined) {
+    // The branch is force-updated every run, but a reused PR keeps its original
+    // title/body — refresh them so the `Updated files` list matches the current diff.
+    await octokit.rest.pulls.update({
+      owner,
+      repo,
+      pull_number: open.number,
+      title,
+      body,
+    });
+
     return { number: open.number, htmlUrl: open.html_url };
   }
 
@@ -17221,6 +17267,7 @@ See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/a
 - A single PR with all changed files is created (or reused if `branch` already has an open PR).
 - The PR link is surfaced on the run page as a `::notice` annotation (titled with the PR title) in addition to the step-summary link, so a scheduled sync run leads straight to its PR.
 - The head `branch` is force-updated on every run.
+- A reused PR's title and body are refreshed on every run, so the `**Updated files:**` list always reflects the current diff — not just the files that differed when the PR was first opened.
 - If no files differ between source and destination, no PR is created and the action exits cleanly.
 - A missing source path fails the run with `Source not found at <repo>:<path>`.
 - The destination path may not exist yet — it will be created in the PR.
