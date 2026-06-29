@@ -401,6 +401,16 @@ Use this body for the `## Pre-Implementation` section:
 Invoke `Skill(autopilot:branch-create)` with the resolved issue number (e.g., `42` for `#42`). The branch-create skill fetches the issue, generates an `issue-<number>-<slug>` branch name, and prompts the user to confirm before creation. Do NOT present a Hotfix/Trivial/Maintenance prefix prompt — issue inputs always use the `issue-<number>-<slug>` convention so the PR can link back via `Closes #<number>`.
 ```
 
+#### Input type is `linear-issue` or `linear-issue-url` (a Linear id such as `ENG-123`, or a Linear issue URL)
+
+Use this body for the `## Pre-Implementation` section:
+
+```
+## Pre-Implementation
+
+Invoke `Skill(autopilot:branch-create)` with arguments `<LINEAR-ID> --start` (e.g., `ENG-123 --start`). The branch-create skill fetches the ticket, generates a `<team>-<number>-<slug>` branch name, moves the ticket to "In Progress" via `--start` (best-effort — it never blocks branch creation), and prompts the user to confirm before creation. Do NOT present a Hotfix/Trivial/Maintenance prefix prompt — Linear inputs always use the `<team>-<number>-<slug>` convention so the PR can link back via `Closes <LINEAR-ID>`.
+```
+
 #### Input type is `code-scanning-alert`
 
 Use this body for the `## Pre-Implementation` section:
