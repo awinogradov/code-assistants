@@ -187,6 +187,7 @@ The content is organized as follows:
         1.0.0.md
         2.0.0.md
         2.0.1.md
+        2.0.2.md
       src/
         botIdentity.test.ts
         botIdentity.ts
@@ -15372,6 +15373,25 @@ The documentation now explains how actions create helpful link annotations in Gi
 * document run-page link annotations ([a3b0197](https://github.com/awinogradov/code-assistants/commit/a3b0197753dfb84d48887adf34f18999c6b9896b))
 </file>
 
+<file path=".github/actions/files-sync/.release_notes/2.0.2.md">
+## [2.0.2](https://github.com/awinogradov/code-assistants/compare/files-sync-action@v2.0.1...files-sync-action@v2.0.2) (2026-06-29)
+
+## Release Notes
+
+Reused file-sync pull requests now stay accurate across repeated runs — the title and file list always reflect what's actually changed.
+
+## 🐛 Bug Fixes
+
+### Accurate PR Descriptions on Re-runs
+
+When the sync action found an existing open pull request and reused it rather than opening a new one, the PR title and the "Updated files" body section were left unchanged from the previous run. This meant the description could list files that were no longer part of the diff, or miss files that had just been added. The PR now refreshes both the title and the full file list on every run, so reviewers always see an accurate picture of what the current sync changed.
+
+
+### Bug Fixes
+
+* **files-sync:** refresh reused pull request title and body ([d60e1dc](https://github.com/awinogradov/code-assistants/commit/d60e1dc470c2c23858ec3fb32f2395c53f34a200))
+</file>
+
 <file path=".github/actions/files-sync/src/botIdentity.test.ts">
 import { describe, expect, mock, test } from 'bun:test';
 
@@ -16696,6 +16716,22 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [2.0.2](https://github.com/awinogradov/code-assistants/compare/files-sync-action@v2.0.1...files-sync-action@v2.0.2) (2026-06-29)
+
+## Release Notes
+
+Reused file-sync pull requests now stay accurate across repeated runs — the title and file list always reflect what's actually changed.
+
+## 🐛 Bug Fixes
+
+### Accurate PR Descriptions on Re-runs
+
+When the sync action found an existing open pull request and reused it rather than opening a new one, the PR title and the "Updated files" body section were left unchanged from the previous run. This meant the description could list files that were no longer part of the diff, or miss files that had just been added. The PR now refreshes both the title and the full file list on every run, so reviewers always see an accurate picture of what the current sync changed.
+
+
+### Bug Fixes
+
+* **files-sync:** refresh reused pull request title and body ([d60e1dc](https://github.com/awinogradov/code-assistants/commit/d60e1dc470c2c23858ec3fb32f2395c53f34a200))
 ## [2.0.1](https://github.com/awinogradov/code-assistants/compare/files-sync-action@v2.0.0...files-sync-action@v2.0.1) (2026-06-13)
 
 ## Release Notes
@@ -17126,7 +17162,7 @@ await main().catch((error: unknown) => {
 <file path=".github/actions/files-sync/package.json">
 {
   "name": "@code-assistants/files-sync-action",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Composite GitHub Action that syncs declared files from upstream repositories.",
   "private": true,
   "type": "module",
@@ -17161,7 +17197,7 @@ await main().catch((error: unknown) => {
 <file path=".github/actions/files-sync/README.md">
 # Files sync
 
-[![GitHub Release](https://img.shields.io/badge/release-v2.0.1-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v2.0.2-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that syncs declared files from one or more source repositories into
@@ -17299,7 +17335,7 @@ uses: awinogradov/code-assistants/.github/actions/files-sync@v1
 </file>
 
 <file path=".github/actions/files-sync/version">
-2.0.1
+2.0.2
 </file>
 
 <file path=".github/actions/licenses-audit/src/licenses-report.test.ts">
