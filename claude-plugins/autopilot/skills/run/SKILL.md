@@ -316,6 +316,16 @@ Use this body for the `## Pre-Implementation` section:
 Invoke `Skill(autopilot:branch-create)` with arguments `<issue-number> --autopilot` (e.g., `42 --autopilot` for `#42`). The branch-create skill fetches the issue, generates an `issue-<number>-<slug>` branch name, and creates the branch directly without a confirmation prompt (the `--autopilot` flag suppresses Phase 5). Do NOT present a Hotfix/Trivial/Maintenance prefix prompt — issue inputs always use the `issue-<number>-<slug>` convention so the PR can link back via `Closes #<number>`. Conflict resolution still surfaces if the branch already exists.
 ```
 
+##### Input type is `linear-issue` or `linear-issue-url` (a Linear id such as `ENG-123`, or a Linear issue URL)
+
+Use this body for the `## Pre-Implementation` section:
+
+```
+## Pre-Implementation
+
+Invoke `Skill(autopilot:branch-create)` with arguments `<LINEAR-ID> --start --autopilot` (e.g., `ENG-123 --start --autopilot`). The branch-create skill fetches the ticket, generates a `<team>-<number>-<slug>` branch name, and creates the branch directly without a confirmation prompt (the `--autopilot` flag suppresses Phase 5). The `--start` flag then moves the ticket to "In Progress" (best-effort — it never blocks branch creation), mirroring how `github-issue` inputs are auto-assigned to the current user the moment work starts. Do NOT present a Hotfix/Trivial/Maintenance prefix prompt — Linear inputs always use the `<team>-<number>-<slug>` convention so the PR can link back via `Closes <LINEAR-ID>`. Conflict resolution still surfaces if the branch already exists.
+```
+
 ##### Input type is `code-scanning-alert`
 
 Use this body for the `## Pre-Implementation` section:
