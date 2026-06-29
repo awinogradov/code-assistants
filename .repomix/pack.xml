@@ -376,6 +376,7 @@ claude-plugins/
       1.3.1.md
       1.4.0.md
       1.5.0.md
+      1.6.0.md
     agents/
       analyze-pr-commits.md
       analyze-staged-changes.md
@@ -34760,7 +34761,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -35613,6 +35614,37 @@ Running `/autopilot:run` used to stop and wait for you to approve the plan befor
 ### Bug Fixes
 
 * **autopilot:** drop plan-approval gate from run flow ([6bd8352](https://github.com/awinogradov/code-assistants/commit/6bd83520f6e0aaa84e6ab9e3f75a752673dcaa62))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/1.6.0.md">
+## [1.6.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.5.0...autopilot@v1.6.0) (2026-06-29)
+
+## Release Notes
+
+Linear tickets now move to **In Progress** automatically when autopilot begins work on them, keeping your issue tracker in sync without any manual status updates.
+
+## ✨ What's New
+
+### Automatic Linear Issue Progress Tracking
+
+When autopilot starts work on a Linear issue, the linked ticket now automatically moves to **In Progress** — the same behavior already in place for GitHub issues. This means your Linear board reflects real work state without anyone having to manually drag tickets across columns. Teams using Linear for sprint tracking will see accurate status without extra coordination overhead.
+
+<details><summary>Related issues</summary>
+
+- [#383: Move Linear issue to In Progress when a plan is accepted in autopilot](https://github.com/awinogradov/code-assistants/issues/383)
+- [#384: Move Linear issues to In Progress when autopilot starts work](https://github.com/awinogradov/code-assistants/pull/384)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #383 | [#384](https://github.com/awinogradov/code-assistants/pull/384) | @awinogradov |
+
+### Features
+
+* **autopilot:** pass --start for linear branch creation ([537394c](https://github.com/awinogradov/code-assistants/commit/537394ce78279833b7ecf526ce4e043e9b5e6efb))
 </file>
 
 <file path="claude-plugins/autopilot/agents/analyze-pr-commits.md">
@@ -47721,6 +47753,34 @@ Write the most helpful, readable output you can: plain, direct prose; every refe
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.6.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.5.0...autopilot@v1.6.0) (2026-06-29)
+
+## Release Notes
+
+Linear tickets now move to **In Progress** automatically when autopilot begins work on them, keeping your issue tracker in sync without any manual status updates.
+
+## ✨ What's New
+
+### Automatic Linear Issue Progress Tracking
+
+When autopilot starts work on a Linear issue, the linked ticket now automatically moves to **In Progress** — the same behavior already in place for GitHub issues. This means your Linear board reflects real work state without anyone having to manually drag tickets across columns. Teams using Linear for sprint tracking will see accurate status without extra coordination overhead.
+
+<details><summary>Related issues</summary>
+
+- [#383: Move Linear issue to In Progress when a plan is accepted in autopilot](https://github.com/awinogradov/code-assistants/issues/383)
+- [#384: Move Linear issues to In Progress when autopilot starts work](https://github.com/awinogradov/code-assistants/pull/384)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #383 | [#384](https://github.com/awinogradov/code-assistants/pull/384) | @awinogradov |
+
+### Features
+
+* **autopilot:** pass --start for linear branch creation ([537394c](https://github.com/awinogradov/code-assistants/commit/537394ce78279833b7ecf526ce4e043e9b5e6efb))
 ## [1.5.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.4.0...autopilot@v1.5.0) (2026-06-29)
 
 ## Release Notes
@@ -48573,14 +48633,14 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
   "release": {
     "type": "claude-plugin"
   },
-  "version": "1.5.0"
+  "version": "1.6.0"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.5.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.6.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -48994,7 +49054,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-1.5.0
+1.6.0
 </file>
 
 <file path="docs/01-workspace-structure.md">
