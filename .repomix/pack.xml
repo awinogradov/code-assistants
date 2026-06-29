@@ -50,6 +50,7 @@ The content is organized as follows:
         2.0.0.md
         2.0.1.md
         2.0.2.md
+        2.1.0.md
       docs/
         sync-flow.md
       src/
@@ -374,6 +375,7 @@ claude-plugins/
       1.3.0.md
       1.3.1.md
       1.4.0.md
+      1.5.0.md
     agents/
       analyze-pr-commits.md
       analyze-staged-changes.md
@@ -819,6 +821,90 @@ The service documentation has been restructured into clearly numbered book chapt
 ### Bug Fixes
 
 * renumber docs and update shipped links ([4b77286](https://github.com/awinogradov/code-assistants/commit/4b77286ff4fa59ea51a25ca051e36e6898df4f06))
+</file>
+
+<file path=".github/actions/agents-rules-sync/.release_notes/2.1.0.md">
+## [2.1.0](https://github.com/awinogradov/code-assistants/compare/agents-rules-sync-action@v2.0.2...agents-rules-sync-action@v2.1.0) (2026-06-29)
+
+## Release Notes
+
+Repositories with multiple Linear teams can now declare all of them in a single `agents.trackers` array, with automatic routing by issue key prefix.
+
+## ✨ What's New
+
+### Multi-Team Linear Tracker Support
+
+Consumer repositories that span more than one Linear team no longer need to pick just one. The `agents.trackers` array now accepts multiple Linear tracker entries side by side, and issues are automatically routed to the correct team based on their key prefix (e.g. `ARCH-` vs `ENG-`). When an AI agent creates or lists Linear issues and more than one Linear tracker is configured, it will prompt to select the appropriate team — keeping work items landing in the right place without manual disambiguation.
+
+The array is validated on sync, and the action will reject configurations with a missing team, duplicate GitHub tracker entries, or colliding key prefixes across Linear teams, catching misconfiguration before it causes routing surprises downstream.
+
+<details><summary>Related issues</summary>
+
+- [#377: Support multiple Linear teams in agents.trackers](https://github.com/awinogradov/code-assistants/issues/377)
+- [#378: Support multiple Linear teams in one repository](https://github.com/awinogradov/code-assistants/pull/378)
+</details>
+
+## 📋 Protocol & Contract Changes
+
+### `agents.trackers` Array Now Supports Multiple Linear Entries
+
+The `agents.trackers` field in the consumer repository's `package.json` previously supported a single tracker configuration. It now accepts an array with multiple Linear team entries alongside the GitHub entry.
+
+**Before:**
+```json
+{
+  "agents": {
+    "rules": "Bun",
+    "trackers": [
+      { "type": "linear", "team": "ENG" }
+    ]
+  }
+}
+```
+
+**After:**
+```json
+{
+  "agents": {
+    "rules": "Bun",
+    "trackers": [
+      { "type": "github" },
+      { "type": "linear", "team": "ENG" },
+      { "type": "linear", "team": "ARCH" }
+    ]
+  }
+}
+```
+
+Validation rules enforced at sync time:
+- Each Linear entry must specify a `team`
+- Key prefixes across Linear entries must be unique (no two teams sharing the same prefix)
+- Only one GitHub tracker entry is permitted
+
+## 📚 Documentation & Settings Updates
+
+### Multiple Linear Teams Documented
+
+The `agents.trackers` configuration reference has been updated to cover the multi-team setup, including how key prefix routing works and the validation constraints the action enforces. Refer to the updated docs in the upstream `awinogradov/code-assistants` repository for full examples.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #377 | [#378](https://github.com/awinogradov/code-assistants/pull/378) | @awinogradov |
+
+### Features
+
+* **agents-rules-sync:** validate agents.trackers array ([72bb572](https://github.com/awinogradov/code-assistants/commit/72bb57228fc86ef2451662aeebb805acff9868f1))
+
+### Documentation
+
+* document multiple linear teams in trackers ([fcdf280](https://github.com/awinogradov/code-assistants/commit/fcdf280efaa6e523d307e1af161dbda4e0e82d4d))
+
+### Tests
+
+* **agents-rules-sync:** cover trackers resolver ([bba67a9](https://github.com/awinogradov/code-assistants/commit/bba67a931df6c49f9ca85b883a166f0f99c098d5))
 </file>
 
 <file path=".github/actions/agents-rules-sync/docs/sync-flow.md">
@@ -1721,6 +1807,87 @@ await main().catch((error: unknown) => {
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [2.1.0](https://github.com/awinogradov/code-assistants/compare/agents-rules-sync-action@v2.0.2...agents-rules-sync-action@v2.1.0) (2026-06-29)
+
+## Release Notes
+
+Repositories with multiple Linear teams can now declare all of them in a single `agents.trackers` array, with automatic routing by issue key prefix.
+
+## ✨ What's New
+
+### Multi-Team Linear Tracker Support
+
+Consumer repositories that span more than one Linear team no longer need to pick just one. The `agents.trackers` array now accepts multiple Linear tracker entries side by side, and issues are automatically routed to the correct team based on their key prefix (e.g. `ARCH-` vs `ENG-`). When an AI agent creates or lists Linear issues and more than one Linear tracker is configured, it will prompt to select the appropriate team — keeping work items landing in the right place without manual disambiguation.
+
+The array is validated on sync, and the action will reject configurations with a missing team, duplicate GitHub tracker entries, or colliding key prefixes across Linear teams, catching misconfiguration before it causes routing surprises downstream.
+
+<details><summary>Related issues</summary>
+
+- [#377: Support multiple Linear teams in agents.trackers](https://github.com/awinogradov/code-assistants/issues/377)
+- [#378: Support multiple Linear teams in one repository](https://github.com/awinogradov/code-assistants/pull/378)
+</details>
+
+## 📋 Protocol & Contract Changes
+
+### `agents.trackers` Array Now Supports Multiple Linear Entries
+
+The `agents.trackers` field in the consumer repository's `package.json` previously supported a single tracker configuration. It now accepts an array with multiple Linear team entries alongside the GitHub entry.
+
+**Before:**
+```json
+{
+  "agents": {
+    "rules": "Bun",
+    "trackers": [
+      { "type": "linear", "team": "ENG" }
+    ]
+  }
+}
+```
+
+**After:**
+```json
+{
+  "agents": {
+    "rules": "Bun",
+    "trackers": [
+      { "type": "github" },
+      { "type": "linear", "team": "ENG" },
+      { "type": "linear", "team": "ARCH" }
+    ]
+  }
+}
+```
+
+Validation rules enforced at sync time:
+- Each Linear entry must specify a `team`
+- Key prefixes across Linear entries must be unique (no two teams sharing the same prefix)
+- Only one GitHub tracker entry is permitted
+
+## 📚 Documentation & Settings Updates
+
+### Multiple Linear Teams Documented
+
+The `agents.trackers` configuration reference has been updated to cover the multi-team setup, including how key prefix routing works and the validation constraints the action enforces. Refer to the updated docs in the upstream `awinogradov/code-assistants` repository for full examples.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #377 | [#378](https://github.com/awinogradov/code-assistants/pull/378) | @awinogradov |
+
+### Features
+
+* **agents-rules-sync:** validate agents.trackers array ([72bb572](https://github.com/awinogradov/code-assistants/commit/72bb57228fc86ef2451662aeebb805acff9868f1))
+
+### Documentation
+
+* document multiple linear teams in trackers ([fcdf280](https://github.com/awinogradov/code-assistants/commit/fcdf280efaa6e523d307e1af161dbda4e0e82d4d))
+
+### Tests
+
+* **agents-rules-sync:** cover trackers resolver ([bba67a9](https://github.com/awinogradov/code-assistants/commit/bba67a931df6c49f9ca85b883a166f0f99c098d5))
 ## [2.0.2](https://github.com/awinogradov/code-assistants/compare/agents-rules-sync-action@v2.0.1...agents-rules-sync-action@v2.0.2) (2026-06-13)
 
 ## Release Notes
@@ -1963,7 +2130,7 @@ If you're currently using a pinned version tag, you can continue using it withou
 <file path=".github/actions/agents-rules-sync/package.json">
 {
   "name": "@code-assistants/agents-rules-sync-action",
-  "version": "2.0.2",
+  "version": "2.1.0",
   "description": "Composite GitHub Action that syncs the stack-appropriate agent rules file into CLAUDE.md.",
   "private": true,
   "type": "module",
@@ -1998,7 +2165,7 @@ If you're currently using a pinned version tag, you can continue using it withou
 <file path=".github/actions/agents-rules-sync/README.md">
 # Agents rules sync
 
-[![GitHub Release](https://img.shields.io/badge/release-v2.0.2-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v2.1.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that syncs the stack-appropriate agent rules file from an upstream
@@ -2141,7 +2308,7 @@ uses: awinogradov/code-assistants/.github/actions/agents-rules-sync@v1
 </file>
 
 <file path=".github/actions/agents-rules-sync/version">
-2.0.2
+2.1.0
 </file>
 
 <file path=".github/actions/auto-label/.release_notes/0.2.0.md">
@@ -34593,7 +34760,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -35405,6 +35572,47 @@ To enable Linear as an issue tracker, add a `trackers` entry to the `agents` sec
 ### Tests
 
 * **autopilot:** add pdf:create renderer tests ([cbc50de](https://github.com/awinogradov/code-assistants/commit/cbc50de5c02e9adf37323fb303eebded08998737))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/1.5.0.md">
+## [1.5.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.4.0...autopilot@v1.5.0) (2026-06-29)
+
+## Release Notes
+
+The headline change in v1.5.0 is multi-team Linear support, letting a single repository route issues across multiple Linear teams without manual workarounds.
+
+## ✨ What's New
+
+### Multi-Team Linear Support
+
+Repositories that span more than one Linear team can now configure all of them in `agents.trackers`. Issues are automatically routed to the correct team based on their key prefix (e.g. `ARCH-`, `ENG-`), so there's no longer a need to maintain separate configurations or manually specify the team on every operation. When you create or list issues and more than one Linear tracker is configured, the agent will prompt you to pick the target team. The `agents.trackers` array is also validated on startup — configuration that references a missing team, has colliding key prefixes, or includes a duplicate GitHub entry will be rejected with a clear error rather than failing silently at runtime.
+
+<details><summary>Related issues</summary>
+
+- [#377: Support multiple Linear teams in agents.trackers](https://github.com/awinogradov/code-assistants/issues/377)
+- [#378: Support multiple Linear teams in one repository](https://github.com/awinogradov/code-assistants/pull/378)
+</details>
+
+## 🐛 Bug Fixes
+
+### `/autopilot:run` No Longer Pauses for Plan Approval
+
+Running `/autopilot:run` used to stop and wait for you to approve the plan before proceeding. That gate has been removed — invoking the command now authorizes the full plan → implement → commit → PR → monitor flow to run end-to-end without further prompts. If you need to review the plan before execution, use the separate plan step rather than `/autopilot:run`.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #377 | [#378](https://github.com/awinogradov/code-assistants/pull/378) | @awinogradov |
+
+### Features
+
+* **autopilot:** support multiple linear teams ([283c890](https://github.com/awinogradov/code-assistants/commit/283c890f13480091c3c5521160cc8d829ff09301))
+
+### Bug Fixes
+
+* **autopilot:** drop plan-approval gate from run flow ([6bd8352](https://github.com/awinogradov/code-assistants/commit/6bd83520f6e0aaa84e6ab9e3f75a752673dcaa62))
 </file>
 
 <file path="claude-plugins/autopilot/agents/analyze-pr-commits.md">
@@ -47493,6 +47701,44 @@ Write the most helpful, readable output you can: plain, direct prose; every refe
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.5.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.4.0...autopilot@v1.5.0) (2026-06-29)
+
+## Release Notes
+
+The headline change in v1.5.0 is multi-team Linear support, letting a single repository route issues across multiple Linear teams without manual workarounds.
+
+## ✨ What's New
+
+### Multi-Team Linear Support
+
+Repositories that span more than one Linear team can now configure all of them in `agents.trackers`. Issues are automatically routed to the correct team based on their key prefix (e.g. `ARCH-`, `ENG-`), so there's no longer a need to maintain separate configurations or manually specify the team on every operation. When you create or list issues and more than one Linear tracker is configured, the agent will prompt you to pick the target team. The `agents.trackers` array is also validated on startup — configuration that references a missing team, has colliding key prefixes, or includes a duplicate GitHub entry will be rejected with a clear error rather than failing silently at runtime.
+
+<details><summary>Related issues</summary>
+
+- [#377: Support multiple Linear teams in agents.trackers](https://github.com/awinogradov/code-assistants/issues/377)
+- [#378: Support multiple Linear teams in one repository](https://github.com/awinogradov/code-assistants/pull/378)
+</details>
+
+## 🐛 Bug Fixes
+
+### `/autopilot:run` No Longer Pauses for Plan Approval
+
+Running `/autopilot:run` used to stop and wait for you to approve the plan before proceeding. That gate has been removed — invoking the command now authorizes the full plan → implement → commit → PR → monitor flow to run end-to-end without further prompts. If you need to review the plan before execution, use the separate plan step rather than `/autopilot:run`.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #377 | [#378](https://github.com/awinogradov/code-assistants/pull/378) | @awinogradov |
+
+### Features
+
+* **autopilot:** support multiple linear teams ([283c890](https://github.com/awinogradov/code-assistants/commit/283c890f13480091c3c5521160cc8d829ff09301))
+
+### Bug Fixes
+
+* **autopilot:** drop plan-approval gate from run flow ([6bd8352](https://github.com/awinogradov/code-assistants/commit/6bd83520f6e0aaa84e6ab9e3f75a752673dcaa62))
 ## [1.4.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.3.1...autopilot@v1.4.0) (2026-06-26)
 
 ## Release Notes
@@ -48307,14 +48553,14 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
   "release": {
     "type": "claude-plugin"
   },
-  "version": "1.4.0"
+  "version": "1.5.0"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.4.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.5.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -48728,7 +48974,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-1.4.0
+1.5.0
 </file>
 
 <file path="docs/01-workspace-structure.md">
