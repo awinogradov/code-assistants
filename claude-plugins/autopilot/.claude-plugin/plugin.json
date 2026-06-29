@@ -1,6 +1,6 @@
 {
   "name": "autopilot",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",

@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.6.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.5.0...autopilot@v1.6.0) (2026-06-29)
+
+## Release Notes
+
+Linear tickets now move to **In Progress** automatically when autopilot begins work on them, keeping your issue tracker in sync without any manual status updates.
+
+## ✨ What's New
+
+### Automatic Linear Issue Progress Tracking
+
+When autopilot starts work on a Linear issue, the linked ticket now automatically moves to **In Progress** — the same behavior already in place for GitHub issues. This means your Linear board reflects real work state without anyone having to manually drag tickets across columns. Teams using Linear for sprint tracking will see accurate status without extra coordination overhead.
+
+<details><summary>Related issues</summary>
+
+- [#383: Move Linear issue to In Progress when a plan is accepted in autopilot](https://github.com/awinogradov/code-assistants/issues/383)
+- [#384: Move Linear issues to In Progress when autopilot starts work](https://github.com/awinogradov/code-assistants/pull/384)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #383 | [#384](https://github.com/awinogradov/code-assistants/pull/384) | @awinogradov |
+
+### Features
+
+* **autopilot:** pass --start for linear branch creation ([537394c](https://github.com/awinogradov/code-assistants/commit/537394ce78279833b7ecf526ce4e043e9b5e6efb))
 ## [1.5.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.4.0...autopilot@v1.5.0) (2026-06-29)
 
 ## Release Notes
