@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [2.0.2](https://github.com/awinogradov/code-assistants/compare/files-sync-action@v2.0.1...files-sync-action@v2.0.2) (2026-06-29)
+
+## Release Notes
+
+Reused file-sync pull requests now stay accurate across repeated runs — the title and file list always reflect what's actually changed.
+
+## 🐛 Bug Fixes
+
+### Accurate PR Descriptions on Re-runs
+
+When the sync action found an existing open pull request and reused it rather than opening a new one, the PR title and the "Updated files" body section were left unchanged from the previous run. This meant the description could list files that were no longer part of the diff, or miss files that had just been added. The PR now refreshes both the title and the full file list on every run, so reviewers always see an accurate picture of what the current sync changed.
+
+
+### Bug Fixes
+
+* **files-sync:** refresh reused pull request title and body ([d60e1dc](https://github.com/awinogradov/code-assistants/commit/d60e1dc470c2c23858ec3fb32f2395c53f34a200))
 ## [2.0.1](https://github.com/awinogradov/code-assistants/compare/files-sync-action@v2.0.0...files-sync-action@v2.0.1) (2026-06-13)
 
 ## Release Notes
