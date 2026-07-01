@@ -181,6 +181,8 @@ Tool parameters:
 - Avoids implementation details
 - Avoids technical jargon without context
 
+**Title self-check (MANDATORY):** re-verify the updated title against the [Phase 3](#phase-3-gather-context) provider before [Phase 7](#phase-7-push-and-update) executes `gh pr edit`. If `provider = linear`, the title MUST start with the branch's `<team>-<number>` uppercased plus `: ` (branch `frtns-28-pr-gate` → title starts with `FRTNS-28: `); if the prefix is missing — including when the existing PR title lacked it — or names a different id, fix the title now so an update restores the convention instead of preserving the defect. If `provider = github` or a special prefix, the title MUST NOT start with a `TEAM-N:` ticket prefix. This check is the gate, exactly like the reference-formatting self-check below is for the body.
+
 ### PR Body
 
 **Reference formatting (MANDATORY):** The generated body — both the description and the release-notes section — MUST follow the reference-formatting rules inlined at the end of this skill. The rule that keeps regressing: render every mention of a standard consistently as a link to its versioned RFC by stable ID (e.g., `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`), never a mix of bare text and links in the same body. Before finalizing, self-check the drafted body: a bare 7–40-char hex token or a bare tracker id (`[A-Z][A-Z0-9]*-[0-9]+`) outside the `**Issues:**` section is a violation — link it per the inlined rules.
@@ -309,7 +311,7 @@ Closes #<issue-from-branch>
 
 Present the updated PR using **AskUserQuestion tool** with preview.
 
-1. Compose the full PR content (title + description with separators) as a single string.
+1. Compose the full PR content (title + description with separators) as a single string, after running the [Phase 5](#phase-5-generate-updated-pr-title-and-body) Title self-check on the title.
 
 2. Confirm using AskUserQuestion tool:
 

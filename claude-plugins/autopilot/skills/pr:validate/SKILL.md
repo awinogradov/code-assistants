@@ -4,6 +4,7 @@ description: Validate a PR title and branch name against repository contributing
 argument-hint: 'PR_TITLE: "<title>" BRANCH_NAME: "<branch>" PR_AUTHOR: "<author-login>"'
 allowed-tools:
   - Bash(gh *)
+  - Read
 ---
 
 ## Input
@@ -46,6 +47,21 @@ You are validating the PR title and branch name provided above. Apply the follow
 4. No period at the end
 5. Total length must be under 120 characters
 6. Must NOT use Conventional Commits format (e.g., `feat(scope): ...` is invalid as a PR title)
+
+### Linear PR Title Format (Linear-tracked repositories)
+
+```
+<LINEAR-ID>: <Business-valuable description>
+```
+
+Linear title rules:
+
+- Valid only when the repository's `package.json` `agents.trackers` lists a `linear` entry whose effective keys (the entry's `keys`, defaulting to `[team]`) include the ID's key — read `package.json` with the Read tool. Without a matching `linear` tracker, a `TEAM-N:` prefix is invalid.
+- `LINEAR-ID` is the uppercase ticket id matching `[A-Z][A-Z0-9]*-[0-9]+`, followed by a colon and a single space
+- When BRANCH_NAME matches the Linear branch format below, the ID MUST equal the branch's `<team>-<number>` uppercased — branch `frtns-28-pr-gate` requires the title to start with `FRTNS-28: ` exactly; a different id (e.g., `FRTNS-82:`) or a missing prefix is invalid
+- A Linear-prefixed title on an `issue-<number>-` or special-prefix branch is invalid
+- When BRANCH_NAME is empty, accept the Linear title on the two rules above alone — there is no branch to cross-check
+- Description after the prefix follows the standard rules (capitalized, no period, under 120 chars total)
 
 ### Special Prefixes (bypass standard validation)
 
@@ -92,6 +108,18 @@ issue-<number>-<short-description>
 - `short-description` is required, lowercase, hyphens only (no underscores)
 - Aim for under 60 characters; must be under 100
 
+**Linear ticket format (Linear-tracked repositories):**
+
+```
+<team>-<number>-<short-description>
+```
+
+- Valid only when `package.json` `agents.trackers` lists a `linear` entry whose effective keys include the branch's team key uppercased — otherwise the branch is invalid, so a typo like `isue-42-fix` is not silently accepted as Linear
+- `team` is the Linear team key lowercased (letters and digits, starting with a letter); `number` is the ticket number (digits only)
+- Checked AFTER the `issue-` keyword, the special prefixes, and `release-` — those literal prefixes always win over the generic Linear shape
+- `short-description` is required, lowercase, hyphens only (no underscores)
+- Aim for under 60 characters; must be under 100
+
 **Special prefix format:**
 
 ```
@@ -118,6 +146,7 @@ release-<version>
 - `issue-123-update-dto`
 - `issue-45-fix-editor-crash`
 - `issue-789-update-proto`
+- `eng-123-add-auth` — when a `linear` tracker with key `ENG` is configured
 - `hotfix-memory-leak-editor`
 - `trivial-fix-typo-readme`
 - `maintenance-upgrade-node-22`
@@ -129,7 +158,8 @@ release-<version>
 
 - `add-user-auth` — missing `issue-<number>` prefix or special prefix
 - `issue_123_add_auth` — underscores not allowed
-- `repo-123-add-auth` — only literal `issue-` prefix is allowed
+- `eng_123_add_auth` — underscores not allowed in Linear branches either
+- `repo-123-add-auth` — Linear shape without a matching `linear` tracker key `REPO` in `agents.trackers`
 - `wip` — no issue ref, no description
 - `ISSUE-123-add-auth` — must be lowercase
 - `release-v1.2.0` — no `v` prefix
@@ -141,7 +171,7 @@ If BRANCH_NAME is empty, skip branch name validation entirely (Dependabot and si
 - Implementation details (those belong in PR body)
 - Technical jargon without context
 - Vague descriptions
-- Including the issue number in the title (link via magic words in the body instead)
+- Including the GitHub issue number in the title (link via magic words in the body instead; the Linear ticket-id prefix on Linear-tracked repositories is the one sanctioned exception)
 
 ### Valid PR Title Examples
 
@@ -149,6 +179,7 @@ If BRANCH_NAME is empty, skip branch name validation entirely (Dependabot and si
 - `Add annotation events for playback duration reporting`
 - `Refactor annotation codec for streaming support`
 - `Remove legacy plan-import endpoints`
+- `ENG-123: Allow theme selection` — Linear-tracked repo, branch `eng-123-…`
 - `HOTFIX: Memory leak in editor`
 - `TRIVIAL: Fix typo in README`
 - `MAINTENANCE: Upgrade Node to 22 LTS`
@@ -160,19 +191,25 @@ If BRANCH_NAME is empty, skip branch name validation entirely (Dependabot and si
 ### Invalid PR Title Examples
 
 - `feat(editor): add theme routing` — Conventional Commits format, not PR title format
-- `#123: Add feature` — Issue numbers must NOT appear in the title
+- `#123: Add feature` — GitHub issue numbers must NOT appear in the title
 - `123: Add feature` — Same; link the issue via `Closes #123` in the body
+- `ENG-123: Add feature` — on an `issue-…`/special-prefix branch, or when no `linear` tracker matches key `ENG`
+- `Add PR quality gate` on branch `frtns-28-pr-gate` — a gated Linear branch requires the `FRTNS-28: ` title prefix
 - `Added theme options` — Vague, past tense, missing business value
 - `Allow editor theme selection per workspace.` — Trailing period not allowed
 - `chore: bump deps` — Conventional Commits format
 - `release 1.2.0` — `Release` must be capitalized
 - `Release v1.2.0` — no `v` prefix in version
 
+### Intentional divergence from the CI checks
+
+The `contributing-check` CI action validates the title and the branch independently, so it accepts some combinations these rules reject. The title↔branch consistency rule, the mandatory colon + space after the Linear id (the CI header pattern makes the colon optional), and the `agents.trackers` gating are deliberately stricter and have no CI counterpart — a PR that passes CI but fails here is working as designed, not drift.
+
 ---
 
 ## GitHub Issue Verification
 
-For standard branch names (skip for HOTFIX/TRIVIAL/MAINTENANCE/PROPOSAL/SECURITY prefixes and Release branches), perform these additional checks:
+For `issue-<number>-` branch names (skip for HOTFIX/TRIVIAL/MAINTENANCE/PROPOSAL/SECURITY prefixes, Linear branches, and Release branches), perform these additional checks:
 
 1. **Extract the issue number** from the branch name (e.g., `123` from `issue-123-add-password-reset`).
 
@@ -187,6 +224,8 @@ For standard branch names (skip for HOTFIX/TRIVIAL/MAINTENANCE/PROPOSAL/SECURITY
 3. **Validate relevance**: Compare the PR title against the issue title and body. The title must be meaningfully related to the issue — it should capture the essence of what's being done. Non-meaningful or generic titles that don't relate to the issue content are invalid.
 
 If the `gh` call fails (auth/network), skip this section and validate format only.
+
+For Linear branches, skip ticket-existence and relevance verification entirely — in CI only `gh` is available, with no Linear read path. The format rules plus the title↔branch consistency rule are the full check.
 
 ---
 
