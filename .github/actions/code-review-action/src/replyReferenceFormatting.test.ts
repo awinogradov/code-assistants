@@ -39,4 +39,16 @@ describe("reply reference-formatting wiring", () => {
     expect(content).toContain("`CHECK-` rule code");
     expect(content).toContain("pr:review/SKILL.md#25-rule-codes");
   });
+
+  // Issue #387: the mandate alone was ignored downstream ("Fixed in 3baf978" with a
+  // bare SHA) — the copied reply template must itself demonstrate the linked form.
+  test.each(replySkillFiles)("%s demonstrates the linked-SHA form in a reply template", async (file) => {
+    const content = await readFile(file, "utf8");
+    expect(content).toContain("Fixed in [<sha>](<repo-commit-url>/<sha>)");
+  });
+
+  test.each(replySkillFiles)("%s instructs a bare-reference self-check before posting", async (file) => {
+    const content = await readFile(file, "utf8");
+    expect(content).toContain("bare 7–40-char hex token");
+  });
 });

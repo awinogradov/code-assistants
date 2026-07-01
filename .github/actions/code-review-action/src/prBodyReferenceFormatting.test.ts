@@ -39,3 +39,37 @@ describe("output reference-formatting wiring", () => {
     expect(content.slice(0, blockStart)).toContain(applyInstruction);
   });
 });
+
+// Issue #387: bare Linear ids in generated output are dead text on GitHub. The PR-body
+// skills must prescribe the plain issue URL on magic-word lines (the form Linear's
+// parser and GitHub's autolinker both accept), pr:review must link the ticket it
+// cites, and the producing agent contracts must expose the issue `url` the skills
+// build those links from. Presence-guards in the style of the wiring test above.
+describe("linear issue linking (issue #387)", () => {
+  const prBodySkills = ["pr:create", "pr:update"];
+
+  test.each(prBodySkills)("%s prescribes the Linear issue URL on magic-word lines", async (skill) => {
+    const content = await readFile(join(skillsDir, skill, "SKILL.md"), "utf8");
+    expect(content).toContain("Closes https://linear.app");
+    // Negative guard: the pre-#387 prescription must not resurface.
+    expect(content).not.toContain("`**Issues:**` uses `Closes ENG-123`");
+  });
+
+  test.each(prBodySkills)("%s instructs a bare-reference self-check on the drafted body", async (skill) => {
+    const content = await readFile(join(skillsDir, skill, "SKILL.md"), "utf8");
+    expect(content).toContain("self-check the drafted body");
+  });
+
+  test("pr:review cites the linked ticket as a link built from the issue url", async () => {
+    const content = await readFile(join(skillsDir, "pr:review", "SKILL.md"), "utf8");
+    expect(content).toContain("cite it as a markdown link built from");
+  });
+
+  test.each([
+    join(repoRoot, "claude-plugins/autopilot/agents/resolve-issue-context.md"),
+    join(repoRoot, "claude-plugins/autopilot/agents/analyze-pr-commits.md"),
+  ])("%s exposes the issue url in its output contract", async (file) => {
+    const content = await readFile(file, "utf8");
+    expect(content).toContain("`url`");
+  });
+});
