@@ -90,6 +90,22 @@ issue-<number>-<short-description>
 - ❌ `issue_123_add_auth`
 - ❌ `wip`
 
+**Linear Ticket Branches:**
+
+On repositories that configure a `linear` tracker in `package.json` `agents.trackers`, a branch links to a Linear ticket instead of a GitHub issue — the ticket id lowercased, then the slug:
+
+```
+<team>-<number>-<short-description>
+```
+
+- `team` is the Linear team key lowercased (`ENG-123` → `eng-123-…`)
+- Same rules apply: lowercase, hyphens only, aim for under 60 characters (hard limit: 100)
+
+**Examples:**
+
+- ✅ `eng-123-add-auth`
+- ❌ `ENG-123-add-auth`
+
 **Special Prefix Branches:**
 
 Some changes don't require an issue (see [Special PR Prefixes](#special-pr-prefixes)). Use the prefix as the branch identifier:
@@ -314,8 +330,18 @@ docs(auth): add jwt validation documentation
 
 - Required, capitalized, business-focused, no period
 - Under 120 characters total
-- Do NOT include the issue number in the title — link it from the PR body via [Magic Words](#magic-words)
+- Do NOT include the GitHub issue number in the title — link it from the PR body via [Magic Words](#magic-words)
 - NOT Conventional Commits format — that's the default for single-commit PRs, but reviewers and codeowners read the title first; keep it business-readable
+
+**Linear-tracked repositories:** the title is prefixed with the uppercase ticket id and a colon, matching the branch's ticket, so the ticket shows in the PR list:
+
+```
+<LINEAR-ID>: <Business-valuable description>
+```
+
+- ✅ `ENG-123: Allow theme selection` — on branch `eng-123-…`
+- ❌ `Allow theme selection` on branch `eng-123-…` — the ticket prefix is required
+- Description after the prefix follows the same rules as a standard PR title
 
 **PR title should be understandable:**
 
@@ -452,6 +478,8 @@ Closes #124
 Part of #100
 ```
 
+**Linear-tracked repositories:** the magic word takes the plain Linear issue URL instead of `#N` (e.g., `Closes https://linear.app/<workspace>/issue/ENG-123`) — a bare Linear id is dead text on GitHub, while the URL form is parsed by both sides. The ticket auto-closes on merge only via [Linear's GitHub integration](https://linear.app/docs/github); GitHub itself does not close Linear issues.
+
 > [!TIP]
 > Use the `/autopilot:pr-create` slash command to generate a PR title and description.
 
@@ -488,9 +516,9 @@ Only one strategy is used per repository. Reasons:
 **Before submitting:**
 
 ```markdown
-- [ ] Branch name starts with `issue-<number>-` or one of the special prefixes (`hotfix-`, `trivial-`, `maintenance-`, `proposal-`, `security-`)
-- [ ] PR title is a business-valuable description (no `#<n>:` prefix) or uses a recognized special prefix
-- [ ] PR description links the issue via `Closes #<n>` / `Fixes #<n>` / `Resolves #<n>` (when applicable)
+- [ ] Branch name starts with `issue-<number>-` or one of the special prefixes (`hotfix-`, `trivial-`, `maintenance-`, `proposal-`, `security-`) — or `<team>-<number>-` on Linear-tracked repos
+- [ ] PR title is a business-valuable description (no `#<n>:` prefix) or uses a recognized special prefix — on Linear-tracked repos, prefixed with the branch's ticket id (`TEAM-N: <description>`)
+- [ ] PR description links the issue via `Closes #<n>` / `Fixes #<n>` / `Resolves #<n>` (when applicable; Linear-tracked repos use the plain ticket URL)
 - [ ] All commits follow Conventional Commits format
 - [ ] No commits contain issue numbers in messages
 - [ ] No commits contain AI agent `Co-authored-by` trailers
