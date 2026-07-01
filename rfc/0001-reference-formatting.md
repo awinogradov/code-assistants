@@ -1,11 +1,11 @@
 ---
 number: 1
-version: 3
+version: 4
 title: Reference formatting & readability
 status: Accepted
 author: "@awinogradov"
 created: 2026-06-04
-updated: 2026-06-17
+updated: 2026-07-02
 ---
 
 # RFC-0001: Reference formatting & readability
@@ -23,7 +23,7 @@ These rules govern references — when you point the reader at a real file, stan
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
 - Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
-- Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
+- Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link. A tracker ID GitHub does not auto-link (e.g. Linear `ENG-123`) is dead text when bare: in prose, ALWAYS render it as a markdown link, e.g. `[ENG-123](https://linear.app/<workspace>/issue/ENG-123)` — a slug-less issue URL resolves. On a magic-word line (`Closes`/`Fixes`/`Related to` in a PR body's `**Issues:**` section) use plain forms only: bare `#N` for GitHub, the plain issue URL for other trackers — never a markdown-bracket link, which breaks the close-parsers.
 
 Backticks suppress GitHub autolinking: a commit SHA or issue/PR number inside a code span renders as dead text — that is why a backticked SHA was un-clickable in a prior review. Never wrap a SHA or issue/PR number in backticks; link it, or leave it bare so GitHub auto-links it.
 
@@ -33,6 +33,7 @@ Write the most helpful, readable output you can: plain, direct prose; every refe
 
 ## Changelog
 
+- **v4** (2026-07-02) — Tracker IDs GitHub does not auto-link (e.g. Linear `ENG-123`) must resolve: a markdown link in prose, the plain issue URL on magic-word lines (`Closes`/`Fixes`) — the form both GitHub's autolinker and Linear's magic-word parser accept. Bare tracker IDs are no longer allowed ([#387](https://github.com/awinogradov/code-assistants/issues/387)).
 - **v3** (2026-06-17) — Cross-document references are now linked, not inlined. Link any file, doc, skill, agent, or action you point the reader at, and link cross-document sections by `path#anchor` (repo-relative in repository files, absolute `<repo-blob-url>` in generated output). Every reference must resolve; the `linkResolution` test enforces it. Reverses the v1–v2 rule that cross-document references use an inline gist.
 - **v2** (2026-06-05) — A section in the same document may be linked by its anchor (e.g. `[Phase 6](#phase-6-reply-to-review-threads)`); cross-document sections still use an inline gist.
 - **v1** (2026-06-04) — Initial version.

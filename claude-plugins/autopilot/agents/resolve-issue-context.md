@@ -32,7 +32,7 @@ Resolve the provider from the prompt: if **Input type** is `linear-issue`, follo
 Store the full JSON in `ISSUE_JSON` so [Phase 2](#phase-2-auto-assign-current-user-opt-in) can re-read it without another API call:
 
 ```bash
-ISSUE_JSON=$(gh issue view "$NUMBER" -R "$REPO" --json title,body,comments,labels,state,author,createdAt,assignees)
+ISSUE_JSON=$(gh issue view "$NUMBER" -R "$REPO" --json title,body,comments,labels,state,author,createdAt,assignees,url)
 ```
 
 ### Linear
@@ -114,11 +114,12 @@ Output ONLY a single JSON object matching the schema below — no preamble, no s
 | `status`       | string            | Issue state — GitHub `"OPEN"`/`"CLOSED"`, or the Linear workflow state (e.g. `"In Progress"`, `"Done"`)                                                                                 |
 | `labels`       | string[]          | Label names; empty array when none                                                                                                                                                      |
 | `assignee`     | string \| null    | The [Phase 2](#phase-2-auto-assign-current-user-opt-in) status string when [Phase 2](#phase-2-auto-assign-current-user-opt-in) ran; `null` for read-only callers, and `null` for Linear |
+| `url`          | string \| null    | The issue's web URL — GitHub `url` from `gh issue view`, Linear `url` from `get_issue`/the GraphQL helper; `null` when unavailable. Callers build reference links from it (RFC-0001)    |
 | `description`  | string            | Issue body                                                                                                                                                                              |
 | `comments`     | object[]          | `{ "author": string, "date": string, "body": string }` per comment; empty when none                                                                                                     |
 | `resolveError` | string \| null    | Linear only; `null` (or omitted) on success, a short reason when the Linear issue could not be resolved                                                                                 |
 
-**Linear field mapping** (provider is Linear): `source` → `"Linear <identifier>"`; `issueId` → the string identifier (e.g. `"ENG-123"`); `status` → the workflow `state.name`; `labels` → label names; `description` → the issue description; `comments` → each Linear comment as `{ author, date, body }`; `assignee` → `null`. The GraphQL fallback helper already emits exactly this shape, so on fallback pass its stdout through unchanged.
+**Linear field mapping** (provider is Linear): `source` → `"Linear <identifier>"`; `issueId` → the string identifier (e.g. `"ENG-123"`); `status` → the workflow `state.name`; `labels` → label names; `url` → the issue `url`; `description` → the issue description; `comments` → each Linear comment as `{ author, date, body }`; `assignee` → `null`. The GraphQL fallback helper already emits exactly this shape, so on fallback pass its stdout through unchanged.
 
 Example:
 
@@ -129,6 +130,7 @@ Example:
   "title": "Add JWT refresh endpoint",
   "status": "OPEN",
   "labels": ["enhancement"],
+  "url": "https://github.com/octocat/hello-world/issues/42",
   "assignee": "@octocat (just assigned)",
   "description": "We need a refresh endpoint...",
   "comments": [{ "author": "octocat", "date": "2026-05-30", "body": "Agreed." }]

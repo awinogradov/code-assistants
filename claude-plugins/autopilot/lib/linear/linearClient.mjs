@@ -15,6 +15,7 @@ const issueQuery = `
     issue(id: $id) {
       identifier
       title
+      url
       description
       state { name }
       labels { nodes { name } }

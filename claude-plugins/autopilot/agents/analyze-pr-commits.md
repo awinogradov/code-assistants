@@ -43,7 +43,7 @@ If the fetch flag is `true` and an issue identifier is provided, fetch by provid
   gh issue view <ISSUE-NUMBER> -R <REPO> --json title,body,state
   ```
 
-- **Linear** (provider is `linear`): call `mcp__plugin_autopilot_linear__get_issue` with `{ "id": "<ISSUE-ID>" }` and read `title`, `description`, and `state.name`.
+- **Linear** (provider is `linear`): call `mcp__plugin_autopilot_linear__get_issue` with `{ "id": "<ISSUE-ID>" }` and read `title`, `description`, `state.name`, and `url` — the issue URL is what `pr:create`/`pr:update` put after the `Closes` magic word per [RFC-0001](../../../rfc/0001-reference-formatting.md).
 
 If the call fails, skip issue context — do not abort.
 
@@ -69,6 +69,7 @@ Output ONLY the structured block. No preamble or commentary:
 
 ### Issue Context
 **Title:** [GitHub issue title]
+**URL:** [issue web URL, or "unresolvable" when the fetch returned none]
 **Description:** [first 2-3 sentences of issue body]
 **Status:** [state]
 

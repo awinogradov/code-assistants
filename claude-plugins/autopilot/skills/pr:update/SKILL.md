@@ -119,7 +119,7 @@ AskUserQuestion({
 3. Determine the provider and issue reference from the branch, checking **in this order**:
    - **GitHub** — `^issue-([0-9]+)-`: extract the number; `provider = github`; link as `Closes #<n>`.
    - **Special prefix** — `hotfix-`/`trivial-`/`maintenance-`/`proposal-`/`security-`: the PR title uses the uppercased prefix (e.g., `HOTFIX:`). For a `security-` branch, emit NO `Closes #` — keep the code-scanning alert reference (see the `**Alert:**` rule below).
-   - **Linear** — `^([a-z][a-z0-9]*)-([0-9]+)-`: uppercase to the Linear id (e.g., `eng-123-…` → `ENG-123`); `provider = linear`; the title gets the `ENG-123:` prefix and `**Issues:**` uses `Closes ENG-123`.
+   - **Linear** — `^([a-z][a-z0-9]*)-([0-9]+)-`: uppercase to the Linear id (e.g., `eng-123-…` → `ENG-123`); `provider = linear`; the title gets the `ENG-123:` prefix and `**Issues:**` carries the magic word with the plain Linear issue URL — `Closes <linear-issue-url>` from the issue context below (bare-id fallback per the Magic Words rule in [Phase 5](#phase-5-generate-updated-pr-title-and-body)).
 
 Invoke the `analyze-pr-commits` sub-agent to gather commit history, diff summary, issue context, and change significance:
 
@@ -167,7 +167,7 @@ Tool parameters:
 **Rules:**
 
 - Standard (GitHub) title is the business description only — do NOT include the issue number in the title (it goes in the `**Issues:**` section via `Closes #<n>`)
-- Linear title is prefixed with the uppercase Linear id and a colon (`ENG-123: …`) so the ticket shows in the PR list; the `**Issues:**` section still carries `Closes ENG-123`
+- Linear title is prefixed with the uppercase Linear id and a colon (`ENG-123: …`) so the ticket shows in the PR list; the `**Issues:**` section still carries the magic word with the plain issue URL (`Closes https://linear.app/<workspace>/issue/ENG-123`), bare id only when no URL is resolvable
 - Special prefixes are uppercase, followed by a colon and a space
 - Description is capitalized, business-focused, no period
 - Under 120 characters total
@@ -183,7 +183,7 @@ Tool parameters:
 
 ### PR Body
 
-**Reference formatting (MANDATORY):** The generated body — both the description and the release-notes section — MUST follow the reference-formatting rules inlined at the end of this skill. The rule that keeps regressing: render every mention of a standard consistently as a link to its versioned RFC by stable ID (e.g., `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`), never a mix of bare text and links in the same body.
+**Reference formatting (MANDATORY):** The generated body — both the description and the release-notes section — MUST follow the reference-formatting rules inlined at the end of this skill. The rule that keeps regressing: render every mention of a standard consistently as a link to its versioned RFC by stable ID (e.g., `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`), never a mix of bare text and links in the same body. Before finalizing, self-check the drafted body: a bare 7–40-char hex token or a bare tracker id (`[A-Z][A-Z0-9]*-[0-9]+`) outside the `**Issues:**` section is a violation — link it per the inlined rules.
 
 The PR body uses `---` separators to divide three sections: description, release notes (optional), and issue links.
 
@@ -240,11 +240,11 @@ Content rules:
 - There MUST be a blank line between the `---` separator and the `**Issues:**` heading
 - The section MUST be present when any issue-linking magic words exist
 - DO NOT place magic words (e.g., `Closes #N`, `Related to #N`) as bare text in the description — they MUST be inside the `**Issues:**` section
-- Issue links MUST use magic words — NEVER use markdown links like `[#N](url)`
+- Issue links MUST use magic words — NEVER use markdown links like `[#N](url)` (they break the GitHub and Linear close-parsers); for a Linear issue the magic word takes the plain issue URL, which GitHub auto-links and Linear detects
 - The section is omitted ONLY for special prefix branches (HOTFIX / TRIVIAL / MAINTENANCE / PROPOSAL / SECURITY) when no issue numbers are provided
 - For a `security-` branch (code-scanning alert fix), the `**Issues:**` section is replaced by an `**Alert:**` section recording the alert URL (a `---` separator, then `**Alert:**` on its own line, then the alert URL). Emit NO `Closes #`: code-scanning alerts close on the next scan, not via PR magic words. The `**Alert:**` section occupies the last slot, where `**Issues:**` would go.
 
-**Preserving existing links:** Parse the old PR body's `**Issues:**` section to preserve existing magic-word links (`Closes`, `Fixes`, `Resolves`, `Part of`, `Related to`) — for either a GitHub `#N` or a Linear id (e.g. `Closes ENG-123`) — that were set during PR creation or previous updates.
+**Preserving existing links:** Parse the old PR body's `**Issues:**` section to preserve existing magic-word links (`Closes`, `Fixes`, `Resolves`, `Part of`, `Related to`) — the reference after the magic word may be a GitHub `#N`, a legacy bare Linear id (`[A-Z][A-Z0-9]*-[0-9]+`, e.g. `Closes ENG-123`), or a Linear issue URL (`https://linear.app/<workspace>/issue/<KEY-N>` with optional trailing slug or slash). Accept all three; when regenerating a line that carried a legacy bare id, upgrade it to the URL form if the issue URL is resolvable from the issue context.
 
 **Adding new links:** If `--closes` or `--related` flags were provided in the command invocation, add those as additional links.
 
@@ -256,11 +256,11 @@ Content rules:
 - `Part of #N` — Plain reference (auto-linked, no close)
 - `Related to #N` — Plain reference (auto-linked, no close)
 
-For a **Linear** branch, use the Linear id in place of `#N` (e.g., `Closes ENG-123`); Linear auto-closes on merge only when the GitHub↔Linear integration is configured.
+For a **Linear** branch, use the plain Linear issue URL in place of `#N` (e.g., `Closes https://linear.app/<workspace>/issue/ENG-123`) — a bare Linear id is dead text on GitHub, while [Linear's magic-word parser](https://linear.app/docs/github#linking-linear-issues-to-github-prs) accepts the URL form and GitHub renders it as a clickable autolink. Fall back to the bare id only when no URL is resolvable, and state "issue URL unresolvable — emitting bare Linear id" in the run output. Linear auto-closes on merge only when the GitHub↔Linear integration is configured.
 
 **Issue linking rules:**
 
-1. Always include `Closes #<N>` (GitHub) or `Closes <LINEAR-ID>` (Linear) for the issue derived from the branch name (skip for special prefix branches)
+1. Always include `Closes #<N>` (GitHub) or `Closes <linear-issue-url>` (Linear; bare-id fallback per the rule above) for the issue derived from the branch name (skip for special prefix branches)
 2. Preserve any additional magic-word links from the old PR body
 3. If `--closes` provided, add `Closes #<n>` for each additional issue (dedup with existing)
 4. If `--related` provided, add `Related to #<n>` for each related issue (dedup with existing)
@@ -474,7 +474,7 @@ These rules govern references — when you point the reader at a real file, stan
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
 - Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
-- Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
+- Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link. A tracker ID GitHub does not auto-link (e.g. Linear `ENG-123`) is dead text when bare: in prose, ALWAYS render it as a markdown link, e.g. `[ENG-123](https://linear.app/<workspace>/issue/ENG-123)` — a slug-less issue URL resolves. On a magic-word line (`Closes`/`Fixes`/`Related to` in a PR body's `**Issues:**` section) use plain forms only: bare `#N` for GitHub, the plain issue URL for other trackers — never a markdown-bracket link, which breaks the close-parsers.
 
 Backticks suppress GitHub autolinking: a commit SHA or issue/PR number inside a code span renders as dead text — that is why a backticked SHA was un-clickable in a prior review. Never wrap a SHA or issue/PR number in backticks; link it, or leave it bare so GitHub auto-links it.
 
