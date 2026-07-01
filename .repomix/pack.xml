@@ -15070,7 +15070,7 @@ runs:
           PROPOSAL
           SECURITY
           Release
-          [A-Z]+-\d+
+          [A-Z][A-Z0-9]*-\d+
           [A-Z]\w*
         headerPattern: '^([A-Z]\S*?):?\s+(.+)$'
         headerPatternCorrespondence: type, subject
@@ -15155,10 +15155,10 @@ The action never writes to the repository or to the PR, so writes are not reques
 
 The action runs four steps sequentially. The first failure short-circuits the job — later steps do not run.
 
-1. **Branch name** — [`deepakputhraya/action-branch-name@v1.0.0`](https://github.com/deepakputhraya/action-branch-name) enforces the regex `^(issue-\d+-[a-z0-9]+(-[a-z0-9]+)*|(hotfix|trivial|maintenance|proposal)-[a-z0-9]+(-[a-z0-9]+)*|release-\d+\.\d+\.\d+)$` with `min_length: 5`, `max_length: 100`, and `ignore: main,master`. This matches the CONTRIBUTING.md `Branches` section.
+1. **Branch name** — [`deepakputhraya/action-branch-name@v1.0.0`](https://github.com/deepakputhraya/action-branch-name) enforces the regex `^(issue-\d+-[a-z0-9]+(-[a-z0-9]+)*|[a-z][a-z0-9]*-\d+-[a-z0-9]+(-[a-z0-9]+)*|(hotfix|trivial|maintenance|proposal|security)-[a-z0-9]+(-[a-z0-9]+)*|release-([a-z0-9]+(-[a-z0-9]+)*-)?\d+\.\d+\.\d+)$` — the GitHub `issue-<n>-<slug>` form, the Linear `<team>-<n>-<slug>` form, the special prefixes, and release branches — with `min_length: 5`, `max_length: 100`, and `ignore: main,master`. This matches the CONTRIBUTING.md `Branches` section.
 2. **Checkout** — `actions/checkout@v4` with `fetch-depth: 0` so commitlint can resolve the full PR commit range.
 3. **Commit messages** — [`wagoid/commitlint-github-action@v6`](https://github.com/wagoid/commitlint-github-action) runs against `./commitlint.config.mjs` with `failOnWarnings: false`. Level-1 (warning) rules — `body-max-line-length` and `footer-max-line-length` — are surfaced as warnings but do not block merge. Level-2 (error) rules — including the custom `body-required-for-types`, `no-issue-id-in-subject`, and `no-ai-coauthored-by` — block merge.
-4. **PR title (semantic)** — [`amannn/action-semantic-pull-request@v6`](https://github.com/amannn/action-semantic-pull-request) accepts the special prefixes (`HOTFIX`, `TRIVIAL`, `MAINTENANCE`, `PROPOSAL`, `Release`) and any capitalized business-style title via the `[A-Z]\w*` type pattern. Titles ending in a period are rejected with a CONTRIBUTING.md cross-reference.
+4. **PR title (semantic)** — [`amannn/action-semantic-pull-request@v6`](https://github.com/amannn/action-semantic-pull-request) accepts the special prefixes (`HOTFIX`, `TRIVIAL`, `MAINTENANCE`, `PROPOSAL`, `SECURITY`, `Release`), the Linear ticket-id prefix via the `[A-Z][A-Z0-9]*-\d+` type pattern (e.g. `ENG-123: …` on Linear-tracked repos), and any capitalized business-style title via the `[A-Z]\w*` type pattern. Titles ending in a period are rejected with a CONTRIBUTING.md cross-reference.
 5. **PR title length** — Inline bash check fails the job if the PR title exceeds 120 characters. The title is read via the `PR_TITLE` env var (not shell-interpolated) to avoid command injection from a hostile title.
 
 All third-party action references are pinned to commit SHAs with `# vX.Y.Z` comments so a tag move does not silently change behavior.
@@ -43904,6 +43904,8 @@ If the agent reports breaking changes, treat `--release-notes` as mandatory — 
 - Avoids implementation details
 - Avoids technical jargon without context
 
+**Title self-check (MANDATORY):** re-verify the drafted title against the [Phase 1](#phase-1-validate-current-state) provider immediately before [Phase 6](#phase-6-create-pull-request) — when composing the [Phase 5](#phase-5-verify-with-user) preview on the interactive path, and in the autopilot bypass. If `provider = linear`, the title MUST start with the branch's `<team>-<number>` uppercased plus `: ` (branch `frtns-28-pr-gate` → title starts with `FRTNS-28: `); if the prefix is missing or names a different id, fix the title now. If `provider = github` or a special prefix, the title MUST NOT start with a `TEAM-N:` ticket prefix. A rule stated only here demonstrably gets dropped when the title is composed from commit context — this check is the gate, exactly like the reference-formatting self-check in [Phase 4](#phase-4-generate-pr-description) is for the body.
+
 ## Phase 4: Generate PR Description
 
 > **Canonical:** this section is the canonical PR-body grammar (sections, ordering, formatting, magic words); [pr:update Phase 5](../pr:update/SKILL.md#phase-5-generate-updated-pr-title-and-body) mirrors it — keep the two in sync.
@@ -44030,11 +44032,12 @@ Closes #<issue-from-branch>
 **Autopilot bypass:** If `autopilotMode` is true, skip the AskUserQuestion confirmation below. Before proceeding to [Phase 6](#phase-6-create-pull-request):
 
 - If meaningful changes are detected (per the [analyze-pr-commits](../../agents/analyze-pr-commits.md#phase-3-analyze-change-significance) significance from [Phase 2](#phase-2-gather-context)) AND neither `--release-notes` nor breaking changes triggered the release notes section, auto-generate the `**Release notes:**` section using the rules in [Phase 4](#phase-4-generate-pr-description) and insert it between the description and the `**Issues:**` section (with `---` separators).
+- Run the [Phase 3](#phase-3-generate-pr-title) Title self-check on the final title; fix the title if it fails.
 - Then proceed directly to [Phase 6](#phase-6-create-pull-request) with the resulting title and body.
 
 Present PR details using **AskUserQuestion tool** with preview.
 
-1. Compose the full PR content (title + description with separators) as a single string.
+1. Compose the full PR content (title + description with separators) as a single string, after running the [Phase 3](#phase-3-generate-pr-title) Title self-check on the title.
 
 2. Confirm using AskUserQuestion tool:
 
@@ -46287,6 +46290,8 @@ Tool parameters:
 - Avoids implementation details
 - Avoids technical jargon without context
 
+**Title self-check (MANDATORY):** re-verify the updated title against the [Phase 3](#phase-3-gather-context) provider before [Phase 7](#phase-7-push-and-update) executes `gh pr edit`. If `provider = linear`, the title MUST start with the branch's `<team>-<number>` uppercased plus `: ` (branch `frtns-28-pr-gate` → title starts with `FRTNS-28: `); if the prefix is missing — including when the existing PR title lacked it — or names a different id, fix the title now so an update restores the convention instead of preserving the defect. If `provider = github` or a special prefix, the title MUST NOT start with a `TEAM-N:` ticket prefix. This check is the gate, exactly like the reference-formatting self-check below is for the body.
+
 ### PR Body
 
 **Reference formatting (MANDATORY):** The generated body — both the description and the release-notes section — MUST follow the reference-formatting rules inlined at the end of this skill. The rule that keeps regressing: render every mention of a standard consistently as a link to its versioned RFC by stable ID (e.g., `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`), never a mix of bare text and links in the same body. Before finalizing, self-check the drafted body: a bare 7–40-char hex token or a bare tracker id (`[A-Z][A-Z0-9]*-[0-9]+`) outside the `**Issues:**` section is a violation — link it per the inlined rules.
@@ -46415,7 +46420,7 @@ Closes #<issue-from-branch>
 
 Present the updated PR using **AskUserQuestion tool** with preview.
 
-1. Compose the full PR content (title + description with separators) as a single string.
+1. Compose the full PR content (title + description with separators) as a single string, after running the [Phase 5](#phase-5-generate-updated-pr-title-and-body) Title self-check on the title.
 
 2. Confirm using AskUserQuestion tool:
 
@@ -46596,6 +46601,7 @@ description: Validate a PR title and branch name against repository contributing
 argument-hint: 'PR_TITLE: "<title>" BRANCH_NAME: "<branch>" PR_AUTHOR: "<author-login>"'
 allowed-tools:
   - Bash(gh *)
+  - Read
 ---
 
 ## Input
@@ -46638,6 +46644,21 @@ You are validating the PR title and branch name provided above. Apply the follow
 4. No period at the end
 5. Total length must be under 120 characters
 6. Must NOT use Conventional Commits format (e.g., `feat(scope): ...` is invalid as a PR title)
+
+### Linear PR Title Format (Linear-tracked repositories)
+
+```
+<LINEAR-ID>: <Business-valuable description>
+```
+
+Linear title rules:
+
+- Valid only when the repository's `package.json` `agents.trackers` lists a `linear` entry whose effective keys (the entry's `keys`, defaulting to `[team]`) include the ID's key — read `package.json` with the Read tool. Without a matching `linear` tracker, a `TEAM-N:` prefix is invalid.
+- `LINEAR-ID` is the uppercase ticket id matching `[A-Z][A-Z0-9]*-[0-9]+`, followed by a colon and a single space
+- When BRANCH_NAME matches the Linear branch format below, the ID MUST equal the branch's `<team>-<number>` uppercased — branch `frtns-28-pr-gate` requires the title to start with `FRTNS-28: ` exactly; a different id (e.g., `FRTNS-82:`) or a missing prefix is invalid
+- A Linear-prefixed title on an `issue-<number>-` or special-prefix branch is invalid
+- When BRANCH_NAME is empty, accept the Linear title on the two rules above alone — there is no branch to cross-check
+- Description after the prefix follows the standard rules (capitalized, no period, under 120 chars total)
 
 ### Special Prefixes (bypass standard validation)
 
@@ -46684,6 +46705,18 @@ issue-<number>-<short-description>
 - `short-description` is required, lowercase, hyphens only (no underscores)
 - Aim for under 60 characters; must be under 100
 
+**Linear ticket format (Linear-tracked repositories):**
+
+```
+<team>-<number>-<short-description>
+```
+
+- Valid only when `package.json` `agents.trackers` lists a `linear` entry whose effective keys include the branch's team key uppercased — otherwise the branch is invalid, so a typo like `isue-42-fix` is not silently accepted as Linear
+- `team` is the Linear team key lowercased (letters and digits, starting with a letter); `number` is the ticket number (digits only)
+- Checked AFTER the `issue-` keyword, the special prefixes, and `release-` — those literal prefixes always win over the generic Linear shape
+- `short-description` is required, lowercase, hyphens only (no underscores)
+- Aim for under 60 characters; must be under 100
+
 **Special prefix format:**
 
 ```
@@ -46710,6 +46743,7 @@ release-<version>
 - `issue-123-update-dto`
 - `issue-45-fix-editor-crash`
 - `issue-789-update-proto`
+- `eng-123-add-auth` — when a `linear` tracker with key `ENG` is configured
 - `hotfix-memory-leak-editor`
 - `trivial-fix-typo-readme`
 - `maintenance-upgrade-node-22`
@@ -46721,7 +46755,8 @@ release-<version>
 
 - `add-user-auth` — missing `issue-<number>` prefix or special prefix
 - `issue_123_add_auth` — underscores not allowed
-- `repo-123-add-auth` — only literal `issue-` prefix is allowed
+- `eng_123_add_auth` — underscores not allowed in Linear branches either
+- `repo-123-add-auth` — Linear shape without a matching `linear` tracker key `REPO` in `agents.trackers`
 - `wip` — no issue ref, no description
 - `ISSUE-123-add-auth` — must be lowercase
 - `release-v1.2.0` — no `v` prefix
@@ -46733,7 +46768,7 @@ If BRANCH_NAME is empty, skip branch name validation entirely (Dependabot and si
 - Implementation details (those belong in PR body)
 - Technical jargon without context
 - Vague descriptions
-- Including the issue number in the title (link via magic words in the body instead)
+- Including the GitHub issue number in the title (link via magic words in the body instead; the Linear ticket-id prefix on Linear-tracked repositories is the one sanctioned exception)
 
 ### Valid PR Title Examples
 
@@ -46741,6 +46776,7 @@ If BRANCH_NAME is empty, skip branch name validation entirely (Dependabot and si
 - `Add annotation events for playback duration reporting`
 - `Refactor annotation codec for streaming support`
 - `Remove legacy plan-import endpoints`
+- `ENG-123: Allow theme selection` — Linear-tracked repo, branch `eng-123-…`
 - `HOTFIX: Memory leak in editor`
 - `TRIVIAL: Fix typo in README`
 - `MAINTENANCE: Upgrade Node to 22 LTS`
@@ -46752,19 +46788,25 @@ If BRANCH_NAME is empty, skip branch name validation entirely (Dependabot and si
 ### Invalid PR Title Examples
 
 - `feat(editor): add theme routing` — Conventional Commits format, not PR title format
-- `#123: Add feature` — Issue numbers must NOT appear in the title
+- `#123: Add feature` — GitHub issue numbers must NOT appear in the title
 - `123: Add feature` — Same; link the issue via `Closes #123` in the body
+- `ENG-123: Add feature` — on an `issue-…`/special-prefix branch, or when no `linear` tracker matches key `ENG`
+- `Add PR quality gate` on branch `frtns-28-pr-gate` — a gated Linear branch requires the `FRTNS-28: ` title prefix
 - `Added theme options` — Vague, past tense, missing business value
 - `Allow editor theme selection per workspace.` — Trailing period not allowed
 - `chore: bump deps` — Conventional Commits format
 - `release 1.2.0` — `Release` must be capitalized
 - `Release v1.2.0` — no `v` prefix in version
 
+### Intentional divergence from the CI checks
+
+The `contributing-check` CI action validates the title and the branch independently, so it accepts some combinations these rules reject. The title↔branch consistency rule, the mandatory colon + space after the Linear id (the CI header pattern makes the colon optional), and the `agents.trackers` gating are deliberately stricter and have no CI counterpart — a PR that passes CI but fails here is working as designed, not drift.
+
 ---
 
 ## GitHub Issue Verification
 
-For standard branch names (skip for HOTFIX/TRIVIAL/MAINTENANCE/PROPOSAL/SECURITY prefixes and Release branches), perform these additional checks:
+For `issue-<number>-` branch names (skip for HOTFIX/TRIVIAL/MAINTENANCE/PROPOSAL/SECURITY prefixes, Linear branches, and Release branches), perform these additional checks:
 
 1. **Extract the issue number** from the branch name (e.g., `123` from `issue-123-add-password-reset`).
 
@@ -46779,6 +46821,8 @@ For standard branch names (skip for HOTFIX/TRIVIAL/MAINTENANCE/PROPOSAL/SECURITY
 3. **Validate relevance**: Compare the PR title against the issue title and body. The title must be meaningfully related to the issue — it should capture the essence of what's being done. Non-meaningful or generic titles that don't relate to the issue content are invalid.
 
 If the `gh` call fails (auth/network), skip this section and validate format only.
+
+For Linear branches, skip ticket-existence and relevance verification entirely — in CI only `gh` is available, with no Linear read path. The format rules plus the title↔branch consistency rule are the full check.
 
 ---
 
@@ -50848,7 +50892,7 @@ Once a Linear ticket is resolved, the write path mirrors the GitHub flow with Li
 - **Pull request** — [`pr:create`](../claude-plugins/autopilot/skills/pr:create/SKILL.md) and [`pr:update`](../claude-plugins/autopilot/skills/pr:update/SKILL.md) detect the provider from the branch shape, prefix the title with the uppercase id (`ENG-123: <description>`) so the ticket shows in the PR list, and put the magic word with the plain Linear issue URL (`Closes https://linear.app/<workspace>/issue/ENG-123`, or `Part of` / `Related to`) in the `**Issues:**` section — a bare Linear id is dead text on GitHub, while the URL form is both [Linear-parseable](https://linear.app/docs/github#linking-linear-issues-to-github-prs) and GitHub-clickable ([RFC-0001](../rfc/0001-reference-formatting.md)); the bare id is the fallback when no URL is resolvable. GitHub branches keep their business-only title and `Closes #N`.
 - **Done on merge** — a Linear ticket auto-closes on merge only when the [GitHub↔Linear integration](https://linear.app/docs/github) is configured for the repository; otherwise the magic word is a tracked reference.
 
-The shared CI gates accept both conventions: the branch-name and semantic-PR-title checks in the [`contributing-check`](../.github/actions/contributing-check/action.yml) action — and the local [`pre-push`](../.husky/pre-push) hook — recognise the Linear `<team>-<n>-<slug>` branch and the `ENG-123:` title alongside the GitHub forms.
+The shared CI gates accept both conventions: the branch-name and semantic-PR-title checks in the [`contributing-check`](../.github/actions/contributing-check/action.yml) action — and the local [`pre-push`](../.husky/pre-push) hook — recognise the Linear `<team>-<n>-<slug>` branch and the `ENG-123:` title alongside the GitHub forms. At review time, [`pr:validate`](../claude-plugins/autopilot/skills/pr:validate/SKILL.md) goes further than CI: it gates the Linear forms on the `agents.trackers` config and requires the title prefix to match the branch's ticket id exactly, so a Linear branch with an unprefixed or mismatched title is flagged even though the independent CI checks pass it.
 
 ## Creating and listing issues
 
@@ -54086,6 +54130,22 @@ issue-<number>-<short-description>
 - ❌ `issue_123_add_auth`
 - ❌ `wip`
 
+**Linear Ticket Branches:**
+
+On repositories that configure a `linear` tracker in `package.json` `agents.trackers`, a branch links to a Linear ticket instead of a GitHub issue — the ticket id lowercased, then the slug:
+
+```
+<team>-<number>-<short-description>
+```
+
+- `team` is the Linear team key lowercased (`ENG-123` → `eng-123-…`)
+- Same rules apply: lowercase, hyphens only, aim for under 60 characters (hard limit: 100)
+
+**Examples:**
+
+- ✅ `eng-123-add-auth`
+- ❌ `ENG-123-add-auth`
+
 **Special Prefix Branches:**
 
 Some changes don't require an issue (see [Special PR Prefixes](#special-pr-prefixes)). Use the prefix as the branch identifier:
@@ -54310,8 +54370,18 @@ docs(auth): add jwt validation documentation
 
 - Required, capitalized, business-focused, no period
 - Under 120 characters total
-- Do NOT include the issue number in the title — link it from the PR body via [Magic Words](#magic-words)
+- Do NOT include the GitHub issue number in the title — link it from the PR body via [Magic Words](#magic-words)
 - NOT Conventional Commits format — that's the default for single-commit PRs, but reviewers and codeowners read the title first; keep it business-readable
+
+**Linear-tracked repositories:** the title is prefixed with the uppercase ticket id and a colon, matching the branch's ticket, so the ticket shows in the PR list:
+
+```
+<LINEAR-ID>: <Business-valuable description>
+```
+
+- ✅ `ENG-123: Allow theme selection` — on branch `eng-123-…`
+- ❌ `Allow theme selection` on branch `eng-123-…` — the ticket prefix is required
+- Description after the prefix follows the same rules as a standard PR title
 
 **PR title should be understandable:**
 
@@ -54448,6 +54518,8 @@ Closes #124
 Part of #100
 ```
 
+**Linear-tracked repositories:** the magic word takes the plain Linear issue URL instead of `#N` (e.g., `Closes https://linear.app/<workspace>/issue/ENG-123`) — a bare Linear id is dead text on GitHub, while the URL form is parsed by both sides. The ticket auto-closes on merge only via [Linear's GitHub integration](https://linear.app/docs/github); GitHub itself does not close Linear issues.
+
 > [!TIP]
 > Use the `/autopilot:pr-create` slash command to generate a PR title and description.
 
@@ -54484,9 +54556,9 @@ Only one strategy is used per repository. Reasons:
 **Before submitting:**
 
 ```markdown
-- [ ] Branch name starts with `issue-<number>-` or one of the special prefixes (`hotfix-`, `trivial-`, `maintenance-`, `proposal-`, `security-`)
-- [ ] PR title is a business-valuable description (no `#<n>:` prefix) or uses a recognized special prefix
-- [ ] PR description links the issue via `Closes #<n>` / `Fixes #<n>` / `Resolves #<n>` (when applicable)
+- [ ] Branch name starts with `issue-<number>-` or one of the special prefixes (`hotfix-`, `trivial-`, `maintenance-`, `proposal-`, `security-`) — or `<team>-<number>-` on Linear-tracked repos
+- [ ] PR title is a business-valuable description (no `#<n>:` prefix) or uses a recognized special prefix — on Linear-tracked repos, prefixed with the branch's ticket id (`TEAM-N: <description>`)
+- [ ] PR description links the issue via `Closes #<n>` / `Fixes #<n>` / `Resolves #<n>` (when applicable; Linear-tracked repos use the plain ticket URL)
 - [ ] All commits follow Conventional Commits format
 - [ ] No commits contain issue numbers in messages
 - [ ] No commits contain AI agent `Co-authored-by` trailers
