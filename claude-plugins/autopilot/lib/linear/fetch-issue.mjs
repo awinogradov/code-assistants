@@ -17,6 +17,7 @@ const degraded = (id, error) => ({
   title: null,
   status: "unresolved",
   labels: [],
+  url: null,
   assignee: null,
   description: null,
   comments: [],
@@ -40,6 +41,7 @@ async function main() {
       title: issue.title,
       status: issue.state?.name ?? null,
       labels: (issue.labels?.nodes ?? []).map((label) => label.name),
+      url: issue.url ?? null,
       assignee: null,
       description: issue.description ?? "",
       comments: (issue.comments?.nodes ?? []).map((comment) => ({

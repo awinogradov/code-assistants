@@ -64,7 +64,7 @@ Treat the prior review **bodies** ([§1.1](#11-pr-context)) plus the inline thre
 
 Extract the linked issue ID from PR metadata. Check in order, stop at first match:
 
-1. **PR body `Issues:` section** — lines starting with `Closes` or `Related to` followed by a ticket ID
+1. **PR body `Issues:` section** — lines starting with `Closes` or `Related to` followed by a ticket ID; the id may be bare (`#12`, `ENG-123`) or inside a tracker issue URL (`https://linear.app/<workspace>/issue/ENG-123/<slug>`) — extract the `#N` / `KEY-N` token either way
 2. **Branch name** — leading `[a-z]+-[0-9]+` segment, convert to UPPERCASE
 
 Load the remaining context in parallel — the codebase snapshot, the prior inline review threads, and (when an issue is linked) the linked-issue context plus the related TODOs / issue references in the codebase. Prior-review verdicts and summary bodies already come from the [§1.1](#11-pr-context) `gh pr view` output; the `fetch-pr-reviews` agent adds the per-line inline annotations via read-only `gh api`, returning a categorized summary (raw API output stays out of this context).
@@ -837,6 +837,8 @@ Map `severity` to its emoji when rendering in [Phase 3](#phase-3-submit-review):
 
 **SKIP empty sections entirely. Do NOT write "None" or "N/A" - just omit the section.**
 
+**Ticket references:** when the body cites the linked ticket, cite it as a markdown link built from the [§1.2](#12-load-context-via-sub-agents) `resolve-issue-context` `url` (e.g. `[ENG-123](https://linear.app/<workspace>/issue/ENG-123)`) — a bare tracker id GitHub does not auto-link is dead text; fall back to the bare id only when no URL is resolvable. GitHub issue numbers stay bare (`#42` auto-links).
+
 **Empty vs non-empty `reviewComment`** follows the canonical [Verdict Decision Rules](#verdict-decision-rules): use empty `""` for an approval with no findings (rule 3) — the `verdict` field drives the GitHub event, so no body text is needed; use a non-empty body for any review with findings or a `requestChanges` verdict; and when there is nothing new to report, emit no structured output at all (rule 0).
 
 **If reviewComment is non-empty, use these verdict headers at the END:**
@@ -969,7 +971,7 @@ These rules govern references — when you point the reader at a real file, stan
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
 - Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
-- Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
+- Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link. A tracker ID GitHub does not auto-link (e.g. Linear `ENG-123`) is dead text when bare: in prose, ALWAYS render it as a markdown link, e.g. `[ENG-123](https://linear.app/<workspace>/issue/ENG-123)` — a slug-less issue URL resolves. On a magic-word line (`Closes`/`Fixes`/`Related to` in a PR body's `**Issues:**` section) use plain forms only: bare `#N` for GitHub, the plain issue URL for other trackers — never a markdown-bracket link, which breaks the close-parsers.
 
 Backticks suppress GitHub autolinking: a commit SHA or issue/PR number inside a code span renders as dead text — that is why a backticked SHA was un-clickable in a prior review. Never wrap a SHA or issue/PR number in backticks; link it, or leave it bare so GitHub auto-links it.
 

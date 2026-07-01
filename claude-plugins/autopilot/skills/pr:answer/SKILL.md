@@ -119,12 +119,13 @@ Read the COMMENT_BODY carefully. If COMMENT_PATH and COMMENT_LINE are provided, 
 
 Always provide a reply. Keep it concise (1-5 sentences). Be direct.
 
-- If wrong: "You're right, [reason]. Resolving this."
+- If wrong (fix already committed): "You're right, [reason]. Fixed in [<sha>](<repo-commit-url>/<sha>)."
+- If wrong (no commit yet): "You're right, [reason]. Resolving this."
 - If right: "[Explanation of why this is still an issue]."
 - If needs discussion: "[Acknowledge point], however [concern]."
 - If question: "[Direct answer]."
 
-Format the reply per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) — the **Reference formatting & readability** rules inlined at the end of this skill; they apply to the text inside the `reply` string value, not the JSON envelope. The reference kind that recurs here is the commit SHA: when the reply cites the commit that fixes the thread, render the SHA as a markdown link `[<sha>](<repo-commit-url>/<sha>)` built from `REPO` — never a bare or backticked SHA. Because replies post as GitHub comments, every other reference resolves only as an absolute link built from `REPO`: render any `CHECK-` rule code as a `RULES_DOC_URL` link exactly as the [`pr:review` skill's §2.5](../pr:review/SKILL.md#25-rule-codes) does, and link any file, doc, skill, agent, or section you cite as a `<repo-blob-url>/path#anchor` URL — never a bare name or a repo-relative path (relative paths do not resolve in a comment).
+Format the reply per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) — the **Reference formatting & readability** rules inlined at the end of this skill; they apply to the text inside the `reply` string value, not the JSON envelope. The reference kind that recurs here is the commit SHA: when the reply cites the commit that fixes the thread, render the SHA as a markdown link `[<sha>](<repo-commit-url>/<sha>)` built from `REPO` — never a bare or backticked SHA. Because replies post as GitHub comments, every other reference resolves only as an absolute link built from `REPO`: render any `CHECK-` rule code as a `RULES_DOC_URL` link exactly as the [`pr:review` skill's §2.5](../pr:review/SKILL.md#25-rule-codes) does, and link any file, doc, skill, agent, or section you cite as a `<repo-blob-url>/path#anchor` URL — never a bare name or a repo-relative path (relative paths do not resolve in a comment). Before returning the reply, self-check it: a bare 7–40-char hex token or a bare tracker id (`[A-Z][A-Z0-9]*-[0-9]+`) is a violation — link it per the rules above.
 
 ### Thread Resolution
 
@@ -204,7 +205,7 @@ These rules govern references — when you point the reader at a real file, stan
 - Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
 - Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
 - Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
-- Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link.
+- Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link. A tracker ID GitHub does not auto-link (e.g. Linear `ENG-123`) is dead text when bare: in prose, ALWAYS render it as a markdown link, e.g. `[ENG-123](https://linear.app/<workspace>/issue/ENG-123)` — a slug-less issue URL resolves. On a magic-word line (`Closes`/`Fixes`/`Related to` in a PR body's `**Issues:**` section) use plain forms only: bare `#N` for GitHub, the plain issue URL for other trackers — never a markdown-bracket link, which breaks the close-parsers.
 
 Backticks suppress GitHub autolinking: a commit SHA or issue/PR number inside a code span renders as dead text — that is why a backticked SHA was un-clickable in a prior review. Never wrap a SHA or issue/PR number in backticks; link it, or leave it bare so GitHub auto-links it.
 
