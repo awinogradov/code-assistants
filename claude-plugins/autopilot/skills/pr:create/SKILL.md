@@ -167,6 +167,8 @@ If the agent reports breaking changes, treat `--release-notes` as mandatory — 
 - Avoids implementation details
 - Avoids technical jargon without context
 
+**Title self-check (MANDATORY):** re-verify the drafted title against the [Phase 1](#phase-1-validate-current-state) provider immediately before [Phase 6](#phase-6-create-pull-request) — when composing the [Phase 5](#phase-5-verify-with-user) preview on the interactive path, and in the autopilot bypass. If `provider = linear`, the title MUST start with the branch's `<team>-<number>` uppercased plus `: ` (branch `frtns-28-pr-gate` → title starts with `FRTNS-28: `); if the prefix is missing or names a different id, fix the title now. If `provider = github` or a special prefix, the title MUST NOT start with a `TEAM-N:` ticket prefix. A rule stated only here demonstrably gets dropped when the title is composed from commit context — this check is the gate, exactly like the reference-formatting self-check in [Phase 4](#phase-4-generate-pr-description) is for the body.
+
 ## Phase 4: Generate PR Description
 
 > **Canonical:** this section is the canonical PR-body grammar (sections, ordering, formatting, magic words); [pr:update Phase 5](../pr:update/SKILL.md#phase-5-generate-updated-pr-title-and-body) mirrors it — keep the two in sync.
@@ -293,11 +295,12 @@ Closes #<issue-from-branch>
 **Autopilot bypass:** If `autopilotMode` is true, skip the AskUserQuestion confirmation below. Before proceeding to [Phase 6](#phase-6-create-pull-request):
 
 - If meaningful changes are detected (per the [analyze-pr-commits](../../agents/analyze-pr-commits.md#phase-3-analyze-change-significance) significance from [Phase 2](#phase-2-gather-context)) AND neither `--release-notes` nor breaking changes triggered the release notes section, auto-generate the `**Release notes:**` section using the rules in [Phase 4](#phase-4-generate-pr-description) and insert it between the description and the `**Issues:**` section (with `---` separators).
+- Run the [Phase 3](#phase-3-generate-pr-title) Title self-check on the final title; fix the title if it fails.
 - Then proceed directly to [Phase 6](#phase-6-create-pull-request) with the resulting title and body.
 
 Present PR details using **AskUserQuestion tool** with preview.
 
-1. Compose the full PR content (title + description with separators) as a single string.
+1. Compose the full PR content (title + description with separators) as a single string, after running the [Phase 3](#phase-3-generate-pr-title) Title self-check on the title.
 
 2. Confirm using AskUserQuestion tool:
 
