@@ -80,6 +80,11 @@ describe("ticketExtractor", () => {
       expect(result).toEqual(["TEAM-123"]);
     });
 
+    test("extracts the id from a Linear issue URL magic-word line", () => {
+      const result = extractTicketIds("Closes https://linear.app/acme/issue/ENG-123/add-auth");
+      expect(result).toEqual(["ENG-123"]);
+    });
+
     test("returns empty array when no matches", () => {
       const result = extractTicketIds("no tickets here");
       expect(result).toEqual([]);
