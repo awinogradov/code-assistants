@@ -35,7 +35,7 @@ runs:
           PROPOSAL
           SECURITY
           Release
-          [A-Z]+-\d+
+          [A-Z][A-Z0-9]*-\d+
           [A-Z]\w*
         headerPattern: '^([A-Z]\S*?):?\s+(.+)$'
         headerPatternCorrespondence: type, subject
