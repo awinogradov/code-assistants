@@ -4,7 +4,7 @@
 
 `code-review-action` instruments every review run with per-run metrics — model latency, token usage, cache hits, cost, and tool round-trips. These numbers were invaluable while optimizing the action, but they used to live only in the Actions run logs.
 
-The run-summary footer surfaces them directly under each review: a collapsed `<details>` block appended to the **main review comment and the preflight skip comment** — never on inline comments, never on `react`-mode replies — so reviewers can spot a slow or expensive run at a glance without digging through workflow logs. The skip-comment footer is described in "Preflight skip comments" below; the rest of this document covers the review path.
+The run-summary footer surfaces them directly under each review: a collapsed `<details>` block appended to the **main review comment and the preflight skip comment** — never on inline comments, never on `react`-mode replies — so reviewers can spot a slow or expensive run at a glance without digging through workflow logs. The skip-comment footer is described in "Preflight skip comments" below; the rest of this document covers the review path. The rare [random review tip](#random-review-tip) that occasionally rides beside the footer is documented below as well.
 
 ## Data flow
 
@@ -43,7 +43,7 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 │        ▼                                                           │
 │  finalBody = buildReviewBody(body, footer, hasInline)            │
 │        │                                                          │
-│        ├──④──▶ dedupKey = normalizeBody(stripRunSummaryFooter(·)) │
+│        ├──④──▶ reviewDedupKey(·) — strips tip block + footer      │
 │        │        applied to BOTH bodies before comparison          │
 │        ▼                                                          │
 │  octokit.createReview({ body: finalBody })  ──⑤──▶ MAIN comment   │
@@ -56,7 +56,7 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 - ① `setOutput` writes `run_summary` to `$GITHUB_OUTPUT` using a per-call heredoc delimiter, so the JSON value is safe. It is emitted **before** `emitOutputs`, which may `process.exit(1)` on a non-success result.
 - ② `action.yml` bridges the step output into the submit process as the `RUN_SUMMARY` env var. The `react`-mode reaction step is intentionally **not** wired — the footer is review-only.
 - ③ `parseRunSummary` validates the untrusted env with a strict Zod schema (no coercion); an empty or invalid value yields no footer and the review posts unchanged.
-- ④ The footer carries run-varying numbers, so it is stripped from both the new body and the previously-posted body before the duplicate-suppression guard compares them — otherwise the cost/latency deltas would defeat dedup. `normalizeBody` stays generic.
+- ④ The footer carries run-varying numbers, so it is stripped from both the new body and the previously-posted body before the duplicate-suppression guard compares them — otherwise the cost/latency deltas would defeat dedup. The comparison is the single `reviewDedupKey` composition, which also strips any [random review tip](#random-review-tip) block; `normalizeBody` stays generic.
 - ⑤ The footer lands only on the main review comment via `createReview`; inline comments and `reactToComment.ts` replies are untouched.
 
 ## Rendered footer
@@ -98,6 +98,46 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 
 The pr:review skill returns an empty `reviewComment` for an approval with no findings — by contract no review prose is written, the APPROVE event speaks for itself. Posting a comment that is _only_ the stats footer reads as an empty (or broken) review and is indistinguishable from a genuine content-free-approval failure, so `submitReview.ts` builds the body through `buildReviewBody`: when the review body is empty and there are no inline comments, it substitutes a minimal `✅ No issues found.` line before appending the footer. The shared `isCleanApproval` predicate detects this case, and `submitReview.ts` also passes `includeUsageHint: false` to `renderRunSummaryFooter` for it — the `> [!TIP]` usage hint is dropped so a no-issues result isn't padded with a prompt to ask the bot a question; only the metrics block remains. Reviews that carry findings (and the preflight skip comment below) keep the TIP. The dedup and consecutive-approval guards still compare the raw (empty) `reviewComment`, so repeat clean approvals are skipped rather than re-posted.
 
+## Random review tip
+
+On roughly 5% of review submissions the comment carries one extra `> [!TIP]` alert — a rotating tip from the curated pool in `reviewTip.ts` (bot/PR-flow usage and repo-convention reminders, [issue 389](https://github.com/awinogradov/code-assistants/issues/389)). The roll happens in `submitReview.ts` (`Math.random()` against the `tipProbability` constant); the pure selector turns that single roll into both the 5% gate and a uniform pick over the tips the PR has not seen yet.
+
+```text
+┌───────────────────┐        ┌──────────────────┐        ┌─────────────────┐
+│    GitHub API     │        │ submitReview.ts  │── ② ──▶│  reviewTip.ts   │
+│ prior bot reviews │── ① ──▶│ assemble comment │◀── ③ ──│ pool + selector │
+└───────────────────┘        └────────┬─────────┘        └─────────────────┘
+                                      │ ④
+                                      ▼
+                             ┌──────────────────┐
+                             │  review comment  │
+                             │   TIP + marker   │
+                             │  summary footer  │
+                             └────────┬─────────┘
+                                      │ ⑤
+                                      ▼
+                             ┌──────────────────┐
+                             │   dedup guard    │
+                             │ strip tip+footer │
+                             └──────────────────┘
+```
+
+**Flow legend:**
+
+- ① Fetch the bot's prior reviews on the PR (paginated); collect shown tip ids from `<!-- review-tip-start: <id> -->` markers
+- ② Pass one injected random roll (5% gate) and the shown-id set to the selector
+- ③ Selector returns one unshown tip, or nothing (missed roll or exhausted pool)
+- ④ Append the tip as a top-level `> [!TIP]` alert plus its hidden id marker between the review prose and the run-summary footer
+- ⑤ Duplicate suppression strips tip blocks and the footer before comparing review bodies
+
+Three contracts keep the tip safe:
+
+- **Never repeated within a PR.** Each rendered tip embeds its id in a hidden marker (`<!-- review-tip-start: <id> -->` … `<!-- review-tip-end -->`). Before rolling, `submitReview.ts` lists the bot's prior reviews — `listBotReviewBodies` paginates past the 30-per-page default — and excludes every id already present; an exhausted pool shows nothing. Extraction and stripping match the full rendered block shape, not bare markers, so a marker quoted inside a review's code fence cannot corrupt the shown-id set or the dedup key.
+- **Dedup-immune.** Every duplicate-suppression comparison goes through `reviewDedupKey` (strip tip blocks, strip the footer, normalize), so a rolled tip never makes two otherwise-identical reviews look different — and never re-posts one. The consecutive-approval guard compares the model's raw `reviewComment`, which never contains a tip.
+- **Fail-open, quiet on clean approvals.** A clean approval (`✅ No issues found.`) stays tip-free, matching the usage-hint suppression above. A failure listing prior reviews logs `Skipping review tip (fail-open): …` and posts the review untipped; a selected tip logs `Review tip selected: <id>` for auditability.
+
+The pool and the ~5% rate are hardcoded — no action input configures them. Consumers tracking the action `@main` receive tips on merge; disabling them means reverting the feature commit upstream. Tip links are absolute URLs into this repository whose paths must exist in-tree, guarded by a `reviewTip.test.ts` case so a docs move cannot silently 404 a shipped tip.
+
 ## Preflight skip comments
 
 When preflight checks fail, the action skips the AI review and posts a "red flags 🚩" comment. Each failed check links to its run log, carries a one-sentence "why it failed" blockquote, and — when that explanation ran — the comment closes with the same run-summary footer as a review.
@@ -121,7 +161,9 @@ Because the reasons derive from untrusted CI annotations, `skipComment.ts` sanit
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `src/runClaude.ts`            | Runs a single Agent-SDK pass (review, react, or `preflight` via `CLAUDE_RUN_MODE`); computes the summary; emits `run_summary` |
 | `src/runSummaryFooter.ts`     | `runSummarySchema`, `parseRunSummary`, `renderRunSummaryFooter`, `stripRunSummaryFooter`, `buildReviewBody`                   |
-| `src/submitReview.ts`         | Builds the review body via `buildReviewBody` (clean-approval line + footer); strips the footer for dedup                      |
+| `src/submitReview.ts`         | Builds the review body via `buildReviewBody` (clean-approval line + tip + footer); dedups via `reviewDedupKey`                |
+| `src/reviewTip.ts`            | Tip pool + `tipProbability`; pure select/render, marker-shaped extraction and stripping of the tip block                      |
+| `src/github/githubReview.ts`  | `listBotReviewBodies` (paginated prior bot reviews for the no-repeat guard); `reviewDedupKey` — the one dedup composition     |
 | `src/preflightChecks.ts`      | Polls checks; on failure emits the failed checks + explain prompt; posts only the timeout comment inline                      |
 | `src/skipComment.ts`          | Skip-path helpers: fetch annotations, build the explain prompt, allowlist + sanitize reasons, render the comment, post/dedup  |
 | `src/preflightSkipComment.ts` | Post step: assembles the failed-checks comment from the explain step's reasons + run summary and posts it (fail-open)         |

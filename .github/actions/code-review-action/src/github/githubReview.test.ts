@@ -12,8 +12,12 @@ import {
   getLastBotReview,
   hasRecentBotReply,
   hasRecentBotReview,
+  listBotReviewBodies,
   normalizeBody,
+  reviewDedupKey,
 } from "./githubReview.ts";
+import { renderReviewTip, reviewTips } from "../reviewTip.ts";
+import { renderRunSummaryFooter, type RunSummary } from "../runSummaryFooter.ts";
 
 describe("normalizeBody", () => {
   test("strips per-line trailing whitespace", () => {
@@ -141,6 +145,57 @@ describe("hasRecentBotReview", () => {
   test("returns false when the bot has no review", async () => {
     const o = reviews([{ user: { login: "alice" }, state: "APPROVED", commit_id: "sha1" }]);
     expect(await hasRecentBotReview(o, "o", "r", 1, "bot", "sha1")).toBe(false);
+  });
+});
+
+describe("listBotReviewBodies", () => {
+  test("paginates listReviews and keeps only the bot's non-pending bodies", async () => {
+    let paginateArgs: unknown[] = [];
+    const listReviews = () => ({ data: [] });
+    const octokit = {
+      rest: { pulls: { listReviews } },
+      paginate: (method: unknown, params: unknown) => {
+        paginateArgs = [method, params];
+        return [
+          { user: { login: "alice" }, state: "APPROVED", body: "not the bot" },
+          { user: { login: "bot" }, state: "PENDING", body: "pending" },
+          { user: { login: "bot" }, state: "APPROVED", body: "first" },
+          { user: { login: "bot" }, state: "CHANGES_REQUESTED", body: null },
+        ];
+      },
+    } as unknown as Octokit;
+
+    expect(await listBotReviewBodies(octokit, "o", "r", 1, "bot")).toEqual(["first", ""]);
+    expect(paginateArgs[0]).toBe(listReviews);
+    expect(paginateArgs[1]).toEqual({ owner: "o", repo: "r", pull_number: 1, per_page: 100 });
+  });
+});
+
+describe("reviewDedupKey", () => {
+  const summary: RunSummary = {
+    mode: "review",
+    model: "claude-sonnet-4-6",
+    model_ms: 34000,
+    tokens_in: 100,
+    tokens_out: 10,
+    cache_read_tokens: 0,
+    cache_creation_tokens: 0,
+    cost_usd: 0.35,
+    num_turns: 1,
+    tool_round_trips: 2,
+  };
+
+  test("bodies differing only by the footer metrics and/or a tip block compare equal", () => {
+    const body = "### Blockers\n\n- one";
+    const footer = renderRunSummaryFooter(summary, "bot");
+    expect(reviewDedupKey(body + renderReviewTip(reviewTips[0]) + footer)).toBe(
+      reviewDedupKey(body + footer),
+    );
+    expect(reviewDedupKey(body + renderReviewTip(reviewTips[0]))).toBe(reviewDedupKey(body));
+  });
+
+  test("genuinely different content stays different", () => {
+    expect(reviewDedupKey("### Blockers\n\n- one")).not.toBe(reviewDedupKey("### Blockers\n\n- two"));
   });
 });
 
