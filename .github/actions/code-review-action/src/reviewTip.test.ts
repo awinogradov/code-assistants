@@ -124,11 +124,13 @@ describe("stripReviewTips", () => {
 
 describe("composition with the run-summary footer", () => {
   const body = "review with findings";
-  const footer = renderRunSummaryFooter(summary, "review-bot");
+  const footer = renderRunSummaryFooter(summary);
   const composed = body + renderReviewTip(firstTip) + footer;
 
-  test("tip renders between the body and the footer's usage hint", () => {
-    expect(composed.indexOf("<!-- review-tip-start:")).toBeLessThan(composed.indexOf("> [!TIP]\n> `@review-bot"));
+  test("tip renders between the body and the footer's metrics block", () => {
+    expect(composed.indexOf("<!-- review-tip-start:")).toBeLessThan(
+      composed.indexOf("<!-- run-summary-start -->"),
+    );
   });
 
   test("stripping tip and footer commutes and recovers the body", () => {

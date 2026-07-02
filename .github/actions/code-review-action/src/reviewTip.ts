@@ -16,7 +16,7 @@
  * const shown = extractShownTipIds(await listBotReviewBodies(octokit, ...));
  * const tip = selectReviewTip(Math.random(), shown);
  * const body = tip ? review + renderReviewTip(tip) : review;
- * // dedup: normalizeBody(stripRunSummaryFooter(stripReviewTips(body)))
+ * // dedup: normalizeBody(stripLegacyUsageHint(stripRunSummaryFooter(stripReviewTips(body))))
  */
 
 /** One entry of the review-tip pool. */
@@ -85,6 +85,10 @@ export const reviewTips: readonly ReviewTip[] = [
   {
     id: "todo-cleanup",
     text: "Run [/autopilot:todo-cleanup](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/todo-cleanup/SKILL.md) to file tracking issues for `TODO`/`FIXME` comments and link them in place.",
+  },
+  {
+    id: "ask-reviewer",
+    text: "Ask the reviewer anything: comment `@<bot username> <question>` (the username on this review). Replies inside its threads don't need the mention.",
   },
 ];
 

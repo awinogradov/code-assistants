@@ -15,9 +15,9 @@
  *
  * @example
  * const summary = parseRunSummary(process.env.RUN_SUMMARY);
- * const footer = summary ? renderRunSummaryFooter(summary, reviewer) : "";
+ * const footer = summary ? renderRunSummaryFooter(summary) : "";
  * const body = buildReviewBody(reviewComment, footer, inlineComments.length > 0);
- * // dedup: normalizeBody(stripRunSummaryFooter(body))
+ * // dedup: normalizeBody(stripLegacyUsageHint(stripRunSummaryFooter(stripReviewTips(body))))
  */
 import { z } from "zod";
 
@@ -117,32 +117,19 @@ function renderDataComment(summary: RunSummary): string {
 }
 
 /**
- * Render the run-summary footer: an optional visible `@<reviewer>` usage hint
- * followed by the marker-wrapped, collapsible metrics block (built from the
- * shared {@link buildMarkedDetailsBlock} helper).
- *
- * The hint is stable text and sits *outside* the strip markers so it survives
- * {@link stripRunSummaryFooter} and stays in the comment after dedup; only the
- * run-varying metrics are marker-bounded — including the machine-readable
- * {@link renderDataComment} block appended after the table. The two leading
- * blank lines separate the footer from the preceding review body.
- *
- * `includeUsageHint` defaults to `true`; pass `false` to drop the TIP for a
- * clean approval (`✅ No issues found.`), where prompting the reader to ask the
- * bot a question adds noise to a no-issues result. The metrics block always
- * renders.
+ * Render the run-summary footer: the marker-wrapped, collapsible metrics block
+ * (built from the shared {@link buildMarkedDetailsBlock} helper). Everything in
+ * the footer is run-varying and marker-bounded — including the machine-readable
+ * {@link renderDataComment} block appended after the table — so {@link
+ * stripRunSummaryFooter} removes it whole. The occasional usage tip is not
+ * rendered here: it comes from the rotating `reviewTip.ts` pool, appended by
+ * the caller. The two leading blank lines separate the footer from the
+ * preceding review body.
  */
-export function renderRunSummaryFooter(
-  summary: RunSummary,
-  reviewer: string,
-  includeUsageHint = true,
-): string {
-  const usageHint = `> [!TIP]\n> \`@${reviewer} <comment>\` — Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.`;
-
+export function renderRunSummaryFooter(summary: RunSummary): string {
   return [
     "",
     "",
-    ...(includeUsageHint ? [usageHint, ""] : []),
     buildMarkedDetailsBlock({
       startMarker: footerStartMarker,
       endMarker: footerEndMarker,
@@ -165,8 +152,7 @@ export const cleanApprovalBody = "✅ No issues found.";
  * A clean approval — an empty review body with no inline comments. The single
  * source of truth for the no-issues case: it drives both the
  * {@link cleanApprovalBody} substitution in {@link buildReviewBody} and the
- * caller's decision to drop the footer's usage-hint TIP (via
- * `renderRunSummaryFooter`'s `includeUsageHint`).
+ * caller's decision to skip the random review tip.
  */
 export function isCleanApproval(reviewBody: string, hasInlineComments: boolean): boolean {
   return reviewBody.trim() === "" && !hasInlineComments;
@@ -203,4 +189,25 @@ export function stripRunSummaryFooter(body: string): string {
   if (end === -1) return body;
 
   return (body.slice(0, start) + body.slice(end + footerEndMarker.length)).trimEnd();
+}
+
+/**
+ * Every rendered shape of the retired always-on usage hint: one frozen sentence
+ * that shipped first as a `> 💡 …` blockquote and later as a two-line `> [!TIP]`
+ * alert, with the bot login (`@\S+`) varying per consumer. Keyed on the sentence
+ * rather than one byte-exact era so every historical rendering matches.
+ */
+const legacyUsageHintPattern =
+  /(?:> \[!TIP\]\n)?> (?:💡 )?`@\S+ <comment>` — Ask the AI reviewer a question or request changes\. Replies inside a review thread the bot already opened don't need the mention\.\n?/g;
+
+/**
+ * Remove the retired always-on usage hint from a review body. The hint sat
+ * outside the footer's strip markers, so every pre-hotfix review body on GitHub
+ * carries it forever — this strip is permanent compat, not a transition shim:
+ * without it `reviewDedupKey` could never match a historical body again and
+ * duplicate suppression would re-post an otherwise-identical review once per
+ * PR. Leftover blank lines are collapsed later by `normalizeBody`.
+ */
+export function stripLegacyUsageHint(body: string): string {
+  return body.replaceAll(legacyUsageHintPattern, "");
 }

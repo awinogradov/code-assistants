@@ -29,21 +29,22 @@ const runSummary = JSON.stringify({
 
 describe("buildSkipCommentBody", () => {
   test("renders links, reason blockquotes, and the run-summary footer", () => {
-    const body = buildSkipCommentBody("octocat", failed, reasonsOutput, runSummary, "review-bot");
+    const body = buildSkipCommentBody("octocat", failed, reasonsOutput, runSummary);
     expect(body).toContain("- [Auto label](https://gh.example/runs/1)\n  > Lint failed.");
     expect(body).toContain("<!-- run-summary-start -->");
     expect(body).toContain("Review run summary 🤖");
+    expect(body).not.toContain("[!TIP]");
   });
 
   test("links only and no footer when there are no reasons (fail-open)", () => {
-    const body = buildSkipCommentBody("octocat", failed, "", "", "review-bot");
+    const body = buildSkipCommentBody("octocat", failed, "", "");
     expect(body).toContain("- [Auto label](https://gh.example/runs/1)");
     expect(body).not.toContain("  > ");
     expect(body).not.toContain("<!-- run-summary-start -->");
   });
 
   test("reasons without a summary yield blockquotes but no footer", () => {
-    const body = buildSkipCommentBody("octocat", failed, reasonsOutput, "", "review-bot");
+    const body = buildSkipCommentBody("octocat", failed, reasonsOutput, "");
     expect(body).toContain("  > Lint failed.");
     expect(body).not.toContain("<!-- run-summary-start -->");
   });

@@ -18,7 +18,7 @@
  * @example
  * const context = await fetchFailureContext(octokit, owner, repo, failed);
  * const prompt = buildExplainPrompt(failed, context); // → runClaude (structured_output)
- * const body = buildSkipCommentBody(author, failed, structuredOutput, runSummary, reviewer);
+ * const body = buildSkipCommentBody(author, failed, structuredOutput, runSummary);
  * await postSkipComment(octokit, owner, repo, prNumber, reviewer, body);
  */
 import type { FailedCheck } from "@code-assistants/actions-core/checkStatus";
@@ -230,19 +230,19 @@ export function buildSkipCommentBody(
   failed: FailedCheck[],
   structuredOutput: string | undefined,
   runSummary: string | undefined,
-  reviewer: string,
 ): string {
   const reasons = allowlistReasons(structuredOutput, failed);
   const summary = parseRunSummary(runSummary);
   const footer =
-    Object.keys(reasons).length > 0 && summary ? renderRunSummaryFooter(summary, reviewer) : "";
+    Object.keys(reasons).length > 0 && summary ? renderRunSummaryFooter(summary) : "";
   return buildFailureComment(author, failed, reasons) + footer;
 }
 
 /**
- * Strip the AI reason blockquote lines (and the footer's usage hint, also a
- * blockquote) so dedup compares only the stable skeleton — the framing plus the
- * `- [name](url)` links, which are deterministic for a given failed-check set.
+ * Strip the AI reason blockquote lines (and, in pre-hotfix comments, the
+ * retired footer usage hint — also a blockquote) so dedup compares only the
+ * stable skeleton — the framing plus the `- [name](url)` links, which are
+ * deterministic for a given failed-check set.
  */
 export function stripFailureReasons(body: string): string {
   return body

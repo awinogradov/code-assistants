@@ -17,7 +17,11 @@ import {
   reviewDedupKey,
 } from "./githubReview.ts";
 import { renderReviewTip, reviewTips } from "../reviewTip.ts";
-import { renderRunSummaryFooter, type RunSummary } from "../runSummaryFooter.ts";
+import {
+  renderRunSummaryFooter,
+  stripLegacyUsageHint,
+  type RunSummary,
+} from "../runSummaryFooter.ts";
 
 describe("normalizeBody", () => {
   test("strips per-line trailing whitespace", () => {
@@ -187,11 +191,34 @@ describe("reviewDedupKey", () => {
 
   test("bodies differing only by the footer metrics and/or a tip block compare equal", () => {
     const body = "### Blockers\n\n- one";
-    const footer = renderRunSummaryFooter(summary, "bot");
+    const footer = renderRunSummaryFooter(summary);
     expect(reviewDedupKey(body + renderReviewTip(reviewTips[0]) + footer)).toBe(
       reviewDedupKey(body + footer),
     );
     expect(reviewDedupKey(body + renderReviewTip(reviewTips[0]))).toBe(reviewDedupKey(body));
+  });
+
+  test("a pre-hotfix body carrying the legacy usage hint keys equal to the new format", () => {
+    const body = "### Blockers\n\n- one";
+    const sentence =
+      "— Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.";
+    // Byte-exact historical shapes: the old renderer emitted "\n\n" + hint + footer.
+    const tipAlertHint = `> [!TIP]\n> \`@symbiot-bot <comment>\` ${sentence}`;
+    const emojiHint = `> 💡 \`@review-bot <comment>\` ${sentence}`;
+    const newFormat = reviewDedupKey(body + renderRunSummaryFooter(summary));
+    expect(reviewDedupKey(`${body}\n\n${tipAlertHint}${renderRunSummaryFooter(summary)}`)).toBe(
+      newFormat,
+    );
+    expect(reviewDedupKey(`${body}\n\n${emojiHint}${renderRunSummaryFooter(summary)}`)).toBe(
+      newFormat,
+    );
+  });
+
+  test("stripLegacyUsageHint never fires inside any rendered pool tip", () => {
+    for (const tip of reviewTips) {
+      const rendered = renderReviewTip(tip);
+      expect(stripLegacyUsageHint(rendered)).toBe(rendered);
+    }
   });
 
   test("genuinely different content stays different", () => {
