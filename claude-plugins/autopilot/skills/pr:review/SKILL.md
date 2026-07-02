@@ -50,7 +50,7 @@ You review the whole PR yourself in a single pass: load context, evaluate the di
 Fetch PR metadata and the diff:
 
 ```bash
-gh pr view <PR_NUMBER> -R <REPO> --json title,body,files,commits,reviews,latestReviews,comments,reviewDecision
+gh pr view <PR_NUMBER> -R <REPO> --json title,body,files,commits,reviews,latestReviews,comments,reviewDecision,headRefOid,baseRefOid
 gh pr diff <PR_NUMBER> -R <REPO>
 ```
 
@@ -145,7 +145,11 @@ Do NOT produce the structured JSON output.
 Read the project's own conventions before judging the diff — you enforce them, so you must load them first (mirrors the [`plan` skill's Phase 1](../plan/SKILL.md#phase-1-context-gathering)):
 
 - **CLAUDE.md (stack rules)** — read the repository-root `CLAUDE.md`; map each changed line to the rule it must satisfy.
-- **README + `docs/*` (project conventions)** — read the root `README.md` and the docs it links; treat `docs/` as the source of truth for project-specific conventions.
+- **README + `docs/*` (project conventions)** — read the root `README.md` and the docs it links; treat `docs/` as the source of truth for project-specific conventions. When the root README carries no docs index, fall back to `docs/README.md`, then to the Glob `docs/*.md` file names.
+- **`rfc/` (versioned standards)** — if `rfc/` exists at the repository root, build a standards inventory and read the diff-relevant standards; the [Repository Standards checks](#repository-standards-rfcs) enforce them:
+  - **Inventory** — read the `rfc/README.md` index table into `{id, title, status, path}`; when it is absent, Glob `rfc/[0-9]*.md` and read each file's frontmatter block. Derive a missing id/title from the `NNNN-slug` filename (or the first H1). A missing or unparseable `status` counts as Draft — record it as defaulted. `Superseded` entries are never enforcement sources.
+  - **Selection** — match each entry's title+slug tokens against the changed file paths and the diff's visible domains (log calls → a logging standard, HTTP routes → an API standard, new files → a file-structure standard). When in doubt whether a standard applies, load it — capped at 3 standards per review, ranked by match strength; record dropped candidates in the Context Map (no silent truncation).
+  - **Reads** — use the Read tool on matched standards (do not rely on the pack; a fallback pack may omit nested markdown); for a standard longer than ~300 lines, read only the matched sections. An RFC the diff itself modifies is enforced at its **base-branch version** — fetch it via `gh api repos/<REPO>/contents/<path>?ref=<baseRefOid>` (from [§1.1](#11-pr-context)) — so a PR cannot legalize its own diff by editing the standard; the hygiene checks still apply to the modified version.
 - **context7 / Ref / Exa** — MANDATORY for any unfamiliar library or API the diff touches; never guess an API's behavior.
 - **Perplexity** — web search for general or architectural questions.
 
@@ -158,6 +162,7 @@ Read the project's own conventions before judging the diff — you enforce them,
 - **Related work** — TODOs and `#<issue>` references in the codebase from `search-codebase-todos` ([§1.2](#12-load-context-via-sub-agents)): flag whether the diff resolves or conflicts with a related TODO, leaves a referenced issue half-addressed, or duplicates work tracked elsewhere; "none" when no issue is linked or none found.
 - **Prior-review findings** — unresolved findings from prior review bodies ([§1.1](#11-pr-context)) and inline threads from `fetch-pr-reviews` ([§1.2](#12-load-context-via-sub-agents)); empty on first review.
 - **Project conventions** — the CLAUDE.md / README / `docs/*` points that bear on the diff ([§1.4](#14-project-context-read-before-reviewing)).
+- **Applicable standards** — the standards selected in [§1.4](#14-project-context-read-before-reviewing): each as id + status (marked "defaulted" when the status was inferred) with a one-line why, plus any dropped candidates; "none" when nothing matched or the folders are absent. This map is the audit log of what was loaded and why.
 - **Codebase pointers** — only the targeted pack-`grep` hits pulled for cross-file checks; "none" when the diff is self-contained.
 - **Stack** — `agents.rules` value (drives [§2](#phase-2-review-the-diff) thresholds), or `unknown`.
 
@@ -732,6 +737,50 @@ The root `README.md` Documentation section is the single index — every `.md` u
 
 A `docs/*.md` file exceeds ~5000 characters or documents more than one area. Split it; keep code examples minimal (link to source, explain the "why" in prose).
 
+<a id="CHECK-DOC-005"></a>
+**CHECK-DOC-005: Diff contradicts a documented project convention** — Severity: suggestion
+
+A change violates a convention documented in the repository's `docs/*` or README — the [§1.5](#15-context-map) Applicable standards map lists the conventions in play. Docs are unversioned prose, so this is capped at suggestion; a convention that must block belongs in an Accepted RFC. Quote the contradicted sentence verbatim (≤2 lines) in the finding detail and cite the doc section as a link built from the [§1.1](#11-pr-context) `headRefOid`.
+
+- Example: a `docs/*.md` API chapter prescribes cursor pagination and the diff adds an offset-paginated endpoint.
+- Skip: the doc describes current behavior the diff intentionally changes AND the same PR updates that doc.
+
+#### Repository Standards (RFCs)
+
+Applies to repositories carrying an `rfc/` folder ([§1.4](#14-project-context-read-before-reviewing) builds the inventory). Skip CHECK-RFC-001/002 when the [§1.5](#15-context-map) Applicable standards map is "none"; CHECK-RFC-003/004 apply whenever the diff touches `rfc/` files. When a violation also matches a generic check above, report that check once and cite the RFC in its detail — do not double-report. Every CHECK-RFC-001/002 finding must quote the violated clause verbatim (≤2 lines) from the standard in its detail — a finding that only paraphrases the rule is not reportable — and cite the standard by its stable ID as a link built from the [§1.1](#11-pr-context) `headRefOid` (e.g. `[RFC-0003](https://github.com/<REPO>/blob/<headRefOid>/rfc/0003-service-logging-standard.md)`).
+
+<a id="CHECK-RFC-001"></a>
+**CHECK-RFC-001: Diff violates an Accepted repository RFC** — Severity: blocker
+
+A change contradicts a clause of an RFC whose `status` is Accepted — the repository's ratified standard, immutable except through a version bump.
+
+- Example: an Accepted logging RFC mandates structured JSON logs and the diff adds a plain `console.log` to a service.
+- Skip: the RFC's own text names an exception that applies; a defaulted status is Draft, not Accepted — route it to CHECK-RFC-002.
+
+<a id="CHECK-RFC-002"></a>
+**CHECK-RFC-002: Diff conflicts with a Draft repository RFC** — Severity: suggestion
+
+A change contradicts a clause of a Draft RFC (including standards whose status was defaulted to Draft). Draft standards are proposals — advisory only, never a blocker; name the Draft status in the finding.
+
+- Example: a Draft API-versioning RFC prescribes `/v1/` route prefixes and the diff adds an unversioned route.
+- Skip: the Draft's own text scopes itself to future or new code and the diff only extends an existing pattern.
+
+<a id="CHECK-RFC-003"></a>
+**CHECK-RFC-003: Accepted RFC edited without a version bump** — Severity: blocker
+
+The diff changes the content of an Accepted RFC without incrementing its `version` frontmatter and adding a Changelog entry (and updating `updated` when the format carries it). An Accepted RFC is immutable except through an explicit, recorded version bump.
+
+- Example: rewording a mandate inside an Accepted RFC while `version:` stays unchanged.
+- Skip: pure typo or formatting fixes that change no normative content — mention them in prose instead; a status transition (e.g. Draft → Accepted) recorded with a version bump.
+
+<a id="CHECK-RFC-004"></a>
+**CHECK-RFC-004: RFC file hygiene** — Severity: suggestion
+
+A new or renamed RFC is missing from the `rfc/README.md` index, its filename does not follow `NNNN-short-slug.md`, or its frontmatter is missing or malformed (no parseable `status`).
+
+- Example: adding an `rfc/0008-*.md` standard without an index row; an RFC whose frontmatter lacks `status`.
+- Skip: repositories with no `rfc/README.md` index at all — the Glob fallback is the index there; flag only frontmatter problems.
+
 #### Service Standards
 
 Applies when the diff adds or changes a backend service's API, entrypoint, or runtime config. Skip libraries, frontend-only changes, and diffs that touch none of these. Secrets in code are CHECK-SEC-001 and missing tests are CHECK-TEST-008 — do not double-report them here.
@@ -789,7 +838,7 @@ Map `severity` to its emoji when rendering in [Phase 3](#phase-3-submit-review):
 
 ### Issue Severity
 
-- **🚧 Blocking** - Must fix before merge (bugs, security, missing tests, RFC violations)
+- **🚧 Blocking** - Must fix before merge (bugs, security, missing tests, Accepted-RFC violations)
 - **🙋‍♂️ Suggestions** - Should fix, can discuss (architecture, patterns)
 - **💡 Nitpicks** - Optional improvement (style, naming)
 

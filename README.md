@@ -22,19 +22,20 @@ See the [plugin README](./claude-plugins/autopilot/README.md#installation) for s
 
 The `docs/` guides are numbered chapters in reading order — start at chapter 1 and read on, or jump to the chapter you need.
 
-| #   | Document                                                                        | What it covers                                                                                      |
-| --- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| 1   | [Workspace structure](./docs/01-workspace-structure.md)                         | where new actions, packages, and apps go, and how they wire into Turbo                              |
-| 2   | [`agents` field spec](./docs/02-agents-field.md)                                | how skills detect a repository's tech stack from `package.json`                                     |
-| 3   | [Review run-summary footer](./docs/03-code-review-run-summary.md)               | how `code-review-action` surfaces per-run metrics in a footer, plus the rare rotating review tip    |
-| 4   | [Inline suggestions and AI-agent prompts](./docs/04-code-review-suggestions.md) | one-click GitHub suggestion blocks and a "Prompt for AI agents" block on each inline finding        |
-| 5   | [Plan and run skills](./docs/05-plan-run-skills.md)                             | how the `plan` and `run` skills go from task to reviewed plan to merged PR, with ASCII diagrams     |
-| 6   | [`release` field spec](./docs/06-release-field.md)                              | how `release-action` picks the right artifacts for npm packages, GitHub Actions, and plugins        |
-| 7   | [Release auto-merge flow](./docs/07-release-automerge.md)                       | the event-driven action that merges approved, all-green release PRs and propagates downstream       |
-| 8   | [Upstream sync](./docs/08-upstream-sync.md)                                     | the one-action `upstream-sync` aggregator and the thin `upstream.yml` consumers run, per-kind       |
-| 9   | [Committed Repomix pack](./docs/09-repomix-pack.md)                             | the `.repomix/pack.xml` snapshot, its merge-triggered refresh, and the snapshot-first contract      |
-| 10  | [The `pdf:create` skill](./docs/10-pdf-create-skill.md)                         | the portable `@react-pdf/renderer` pipeline that renders a themed PDF, decoupled from the workspace |
-| 11  | [Linear tracker support](./docs/11-linear-tracker.md)                           | how `agents.trackers` opts a project into Linear and other issue trackers behind one JSON contract  |
+| #   | Document                                                                          | What it covers                                                                                      |
+| --- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| 1   | [Workspace structure](./docs/01-workspace-structure.md)                           | where new actions, packages, and apps go, and how they wire into Turbo                              |
+| 2   | [`agents` field spec](./docs/02-agents-field.md)                                  | how skills detect a repository's tech stack from `package.json`                                     |
+| 3   | [Review run-summary footer](./docs/03-code-review-run-summary.md)                 | how `code-review-action` surfaces per-run metrics in a footer, plus the rare rotating review tip    |
+| 4   | [Inline suggestions and AI-agent prompts](./docs/04-code-review-suggestions.md)   | one-click GitHub suggestion blocks and a "Prompt for AI agents" block on each inline finding        |
+| 5   | [Plan and run skills](./docs/05-plan-run-skills.md)                               | how the `plan` and `run` skills go from task to reviewed plan to merged PR, with ASCII diagrams     |
+| 6   | [`release` field spec](./docs/06-release-field.md)                                | how `release-action` picks the right artifacts for npm packages, GitHub Actions, and plugins        |
+| 7   | [Release auto-merge flow](./docs/07-release-automerge.md)                         | the event-driven action that merges approved, all-green release PRs and propagates downstream       |
+| 8   | [Upstream sync](./docs/08-upstream-sync.md)                                       | the one-action `upstream-sync` aggregator and the thin `upstream.yml` consumers run, per-kind       |
+| 9   | [Committed Repomix pack](./docs/09-repomix-pack.md)                               | the `.repomix/pack.xml` snapshot, its merge-triggered refresh, and the snapshot-first contract      |
+| 10  | [The `pdf:create` skill](./docs/10-pdf-create-skill.md)                           | the portable `@react-pdf/renderer` pipeline that renders a themed PDF, decoupled from the workspace |
+| 11  | [Linear tracker support](./docs/11-linear-tracker.md)                             | how `agents.trackers` opts a project into Linear and other issue trackers behind one JSON contract  |
+| 12  | [Code review repository standards](./docs/12-code-review-repository-standards.md) | how the review enforces a consumer repo's `rfc/` and `docs/` standards with status-based severity   |
 
 **Standards.**
 

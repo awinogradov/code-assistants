@@ -101,6 +101,12 @@ The `pr:review` skill carries the full review rubric (all `CHECK-*` rules) inlin
 
 To run a different repo's skills instead — e.g. a consumer's own `pr:review` — point `review_prompt` / `react_prompt` at them and install the plugin that provides them (see below).
 
+## Repository standards (rfc/ and docs/)
+
+When the reviewed repository carries an `rfc/` folder (versioned standards with `status` frontmatter) or a `docs/` folder, the review enforces those standards on the diff — no input or config needed; the folders are the opt-in. Severity follows source stability: an Accepted RFC violation blocks (`CHECK-RFC-001`), a Draft RFC conflict and a `docs/` convention contradiction are non-blocking suggestions (`CHECK-RFC-002`, `CHECK-DOC-005`), and two hygiene checks protect the `rfc/` contract itself (`CHECK-RFC-003/004`).
+
+See [Code review repository standards](../../../docs/12-code-review-repository-standards.md) for the discovery, selection, and citation contract.
+
 ## Installing plugins
 
 `marketplaces` and `plugins` install Claude Code plugins before the run, so `review_prompt` / `react_prompt` can target a skill the bundled `autopilot` plugin doesn't provide. Each `marketplaces` line is `name=source` and each `plugins` line is `plugin@marketplace`; the action registers the marketplaces (`extraKnownMarketplaces`) and installs the plugins (`enabledPlugins`), then Claude Code's headless install resolves their slash commands.
