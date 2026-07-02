@@ -363,6 +363,13 @@ Choose ONE backend based on the project's needs. Do not mix.
 - 👤 No raw `gh pr create` — use `Skill(autopilot:pr:create)`
 - 👤 No raw `gh issue create` — use `Skill(autopilot:issue:create)`
 
+## 15. Git Workflow
+
+- 👤 **MANDATORY**: `CONTRIBUTING.md` in the repository root is the binding standard for every branch, commit, PR, and issue operation — read the governing section before acting; never restate or improvise its rules
+- 👤 Governing sections: "Branches" for branch names, "Commits" for commit messages, "PR Title" and "Special PR Prefixes" for PR titles, "PR Description" and "Magic Words" for PR bodies and issue linking, "How to Contribute" for issues
+- 👤 The `Skill(autopilot:*)` commands in §16.1 implement these conventions — invoking the skill satisfies this section
+- 👤 Never bypass validation hooks with `--no-verify` — fix the violation instead
+
 ## 16. AI Assistant Workflow
 
 ### 16.1 Claude Code
