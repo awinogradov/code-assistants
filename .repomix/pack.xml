@@ -10793,7 +10793,7 @@ inputs:
   model:
     description: "Claude model to use for AI operations"
     required: false
-    default: "claude-sonnet-4-6"
+    default: "claude-sonnet-5"
   debug_logs:
     description: "Enable verbose DEBUG-level Claude trace logging and force execution artifact upload. When false, artifacts upload only on failure or when a run exceeds 5 minutes."
     required: false
@@ -12304,7 +12304,7 @@ The `if` condition prevents runner provisioning for non-PR issue comments. All o
 | `react_to_comments`    | no       | `true`                   | Auto-detect comment events and route to `react` mode.                                                                                                                         |
 | `bot_username`         | no       | falls back to `reviewer` | Username for skipping CI-author PRs labeled `ci-skip-review`.                                                                                                                 |
 | `release_pr_authors`   | no       | —                        | Comma-separated trusted authors whose `release-*`/`delivery-*` PRs are auto-approved. Empty disables it. See [Release PR auto-approval](#release-pr-auto-approval).           |
-| `model`                | no       | `claude-sonnet-4-6`      | Claude model to use.                                                                                                                                                          |
+| `model`                | no       | `claude-sonnet-5`        | Claude model to use.                                                                                                                                                          |
 | `settings`             | no       | —                        | Claude Code settings JSON (e.g., env vars for MCP servers).                                                                                                                   |
 | `mcp_config`           | no       | —                        | Additional MCP server configuration JSON, merged with repo `.mcp.json`.                                                                                                       |
 | `preflight_checks`     | no       | `true`                   | Wait for PR checks to pass before running review (review mode only).                                                                                                          |
