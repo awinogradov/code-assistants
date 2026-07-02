@@ -135,6 +135,8 @@ The content is organized as follows:
         reactToComment.ts
         referenceFormattingSync.test.ts
         replyReferenceFormatting.test.ts
+        reviewTip.test.ts
+        reviewTip.ts
         rulesDocUrlSync.test.ts
         runClaude.test.ts
         runClaude.ts
@@ -4851,8 +4853,12 @@ import {
   getLastBotReview,
   hasRecentBotReply,
   hasRecentBotReview,
+  listBotReviewBodies,
   normalizeBody,
+  reviewDedupKey,
 } from "./githubReview.ts";
+import { renderReviewTip, reviewTips } from "../reviewTip.ts";
+import { renderRunSummaryFooter, type RunSummary } from "../runSummaryFooter.ts";
 
 describe("normalizeBody", () => {
   test("strips per-line trailing whitespace", () => {
@@ -4983,6 +4989,57 @@ describe("hasRecentBotReview", () => {
   });
 });
 
+describe("listBotReviewBodies", () => {
+  test("paginates listReviews and keeps only the bot's non-pending bodies", async () => {
+    let paginateArgs: unknown[] = [];
+    const listReviews = () => ({ data: [] });
+    const octokit = {
+      rest: { pulls: { listReviews } },
+      paginate: (method: unknown, params: unknown) => {
+        paginateArgs = [method, params];
+        return [
+          { user: { login: "alice" }, state: "APPROVED", body: "not the bot" },
+          { user: { login: "bot" }, state: "PENDING", body: "pending" },
+          { user: { login: "bot" }, state: "APPROVED", body: "first" },
+          { user: { login: "bot" }, state: "CHANGES_REQUESTED", body: null },
+        ];
+      },
+    } as unknown as Octokit;
+
+    expect(await listBotReviewBodies(octokit, "o", "r", 1, "bot")).toEqual(["first", ""]);
+    expect(paginateArgs[0]).toBe(listReviews);
+    expect(paginateArgs[1]).toEqual({ owner: "o", repo: "r", pull_number: 1, per_page: 100 });
+  });
+});
+
+describe("reviewDedupKey", () => {
+  const summary: RunSummary = {
+    mode: "review",
+    model: "claude-sonnet-4-6",
+    model_ms: 34000,
+    tokens_in: 100,
+    tokens_out: 10,
+    cache_read_tokens: 0,
+    cache_creation_tokens: 0,
+    cost_usd: 0.35,
+    num_turns: 1,
+    tool_round_trips: 2,
+  };
+
+  test("bodies differing only by the footer metrics and/or a tip block compare equal", () => {
+    const body = "### Blockers\n\n- one";
+    const footer = renderRunSummaryFooter(summary, "bot");
+    expect(reviewDedupKey(body + renderReviewTip(reviewTips[0]) + footer)).toBe(
+      reviewDedupKey(body + footer),
+    );
+    expect(reviewDedupKey(body + renderReviewTip(reviewTips[0]))).toBe(reviewDedupKey(body));
+  });
+
+  test("genuinely different content stays different", () => {
+    expect(reviewDedupKey("### Blockers\n\n- one")).not.toBe(reviewDedupKey("### Blockers\n\n- two"));
+  });
+});
+
 describe("hasRecentBotReply", () => {
   test("detects an inline reply by the bot to the given comment", async () => {
     const octokit = {
@@ -5018,6 +5075,9 @@ describe("hasRecentBotReply", () => {
  * import { fetchReviewThreads, resolveThread, parseRepoEnv } from "./github/githubReview.ts";
  */
 import { Octokit } from "@octokit/rest";
+
+import { stripReviewTips } from "../reviewTip.ts";
+import { stripRunSummaryFooter } from "../runSummaryFooter.ts";
 
 /** GitHub PR review event type */
 export type ReviewEvent = "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
@@ -5091,6 +5151,17 @@ export function normalizeBody(body: string): string {
     .trim();
 }
 
+/**
+ * Canonical dedup key for review-body comparison: strips the run-varying
+ * summary footer and any review-tip block, then normalizes whitespace, so
+ * two reviews differing only in metrics or a rolled tip compare as
+ * identical. Every duplicate-suppression comparison must go through this
+ * one composition — a site applying its own subset silently defeats dedup.
+ */
+export function reviewDedupKey(body: string): string {
+  return normalizeBody(stripRunSummaryFooter(stripReviewTips(body)));
+}
+
 /** Minimal shape of a submitted review needed for dedup comparison. */
 export interface BotReviewSummary {
   body: string | null;
@@ -5115,6 +5186,29 @@ export async function getLastBotReview(
     pull_number: pullNumber,
   });
   return reviews.filter((r) => r.user?.login === reviewer && r.state !== "PENDING").at(-1);
+}
+
+/**
+ * All non-pending review bodies the bot has posted on a PR, oldest first.
+ * Paginates past the 30-per-page default so the review-tip no-repeat guard
+ * sees every prior tip marker even on long-lived PRs.
+ */
+export async function listBotReviewBodies(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  pullNumber: number,
+  reviewer: string
+): Promise<string[]> {
+  const reviews = await octokit.paginate(octokit.rest.pulls.listReviews, {
+    owner,
+    repo,
+    pull_number: pullNumber,
+    per_page: 100,
+  });
+  return reviews
+    .filter((review) => review.user?.login === reviewer && review.state !== "PENDING")
+    .map((review) => review.body ?? "");
 }
 
 /**
@@ -8342,6 +8436,298 @@ describe("reply reference-formatting wiring", () => {
 });
 </file>
 
+<file path=".github/actions/code-review-action/src/reviewTip.test.ts">
+/**
+ * Tests for reviewTip.ts.
+ * Covers the 5% gate boundaries, the single-roll uniform pick, per-PR
+ * exclusion/exhaustion, marker extraction and stripping (round-trip, all
+ * occurrences, quoted-marker resistance), composition with the run-summary
+ * footer, and the link-stability guard on the pool's absolute URLs.
+ */
+import { join } from "node:path";
+
+import { describe, expect, test } from "bun:test";
+
+import { normalizeBody } from "./github/githubReview.ts";
+import {
+  extractShownTipIds,
+  renderReviewTip,
+  reviewTips,
+  selectReviewTip,
+  stripReviewTips,
+  tipProbability,
+} from "./reviewTip.ts";
+import { renderRunSummaryFooter, stripRunSummaryFooter, type RunSummary } from "./runSummaryFooter.ts";
+
+const noneShown = new Set<string>();
+const firstTip = reviewTips[0];
+const summary: RunSummary = {
+  mode: "review",
+  model: "claude-sonnet-4-6",
+  model_ms: 34000,
+  tokens_in: 100,
+  tokens_out: 10,
+  cache_read_tokens: 0,
+  cache_creation_tokens: 0,
+  cost_usd: 0.35,
+  num_turns: 1,
+  tool_round_trips: 2,
+};
+
+describe("reviewTips pool", () => {
+  test("ids are unique and marker-safe, texts are single-line", () => {
+    expect(new Set(reviewTips.map((tip) => tip.id)).size).toBe(reviewTips.length);
+    for (const tip of reviewTips) {
+      expect(tip.id).toMatch(/^[a-z0-9-]+$/);
+      expect(tip.text).not.toContain("\n");
+    }
+  });
+
+  test("every absolute repo URL points at a path that exists in-tree", async () => {
+    const repoRoot = join(import.meta.dirname, "..", "..", "..", "..");
+    const urls = reviewTips.flatMap((tip) => [
+      ...tip.text.matchAll(
+        /https:\/\/github\.com\/awinogradov\/code-assistants\/(?:blob|tree)\/main\/([^\s)]+)/g,
+      ),
+    ]);
+    expect(urls.length).toBeGreaterThan(0);
+    for (const match of urls) {
+      expect(await Bun.file(join(repoRoot, match[1] ?? "")).exists()).toBe(true);
+    }
+  });
+});
+
+describe("selectReviewTip", () => {
+  test("selects at roll 0 and just below the gate, not at the gate", () => {
+    expect(selectReviewTip(0, noneShown)).toBeDefined();
+    expect(selectReviewTip(tipProbability * 0.999, noneShown)).toBeDefined();
+    expect(selectReviewTip(tipProbability, noneShown)).toBeUndefined();
+  });
+
+  test("maps the roll uniformly over the unshown pool", () => {
+    expect(selectReviewTip(0, noneShown)).toBe(reviewTips[0]);
+    expect(selectReviewTip(tipProbability * 0.999, noneShown)).toBe(reviewTips.at(-1));
+  });
+
+  test("excludes tips the PR has already seen", () => {
+    expect(selectReviewTip(0, new Set([firstTip.id]))).toBe(reviewTips[1]);
+  });
+
+  test("returns undefined when every tip was shown", () => {
+    expect(selectReviewTip(0, new Set(reviewTips.map((tip) => tip.id)))).toBeUndefined();
+  });
+});
+
+describe("extractShownTipIds", () => {
+  test("collects ids across bodies and collapses duplicates", () => {
+    const bodies = [
+      `review one${renderReviewTip(firstTip)}`,
+      `review two${renderReviewTip(firstTip)}${renderReviewTip(reviewTips[1])}`,
+    ];
+    expect(extractShownTipIds(bodies)).toEqual(new Set([firstTip.id, reviewTips[1].id]));
+  });
+
+  test("ignores bare or malformed markers that lack the rendered block shape", () => {
+    const bodies = [
+      "quoted `<!-- review-tip-start: re-review -->` without a block",
+      "<!-- review-tip-start: re-review -->\nno TIP line\n<!-- review-tip-end -->",
+    ];
+    expect(extractShownTipIds(bodies).size).toBe(0);
+  });
+});
+
+describe("stripReviewTips", () => {
+  test("round-trips: body plus a rendered tip normalizes back to the body", () => {
+    const body = "### Blockers\n\n- one";
+    expect(normalizeBody(stripReviewTips(body + renderReviewTip(firstTip)))).toBe(
+      normalizeBody(body),
+    );
+  });
+
+  test("strips every occurrence, not just the first", () => {
+    const doubled = `a${renderReviewTip(firstTip)}\n\nb${renderReviewTip(reviewTips[1])}`;
+    expect(normalizeBody(stripReviewTips(doubled))).toBe("a\n\nb");
+  });
+
+  test("passes bodies without tip markers through unchanged", () => {
+    const body = "plain review body";
+    expect(stripReviewTips(body)).toBe(body);
+  });
+
+  test("does not pair a quoted start marker with a later real end marker", () => {
+    const body = `see \`<!-- review-tip-start: re-review -->\` in the diff${renderReviewTip(firstTip)}`;
+    expect(stripReviewTips(body)).toContain("see `<!-- review-tip-start: re-review -->` in the diff");
+    expect(stripReviewTips(body)).not.toContain("> [!TIP]");
+  });
+});
+
+describe("composition with the run-summary footer", () => {
+  const body = "review with findings";
+  const footer = renderRunSummaryFooter(summary, "review-bot");
+  const composed = body + renderReviewTip(firstTip) + footer;
+
+  test("tip renders between the body and the footer's usage hint", () => {
+    expect(composed.indexOf("<!-- review-tip-start:")).toBeLessThan(composed.indexOf("> [!TIP]\n> `@review-bot"));
+  });
+
+  test("stripping tip and footer commutes and recovers the body", () => {
+    const tipThenFooter = stripRunSummaryFooter(stripReviewTips(composed));
+    const footerThenTip = stripReviewTips(stripRunSummaryFooter(composed));
+    expect(normalizeBody(tipThenFooter)).toBe(normalizeBody(footerThenTip));
+    expect(normalizeBody(tipThenFooter)).toContain(body);
+    expect(normalizeBody(tipThenFooter)).not.toContain("review-tip-start");
+    expect(normalizeBody(tipThenFooter)).not.toContain("run-summary-start");
+  });
+});
+</file>
+
+<file path=".github/actions/code-review-action/src/reviewTip.ts">
+/**
+ * Random review tip: a curated pool of one-line usage tips, one of which is
+ * appended to ~5% of posted review comments so PR authors discover bot and
+ * workflow capabilities they would otherwise only find in the docs.
+ *
+ * Each rendered tip embeds its id in a hidden HTML marker so later runs can
+ * see which tips a PR has already received (no external state) and so the
+ * duplicate-suppression key can strip the block — a rolled tip must never
+ * make two otherwise-identical reviews look different. Extraction and
+ * stripping share one full-block pattern: matching the exact rendered shape
+ * (not bare markers) keeps a marker quoted inside a review's code fence from
+ * pairing with a real end marker and corrupting either the shown-id set or
+ * the dedup key.
+ *
+ * @example
+ * const shown = extractShownTipIds(await listBotReviewBodies(octokit, ...));
+ * const tip = selectReviewTip(Math.random(), shown);
+ * const body = tip ? review + renderReviewTip(tip) : review;
+ * // dedup: normalizeBody(stripRunSummaryFooter(stripReviewTips(body)))
+ */
+
+/** One entry of the review-tip pool. */
+export interface ReviewTip {
+  /** Stable kebab-case id embedded in the hidden marker (`[a-z0-9-]+`). */
+  id: string;
+  /** Single-line GitHub-flavored markdown rendered inside the TIP alert. */
+  text: string;
+}
+
+/** Probability that a posted review carries a tip (per review run). */
+export const tipProbability = 0.05;
+
+/**
+ * The curated tip pool: bot/PR-flow usage plus repo-convention reminders.
+ * Texts must stay true for downstream consumers of the action, so every
+ * link is an absolute URL into this repository whose path exists in-tree
+ * (guarded by a test) — review comments render outside the repo, where
+ * relative links do not resolve.
+ */
+export const reviewTips: readonly ReviewTip[] = [
+  {
+    id: "re-review",
+    text: "Pushed a fix? Reply `re-review` (or `ptal`) on the PR to get a fresh verdict from the reviewer.",
+  },
+  {
+    id: "pr-resolve",
+    text: "The [pr:resolve skill](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/pr:resolve/SKILL.md) turns this review into fixes — run `/autopilot:pr-resolve` locally.",
+  },
+  {
+    id: "commit-suggestion",
+    text: "Inline findings carry a one-click **Commit suggestion** and a copy-paste [Prompt for AI agents](https://github.com/awinogradov/code-assistants/blob/main/docs/04-code-review-suggestions.md) block.",
+  },
+  {
+    id: "conventional-commits",
+    text: "Commit subjects follow [Conventional Commits](https://github.com/awinogradov/code-assistants/blob/main/CONTRIBUTING.md) — lowercase type, subject at 50 characters or fewer.",
+  },
+  {
+    id: "todo-links",
+    text: "Every `TODO`/`FIXME` needs an issue link on the next line (`// @see <issue-url>`) — see [CONTRIBUTING.md](https://github.com/awinogradov/code-assistants/blob/main/CONTRIBUTING.md).",
+  },
+  {
+    id: "squash-review-fixes",
+    text: "Squash review-fix commits back into the original `feat`/`fix` commit before merge so the history stays atomic.",
+  },
+  {
+    id: "pr-monitor",
+    text: "The [pr:monitor skill](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/pr:monitor/SKILL.md) babysits a PR — run `/autopilot:pr-monitor` and it fixes CI and resolves feedback until approval.",
+  },
+  {
+    id: "pr-update",
+    text: "Pushed more commits? Run `/autopilot:pr-update` so the [PR title and description](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/pr:update/SKILL.md) reflect the full change set.",
+  },
+  {
+    id: "issue-magic-words",
+    text: "Link the PR to its issue with magic words in an **Issues:** section — `Closes #123` auto-closes it on merge (see [CONTRIBUTING.md](https://github.com/awinogradov/code-assistants/blob/main/CONTRIBUTING.md)).",
+  },
+  {
+    id: "run-summary",
+    text: "Every review ends with a collapsed [run summary](https://github.com/awinogradov/code-assistants/blob/main/docs/03-code-review-run-summary.md) — expand it to see the run's model time, tokens, and cost.",
+  },
+  {
+    id: "autopilot-run",
+    text: "One command from issue to reviewed PR: [/autopilot:run](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/run/SKILL.md) plans, implements, commits, and opens the PR.",
+  },
+  {
+    id: "todo-cleanup",
+    text: "Run [/autopilot:todo-cleanup](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/todo-cleanup/SKILL.md) to file tracking issues for `TODO`/`FIXME` comments and link them in place.",
+  },
+];
+
+/**
+ * The exact rendered tip block, with the id captured. Single source of truth
+ * for extraction and stripping; the render/strip round-trip test pins it to
+ * {@link renderReviewTip}'s output shape.
+ */
+const reviewTipBlockPattern =
+  /<!-- review-tip-start: ([a-z0-9-]+) -->\n> \[!TIP\]\n> [^\n]*\n<!-- review-tip-end -->/g;
+
+/**
+ * Pick the tip for this run, or nothing. Pure: the caller injects the roll.
+ * One roll in `[0, 1)` drives both decisions — `roll >= tipProbability`
+ * misses the gate, and conditional on passing, `roll / tipProbability` is
+ * uniform on `[0, 1)`, indexing the unshown subset (the `Math.min` clamp
+ * absorbs the floating-point edge where the ratio rounds up to 1). Tips the
+ * PR has already seen are excluded; an exhausted pool yields nothing.
+ */
+export function selectReviewTip(
+  roll: number,
+  shownIds: ReadonlySet<string>,
+): ReviewTip | undefined {
+  if (roll >= tipProbability) return undefined;
+
+  const unshown = reviewTips.filter((tip) => !shownIds.has(tip.id));
+  if (unshown.length === 0) return undefined;
+
+  const index = Math.min(Math.floor((roll / tipProbability) * unshown.length), unshown.length - 1);
+  return unshown[index];
+}
+
+/**
+ * Render a tip as a top-level `> [!TIP]` alert (GitHub forbids nesting alerts
+ * inside `<details>` or other blockquotes) wrapped in its hidden id markers.
+ * The two leading blank lines separate the block from the preceding body.
+ */
+export function renderReviewTip(tip: ReviewTip): string {
+  return `\n\n<!-- review-tip-start: ${tip.id} -->\n> [!TIP]\n> ${tip.text}\n<!-- review-tip-end -->`;
+}
+
+/** Collect the tip ids already rendered into any of the given review bodies. */
+export function extractShownTipIds(bodies: readonly string[]): Set<string> {
+  return new Set(
+    bodies.flatMap((body) => [...body.matchAll(reviewTipBlockPattern)].map((match) => match[1])),
+  );
+}
+
+/**
+ * Remove every rendered tip block from a review body. Used by the dedup key
+ * so a rolled tip never defeats duplicate suppression; leftover blank lines
+ * are collapsed later by `normalizeBody`. Bodies without tips pass through
+ * unchanged.
+ */
+export function stripReviewTips(body: string): string {
+  return body.replaceAll(reviewTipBlockPattern, "");
+}
+</file>
+
 <file path=".github/actions/code-review-action/src/rulesDocUrlSync.test.ts">
 /**
  * Guards the single canonical pr:review SKILL.md URL that the review and answer
@@ -10504,19 +10890,20 @@ import {
   fetchReviewThreads,
   getLastBotReview,
   hasRecentBotReview,
-  normalizeBody,
+  listBotReviewBodies,
   parseRepoEnv,
   readExecutionResult,
   resolveThread,
+  reviewDedupKey,
   unresolveThread,
   verdictToEvent,
 } from "./github/githubReview.ts";
+import { extractShownTipIds, renderReviewTip, selectReviewTip } from "./reviewTip.ts";
 import {
   buildReviewBody,
   isCleanApproval,
   parseRunSummary,
   renderRunSummaryFooter,
-  stripRunSummaryFooter,
 } from "./runSummaryFooter.ts";
 
 /**
@@ -10633,17 +11020,28 @@ const invalidComments = anchored
 // Fail-open: no footer when RUN_SUMMARY is absent or invalid.
 const reviewBody = output.reviewComment + formatInvalidComments(invalidComments);
 const runSummary = parseRunSummary(process.env.RUN_SUMMARY);
-// Drop the footer's usage-hint TIP on a clean approval — the "No issues found"
-// line shouldn't be padded with a prompt to ask the bot a question.
+// Drop the footer's usage-hint TIP and the random review tip on a clean approval —
+// the "No issues found" line shouldn't be padded with extra prompts.
 const hasInlineComments = validComments.length > 0;
-const footer = runSummary
-  ? renderRunSummaryFooter(runSummary, reviewer, !isCleanApproval(reviewBody, hasInlineComments))
-  : "";
-const finalBody = buildReviewBody(reviewBody, footer, hasInlineComments);
+const cleanApproval = isCleanApproval(reviewBody, hasInlineComments);
+const footer = runSummary ? renderRunSummaryFooter(runSummary, reviewer, !cleanApproval) : "";
 
-// The footer carries run-varying numbers (cost, latency); strip it from both
-// bodies so the duplicate-suppression guard compares the stable content only.
-const dedupKey = (body: string): string => normalizeBody(stripRunSummaryFooter(body));
+// Roll the rare review tip, excluding tips this PR already saw (their hidden markers
+// in prior bot reviews). Fail-open: a listing failure posts the review untipped.
+let tipBlock = "";
+if (!cleanApproval) {
+  try {
+    const bodies = await listBotReviewBodies(octokit, owner, repoName, pullNumber, reviewer);
+    const tip = selectReviewTip(Math.random(), extractShownTipIds(bodies));
+    if (tip) {
+      tipBlock = renderReviewTip(tip);
+      console.log("Review tip selected:", tip.id);
+    }
+  } catch (error) {
+    console.log("Skipping review tip (fail-open):", error);
+  }
+}
+const finalBody = buildReviewBody(reviewBody, tipBlock + footer, hasInlineComments);
 
 console.log(
   `Submitting ${event} review: ${validComments.length} inline comments, ${invalidComments.length} moved to body...`
@@ -10668,7 +11066,7 @@ if (resolvedCount > 0) {
 const lastBotReview = await getLastBotReview(octokit, owner, repoName, pullNumber, reviewer);
 
 // Skip if last bot review has identical body (prevents duplicate from concurrent posting)
-if (lastBotReview && dedupKey(lastBotReview.body ?? "") === dedupKey(finalBody)) {
+if (lastBotReview && reviewDedupKey(lastBotReview.body ?? "") === reviewDedupKey(finalBody)) {
   console.log("✓ Review already posted, skipping duplicate");
   process.exit(0);
 }
@@ -10691,7 +11089,7 @@ await deletePendingReviews(octokit, owner, repoName, pullNumber);
 // A concurrent run (the per-comment concurrency group does not serialize same-PR
 // runs) may have posted an identical body since the check above — skip if so.
 const guardReview = await getLastBotReview(octokit, owner, repoName, pullNumber, reviewer);
-if (guardReview && dedupKey(guardReview.body ?? "") === dedupKey(finalBody)) {
+if (guardReview && reviewDedupKey(guardReview.body ?? "") === reviewDedupKey(finalBody)) {
   console.log("✓ Identical review appeared concurrently, skipping duplicate");
   process.exit(0);
 }
@@ -12365,6 +12763,12 @@ with:
 Every review comment carries a collapsed **"Review run summary 🤖"** footer ("under the cut") with the run's latency, token usage, cache hits, cost, and tool round-trips. The metrics are computed in `runClaude.ts`, passed to `submitReview.ts` via the `run_summary` step output, and appended to the **main review comment only** (never inline, never on `react`-mode replies). The footer is wrapped in HTML-comment markers so it is stripped before duplicate-review detection, keeping run-varying numbers from defeating dedup.
 
 See [Review run-summary footer](../../../docs/03-code-review-run-summary.md) for the full data flow and diagram.
+
+## Random review tip
+
+Roughly 5% of reviews carry one extra rotating `> [!TIP]` — a usage or convention tip from a curated pool, never repeated within the same PR (a hidden per-tip marker in prior bot reviews tracks what was shown). Tips never appear on clean approvals, never affect duplicate-review detection, and fail open: if the prior-review lookup fails, the review posts untipped. The pool and the ~5% rate are hardcoded — consumers tracking `@main` receive tips on merge, and disabling them means reverting the feature commit upstream.
+
+See [Random review tip](../../../docs/03-code-review-run-summary.md#random-review-tip) for the marker contract and data flow.
 
 ## Inline suggestions & AI-agent prompts
 
@@ -49603,7 +50007,7 @@ To add a new language: extend the language-to-pattern table in `claude-plugins/a
 
 `code-review-action` instruments every review run with per-run metrics — model latency, token usage, cache hits, cost, and tool round-trips. These numbers were invaluable while optimizing the action, but they used to live only in the Actions run logs.
 
-The run-summary footer surfaces them directly under each review: a collapsed `<details>` block appended to the **main review comment and the preflight skip comment** — never on inline comments, never on `react`-mode replies — so reviewers can spot a slow or expensive run at a glance without digging through workflow logs. The skip-comment footer is described in "Preflight skip comments" below; the rest of this document covers the review path.
+The run-summary footer surfaces them directly under each review: a collapsed `<details>` block appended to the **main review comment and the preflight skip comment** — never on inline comments, never on `react`-mode replies — so reviewers can spot a slow or expensive run at a glance without digging through workflow logs. The skip-comment footer is described in "Preflight skip comments" below; the rest of this document covers the review path. The rare [random review tip](#random-review-tip) that occasionally rides beside the footer is documented below as well.
 
 ## Data flow
 
@@ -49642,7 +50046,7 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 │        ▼                                                           │
 │  finalBody = buildReviewBody(body, footer, hasInline)            │
 │        │                                                          │
-│        ├──④──▶ dedupKey = normalizeBody(stripRunSummaryFooter(·)) │
+│        ├──④──▶ reviewDedupKey(·) — strips tip block + footer      │
 │        │        applied to BOTH bodies before comparison          │
 │        ▼                                                          │
 │  octokit.createReview({ body: finalBody })  ──⑤──▶ MAIN comment   │
@@ -49655,7 +50059,7 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 - ① `setOutput` writes `run_summary` to `$GITHUB_OUTPUT` using a per-call heredoc delimiter, so the JSON value is safe. It is emitted **before** `emitOutputs`, which may `process.exit(1)` on a non-success result.
 - ② `action.yml` bridges the step output into the submit process as the `RUN_SUMMARY` env var. The `react`-mode reaction step is intentionally **not** wired — the footer is review-only.
 - ③ `parseRunSummary` validates the untrusted env with a strict Zod schema (no coercion); an empty or invalid value yields no footer and the review posts unchanged.
-- ④ The footer carries run-varying numbers, so it is stripped from both the new body and the previously-posted body before the duplicate-suppression guard compares them — otherwise the cost/latency deltas would defeat dedup. `normalizeBody` stays generic.
+- ④ The footer carries run-varying numbers, so it is stripped from both the new body and the previously-posted body before the duplicate-suppression guard compares them — otherwise the cost/latency deltas would defeat dedup. The comparison is the single `reviewDedupKey` composition, which also strips any [random review tip](#random-review-tip) block; `normalizeBody` stays generic.
 - ⑤ The footer lands only on the main review comment via `createReview`; inline comments and `reactToComment.ts` replies are untouched.
 
 ## Rendered footer
@@ -49697,6 +50101,46 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 
 The pr:review skill returns an empty `reviewComment` for an approval with no findings — by contract no review prose is written, the APPROVE event speaks for itself. Posting a comment that is _only_ the stats footer reads as an empty (or broken) review and is indistinguishable from a genuine content-free-approval failure, so `submitReview.ts` builds the body through `buildReviewBody`: when the review body is empty and there are no inline comments, it substitutes a minimal `✅ No issues found.` line before appending the footer. The shared `isCleanApproval` predicate detects this case, and `submitReview.ts` also passes `includeUsageHint: false` to `renderRunSummaryFooter` for it — the `> [!TIP]` usage hint is dropped so a no-issues result isn't padded with a prompt to ask the bot a question; only the metrics block remains. Reviews that carry findings (and the preflight skip comment below) keep the TIP. The dedup and consecutive-approval guards still compare the raw (empty) `reviewComment`, so repeat clean approvals are skipped rather than re-posted.
 
+## Random review tip
+
+On roughly 5% of review submissions the comment carries one extra `> [!TIP]` alert — a rotating tip from the curated pool in `reviewTip.ts` (bot/PR-flow usage and repo-convention reminders, [issue 389](https://github.com/awinogradov/code-assistants/issues/389)). The roll happens in `submitReview.ts` (`Math.random()` against the `tipProbability` constant); the pure selector turns that single roll into both the 5% gate and a uniform pick over the tips the PR has not seen yet.
+
+```text
+┌───────────────────┐        ┌──────────────────┐        ┌─────────────────┐
+│    GitHub API     │        │ submitReview.ts  │── ② ──▶│  reviewTip.ts   │
+│ prior bot reviews │── ① ──▶│ assemble comment │◀── ③ ──│ pool + selector │
+└───────────────────┘        └────────┬─────────┘        └─────────────────┘
+                                      │ ④
+                                      ▼
+                             ┌──────────────────┐
+                             │  review comment  │
+                             │   TIP + marker   │
+                             │  summary footer  │
+                             └────────┬─────────┘
+                                      │ ⑤
+                                      ▼
+                             ┌──────────────────┐
+                             │   dedup guard    │
+                             │ strip tip+footer │
+                             └──────────────────┘
+```
+
+**Flow legend:**
+
+- ① Fetch the bot's prior reviews on the PR (paginated); collect shown tip ids from `<!-- review-tip-start: <id> -->` markers
+- ② Pass one injected random roll (5% gate) and the shown-id set to the selector
+- ③ Selector returns one unshown tip, or nothing (missed roll or exhausted pool)
+- ④ Append the tip as a top-level `> [!TIP]` alert plus its hidden id marker between the review prose and the run-summary footer
+- ⑤ Duplicate suppression strips tip blocks and the footer before comparing review bodies
+
+Three contracts keep the tip safe:
+
+- **Never repeated within a PR.** Each rendered tip embeds its id in a hidden marker (`<!-- review-tip-start: <id> -->` … `<!-- review-tip-end -->`). Before rolling, `submitReview.ts` lists the bot's prior reviews — `listBotReviewBodies` paginates past the 30-per-page default — and excludes every id already present; an exhausted pool shows nothing. Extraction and stripping match the full rendered block shape, not bare markers, so a marker quoted inside a review's code fence cannot corrupt the shown-id set or the dedup key.
+- **Dedup-immune.** Every duplicate-suppression comparison goes through `reviewDedupKey` (strip tip blocks, strip the footer, normalize), so a rolled tip never makes two otherwise-identical reviews look different — and never re-posts one. The consecutive-approval guard compares the model's raw `reviewComment`, which never contains a tip.
+- **Fail-open, quiet on clean approvals.** A clean approval (`✅ No issues found.`) stays tip-free, matching the usage-hint suppression above. A failure listing prior reviews logs `Skipping review tip (fail-open): …` and posts the review untipped; a selected tip logs `Review tip selected: <id>` for auditability.
+
+The pool and the ~5% rate are hardcoded — no action input configures them. Consumers tracking the action `@main` receive tips on merge; disabling them means reverting the feature commit upstream. Tip links are absolute URLs into this repository whose paths must exist in-tree, guarded by a `reviewTip.test.ts` case so a docs move cannot silently 404 a shipped tip.
+
 ## Preflight skip comments
 
 When preflight checks fail, the action skips the AI review and posts a "red flags 🚩" comment. Each failed check links to its run log, carries a one-sentence "why it failed" blockquote, and — when that explanation ran — the comment closes with the same run-summary footer as a review.
@@ -49720,7 +50164,9 @@ Because the reasons derive from untrusted CI annotations, `skipComment.ts` sanit
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `src/runClaude.ts`            | Runs a single Agent-SDK pass (review, react, or `preflight` via `CLAUDE_RUN_MODE`); computes the summary; emits `run_summary` |
 | `src/runSummaryFooter.ts`     | `runSummarySchema`, `parseRunSummary`, `renderRunSummaryFooter`, `stripRunSummaryFooter`, `buildReviewBody`                   |
-| `src/submitReview.ts`         | Builds the review body via `buildReviewBody` (clean-approval line + footer); strips the footer for dedup                      |
+| `src/submitReview.ts`         | Builds the review body via `buildReviewBody` (clean-approval line + tip + footer); dedups via `reviewDedupKey`                |
+| `src/reviewTip.ts`            | Tip pool + `tipProbability`; pure select/render, marker-shaped extraction and stripping of the tip block                      |
+| `src/github/githubReview.ts`  | `listBotReviewBodies` (paginated prior bot reviews for the no-repeat guard); `reviewDedupKey` — the one dedup composition     |
 | `src/preflightChecks.ts`      | Polls checks; on failure emits the failed checks + explain prompt; posts only the timeout comment inline                      |
 | `src/skipComment.ts`          | Skip-path helpers: fetch annotations, build the explain prompt, allowlist + sanitize reasons, render the comment, post/dedup  |
 | `src/preflightSkipComment.ts` | Post step: assembles the failed-checks comment from the explain step's reasons + run summary and posts it (fail-open)         |
@@ -55167,7 +55613,6 @@ export default config;
 <file path="README.md">
 <img width="1768" height="649" alt="image" src="https://github.com/user-attachments/assets/d66366df-7bf3-4c0a-8e33-465f6d2ffa3b" />
 
-
 # Code Assistants
 
 Skills and agents for AI-assisted development workflows — plan, implement, commit, PR, and monitor.
@@ -55194,7 +55639,7 @@ The `docs/` guides are numbered chapters in reading order — start at chapter 1
 | --- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | 1   | [Workspace structure](./docs/01-workspace-structure.md)                         | where new actions, packages, and apps go, and how they wire into Turbo                              |
 | 2   | [`agents` field spec](./docs/02-agents-field.md)                                | how skills detect a repository's tech stack from `package.json`                                     |
-| 3   | [Review run-summary footer](./docs/03-code-review-run-summary.md)               | how `code-review-action` surfaces per-run cost/latency/token metrics in a collapsible footer        |
+| 3   | [Review run-summary footer](./docs/03-code-review-run-summary.md)               | how `code-review-action` surfaces per-run metrics in a footer, plus the rare rotating review tip    |
 | 4   | [Inline suggestions and AI-agent prompts](./docs/04-code-review-suggestions.md) | one-click GitHub suggestion blocks and a "Prompt for AI agents" block on each inline finding        |
 | 5   | [Plan and run skills](./docs/05-plan-run-skills.md)                             | how the `plan` and `run` skills go from task to reviewed plan to merged PR, with ASCII diagrams     |
 | 6   | [`release` field spec](./docs/06-release-field.md)                              | how `release-action` picks the right artifacts for npm packages, GitHub Actions, and plugins        |
