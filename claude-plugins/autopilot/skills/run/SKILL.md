@@ -414,9 +414,7 @@ Call TaskUpdate to set task 9 ("Monitor PR") to `status: "in_progress"`. Invoke 
 - If changes requested: invoke pr:resolve interactively (user IS involved for review feedback)
 - Wait for approval or merge
 
-**Autopilot override for pr:resolve:** When pr:monitor invokes pr:resolve and the skill presents options via AskUserQuestion:
-- For review action (Phase 3): auto-select "Address all"
-- For replies (Phase 6): auto-select "Post all replies"
+**Autopilot override for pr:resolve:** When pr:monitor invokes pr:resolve and the skill presents the review-action gate via AskUserQuestion, auto-select "Address all". Replies post without prompting.
 
 ### Completion
 

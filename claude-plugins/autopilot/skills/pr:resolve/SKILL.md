@@ -159,7 +159,7 @@ Tool parameters:
 - `header`: "Review"
 - `options`: [
   { label: "Address all", description: "Fix blockers, suggestions, and nitpicks; reply to questions" },
-  { label: "Review individually", description: "Approve each comment action one by one" },
+  { label: "Review individually", description: "Approve each fix one by one (replies always post)" },
   { label: "Cancel", description: "Exit without changes" }
   ]
 - `multiSelect`: false
@@ -261,17 +261,7 @@ Explained (N):
   <file>:<line> - "[reply text]"
 ```
 
-Present using AskUserQuestion:
-
-Tool parameters:
-
-- `question`: The summary text above (plain text, no markdown)
-- `header`: "Replies"
-- `options`: [
-  { label: "Post all replies", description: "Reply to all comment threads" },
-  { label: "Review individually", description: "Approve each reply one by one" }
-  ]
-- `multiSelect`: false
+Output the summary above as plain text, then post every drafted reply immediately — do not ask for approval. Before posting, resolve your login with `gh api user --jq .login` and fetch the existing comments — inline threads via `gh api repos/<OWNER>/<REPO>/pulls/<PR_NUMBER>/comments`, top-level via `gh api repos/<OWNER>/<REPO>/issues/<PR_NUMBER>/comments`; skip an inline thread whose latest comment (matching by `in_reply_to_id`) is already yours, and skip a top-level reply whose body you already posted — this keeps re-runs idempotent. If a post fails, continue with the remaining replies and list the failures under `Failed` in the [Phase 6](#phase-6-update-pr-and-summary) summary.
 
 Post replies using the GitHub API:
 
@@ -286,20 +276,6 @@ For top-level review comments:
 ```bash
 gh api repos/<OWNER>/<REPO>/issues/<PR_NUMBER>/comments -f body="<reply>"
 ```
-
-If "Review individually", present each reply with AskUserQuestion before posting:
-
-Tool parameters:
-
-- `question`: "<file>:<line>\n\nReviewer said: <comment text>\n\nDrafted reply: <reply text>"
-- `header`: "Reply"
-- `options`: [
-  { label: "Post reply", description: "Send this reply" },
-  { label: "Edit", description: "Let me rephrase this" }
-  ]
-- `multiSelect`: false
-
-If "Edit" selected, ask for the user's preferred reply text and use that instead.
 
 ---
 
@@ -325,6 +301,9 @@ Replied (N comments):
 Declined (N comments):
   <file>:<line> - <reply summary>
 
+Failed (N replies):
+  <file>:<line> - <post error>
+
 Commit: <commit message>
 Pushed to origin/<branch>
 PR #<N> updated: <url>
@@ -337,6 +316,9 @@ Resolve Review Complete
 
 Replied (N comments):
   <file>:<line> - <reply summary>
+
+Failed (N replies):
+  <file>:<line> - <post error>
 
 No code changes needed.
 PR #<N>: <url>
