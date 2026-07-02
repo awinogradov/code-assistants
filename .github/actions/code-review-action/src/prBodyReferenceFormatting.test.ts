@@ -2,7 +2,9 @@
  * Guards that the output-generating autopilot skills explicitly instruct the model to
  * apply the inlined reference-formatting rules (RFC-0001): pr:create and pr:update (PR
  * bodies, issue #279) plus plan, plan-bun, plan-nodejs-react, run, and issue:create
- * (plan files and issue bodies, issue #334). Each already inlines the canonical block —
+ * (plan files and issue bodies, issue #334), and pr:review (review verdict bodies —
+ * wefortis/fortune-os PR 93 review 4619732611 cited files and standards as backticked
+ * dead text). Each already inlines the canonical block —
  * the referenceFormattingSync test guards that copy stays byte-identical — but inlining
  * alone never made the generators apply it, so generated output escaped the standard.
  *
@@ -29,7 +31,7 @@ const startSentinel = "<!-- ref-format:start -->";
 // generation phase. Reword it only alongside this test.
 const applyInstruction = "reference-formatting rules inlined at the end";
 
-const skills = ["pr:create", "pr:update", "plan", "plan-bun", "plan-nodejs-react", "run", "issue:create", "linear:create"];
+const skills = ["pr:create", "pr:update", "plan", "plan-bun", "plan-nodejs-react", "run", "issue:create", "linear:create", "pr:review"];
 
 describe("output reference-formatting wiring", () => {
   test.each(skills)("%s instructs the body generator to apply RFC-0001", async (skill) => {
@@ -71,5 +73,44 @@ describe("linear issue linking (issue #387)", () => {
   ])("%s exposes the issue url in its output contract", async (file) => {
     const content = await readFile(file, "utf8");
     expect(content).toContain("`url`");
+  });
+});
+
+// wefortis/fortune-os PR 93 review 4619732611: review bodies cited files and standards
+// as backticked dead text — the body templates demonstrated the backticked form, so the
+// inlined mandate lost (the same dynamic issue #387 recorded for reply templates). These
+// pin the linked-form templates and the `<pr-blob-url>` recipe. Links pin the reviewed
+// headRefOid — valid for fork PRs too, whose head commits stay reachable in the base
+// repo via refs/pull/N/head.
+describe("review body file links", () => {
+  const reviewSkill = join(skillsDir, "pr:review", "SKILL.md");
+
+  test("defines the PR blob base from the reviewed head commit", async () => {
+    const content = await readFile(reviewSkill, "utf8");
+    expect(content).toContain("https://github.com/<REPO>/blob/<headRefOid>");
+    expect(content).toContain("reviewDecision,headRefOid");
+  });
+
+  test("templates demonstrate the linked finding-location and anchor forms", async () => {
+    const content = await readFile(reviewSkill, "utf8");
+    expect(content).toContain("[src/path/to/file.ts:NN](<pr-blob-url>/src/path/to/file.ts#LNN)");
+    expect(content).toContain("?plain=1#L");
+    expect(content).toContain("#<heading-anchor>");
+  });
+
+  test("scopes linking to resolvable targets with a pre-emit self-check", async () => {
+    const content = await readFile(reviewSkill, "utf8");
+    expect(content).toContain("NEVER linked by guess");
+    expect(content).toContain("bare 7–40-char hex token");
+  });
+
+  // Negative guards pinned to the exact pre-fix tokens; the intentionally retained
+  // backticked forms (inline-comment own anchor, the NOT `processor.ts:66` contrast)
+  // must not trip them.
+  test("the backticked finding-location templates do not resurface", async () => {
+    const content = await readFile(reviewSkill, "utf8");
+    expect(content).not.toContain("- `src/path/to/file.ts:NN` -");
+    expect(content).not.toContain("`src/webhooks/payment.ts:45`");
+    expect(content).not.toContain("`src/webhooks/payment.ts:62`");
   });
 });
