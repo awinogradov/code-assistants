@@ -101,7 +101,7 @@ The shared CI gates accept both conventions: the branch-name and semantic-PR-tit
 
 - **Create** — [`linear:create`](../claude-plugins/autopilot/skills/linear:create/SKILL.md) is the Linear counterpart to `issue:create`: it generates the same five-section body (Context/What/Why/Scope/Solution), then a short wizard picks the workflow status (`list_issue_statuses`), labels (`list_issue_labels`, pre-selecting the `agents.trackers` repo label), and an assignee, and creates the ticket with `save_issue`.
 - **List and run** — [`issue:run`](../claude-plugins/autopilot/skills/issue:run/SKILL.md) lists the team's recent open tickets via `list_issues` (instead of `gh issue list`) and hands the chosen `TEAM-123` identifier to `autopilot:run`.
-- **Assignees** — the [`resolve-assignees`](../claude-plugins/autopilot/agents/resolve-assignees.md) agent gathers candidates from CODEOWNERS and the Linear team's members; Linear member listing is best-effort and degrades to CODEOWNERS when the MCP user-list tool is unavailable.
+- **Assignees** — the [`resolve-assignees`](../claude-plugins/autopilot/agents/resolve-assignees.md) agent gathers candidates from CODEOWNERS and the Linear team's members, resolves the current Linear user (`get_user "me"`), and returns that user first so self-assign is the default; Linear member listing is best-effort and degrades to CODEOWNERS when the MCP user-list tool is unavailable.
 
 ## TODO links and issue state
 
