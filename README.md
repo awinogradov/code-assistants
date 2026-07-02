@@ -1,6 +1,5 @@
 <img width="1768" height="649" alt="image" src="https://github.com/user-attachments/assets/d66366df-7bf3-4c0a-8e33-465f6d2ffa3b" />
 
-
 # Code Assistants
 
 Skills and agents for AI-assisted development workflows — plan, implement, commit, PR, and monitor.
@@ -27,7 +26,7 @@ The `docs/` guides are numbered chapters in reading order — start at chapter 1
 | --- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | 1   | [Workspace structure](./docs/01-workspace-structure.md)                         | where new actions, packages, and apps go, and how they wire into Turbo                              |
 | 2   | [`agents` field spec](./docs/02-agents-field.md)                                | how skills detect a repository's tech stack from `package.json`                                     |
-| 3   | [Review run-summary footer](./docs/03-code-review-run-summary.md)               | how `code-review-action` surfaces per-run cost/latency/token metrics in a collapsible footer        |
+| 3   | [Review run-summary footer](./docs/03-code-review-run-summary.md)               | how `code-review-action` surfaces per-run metrics in a footer, plus the rare rotating review tip    |
 | 4   | [Inline suggestions and AI-agent prompts](./docs/04-code-review-suggestions.md) | one-click GitHub suggestion blocks and a "Prompt for AI agents" block on each inline finding        |
 | 5   | [Plan and run skills](./docs/05-plan-run-skills.md)                             | how the `plan` and `run` skills go from task to reviewed plan to merged PR, with ASCII diagrams     |
 | 6   | [`release` field spec](./docs/06-release-field.md)                              | how `release-action` picks the right artifacts for npm packages, GitHub Actions, and plugins        |

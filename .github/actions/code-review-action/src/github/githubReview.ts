@@ -7,6 +7,9 @@
  */
 import { Octokit } from "@octokit/rest";
 
+import { stripReviewTips } from "../reviewTip.ts";
+import { stripRunSummaryFooter } from "../runSummaryFooter.ts";
+
 /** GitHub PR review event type */
 export type ReviewEvent = "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
 
@@ -79,6 +82,17 @@ export function normalizeBody(body: string): string {
     .trim();
 }
 
+/**
+ * Canonical dedup key for review-body comparison: strips the run-varying
+ * summary footer and any review-tip block, then normalizes whitespace, so
+ * two reviews differing only in metrics or a rolled tip compare as
+ * identical. Every duplicate-suppression comparison must go through this
+ * one composition — a site applying its own subset silently defeats dedup.
+ */
+export function reviewDedupKey(body: string): string {
+  return normalizeBody(stripRunSummaryFooter(stripReviewTips(body)));
+}
+
 /** Minimal shape of a submitted review needed for dedup comparison. */
 export interface BotReviewSummary {
   body: string | null;
@@ -103,6 +117,29 @@ export async function getLastBotReview(
     pull_number: pullNumber,
   });
   return reviews.filter((r) => r.user?.login === reviewer && r.state !== "PENDING").at(-1);
+}
+
+/**
+ * All non-pending review bodies the bot has posted on a PR, oldest first.
+ * Paginates past the 30-per-page default so the review-tip no-repeat guard
+ * sees every prior tip marker even on long-lived PRs.
+ */
+export async function listBotReviewBodies(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  pullNumber: number,
+  reviewer: string
+): Promise<string[]> {
+  const reviews = await octokit.paginate(octokit.rest.pulls.listReviews, {
+    owner,
+    repo,
+    pull_number: pullNumber,
+    per_page: 100,
+  });
+  return reviews
+    .filter((review) => review.user?.login === reviewer && review.state !== "PENDING")
+    .map((review) => review.body ?? "");
 }
 
 /**
