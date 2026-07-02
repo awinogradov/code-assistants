@@ -4859,7 +4859,11 @@ import {
   reviewDedupKey,
 } from "./githubReview.ts";
 import { renderReviewTip, reviewTips } from "../reviewTip.ts";
-import { renderRunSummaryFooter, type RunSummary } from "../runSummaryFooter.ts";
+import {
+  renderRunSummaryFooter,
+  stripLegacyUsageHint,
+  type RunSummary,
+} from "../runSummaryFooter.ts";
 
 describe("normalizeBody", () => {
   test("strips per-line trailing whitespace", () => {
@@ -5029,11 +5033,34 @@ describe("reviewDedupKey", () => {
 
   test("bodies differing only by the footer metrics and/or a tip block compare equal", () => {
     const body = "### Blockers\n\n- one";
-    const footer = renderRunSummaryFooter(summary, "bot");
+    const footer = renderRunSummaryFooter(summary);
     expect(reviewDedupKey(body + renderReviewTip(reviewTips[0]) + footer)).toBe(
       reviewDedupKey(body + footer),
     );
     expect(reviewDedupKey(body + renderReviewTip(reviewTips[0]))).toBe(reviewDedupKey(body));
+  });
+
+  test("a pre-hotfix body carrying the legacy usage hint keys equal to the new format", () => {
+    const body = "### Blockers\n\n- one";
+    const sentence =
+      "— Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.";
+    // Byte-exact historical shapes: the old renderer emitted "\n\n" + hint + footer.
+    const tipAlertHint = `> [!TIP]\n> \`@symbiot-bot <comment>\` ${sentence}`;
+    const emojiHint = `> 💡 \`@review-bot <comment>\` ${sentence}`;
+    const newFormat = reviewDedupKey(body + renderRunSummaryFooter(summary));
+    expect(reviewDedupKey(`${body}\n\n${tipAlertHint}${renderRunSummaryFooter(summary)}`)).toBe(
+      newFormat,
+    );
+    expect(reviewDedupKey(`${body}\n\n${emojiHint}${renderRunSummaryFooter(summary)}`)).toBe(
+      newFormat,
+    );
+  });
+
+  test("stripLegacyUsageHint never fires inside any rendered pool tip", () => {
+    for (const tip of reviewTips) {
+      const rendered = renderReviewTip(tip);
+      expect(stripLegacyUsageHint(rendered)).toBe(rendered);
+    }
   });
 
   test("genuinely different content stays different", () => {
@@ -5078,7 +5105,7 @@ describe("hasRecentBotReply", () => {
 import { Octokit } from "@octokit/rest";
 
 import { stripReviewTips } from "../reviewTip.ts";
-import { stripRunSummaryFooter } from "../runSummaryFooter.ts";
+import { stripLegacyUsageHint, stripRunSummaryFooter } from "../runSummaryFooter.ts";
 
 /** GitHub PR review event type */
 export type ReviewEvent = "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
@@ -5154,13 +5181,16 @@ export function normalizeBody(body: string): string {
 
 /**
  * Canonical dedup key for review-body comparison: strips the run-varying
- * summary footer and any review-tip block, then normalizes whitespace, so
- * two reviews differing only in metrics or a rolled tip compare as
- * identical. Every duplicate-suppression comparison must go through this
- * one composition — a site applying its own subset silently defeats dedup.
+ * summary footer, any review-tip block, and the retired always-on usage hint
+ * still present in pre-hotfix review bodies, then normalizes whitespace — so
+ * two reviews differing only in metrics, a rolled tip, or the legacy hint
+ * compare as identical. Tip blocks are consumed whole (marker-shaped) before
+ * the legacy matcher runs. Every duplicate-suppression comparison must go
+ * through this one composition — a site applying its own subset silently
+ * defeats dedup.
  */
 export function reviewDedupKey(body: string): string {
-  return normalizeBody(stripRunSummaryFooter(stripReviewTips(body)));
+  return normalizeBody(stripLegacyUsageHint(stripRunSummaryFooter(stripReviewTips(body))));
 }
 
 /** Minimal shape of a submitted review needed for dedup comparison. */
@@ -7979,21 +8009,22 @@ const runSummary = JSON.stringify({
 
 describe("buildSkipCommentBody", () => {
   test("renders links, reason blockquotes, and the run-summary footer", () => {
-    const body = buildSkipCommentBody("octocat", failed, reasonsOutput, runSummary, "review-bot");
+    const body = buildSkipCommentBody("octocat", failed, reasonsOutput, runSummary);
     expect(body).toContain("- [Auto label](https://gh.example/runs/1)\n  > Lint failed.");
     expect(body).toContain("<!-- run-summary-start -->");
     expect(body).toContain("Review run summary 🤖");
+    expect(body).not.toContain("[!TIP]");
   });
 
   test("links only and no footer when there are no reasons (fail-open)", () => {
-    const body = buildSkipCommentBody("octocat", failed, "", "", "review-bot");
+    const body = buildSkipCommentBody("octocat", failed, "", "");
     expect(body).toContain("- [Auto label](https://gh.example/runs/1)");
     expect(body).not.toContain("  > ");
     expect(body).not.toContain("<!-- run-summary-start -->");
   });
 
   test("reasons without a summary yield blockquotes but no footer", () => {
-    const body = buildSkipCommentBody("octocat", failed, reasonsOutput, "", "review-bot");
+    const body = buildSkipCommentBody("octocat", failed, reasonsOutput, "");
     expect(body).toContain("  > Lint failed.");
     expect(body).not.toContain("<!-- run-summary-start -->");
   });
@@ -8094,7 +8125,6 @@ try {
       failed,
       process.env.STRUCTURED_OUTPUT,
       process.env.RUN_SUMMARY,
-      reviewer,
     );
     await postSkipComment(octokit, owner, repoName, pullNumber, reviewer, body);
   }
@@ -8605,11 +8635,13 @@ describe("stripReviewTips", () => {
 
 describe("composition with the run-summary footer", () => {
   const body = "review with findings";
-  const footer = renderRunSummaryFooter(summary, "review-bot");
+  const footer = renderRunSummaryFooter(summary);
   const composed = body + renderReviewTip(firstTip) + footer;
 
-  test("tip renders between the body and the footer's usage hint", () => {
-    expect(composed.indexOf("<!-- review-tip-start:")).toBeLessThan(composed.indexOf("> [!TIP]\n> `@review-bot"));
+  test("tip renders between the body and the footer's metrics block", () => {
+    expect(composed.indexOf("<!-- review-tip-start:")).toBeLessThan(
+      composed.indexOf("<!-- run-summary-start -->"),
+    );
   });
 
   test("stripping tip and footer commutes and recovers the body", () => {
@@ -8642,7 +8674,7 @@ describe("composition with the run-summary footer", () => {
  * const shown = extractShownTipIds(await listBotReviewBodies(octokit, ...));
  * const tip = selectReviewTip(Math.random(), shown);
  * const body = tip ? review + renderReviewTip(tip) : review;
- * // dedup: normalizeBody(stripRunSummaryFooter(stripReviewTips(body)))
+ * // dedup: normalizeBody(stripLegacyUsageHint(stripRunSummaryFooter(stripReviewTips(body))))
  */
 
 /** One entry of the review-tip pool. */
@@ -8711,6 +8743,10 @@ export const reviewTips: readonly ReviewTip[] = [
   {
     id: "todo-cleanup",
     text: "Run [/autopilot:todo-cleanup](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/todo-cleanup/SKILL.md) to file tracking issues for `TODO`/`FIXME` comments and link them in place.",
+  },
+  {
+    id: "ask-reviewer",
+    text: "Ask the reviewer anything: comment `@<bot username> <question>` (the username on this review). Replies inside its threads don't need the mention.",
   },
 ];
 
@@ -10032,7 +10068,8 @@ if (import.meta.main) {
 /**
  * Tests for runSummaryFooter.ts.
  * Covers RUN_SUMMARY parsing (fail-open), footer rendering (number formatting,
- * markers), and footer stripping (round-trip, missing markers).
+ * markers), footer stripping (round-trip, missing markers), and the legacy
+ * usage-hint strip (both historical rendered shapes).
  */
 import { describe, expect, test } from "bun:test";
 
@@ -10042,6 +10079,7 @@ import {
   isCleanApproval,
   parseRunSummary,
   renderRunSummaryFooter,
+  stripLegacyUsageHint,
   stripRunSummaryFooter,
   type RunSummary,
 } from "./runSummaryFooter.ts";
@@ -10058,8 +10096,6 @@ const coreSummary: RunSummary = {
   num_turns: 3,
   tool_round_trips: 10,
 };
-
-const reviewer = "review-bot";
 
 describe("parseRunSummary", () => {
   test("returns undefined for empty or undefined input", () => {
@@ -10096,36 +10132,26 @@ describe("parseRunSummary", () => {
 
 describe("renderRunSummaryFooter", () => {
   test("wraps the block in the strip markers and a horizontal rule", () => {
-    const footer = renderRunSummaryFooter(coreSummary, reviewer);
+    const footer = renderRunSummaryFooter(coreSummary);
     expect(footer).toContain("<!-- run-summary-start -->");
     expect(footer).toContain("<!-- run-summary-end -->");
     expect(footer).toContain("\n---\n");
     expect(footer).toContain("<summary>Review run summary 🤖</summary>");
   });
 
-  test("includes the @reviewer usage hint as a visible TIP alert before the strip markers", () => {
-    const footer = renderRunSummaryFooter(coreSummary, reviewer);
-    expect(footer).toContain("> [!TIP]");
-    expect(footer).toContain(`> \`@${reviewer} <comment>\``);
-    expect(footer.indexOf(`@${reviewer} <comment>`)).toBeLessThan(
-      footer.indexOf("<!-- run-summary-start -->"),
-    );
-  });
-
-  test("omits the usage-hint TIP but keeps the metrics block when includeUsageHint is false", () => {
-    const footer = renderRunSummaryFooter(coreSummary, reviewer, false);
-    expect(footer).not.toContain("> [!TIP]");
-    expect(footer).not.toContain(`@${reviewer} <comment>`);
-    expect(footer).toContain("<!-- run-summary-start -->");
-    expect(footer).toContain("<summary>Review run summary 🤖</summary>");
+  test("renders no TIP alert and nothing outside the strip markers", () => {
+    const footer = renderRunSummaryFooter(coreSummary);
+    expect(footer).not.toContain("[!TIP]");
+    expect(footer.startsWith("\n\n<!-- run-summary-start -->")).toBe(true);
+    expect(footer.endsWith("<!-- run-summary-end -->")).toBe(true);
   });
 
   test("keeps the blank line after <br /> so the table renders inside <details>", () => {
-    expect(renderRunSummaryFooter(coreSummary, reviewer)).toContain("<br />\n\n| Metric | Value |");
+    expect(renderRunSummaryFooter(coreSummary)).toContain("<br />\n\n| Metric | Value |");
   });
 
   test("embeds the machine-readable data comment inside the strip markers", () => {
-    const footer = renderRunSummaryFooter(coreSummary, reviewer);
+    const footer = renderRunSummaryFooter(coreSummary);
     expect(footer).toContain('<!-- run-summary-data: {"mode":"review"');
     expect(footer).toContain('"costUsd":0.35');
     expect(footer).toContain('"modelMs":34000');
@@ -10137,7 +10163,7 @@ describe("renderRunSummaryFooter", () => {
   });
 
   test("formats durations as seconds and cost as USD", () => {
-    const footer = renderRunSummaryFooter(coreSummary, reviewer);
+    const footer = renderRunSummaryFooter(coreSummary);
     expect(footer).toContain("| Model | claude-sonnet-4-6 |");
     expect(footer).toContain("| Model time | 34.0s |");
     expect(footer).toContain("| Cost (USD) | $0.35 |");
@@ -10146,7 +10172,7 @@ describe("renderRunSummaryFooter", () => {
   });
 
   test("renders no fan-out rows (single-pass review)", () => {
-    const footer = renderRunSummaryFooter(coreSummary, reviewer);
+    const footer = renderRunSummaryFooter(coreSummary);
     expect(footer).not.toContain("Fan-out time");
     expect(footer).not.toContain("Agents");
     expect(footer).not.toContain("Parallel speedup");
@@ -10164,24 +10190,38 @@ describe("stripRunSummaryFooter", () => {
     expect(stripRunSummaryFooter(body)).toBe(body);
   });
 
-  test("strips the marker-bounded metrics but keeps the visible usage hint", () => {
+  test("strips the marker-bounded footer entirely, recovering the body", () => {
     const reviewComment = "### Review\n\nLGTM";
-    const stripped = stripRunSummaryFooter(
-      reviewComment + renderRunSummaryFooter(coreSummary, reviewer),
-    );
-    expect(stripped).toContain(reviewComment);
-    expect(stripped).toContain(`@${reviewer} <comment>`);
-    expect(stripped).not.toContain("Review run summary");
-    expect(stripped).not.toContain("<!-- run-summary-start -->");
+    const stripped = stripRunSummaryFooter(reviewComment + renderRunSummaryFooter(coreSummary));
+    expect(stripped).toBe(reviewComment);
   });
 
   test("two bodies with different metrics strip to the same content", () => {
     const reviewComment = "### Review\n\nLGTM";
-    const first = reviewComment + renderRunSummaryFooter(coreSummary, reviewer);
+    const first = reviewComment + renderRunSummaryFooter(coreSummary);
     const second =
-      reviewComment +
-      renderRunSummaryFooter({ ...coreSummary, cost_usd: 0.99, model_ms: 1 }, reviewer);
+      reviewComment + renderRunSummaryFooter({ ...coreSummary, cost_usd: 0.99, model_ms: 1 });
     expect(stripRunSummaryFooter(first)).toBe(stripRunSummaryFooter(second));
+  });
+});
+
+describe("stripLegacyUsageHint", () => {
+  const sentence =
+    "— Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.";
+
+  test("strips the retired TIP-alert shape for any login", () => {
+    const body = `### Review\n\nLGTM\n\n> [!TIP]\n> \`@review-bot <comment>\` ${sentence}`;
+    expect(stripLegacyUsageHint(body).trimEnd()).toBe("### Review\n\nLGTM");
+  });
+
+  test("strips the older 💡 blockquote shape", () => {
+    const body = `### Review\n\nLGTM\n\n> 💡 \`@old-bot <comment>\` ${sentence}`;
+    expect(stripLegacyUsageHint(body).trimEnd()).toBe("### Review\n\nLGTM");
+  });
+
+  test("passes hint-free bodies through unchanged, including other TIP alerts", () => {
+    const body = "plain review body\n\n> [!TIP]\n> Some other tip.";
+    expect(stripLegacyUsageHint(body)).toBe(body);
   });
 });
 
@@ -10201,7 +10241,7 @@ describe("isCleanApproval", () => {
 });
 
 describe("buildReviewBody", () => {
-  const footer = renderRunSummaryFooter(coreSummary, reviewer);
+  const footer = renderRunSummaryFooter(coreSummary);
 
   test("substitutes the clean-approval line for an empty body with no inline comments", () => {
     expect(buildReviewBody("", footer, false)).toBe(cleanApprovalBody + footer);
@@ -10250,9 +10290,9 @@ describe("buildReviewBody", () => {
  *
  * @example
  * const summary = parseRunSummary(process.env.RUN_SUMMARY);
- * const footer = summary ? renderRunSummaryFooter(summary, reviewer) : "";
+ * const footer = summary ? renderRunSummaryFooter(summary) : "";
  * const body = buildReviewBody(reviewComment, footer, inlineComments.length > 0);
- * // dedup: normalizeBody(stripRunSummaryFooter(body))
+ * // dedup: normalizeBody(stripLegacyUsageHint(stripRunSummaryFooter(stripReviewTips(body))))
  */
 import { z } from "zod";
 
@@ -10352,32 +10392,19 @@ function renderDataComment(summary: RunSummary): string {
 }
 
 /**
- * Render the run-summary footer: an optional visible `@<reviewer>` usage hint
- * followed by the marker-wrapped, collapsible metrics block (built from the
- * shared {@link buildMarkedDetailsBlock} helper).
- *
- * The hint is stable text and sits *outside* the strip markers so it survives
- * {@link stripRunSummaryFooter} and stays in the comment after dedup; only the
- * run-varying metrics are marker-bounded — including the machine-readable
- * {@link renderDataComment} block appended after the table. The two leading
- * blank lines separate the footer from the preceding review body.
- *
- * `includeUsageHint` defaults to `true`; pass `false` to drop the TIP for a
- * clean approval (`✅ No issues found.`), where prompting the reader to ask the
- * bot a question adds noise to a no-issues result. The metrics block always
- * renders.
+ * Render the run-summary footer: the marker-wrapped, collapsible metrics block
+ * (built from the shared {@link buildMarkedDetailsBlock} helper). Everything in
+ * the footer is run-varying and marker-bounded — including the machine-readable
+ * {@link renderDataComment} block appended after the table — so {@link
+ * stripRunSummaryFooter} removes it whole. The occasional usage tip is not
+ * rendered here: it comes from the rotating `reviewTip.ts` pool, appended by
+ * the caller. The two leading blank lines separate the footer from the
+ * preceding review body.
  */
-export function renderRunSummaryFooter(
-  summary: RunSummary,
-  reviewer: string,
-  includeUsageHint = true,
-): string {
-  const usageHint = `> [!TIP]\n> \`@${reviewer} <comment>\` — Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.`;
-
+export function renderRunSummaryFooter(summary: RunSummary): string {
   return [
     "",
     "",
-    ...(includeUsageHint ? [usageHint, ""] : []),
     buildMarkedDetailsBlock({
       startMarker: footerStartMarker,
       endMarker: footerEndMarker,
@@ -10400,8 +10427,7 @@ export const cleanApprovalBody = "✅ No issues found.";
  * A clean approval — an empty review body with no inline comments. The single
  * source of truth for the no-issues case: it drives both the
  * {@link cleanApprovalBody} substitution in {@link buildReviewBody} and the
- * caller's decision to drop the footer's usage-hint TIP (via
- * `renderRunSummaryFooter`'s `includeUsageHint`).
+ * caller's decision to skip the random review tip.
  */
 export function isCleanApproval(reviewBody: string, hasInlineComments: boolean): boolean {
   return reviewBody.trim() === "" && !hasInlineComments;
@@ -10438,6 +10464,27 @@ export function stripRunSummaryFooter(body: string): string {
   if (end === -1) return body;
 
   return (body.slice(0, start) + body.slice(end + footerEndMarker.length)).trimEnd();
+}
+
+/**
+ * Every rendered shape of the retired always-on usage hint: one frozen sentence
+ * that shipped first as a `> 💡 …` blockquote and later as a two-line `> [!TIP]`
+ * alert, with the bot login (`@\S+`) varying per consumer. Keyed on the sentence
+ * rather than one byte-exact era so every historical rendering matches.
+ */
+const legacyUsageHintPattern =
+  /(?:> \[!TIP\]\n)?> (?:💡 )?`@\S+ <comment>` — Ask the AI reviewer a question or request changes\. Replies inside a review thread the bot already opened don't need the mention\.\n?/g;
+
+/**
+ * Remove the retired always-on usage hint from a review body. The hint sat
+ * outside the footer's strip markers, so every pre-hotfix review body on GitHub
+ * carries it forever — this strip is permanent compat, not a transition shim:
+ * without it `reviewDedupKey` could never match a historical body again and
+ * duplicate suppression would re-post an otherwise-identical review once per
+ * PR. Leftover blank lines are collapsed later by `normalizeBody`.
+ */
+export function stripLegacyUsageHint(body: string): string {
+  return body.replaceAll(legacyUsageHintPattern, "");
 }
 </file>
 
@@ -10629,7 +10676,7 @@ describe("fetchFailureContext", () => {
  * @example
  * const context = await fetchFailureContext(octokit, owner, repo, failed);
  * const prompt = buildExplainPrompt(failed, context); // → runClaude (structured_output)
- * const body = buildSkipCommentBody(author, failed, structuredOutput, runSummary, reviewer);
+ * const body = buildSkipCommentBody(author, failed, structuredOutput, runSummary);
  * await postSkipComment(octokit, owner, repo, prNumber, reviewer, body);
  */
 import type { FailedCheck } from "@code-assistants/actions-core/checkStatus";
@@ -10841,19 +10888,19 @@ export function buildSkipCommentBody(
   failed: FailedCheck[],
   structuredOutput: string | undefined,
   runSummary: string | undefined,
-  reviewer: string,
 ): string {
   const reasons = allowlistReasons(structuredOutput, failed);
   const summary = parseRunSummary(runSummary);
   const footer =
-    Object.keys(reasons).length > 0 && summary ? renderRunSummaryFooter(summary, reviewer) : "";
+    Object.keys(reasons).length > 0 && summary ? renderRunSummaryFooter(summary) : "";
   return buildFailureComment(author, failed, reasons) + footer;
 }
 
 /**
- * Strip the AI reason blockquote lines (and the footer's usage hint, also a
- * blockquote) so dedup compares only the stable skeleton — the framing plus the
- * `- [name](url)` links, which are deterministic for a given failed-check set.
+ * Strip the AI reason blockquote lines (and, in pre-hotfix comments, the
+ * retired footer usage hint — also a blockquote) so dedup compares only the
+ * stable skeleton — the framing plus the `- [name](url)` links, which are
+ * deterministic for a given failed-check set.
  */
 export function stripFailureReasons(body: string): string {
   return body
@@ -11062,11 +11109,11 @@ const invalidComments = anchored
 // Fail-open: no footer when RUN_SUMMARY is absent or invalid.
 const reviewBody = output.reviewComment + formatInvalidComments(invalidComments);
 const runSummary = parseRunSummary(process.env.RUN_SUMMARY);
-// Drop the footer's usage-hint TIP and the random review tip on a clean approval —
-// the "No issues found" line shouldn't be padded with extra prompts.
+// Skip the random review tip on a clean approval — the "No issues found" line
+// shouldn't be padded with extra prompts. The footer renders either way.
 const hasInlineComments = validComments.length > 0;
 const cleanApproval = isCleanApproval(reviewBody, hasInlineComments);
-const footer = runSummary ? renderRunSummaryFooter(runSummary, reviewer, !cleanApproval) : "";
+const footer = runSummary ? renderRunSummaryFooter(runSummary) : "";
 
 // Roll the rare review tip, excluding tips this PR already saw (their hidden markers
 // in prior bot reviews). Fail-open: a listing failure posts the review untipped.
@@ -14397,7 +14444,7 @@ const summary: RunSummary = {
 
 describe("run-summary writer ↔ parser contract", () => {
   test("parseFooterMetrics recovers what renderRunSummaryFooter wrote", () => {
-    const body = `### Review\n\nLGTM${renderRunSummaryFooter(summary, "review-bot")}`;
+    const body = `### Review\n\nLGTM${renderRunSummaryFooter(summary)}`;
     expect(parseFooterMetrics(body)).toEqual({
       mode: "review",
       modelMs: 34000,
@@ -14415,7 +14462,7 @@ describe("run-summary writer ↔ parser contract", () => {
     // Simulate a future restyle: <sub>-wrap every rendered table cell (the
     // historical drift). The data comment carries no pipes, so it is untouched
     // and the monitor still recovers the metrics.
-    const restyled = renderRunSummaryFooter(summary, "review-bot").replace(
+    const restyled = renderRunSummaryFooter(summary).replace(
       /\| ([^|]+) \| ([^|]+) \|/g,
       "| <sub>$1</sub> | <sub>$2</sub> |",
     );
@@ -50200,12 +50247,11 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 
 ## Rendered footer
 
-`renderRunSummaryFooter` emits a visible `@<reviewer>` usage hint followed by the collapsible metrics block. The hint is stable text and sits **outside** the strip markers so it survives dedup stripping and stays in the comment; only the run-varying metrics are marker-bounded. Inside the block, the start marker sits directly above the `---` rule, and a blank line after `<br />` lets the GitHub-flavored markdown table render inside `<details>`. Below the table — still inside the strip markers — the footer embeds the metrics a second time as a machine-readable JSON comment; that comment, not the table, is what the cost monitor parses (see below).
+`renderRunSummaryFooter` emits the collapsible metrics block alone — everything it renders is marker-bounded. Inside the block, the start marker sits directly above the `---` rule, and a blank line after `<br />` lets the GitHub-flavored markdown table render inside `<details>`. Below the table — still inside the strip markers — the footer embeds the metrics a second time as a machine-readable JSON comment; that comment, not the table, is what the cost monitor parses (see below).
+
+Reviews posted before the footer went TIP-free carry a now-retired always-on usage hint (`` `@<reviewer> <comment>` — Ask the AI reviewer… ``) above the markers. `reviewDedupKey` strips that legacy hint — in both of its historical renderings, the early `> 💡` blockquote and the later `> [!TIP]` alert — so those bodies keep comparing equal to their new-format re-renders forever. The hint's content lives on in the [random review tip](#random-review-tip) pool as the `ask-reviewer` entry.
 
 ```text
-> [!TIP]
-> `@review-bot <comment>` — Ask the AI reviewer a question or request changes. Replies inside a review thread the bot already opened don't need the mention.
-
 <!-- run-summary-start -->
 ---
 <details>
@@ -50235,7 +50281,7 @@ The metrics are computed in one process (`runClaude.ts`) and rendered in another
 
 ## Clean approvals
 
-The pr:review skill returns an empty `reviewComment` for an approval with no findings — by contract no review prose is written, the APPROVE event speaks for itself. Posting a comment that is _only_ the stats footer reads as an empty (or broken) review and is indistinguishable from a genuine content-free-approval failure, so `submitReview.ts` builds the body through `buildReviewBody`: when the review body is empty and there are no inline comments, it substitutes a minimal `✅ No issues found.` line before appending the footer. The shared `isCleanApproval` predicate detects this case, and `submitReview.ts` also passes `includeUsageHint: false` to `renderRunSummaryFooter` for it — the `> [!TIP]` usage hint is dropped so a no-issues result isn't padded with a prompt to ask the bot a question; only the metrics block remains. Reviews that carry findings (and the preflight skip comment below) keep the TIP. The dedup and consecutive-approval guards still compare the raw (empty) `reviewComment`, so repeat clean approvals are skipped rather than re-posted.
+The pr:review skill returns an empty `reviewComment` for an approval with no findings — by contract no review prose is written, the APPROVE event speaks for itself. Posting a comment that is _only_ the stats footer reads as an empty (or broken) review and is indistinguishable from a genuine content-free-approval failure, so `submitReview.ts` builds the body through `buildReviewBody`: when the review body is empty and there are no inline comments, it substitutes a minimal `✅ No issues found.` line before appending the footer. The shared `isCleanApproval` predicate detects this case and also keeps the [random review tip](#random-review-tip) off clean approvals, so a no-issues result is never padded with prompts. The dedup and consecutive-approval guards still compare the raw (empty) `reviewComment`, so repeat clean approvals are skipped rather than re-posted.
 
 ## Random review tip
 
@@ -50272,8 +50318,8 @@ On roughly 5% of review submissions the comment carries one extra `> [!TIP]` ale
 Three contracts keep the tip safe:
 
 - **Never repeated within a PR.** Each rendered tip embeds its id in a hidden marker (`<!-- review-tip-start: <id> -->` … `<!-- review-tip-end -->`). Before rolling, `submitReview.ts` lists the bot's prior reviews — `listBotReviewBodies` paginates past the 30-per-page default — and excludes every id already present; an exhausted pool shows nothing. Extraction and stripping match the full rendered block shape, not bare markers, so a marker quoted inside a review's code fence cannot corrupt the shown-id set or the dedup key.
-- **Dedup-immune.** Every duplicate-suppression comparison goes through `reviewDedupKey` (strip tip blocks, strip the footer, normalize), so a rolled tip never makes two otherwise-identical reviews look different — and never re-posts one. The consecutive-approval guard compares the model's raw `reviewComment`, which never contains a tip.
-- **Fail-open, quiet on clean approvals.** A clean approval (`✅ No issues found.`) stays tip-free, matching the usage-hint suppression above. A failure listing prior reviews logs `Skipping review tip (fail-open): …` and posts the review untipped; a selected tip logs `Review tip selected: <id>` for auditability.
+- **Dedup-immune.** Every duplicate-suppression comparison goes through `reviewDedupKey` (strip tip blocks, strip the footer, strip the legacy usage hint still present in pre-hotfix bodies, normalize), so a rolled tip never makes two otherwise-identical reviews look different — and never re-posts one. The consecutive-approval guard compares the model's raw `reviewComment`, which never contains a tip.
+- **Fail-open, quiet on clean approvals.** A clean approval (`✅ No issues found.`) stays tip-free — a no-issues result isn't padded with prompts. A failure listing prior reviews logs `Skipping review tip (fail-open): …` and posts the review untipped; a selected tip logs `Review tip selected: <id>` for auditability.
 
 The pool and the ~5% rate are hardcoded — no action input configures them. Consumers tracking the action `@main` receive tips on merge; disabling them means reverting the feature commit upstream. Tip links are absolute URLs into this repository whose paths must exist in-tree, guarded by a `reviewTip.test.ts` case so a docs move cannot silently 404 a shipped tip.
 
@@ -50296,18 +50342,18 @@ Because the reasons derive from untrusted CI annotations, `skipComment.ts` sanit
 
 ## Source map
 
-| File                          | Responsibility                                                                                                                |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `src/runClaude.ts`            | Runs a single Agent-SDK pass (review, react, or `preflight` via `CLAUDE_RUN_MODE`); computes the summary; emits `run_summary` |
-| `src/runSummaryFooter.ts`     | `runSummarySchema`, `parseRunSummary`, `renderRunSummaryFooter`, `stripRunSummaryFooter`, `buildReviewBody`                   |
-| `src/submitReview.ts`         | Builds the review body via `buildReviewBody` (clean-approval line + tip + footer); dedups via `reviewDedupKey`                |
-| `src/reviewTip.ts`            | Tip pool + `tipProbability`; pure select/render, marker-shaped extraction and stripping of the tip block                      |
-| `src/github/githubReview.ts`  | `listBotReviewBodies` (paginated prior bot reviews for the no-repeat guard); `reviewDedupKey` — the one dedup composition     |
-| `src/preflightChecks.ts`      | Polls checks; on failure emits the failed checks + explain prompt; posts only the timeout comment inline                      |
-| `src/skipComment.ts`          | Skip-path helpers: fetch annotations, build the explain prompt, allowlist + sanitize reasons, render the comment, post/dedup  |
-| `src/preflightSkipComment.ts` | Post step: assembles the failed-checks comment from the explain step's reasons + run summary and posts it (fail-open)         |
-| `actions-core/checkStatus.ts` | `fetchCheckStatuses` carries each failed check's `{ name, url, checkRunId }` so the skip comment links logs                   |
-| `action.yml`                  | Wires `run_summary` into Submit Review; runs the `explain` (`runClaude`) + `post` skip steps with the `model` input           |
+| File                          | Responsibility                                                                                                                      |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `src/runClaude.ts`            | Runs a single Agent-SDK pass (review, react, or `preflight` via `CLAUDE_RUN_MODE`); computes the summary; emits `run_summary`       |
+| `src/runSummaryFooter.ts`     | `runSummarySchema`, `parseRunSummary`, `renderRunSummaryFooter`, `stripRunSummaryFooter`, `stripLegacyUsageHint`, `buildReviewBody` |
+| `src/submitReview.ts`         | Builds the review body via `buildReviewBody` (clean-approval line + tip + footer); dedups via `reviewDedupKey`                      |
+| `src/reviewTip.ts`            | Tip pool + `tipProbability`; pure select/render, marker-shaped extraction and stripping of the tip block                            |
+| `src/github/githubReview.ts`  | `listBotReviewBodies` (paginated prior bot reviews for the no-repeat guard); `reviewDedupKey` — the one dedup composition           |
+| `src/preflightChecks.ts`      | Polls checks; on failure emits the failed checks + explain prompt; posts only the timeout comment inline                            |
+| `src/skipComment.ts`          | Skip-path helpers: fetch annotations, build the explain prompt, allowlist + sanitize reasons, render the comment, post/dedup        |
+| `src/preflightSkipComment.ts` | Post step: assembles the failed-checks comment from the explain step's reasons + run summary and posts it (fail-open)               |
+| `actions-core/checkStatus.ts` | `fetchCheckStatuses` carries each failed check's `{ name, url, checkRunId }` so the skip comment links logs                         |
+| `action.yml`                  | Wires `run_summary` into Submit Review; runs the `explain` (`runClaude`) + `post` skip steps with the `model` input                 |
 </file>
 
 <file path="docs/04-code-review-suggestions.md">
