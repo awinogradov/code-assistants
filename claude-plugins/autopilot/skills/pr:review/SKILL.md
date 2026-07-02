@@ -740,14 +740,14 @@ A `docs/*.md` file exceeds ~5000 characters or documents more than one area. Spl
 <a id="CHECK-DOC-005"></a>
 **CHECK-DOC-005: Diff contradicts a documented project convention** — Severity: suggestion
 
-A change violates a convention documented in the repository's `docs/*` or README — the [§1.5](#15-context-map) Applicable standards map lists the conventions in play. Docs are unversioned prose, so this is capped at suggestion; a convention that must block belongs in an Accepted RFC. Quote the contradicted sentence verbatim (≤2 lines) in the finding detail and cite the doc section as a link built from the [§1.1](#11-pr-context) `headRefOid`.
+A change violates a convention documented in the repository's `docs/*` or README — the [§1.5](#15-context-map) Applicable standards map lists the conventions in play. Docs are unversioned prose, so this is capped at suggestion; a convention that must block belongs in an Accepted RFC. Quote the contradicted sentence verbatim (≤2 lines) in the finding detail and cite the doc section as a `<pr-blob-url>` link (defined in [reviewComment Format](#reviewcomment-format-30-lines-max)).
 
 - Example: a `docs/*.md` API chapter prescribes cursor pagination and the diff adds an offset-paginated endpoint.
 - Skip: the doc describes current behavior the diff intentionally changes AND the same PR updates that doc.
 
 #### Repository Standards (RFCs)
 
-Applies to repositories carrying an `rfc/` folder ([§1.4](#14-project-context-read-before-reviewing) builds the inventory). Skip CHECK-RFC-001/002 when the [§1.5](#15-context-map) Applicable standards map is "none"; CHECK-RFC-003/004 apply whenever the diff touches `rfc/` files. When a violation also matches a generic check above, report that check once and cite the RFC in its detail — do not double-report. Every CHECK-RFC-001/002 finding must quote the violated clause verbatim (≤2 lines) from the standard in its detail — a finding that only paraphrases the rule is not reportable — and cite the standard by its stable ID as a link built from the [§1.1](#11-pr-context) `headRefOid` (e.g. `[RFC-0003](https://github.com/<REPO>/blob/<headRefOid>/rfc/0003-service-logging-standard.md)`).
+Applies to repositories carrying an `rfc/` folder ([§1.4](#14-project-context-read-before-reviewing) builds the inventory). Skip CHECK-RFC-001/002 when the [§1.5](#15-context-map) Applicable standards map is "none"; CHECK-RFC-003/004 apply whenever the diff touches `rfc/` files. When a violation also matches a generic check above, report that check once and cite the RFC in its detail — do not double-report. Every CHECK-RFC-001/002 finding must quote the violated clause verbatim (≤2 lines) from the standard in its detail — a finding that only paraphrases the rule is not reportable — and cite the standard by its stable ID as a `<pr-blob-url>` link (e.g. `[RFC-0003](<pr-blob-url>/rfc/0003-service-logging-standard.md)`; `<pr-blob-url>` is defined in [reviewComment Format](#reviewcomment-format-30-lines-max)).
 
 <a id="CHECK-RFC-001"></a>
 **CHECK-RFC-001: Diff violates an Accepted repository RFC** — Severity: blocker
@@ -888,6 +888,14 @@ Map `severity` to its emoji when rendering in [Phase 3](#phase-3-submit-review):
 
 **Ticket references:** when the body cites the linked ticket, cite it as a markdown link built from the [§1.2](#12-load-context-via-sub-agents) `resolve-issue-context` `url` (e.g. `[ENG-123](https://linear.app/<workspace>/issue/ENG-123)`) — a bare tracker id GitHub does not auto-link is dead text; fall back to the bare id only when no URL is resolvable. GitHub issue numbers stay bare (`#42` auto-links).
 
+**File and doc links:** define `<pr-blob-url>` = `https://github.com/<REPO>/blob/<headRefOid>` (`headRefOid` from [§1.1](#11-pr-context); valid for fork PRs too — PR head commits stay reachable in the base repo via `refs/pull/N/head`). Percent-encode path characters that break markdown links (spaces → `%20`, parentheses → `%28`/`%29`, `:` → `%3A`). Then:
+
+- **Locations and mentions** — every finding location in the body and every cross-file or out-of-diff file/doc mention (in body prose and inside `inlineComments` bodies) renders as `[<path>:<NN>](<pr-blob-url>/<path>#L<NN>)`; ranges `#L<start>-L<end>`; no known line → drop the fragment.
+- **Only resolvable targets** — link a path from the [§1.1](#11-pr-context) `files` list or one the [§1.2](#12-load-context-via-sub-agents) snapshot / `Glob` / `gh` lookup confirmed; a standard's id resolves to its path via the [§1.4](#14-project-context-read-before-reviewing) standards inventory. An id with no resolved path, or a path with no blob at head (deleted, or a renamed-from old path), is NEVER linked by guess — keep it backticked/bare; a fabricated 404 is worse than no link.
+- **Anchors** — a line cite into a `.md` target inserts `?plain=1` before `#L` so the anchor lands (e.g. `[docs/setup.md:96](<pr-blob-url>/docs/setup.md?plain=1#L96)`); a section cite uses the rendered heading-anchor form `<pr-blob-url>/<path>#<heading-anchor>`, no `?plain=1`; never combine the two.
+- **Inline-comment exception** — an inline comment's own anchored location stays a backticked full path (GitHub anchors it).
+- **Self-check** — before emitting the structured output, scan `reviewComment` and every `inlineComments` body: outside code spans/fences, a backticked or bare file path with a line number, a bare RFC id, or a bare 7–40-char hex token is a violation unless it is one of the two allowed forms above (inline own anchor; unresolvable/no-blob-at-head path) — link paths per these rules and SHAs as `https://github.com/<REPO>/commit/<sha>`.
+
 **Empty vs non-empty `reviewComment`** follows the canonical [Verdict Decision Rules](#verdict-decision-rules): use empty `""` for an approval with no findings (rule 3) — the `verdict` field drives the GitHub event, so no body text is needed; use a non-empty body for any review with findings or a `requestChanges` verdict; and when there is nothing new to report, emit no structured output at all (rule 0).
 
 **If reviewComment is non-empty, use these verdict headers at the END:**
@@ -911,7 +919,7 @@ Map `severity` to its emoji when rendering in [Phase 3](#phase-3-submit-review):
 ```json
 {
   "verdict": "requestChanges",
-  "reviewComment": "Adds retry logic to the payment webhook handler.\n\n### 🚧 Blockers\n\n1. **Missing idempotency check** - `src/webhooks/payment.ts:45` - Retries can cause duplicate charges [CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002)\n\n### ⛔ Request Changes\n\nAdd idempotency key validation before processing payment.",
+  "reviewComment": "Adds retry logic to the payment webhook handler.\n\n### 🚧 Blockers\n\n1. **Missing idempotency check** - [src/webhooks/payment.ts:45](<pr-blob-url>/src/webhooks/payment.ts#L45) - Retries can cause duplicate charges [CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002)\n\n### ⛔ Request Changes\n\nAdd idempotency key validation before processing payment.",
   "inlineComments": [
     {
       "path": "src/webhooks/payment.ts",
@@ -927,7 +935,7 @@ Map `severity` to its emoji when rendering in [Phase 3](#phase-3-submit-review):
 ```json
 {
   "verdict": "approve",
-  "reviewComment": "Adds retry logic to the payment webhook handler.\n\n### 🙋‍♂️ Suggestions\n\n- `src/webhooks/payment.ts:62` - Consider exponential backoff for retries [CHECK-ARCH-002](<RULES_DOC_URL>#CHECK-ARCH-002)\n\n### 👍 Approve",
+  "reviewComment": "Adds retry logic to the payment webhook handler.\n\n### 🙋‍♂️ Suggestions\n\n- [src/webhooks/payment.ts:62](<pr-blob-url>/src/webhooks/payment.ts#L62) - Consider exponential backoff for retries [CHECK-ARCH-002](<RULES_DOC_URL>#CHECK-ARCH-002)\n- [docs/webhooks.md:12](<pr-blob-url>/docs/webhooks.md?plain=1#L12) - Retry policy chapter still documents single-attempt delivery [CHECK-DOC-001](<RULES_DOC_URL>#CHECK-DOC-001)\n\n### 👍 Approve",
   "inlineComments": [
     {
       "path": "src/webhooks/payment.ts",
@@ -947,15 +955,15 @@ Every blocker, suggestion, and nitpick line ends with the rule code rendered per
 
 ### 🚧 Blockers
 
-1. **[Title]** - `src/path/to/file.ts:NN` - [Problem in 1 line] [CHECK-BUG-XXX](<RULES_DOC_URL>#CHECK-BUG-XXX)
+1. **[Title]** - [src/path/to/file.ts:NN](<pr-blob-url>/src/path/to/file.ts#LNN) - [Problem in 1 line] [CHECK-BUG-XXX](<RULES_DOC_URL>#CHECK-BUG-XXX)
 
 ### 🙋‍♂️ Suggestions
 
-- `src/path/to/file.ts:NN` - [Recommendation in 1 line] [CHECK-AI-XXX](<RULES_DOC_URL>#CHECK-AI-XXX)
+- [src/path/to/file.ts:NN](<pr-blob-url>/src/path/to/file.ts#LNN) - [Recommendation in 1 line] [CHECK-AI-XXX](<RULES_DOC_URL>#CHECK-AI-XXX)
 
 ### 💡 Nitpicks
 
-- `src/path/to/file.ts:NN` - [Optional fix in 1 line] [CHECK-CPLX-XXX](<RULES_DOC_URL>#CHECK-CPLX-XXX)
+- [src/path/to/file.ts:NN](<pr-blob-url>/src/path/to/file.ts#LNN) - [Optional fix in 1 line] [CHECK-CPLX-XXX](<RULES_DOC_URL>#CHECK-CPLX-XXX)
 
 ### ⛔ Request Changes / ### 👍 Approve
 
@@ -989,11 +997,11 @@ Add an optional `suggestion` to an inline comment when the fix is concrete and m
 
 ### Include
 
-- ALWAYS full paths for all file references (e.g., `src/services/payment/processor.ts:66`, NOT `processor.ts:66`)
+- ALWAYS full paths for all file references, rendered per **File and doc links** (e.g. `[src/services/payment/processor.ts:66](<pr-blob-url>/src/services/payment/processor.ts#L66)`, NOT `processor.ts:66`)
 - Direct, confident language
 - Clear verdict (rationale only when requesting changes)
 - Rule code rendered per [§2.5](#25-rule-codes) (`[<CODE>](<RULES_DOC_URL>#<CODE>)`, or merged `[[<CODE1>](<RULES_DOC_URL>#<CODE1>), [<CODE2>](<RULES_DOC_URL>#<CODE2>)]` for a shared location) on every finding line (blocker, suggestion, nitpick) and every `inlineComments.body`; omit the suffix entirely when no rule code is available
-- File, section, doc, commit, and issue references follow the Reference formatting & readability rules at the end of this skill. Exception: an inline comment is already anchored to its file and line by GitHub, so keep its location as a backticked full path (e.g. `src/services/payment/processor.ts:66`); apply the linking rules to the review-body prose and any out-of-diff reference
+- File, section, doc, commit, and issue references follow the reference-formatting rules inlined at the end of this skill — build the links per **File and doc links** above. Exception: an inline comment is already anchored to its file and line by GitHub, so keep its location as a backticked full path (e.g. `src/services/payment/processor.ts:66`); apply the linking rules to the review-body prose and to any cross-file or out-of-diff reference inside inline bodies
 
 ### Exclude
 
