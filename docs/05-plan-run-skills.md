@@ -227,7 +227,7 @@ Three sub-agents isolate work from the parent's context. Each returns a single s
 
 - **Auto-Commit** — `Skill(autopilot:commits-create)` (auto-selects a single commit and confirms), then `git push`.
 - **Auto-Create PR** — `Skill(autopilot:pr-create)` (auto-selects "Create PR"), then a format check on the result.
-- **Monitor** — `Skill(autopilot:pr-monitor)` polls CI and review status; on changes-requested it runs `pr-resolve` (auto "Address all" / "Post all replies") and loops until approval.
+- **Monitor** — `Skill(autopilot:pr-monitor)` polls CI and review status; on changes-requested it runs `pr-resolve` (auto "Address all"; replies post without prompting) and loops until approval.
 - Direct `gh pr create` / `git commit` are forbidden in autopilot mode — everything routes through the sub-skills so format stays correct.
 
 ## Where to look in the code
