@@ -8,6 +8,7 @@ allowed-tools:
   - Grep
   - Glob
   - MCP(linear:*)
+  - ToolSearch
   - MCP(repomix:*)
   - MCP(context7:*)
   - MCP(Ref:*)
@@ -43,7 +44,11 @@ Expected form:
 
 ## Completion Requirement
 
-This workflow is not complete until [Phase 7](#phase-7-create-issue) calls `mcp__plugin_autopilot_linear__save_issue` and outputs the created issue identifier and URL. Generating a title, body, or wizard selections does not constitute completion.
+This workflow is not complete until [Phase 7](#phase-7-create-issue) calls the Linear MCP `save_issue` tool and outputs the created issue identifier and URL. Generating a title, body, or wizard selections does not constitute completion.
+
+<!-- Canonical Linear MCP access note. The same paragraph in branch:create, issue:run, and todo-cleanup SKILL.md mirrors this one (only the tool list varies) — keep the four in sync. -->
+
+**Linear MCP access:** Linear operations here use the session's connected Linear MCP server, matching tools by name — the suffix after the final `__` (`save_issue`, `list_issue_statuses`, `list_issue_labels`) — under whatever server prefix the session exposes: the bundled `mcp__plugin_autopilot_linear__*` or a user-configured Linear server such as `mcp__linear-server__*` (Claude Code connects one server per endpoint; a user-scope server shadows the bundled one). The prefix must identify a Linear server (a `linear` server name or the `mcp.linear.app` endpoint) — never bind a generic tool name like `get_issue` to a non-Linear MCP. If a tool is not visible, search for it with ToolSearch by bare tool name before concluding it is absent. Only when no Linear MCP tool resolves under any prefix, stop and tell the user: `No Linear MCP available — check /mcp for a disconnected or unauthenticated Linear server, or connect one: claude mcp add --transport http linear https://mcp.linear.app/mcp`.
 
 ## Phase 0: Resolve Team and Hint
 
@@ -79,7 +84,7 @@ Mirror `issue:create` so the body reflects real code, not hallucinated structure
 Fetch the team's workflow states and let the user choose (default to the team's initial state — e.g. `Triage` or `Todo`):
 
 ```
-mcp__plugin_autopilot_linear__list_issue_statuses  with { "team": "<team>" }
+Linear MCP list_issue_statuses  with { "team": "<team>" }
 ```
 
 Present the states via AskUserQuestion (single-select).
@@ -89,7 +94,7 @@ Present the states via AskUserQuestion (single-select).
 Fetch the team's labels; pre-select the `label` from `agents.trackers` (when present):
 
 ```
-mcp__plugin_autopilot_linear__list_issue_labels  with { "team": "<team>" }
+Linear MCP list_issue_labels  with { "team": "<team>" }
 ```
 
 Present via AskUserQuestion (multi-select). Only labels returned by the call may be selected — never invent a label.
@@ -116,7 +121,7 @@ Present the full issue via AskUserQuestion with a `preview` carrying the title, 
 This phase is mandatory. Create the ticket:
 
 ```
-mcp__plugin_autopilot_linear__save_issue  with {
+Linear MCP save_issue  with {
   "title": "<title>",
   "team": "<team>",
   "description": "<five-section body>",

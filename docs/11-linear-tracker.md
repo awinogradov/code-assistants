@@ -80,7 +80,7 @@ Reading an issue never prompts — the id's key prefix already names the team. C
 
 Autopilot reaches Linear two ways:
 
-- **Linear MCP server (interactive).** The plugin ships a `linear` server in [`.mcp.json`](../claude-plugins/autopilot/.mcp.json) (`https://mcp.linear.app/mcp`, OAuth). Interactive sessions call `mcp__plugin_autopilot_linear__*` tools — no secrets to manage.
+- **Linear MCP server (interactive).** The plugin ships a `linear` server in [`.mcp.json`](../claude-plugins/autopilot/.mcp.json) (`https://mcp.linear.app/mcp`, OAuth). Interactive sessions call the connected Linear MCP server's tools — the bundled `mcp__plugin_autopilot_linear__*` prefix, or a user-configured Linear server such as `mcp__linear-server__*`, which shadows the bundled one when it points at the same endpoint (Claude Code connects one server per endpoint) — no secrets to manage.
 - **GraphQL helper (headless/CI).** Where the OAuth flow cannot run, a bundled zero-dependency helper — [`fetch-issue.mjs`](../claude-plugins/autopilot/lib/linear/fetch-issue.mjs) (Node 18+, global `fetch`, no install step) — calls the Linear GraphQL API keyed by `LINEAR_API_KEY` and prints the same JSON contract as the MCP path.
 
 ## The single resolution seam

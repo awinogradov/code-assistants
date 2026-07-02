@@ -14,6 +14,7 @@ allowed-tools:
   - Bash(mypy *)
   - Bash(gh *)
   - MCP(linear:*)
+  - ToolSearch
   - AskUserQuestion
 ---
 
@@ -150,7 +151,11 @@ For each stale TODO:
 
    c. Create the issue:
    - **GitHub:** `gh issue create --title "<title>" --body "<body>"`
-   - **Linear:** `mcp__plugin_autopilot_linear__save_issue` with `{ "title": "<title>", "team": "<team>", "description": "<body>" }` (the `team` resolved in step 1 above)
+   - **Linear:** the Linear MCP `save_issue` tool with `{ "title": "<title>", "team": "<team>", "description": "<body>" }` (the `team` resolved in step 1 above)
+
+     <!-- Canonical: [linear:create SKILL.md](../linear:create/SKILL.md#completion-requirement) Linear MCP access note — keep this paragraph in sync with it (only the tool list varies). -->
+
+     **Linear MCP access:** Linear operations here use the session's connected Linear MCP server, matching tools by name — the suffix after the final `__` (`save_issue`) — under whatever server prefix the session exposes: the bundled `mcp__plugin_autopilot_linear__*` or a user-configured Linear server such as `mcp__linear-server__*` (Claude Code connects one server per endpoint; a user-scope server shadows the bundled one). The prefix must identify a Linear server (a `linear` server name or the `mcp.linear.app` endpoint) — never bind a generic tool name like `get_issue` to a non-Linear MCP. If a tool is not visible, search for it with ToolSearch by bare tool name before concluding it is absent. Only when no Linear MCP tool resolves under any prefix, stop and tell the user — never silently skip ticket creation: `No Linear MCP available — check /mcp for a disconnected or unauthenticated Linear server, or connect one: claude mcp add --transport http linear https://mcp.linear.app/mcp`.
 
    d. Capture the created issue's URL (GitHub prints it on the last line; for Linear use the returned ticket URL).
 

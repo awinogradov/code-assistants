@@ -7,6 +7,7 @@ allowed-tools:
   - Read
   - Bash(gh *)
   - MCP(linear:*)
+  - ToolSearch
   - AskUserQuestion
   - Skill(autopilot:preflight-check)
 ---
@@ -74,7 +75,11 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
 
 **Skip this phase entirely for special prefix flag branches (--hotfix, --trivial, --maintenance, --proposal, --security).**
 
-**If `provider` is `linear`:** fetch the ticket via `mcp__plugin_autopilot_linear__get_issue` with `{ "id": "<LINEAR-ID>" }` and read its `title` (for the slug) and `state.name`. Skip the GitHub `gh` steps below and do NOT self-assign — Linear assignment is deferred to a later phase; emit `unassigned — Linear assignment deferred`. Then continue to [Phase 3](#phase-3-generate-branch-slug). The steps below apply to **GitHub** issues only.
+**If `provider` is `linear`:** fetch the ticket via the Linear MCP `get_issue` tool with `{ "id": "<LINEAR-ID>" }` and read its `title` (for the slug) and `state.name`; if no Linear MCP tool resolves (see the access note below), stop with its `No Linear MCP available …` message instead of continuing without ticket data. Skip the GitHub `gh` steps below and do NOT self-assign — Linear assignment is deferred to a later phase; emit `unassigned — Linear assignment deferred`. Then continue to [Phase 3](#phase-3-generate-branch-slug). The steps below apply to **GitHub** issues only.
+
+<!-- Canonical: [linear:create SKILL.md](../linear:create/SKILL.md#completion-requirement) Linear MCP access note — keep this paragraph in sync with it (only the tool list varies). -->
+
+**Linear MCP access:** Linear operations here use the session's connected Linear MCP server, matching tools by name — the suffix after the final `__` (`get_issue`, `list_issue_statuses`, `save_issue`) — under whatever server prefix the session exposes: the bundled `mcp__plugin_autopilot_linear__*` or a user-configured Linear server such as `mcp__linear-server__*` (Claude Code connects one server per endpoint; a user-scope server shadows the bundled one). The prefix must identify a Linear server (a `linear` server name or the `mcp.linear.app` endpoint) — never bind a generic tool name like `get_issue` to a non-Linear MCP. If a tool is not visible, search for it with ToolSearch by bare tool name before concluding it is absent. Only when no Linear MCP tool resolves under any prefix, stop and tell the user: `No Linear MCP available — check /mcp for a disconnected or unauthenticated Linear server, or connect one: claude mcp add --transport http linear https://mcp.linear.app/mcp`.
 
 1. **Determine the repository** and bind it to `REPO` so every `gh` call in this phase targets the same repo (important in worktrees and multi-remote checkouts):
 
@@ -266,7 +271,7 @@ Only proceed to [Phase 6](#phase-6-execute) after user selects "Create branch". 
    git push -u origin <branch-name>
    ```
 
-3. **If `provider` is `linear` AND `--start` was passed:** move the ticket to "In Progress" — best-effort, never blocks the branch. Resolve the target state id with `mcp__plugin_autopilot_linear__list_issue_statuses` for the ticket's team, then call `mcp__plugin_autopilot_linear__save_issue` with `{ "id": "<LINEAR-ID>", "state": "<In Progress state>" }`. On success, emit `✓ Ticket <LINEAR-ID> moved to In Progress`; on any failure, emit `issue not started — <reason>` and continue.
+3. **If `provider` is `linear` AND `--start` was passed:** move the ticket to "In Progress" — best-effort, never blocks the branch. Resolve the target state id with the Linear MCP `list_issue_statuses` tool for the ticket's team, then call the Linear MCP `save_issue` tool with `{ "id": "<LINEAR-ID>", "state": "<In Progress state>" }` — tool resolution per the [Phase 2](#phase-2-fetch-github-issue) Linear MCP access note. On success, emit `✓ Ticket <LINEAR-ID> moved to In Progress`; when no Linear MCP tool resolves under any prefix, emit `issue not started — no Linear MCP available (check /mcp or connect one)`; on any other failure, emit `issue not started — <reason>`. Always continue — but the emitted line MUST reach the step 4 output block, never only intermediate text.
 
 4. **Output result:**
 
@@ -280,7 +285,7 @@ Only proceed to [Phase 6](#phase-6-execute) after user selects "Create branch". 
    - Use /autopilot:pr-create when ready
    ```
 
-   When `--start` moved a Linear ticket (step 3 success), add a `✓ Ticket <LINEAR-ID> moved to In Progress` line after the push confirmation.
+   When `--start` was passed for a Linear ticket, add the step 3 outcome line after the push confirmation — `✓ Ticket <LINEAR-ID> moved to In Progress` on success, or the `issue not started — <reason>` line on failure — so a skipped transition is visible in the final output, not just mid-run.
 
 ## Examples
 

@@ -6,6 +6,7 @@ allowed-tools:
   - Bash(gh *)
   - Read
   - MCP(linear:*)
+  - ToolSearch
   - AskUserQuestion
   - Skill(autopilot:run)
 ---
@@ -87,11 +88,15 @@ If `$ARGUMENTS` already supplies an issue identifier (a GitHub number or a Linea
 
 ## Phase 1: Fetch Recent Open Issues
 
-**If the provider is Linear:** first pick the team to browse. With exactly one `linear` tracker, use its `team` (no prompt). With two or more, ask via AskUserQuestion (single-select) — one option per team, `{ label: "<team>", description: "<comma-joined keys, or 'no keys'>" }` — and use the chosen `team`. Then list that team's recent open issues via `mcp__plugin_autopilot_linear__list_issues` (open only, ordered by most-recently-updated; without `--all`, prefer unassigned when the tool exposes an assignee filter). Then mirror the GitHub empty-state handling:
+**If the provider is Linear:** first pick the team to browse. With exactly one `linear` tracker, use its `team` (no prompt). With two or more, ask via AskUserQuestion (single-select) — one option per team, `{ label: "<team>", description: "<comma-joined keys, or 'no keys'>" }` — and use the chosen `team`. Then list that team's recent open issues via the Linear MCP `list_issues` tool (open only, ordered by most-recently-updated; without `--all`, prefer unassigned when the tool exposes an assignee filter). Then mirror the GitHub empty-state handling:
 
 - Non-empty — map each to a picker option `{ label: "<identifier> <title>", description: "<labels or 'no labels'>" }` and continue at [Phase 2](#phase-2-select-an-issue).
 - Empty with `--all` — there are genuinely no open issues to pick from; tell the user and stop (they can re-invoke as `/issue:run <id>`).
 - Empty without `--all` — re-list once without the unassigned preference; if still empty, stop with the same message.
+
+<!-- Canonical: [linear:create SKILL.md](../linear:create/SKILL.md#completion-requirement) Linear MCP access note — keep this paragraph in sync with it (only the tool list varies). -->
+
+**Linear MCP access:** Linear operations here use the session's connected Linear MCP server, matching tools by name — the suffix after the final `__` (`list_issues`) — under whatever server prefix the session exposes: the bundled `mcp__plugin_autopilot_linear__*` or a user-configured Linear server such as `mcp__linear-server__*` (Claude Code connects one server per endpoint; a user-scope server shadows the bundled one). The prefix must identify a Linear server (a `linear` server name or the `mcp.linear.app` endpoint) — never bind a generic tool name like `get_issue` to a non-Linear MCP. If a tool is not visible, search for it with ToolSearch by bare tool name before concluding it is absent. Only when no Linear MCP tool resolves under any prefix, stop and tell the user: `No Linear MCP available — check /mcp for a disconnected or unauthenticated Linear server, or connect one: claude mcp add --transport http linear https://mcp.linear.app/mcp`.
 
 The GitHub steps below apply to **GitHub** projects.
 
