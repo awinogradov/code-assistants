@@ -2,6 +2,64 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.3.0](https://github.com/awinogradov/code-assistants/compare/release-action@v1.2.0...release-action@v1.3.0) (2026-07-02)
+
+## Release Notes
+
+Changelog and reference hygiene reach generated PR bodies, review replies, and issue content — every tracker ID, commit SHA, file path, and external resource now renders as a clickable link in the action's AI-generated output.
+
+## ✨ What's New
+
+### Linked Files and External Resources in Generated Issues
+
+When the release action's autopilot generates a GitHub issue body, any repo files it mentions are now linked directly to their source, and any external resources it cites are linked to their canonical URLs. Previously these appeared as plain text, making it harder to navigate from an issue to the actual code or documentation being referenced.
+
+<details><summary>Related issues</summary>
+
+- [#386: Auto-link mentioned files and external resources in generated issue bodies](https://github.com/awinogradov/code-assistants/issues/386)
+</details>
+
+## 🐛 Bug Fixes
+
+### Clickable Tracker IDs and Commit SHAs in Generated Output
+
+Linear ticket references in AI-generated PR bodies and review output are now rendered as proper clickable links (using the plain issue URL form after `Closes`/`Fixes` magic words so GitHub's close-parsers still work). Review replies that cite a fixing commit now show a linked SHA instead of a bare hash. Both were technically valid text before but dead-ended the reader — you'd have to copy-paste to navigate anywhere.
+
+<details><summary>Related issues</summary>
+
+- [#387: PR bodies and review replies still emit unlinked references violating RFC-0001](https://github.com/awinogradov/code-assistants/issues/387)
+</details>
+
+## 📚 Documentation & Settings Updates
+
+### Reference Formatting Standard Updated to v5
+
+[RFC-0001](https://github.com/awinogradov/code-assistants/blob/main/rfc/0001-reference-formatting.md) has been updated with two new rules: an existence test for file mentions (only link a file path if the file actually exists in the repo — proposed files stay as code specimens in backticks), and an explicit external-resources rule governing how the action cites articles, vendor docs, and web standards. These changes tighten the contract that all generated output is expected to follow.
+
+<details><summary>Related issues</summary>
+
+- [#386: Auto-link mentioned files and external resources in generated issue bodies](https://github.com/awinogradov/code-assistants/issues/386)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #386 | [#407](https://github.com/awinogradov/code-assistants/pull/407) | @awinogradov |
+| #387 | [#388](https://github.com/awinogradov/code-assistants/pull/388) | @awinogradov |
+
+### Features
+
+* **autopilot:** link file and external refs in issue bodies ([1fc148d](https://github.com/awinogradov/code-assistants/commit/1fc148d247ad6a33563f401a43f8d29218af6210))
+
+### Bug Fixes
+
+* link tracker ids and shas in generated output ([56e8668](https://github.com/awinogradov/code-assistants/commit/56e8668bfe800373f2cdaa0da4615924c8f87c67))
+
+### Tests
+
+* guard linked reference forms in skills ([078b9ed](https://github.com/awinogradov/code-assistants/commit/078b9ed55d08bfd223564605726322772fb80472))
 ## [1.2.0](https://github.com/awinogradov/code-assistants/compare/release-action@v1.1.3...release-action@v1.2.0) (2026-06-26)
 
 ## Release Notes
