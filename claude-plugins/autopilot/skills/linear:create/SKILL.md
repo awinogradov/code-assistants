@@ -103,7 +103,7 @@ Present via AskUserQuestion (multi-select). Only labels returned by the call may
 
 ## Phase 5: Resolve Assignee
 
-Launch the `resolve-assignees` agent to gather candidates (CODEOWNERS + Linear team members):
+Launch the `resolve-assignees` agent to gather candidates — CODEOWNERS plus the Linear team's members, with the current Linear user resolved and returned first (flagged `self`):
 
 ```
 Use the Agent tool with:
@@ -112,7 +112,7 @@ Use the Agent tool with:
 - `description`: "Resolve assignees"
 ```
 
-Present the candidates via AskUserQuestion, including a `Leave unassigned` option. Assignment is best-effort — if the agent returns no candidates, default to unassigned.
+Present the returned candidates via AskUserQuestion (single-select), preserving the agent's order, with a `Leave unassigned` option last. The `self` candidate (the current user) is already first — render it as the first option, label it `<name> (you)`, and append `(Recommended)` so self-assign is the obvious default. Assignment is best-effort — if the agent returns no candidates, default to unassigned.
 
 ## Phase 6: Verify with User
 

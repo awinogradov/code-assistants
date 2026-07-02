@@ -334,7 +334,7 @@ Context-isolating workers invoked by other skills to keep the parent conversatio
 | `expert-review`          | inherit | `plan`, `plan-*`                       | Score an implementation plan as a domain expert                                              |
 | `fetch-pr-reviews`       | sonnet  | `pr:answer`, `pr:resolve`, `pr:review` | Fetch, filter, and categorize PR review comments by severity                                 |
 | `resolve-alert-context`  | sonnet  | `plan`, `run`                          | Fetch GitHub code-scanning alert context via the code-scanning API                           |
-| `resolve-assignees`      | sonnet  | `linear:create`                        | Resolve candidate assignees from CODEOWNERS and Linear team members                          |
+| `resolve-assignees`      | sonnet  | `linear:create`                        | Resolve candidate assignees from CODEOWNERS and Linear team members, current user first      |
 | `resolve-issue-context`  | sonnet  | `plan`, `run`, `pr:review`             | Fetch GitHub/Linear issue context; optionally auto-assign current user (idempotent) via `gh` |
 | `scan-and-analyze-todos` | sonnet  | `todo-cleanup`                         | Scan codebase for TODOs and check linked GitHub issue statuses                               |
 | `search-codebase-todos`  | haiku   | `plan`, `run`, `pr:review`             | Search the codebase for TODOs and references to a specific issue                             |
