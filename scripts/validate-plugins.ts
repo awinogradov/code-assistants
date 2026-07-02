@@ -100,23 +100,49 @@ async function validateTarget(t: Target): Promise<string | null> {
   }
 }
 
+const rulesSectionHeading = "## 15. Git Workflow";
+
+/**
+ * The rules/<stack>.md files carry a duplicated Git Workflow section that ships
+ * downstream as each consumer's CLAUDE.md. Verify the section exists in every
+ * file and is byte-identical across them so the copies cannot drift.
+ */
+async function validateRulesSectionSync(): Promise<string | null> {
+  const sections = new Map<string, string>();
+  for await (const path of new Glob("rules/*.md").scan(".")) {
+    const raw = await Bun.file(path).text();
+    const start = raw.indexOf(`\n${rulesSectionHeading}\n`);
+    if (start === -1) return `missing "${rulesSectionHeading}" section in ${path}`;
+    const end = raw.indexOf("\n## ", start + 1);
+    sections.set(path, raw.slice(start + 1, end === -1 ? raw.length : end + 1));
+  }
+  if (sections.size === 0) return "no rules/*.md files found";
+  const [[firstPath, firstSection], ...rest] = [...sections.entries()];
+  const mismatch = rest.find(([, section]) => section !== firstSection);
+  if (mismatch) {
+    return `"${rulesSectionHeading}" section in ${mismatch[0]} differs from ${firstPath}`;
+  }
+  return null;
+}
+
 async function main() {
   const args = process.argv.slice(2);
   let targets: Target[] = [];
+  let checkRules = true;
 
   const filesIdx = args.indexOf("--files");
   if (filesIdx !== -1) {
-    const paths = args.slice(filesIdx + 1);
-    for (const p of paths) {
-      const rel = p.startsWith("./") ? p.slice(2) : p;
+    const paths = args.slice(filesIdx + 1).map((p) => (p.startsWith("./") ? p.slice(2) : p));
+    for (const rel of paths) {
       const t = classify(rel);
       if (t) targets.push(t);
     }
+    checkRules = paths.some((p) => /^rules\/[^/]+\.md$/.test(p));
   } else {
     targets = await discoverAll();
   }
 
-  if (targets.length === 0) {
+  if (targets.length === 0 && !checkRules) {
     console.log("validate-plugins: no plugin files to check");
     return;
   }
@@ -132,11 +158,21 @@ async function main() {
     }
   }
 
+  if (checkRules) {
+    const err = await validateRulesSectionSync();
+    if (err) {
+      failed += 1;
+      console.error(`✖ rules/*.md\n    ${err}`);
+    } else {
+      console.log("✔ rules/*.md git workflow section in sync");
+    }
+  }
+
   if (failed > 0) {
     console.error(`\nvalidate-plugins: ${failed} file(s) failed validation`);
     process.exit(1);
   }
-  console.log(`\nvalidate-plugins: ${targets.length} file(s) OK`);
+  console.log(`\nvalidate-plugins: ${targets.length + (checkRules ? 1 : 0)} check(s) OK`);
 }
 
 main().catch((e) => {
