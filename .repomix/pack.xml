@@ -36906,17 +36906,17 @@ Emit the raw object, not the fenced form. Set `resolveError` to `null` (not the 
 <file path="claude-plugins/autopilot/agents/resolve-assignees.md">
 ---
 name: resolve-assignees
-description: Resolve candidate assignees for an issue from CODEOWNERS and Linear team members. Use when a creation skill needs an assignee picklist without polluting parent context.
+description: Resolve candidate assignees for an issue from CODEOWNERS and Linear team members, with the current Linear user first. Use when a creation skill needs an assignee picklist without polluting parent context.
 tools: Bash, MCP(linear:*)
 model: sonnet
 ---
 
-You are an assignee resolver. Gather candidate assignees from the repository's CODEOWNERS and, for Linear, the team's members, then return a single structured JSON object. Do not output intermediate steps — only the final block.
+You are an assignee resolver. Gather candidate assignees from the repository's CODEOWNERS and, for Linear, the team's members — with the current Linear user first — then return a single structured JSON object. Do not output intermediate steps — only the final block.
 
 **Constraints:**
 
 - For **GitHub**/CODEOWNERS data, use ONLY the `gh` CLI and file reads.
-- For **Linear** members, use ONLY the `mcp__plugin_autopilot_linear__*` tools; never `npx`/`curl`/`npm`.
+- For **Linear** data, use ONLY the session's connected Linear MCP server, matching tools by name — the suffix after the final `__` (`list_users`, `get_user`) — under whatever prefix is available to you (the bundled `mcp__plugin_autopilot_linear__*` or a user-configured Linear server such as `mcp__linear-server__*`); never `npx`/`curl`/`npm`.
 - All variable interpolations into shell commands MUST be double-quoted.
 
 ## Input
@@ -36931,26 +36931,37 @@ The invoking skill provides in the prompt:
 
 Read the CODEOWNERS file from the first location that exists: `.github/CODEOWNERS`, `CODEOWNERS`, or `docs/CODEOWNERS`. Extract owner logins (strip a leading `@`; keep `@org/team` handles flagged as teams). When **Paths** are provided, prefer owners whose glob matches a path; otherwise return the catch-all (`*`) owners. If no CODEOWNERS file exists, skip this phase.
 
-## Phase 2: Linear Members (when a team is given)
+## Phase 2: Linear Members and Current User (when a team is given)
 
-Best-effort: list the team's members via `mcp__plugin_autopilot_linear__list_users` (scope to the team when the tool supports it). If the tool is unavailable or errors, skip it and record the reason in `notes` — return the CODEOWNERS candidates alone rather than failing.
+Best-effort throughout — never fail the whole resolution over a Linear hiccup; on any error skip the affected step, record the reason in `notes`, and fall back to whatever candidates you have (the CODEOWNERS list alone if needed).
+
+1. **Team members.** List the team's members with `list_users` scoped to the team (`{ "team": "<team>" }`). Each becomes a `{ "name", "source": "linear", "id" }` candidate.
+2. **Current user.** Resolve the authenticated caller with `get_user` (`{ "query": "me" }`) and read their `id` and `name`.
+3. **Put the caller first.** When the current user resolves, they MUST end up at candidate index 0:
+   - If a listed member's `id` equals the caller's `id`, set `"self": true` on that candidate and move it to the front.
+   - Otherwise prepend a new `{ "name": "<caller name>", "source": "linear", "id": "<caller id>", "self": true }` candidate — the caller may file against a team they do not belong to.
+
+   Match on the Linear `id` only, so a CODEOWNERS candidate (`id: null`) is never mistaken for the caller. If the `get_user` lookup is unavailable or errors, skip this step (leave every candidate without a `self` flag) and record the reason in `notes`.
 
 ## Phase 3: Output
 
 Output ONLY a single JSON object matching the schema below — no preamble, no surrounding code fence, no commentary. The parent parses it directly, so any extra text breaks consumption.
 
-| Field        | Type           | Constraint                                                                                     |
-| ------------ | -------------- | ---------------------------------------------------------------------------------------------- |
-| `candidates` | object[]       | `{ "name": string, "source": "codeowners" \| "linear", "id": string \| null }`; `[]` when none |
-| `notes`      | string \| null | A short note (e.g. a degraded Linear lookup); `null` when clean                                |
+| Field        | Type           | Constraint                                                                                                    |
+| ------------ | -------------- | ------------------------------------------------------------------------------------------------------------- |
+| `candidates` | object[]       | `{ "name": string, "source": "codeowners" \| "linear", "id": string \| null, "self"?: true }`; `[]` when none |
+| `notes`      | string \| null | A short note (e.g. a degraded Linear lookup); `null` when clean                                               |
+
+`self` marks the current Linear user — set it on exactly one candidate, who must be first (Phase 2), and omit it on every other candidate.
 
 Example:
 
 ```json
 {
   "candidates": [
+    { "name": "Ann Lee", "source": "linear", "id": "u_123", "self": true },
     { "name": "octocat", "source": "codeowners", "id": null },
-    { "name": "Ann Lee", "source": "linear", "id": "u_123" }
+    { "name": "Bob Kim", "source": "linear", "id": "u_456" }
   ],
   "notes": null
 }
@@ -40238,7 +40249,7 @@ Present via AskUserQuestion (multi-select). Only labels returned by the call may
 
 ## Phase 5: Resolve Assignee
 
-Launch the `resolve-assignees` agent to gather candidates (CODEOWNERS + Linear team members):
+Launch the `resolve-assignees` agent to gather candidates — CODEOWNERS plus the Linear team's members, with the current Linear user resolved and returned first (flagged `self`):
 
 ```
 Use the Agent tool with:
@@ -40247,7 +40258,7 @@ Use the Agent tool with:
 - `description`: "Resolve assignees"
 ```
 
-Present the candidates via AskUserQuestion, including a `Leave unassigned` option. Assignment is best-effort — if the agent returns no candidates, default to unassigned.
+Present the returned candidates via AskUserQuestion (single-select), preserving the agent's order, with a `Leave unassigned` option last. The `self` candidate (the current user) is already first — render it as the first option, label it `<name> (you)`, and append `(Recommended)` so self-assign is the obvious default. Assignment is best-effort — if the agent returns no candidates, default to unassigned.
 
 ## Phase 6: Verify with User
 
@@ -49902,7 +49913,7 @@ Context-isolating workers invoked by other skills to keep the parent conversatio
 | `expert-review`          | inherit | `plan`, `plan-*`                       | Score an implementation plan as a domain expert                                              |
 | `fetch-pr-reviews`       | sonnet  | `pr:answer`, `pr:resolve`, `pr:review` | Fetch, filter, and categorize PR review comments by severity                                 |
 | `resolve-alert-context`  | sonnet  | `plan`, `run`                          | Fetch GitHub code-scanning alert context via the code-scanning API                           |
-| `resolve-assignees`      | sonnet  | `linear:create`                        | Resolve candidate assignees from CODEOWNERS and Linear team members                          |
+| `resolve-assignees`      | sonnet  | `linear:create`                        | Resolve candidate assignees from CODEOWNERS and Linear team members, current user first      |
 | `resolve-issue-context`  | sonnet  | `plan`, `run`, `pr:review`             | Fetch GitHub/Linear issue context; optionally auto-assign current user (idempotent) via `gh` |
 | `scan-and-analyze-todos` | sonnet  | `todo-cleanup`                         | Scan codebase for TODOs and check linked GitHub issue statuses                               |
 | `search-codebase-todos`  | haiku   | `plan`, `run`, `pr:review`             | Search the codebase for TODOs and references to a specific issue                             |
@@ -51762,7 +51773,7 @@ The shared CI gates accept both conventions: the branch-name and semantic-PR-tit
 
 - **Create** — [`linear:create`](../claude-plugins/autopilot/skills/linear:create/SKILL.md) is the Linear counterpart to `issue:create`: it generates the same five-section body (Context/What/Why/Scope/Solution), then a short wizard picks the workflow status (`list_issue_statuses`), labels (`list_issue_labels`, pre-selecting the `agents.trackers` repo label), and an assignee, and creates the ticket with `save_issue`.
 - **List and run** — [`issue:run`](../claude-plugins/autopilot/skills/issue:run/SKILL.md) lists the team's recent open tickets via `list_issues` (instead of `gh issue list`) and hands the chosen `TEAM-123` identifier to `autopilot:run`.
-- **Assignees** — the [`resolve-assignees`](../claude-plugins/autopilot/agents/resolve-assignees.md) agent gathers candidates from CODEOWNERS and the Linear team's members; Linear member listing is best-effort and degrades to CODEOWNERS when the MCP user-list tool is unavailable.
+- **Assignees** — the [`resolve-assignees`](../claude-plugins/autopilot/agents/resolve-assignees.md) agent gathers candidates from CODEOWNERS and the Linear team's members, resolves the current Linear user (`get_user "me"`), and returns that user first so self-assign is the default; Linear member listing is best-effort and degrades to CODEOWNERS when the MCP user-list tool is unavailable.
 
 ## TODO links and issue state
 
