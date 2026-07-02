@@ -123,6 +123,12 @@ Every review comment carries a collapsed **"Review run summary 🤖"** footer ("
 
 See [Review run-summary footer](../../../docs/03-code-review-run-summary.md) for the full data flow and diagram.
 
+## Random review tip
+
+Roughly 5% of reviews carry one extra rotating `> [!TIP]` — a usage or convention tip from a curated pool, never repeated within the same PR (a hidden per-tip marker in prior bot reviews tracks what was shown). Tips never appear on clean approvals, never affect duplicate-review detection, and fail open: if the prior-review lookup fails, the review posts untipped. The pool and the ~5% rate are hardcoded — consumers tracking `@main` receive tips on merge, and disabling them means reverting the feature commit upstream.
+
+See [Random review tip](../../../docs/03-code-review-run-summary.md#random-review-tip) for the marker contract and data flow.
+
 ## Inline suggestions & AI-agent prompts
 
 Each inline finding can carry a one-click GitHub **`suggestion`** block (the author commits the fix in one click) and a collapsible **"Prompt for AI agents"** block (a ready-to-paste prompt with the finding and the surrounding diff hunk). The `pr:review` skill emits an optional `suggestion` (verbatim replacement) and `startLine` (multi-line range) per comment; `submitReview.ts` renders the suggestion fence and the deterministic agent prompt and posts them through the existing `createReview` call — adding `start_line`/`side` for multi-line ranges. The feature is always-on; no inputs configure it.

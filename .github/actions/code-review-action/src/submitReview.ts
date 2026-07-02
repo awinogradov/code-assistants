@@ -23,19 +23,20 @@ import {
   fetchReviewThreads,
   getLastBotReview,
   hasRecentBotReview,
-  normalizeBody,
+  listBotReviewBodies,
   parseRepoEnv,
   readExecutionResult,
   resolveThread,
+  reviewDedupKey,
   unresolveThread,
   verdictToEvent,
 } from "./github/githubReview.ts";
+import { extractShownTipIds, renderReviewTip, selectReviewTip } from "./reviewTip.ts";
 import {
   buildReviewBody,
   isCleanApproval,
   parseRunSummary,
   renderRunSummaryFooter,
-  stripRunSummaryFooter,
 } from "./runSummaryFooter.ts";
 
 /**
@@ -152,17 +153,28 @@ const invalidComments = anchored
 // Fail-open: no footer when RUN_SUMMARY is absent or invalid.
 const reviewBody = output.reviewComment + formatInvalidComments(invalidComments);
 const runSummary = parseRunSummary(process.env.RUN_SUMMARY);
-// Drop the footer's usage-hint TIP on a clean approval — the "No issues found"
-// line shouldn't be padded with a prompt to ask the bot a question.
+// Drop the footer's usage-hint TIP and the random review tip on a clean approval —
+// the "No issues found" line shouldn't be padded with extra prompts.
 const hasInlineComments = validComments.length > 0;
-const footer = runSummary
-  ? renderRunSummaryFooter(runSummary, reviewer, !isCleanApproval(reviewBody, hasInlineComments))
-  : "";
-const finalBody = buildReviewBody(reviewBody, footer, hasInlineComments);
+const cleanApproval = isCleanApproval(reviewBody, hasInlineComments);
+const footer = runSummary ? renderRunSummaryFooter(runSummary, reviewer, !cleanApproval) : "";
 
-// The footer carries run-varying numbers (cost, latency); strip it from both
-// bodies so the duplicate-suppression guard compares the stable content only.
-const dedupKey = (body: string): string => normalizeBody(stripRunSummaryFooter(body));
+// Roll the rare review tip, excluding tips this PR already saw (their hidden markers
+// in prior bot reviews). Fail-open: a listing failure posts the review untipped.
+let tipBlock = "";
+if (!cleanApproval) {
+  try {
+    const bodies = await listBotReviewBodies(octokit, owner, repoName, pullNumber, reviewer);
+    const tip = selectReviewTip(Math.random(), extractShownTipIds(bodies));
+    if (tip) {
+      tipBlock = renderReviewTip(tip);
+      console.log("Review tip selected:", tip.id);
+    }
+  } catch (error) {
+    console.log("Skipping review tip (fail-open):", error);
+  }
+}
+const finalBody = buildReviewBody(reviewBody, tipBlock + footer, hasInlineComments);
 
 console.log(
   `Submitting ${event} review: ${validComments.length} inline comments, ${invalidComments.length} moved to body...`
@@ -187,7 +199,7 @@ if (resolvedCount > 0) {
 const lastBotReview = await getLastBotReview(octokit, owner, repoName, pullNumber, reviewer);
 
 // Skip if last bot review has identical body (prevents duplicate from concurrent posting)
-if (lastBotReview && dedupKey(lastBotReview.body ?? "") === dedupKey(finalBody)) {
+if (lastBotReview && reviewDedupKey(lastBotReview.body ?? "") === reviewDedupKey(finalBody)) {
   console.log("✓ Review already posted, skipping duplicate");
   process.exit(0);
 }
@@ -210,7 +222,7 @@ await deletePendingReviews(octokit, owner, repoName, pullNumber);
 // A concurrent run (the per-comment concurrency group does not serialize same-PR
 // runs) may have posted an identical body since the check above — skip if so.
 const guardReview = await getLastBotReview(octokit, owner, repoName, pullNumber, reviewer);
-if (guardReview && dedupKey(guardReview.body ?? "") === dedupKey(finalBody)) {
+if (guardReview && reviewDedupKey(guardReview.body ?? "") === reviewDedupKey(finalBody)) {
   console.log("✓ Identical review appeared concurrently, skipping duplicate");
   process.exit(0);
 }
