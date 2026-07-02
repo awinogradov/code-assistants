@@ -62,7 +62,7 @@ inputs:
   model:
     description: "Claude model to use for AI operations"
     required: false
-    default: "claude-sonnet-4-6"
+    default: "claude-sonnet-5"
   debug_logs:
     description: "Enable verbose DEBUG-level Claude trace logging and force execution artifact upload. When false, artifacts upload only on failure or when a run exceeds 5 minutes."
     required: false
