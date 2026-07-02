@@ -10,7 +10,29 @@ import {
   isAlreadyMentioned,
   parseReactionOutput,
   parseStructuredOutput,
+  repairOverEscapedWhitespace,
 } from "./reviewOutput.ts";
+
+describe("repairOverEscapedWhitespace", () => {
+  test("converts over-escaped whitespace in a single-line body", () => {
+    expect(repairOverEscapedWhitespace("a\\nb")).toBe("a\nb");
+    expect(repairOverEscapedWhitespace("a\\tb")).toBe("a\tb");
+  });
+
+  test("collapses a literal \\r\\n to a single newline in one pass", () => {
+    expect(repairOverEscapedWhitespace("a\\r\\nb")).toBe("a\nb");
+  });
+
+  test("leaves a body that already has a real newline untouched (guard)", () => {
+    const healthy = "real\nbreak with a `\\n` code span";
+    expect(repairOverEscapedWhitespace(healthy)).toBe(healthy);
+  });
+
+  test("is a no-op on empty or escape-free text", () => {
+    expect(repairOverEscapedWhitespace("")).toBe("");
+    expect(repairOverEscapedWhitespace("plain text")).toBe("plain text");
+  });
+});
 
 describe("parseStructuredOutput", () => {
   test("returns null for empty or literal-null input", () => {
@@ -59,6 +81,19 @@ describe("parseStructuredOutput", () => {
       inlineComments: [],
     });
   });
+
+  test("repairs over-escaped reviewComment and inline body, but not suggestion", () => {
+    const raw = JSON.stringify({
+      verdict: "comment",
+      reviewComment: "a\\nb",
+      inlineComments: [{ path: "x.ts", line: 1, body: "c\\nd", suggestion: "e\\nf" }],
+    });
+    const out = parseStructuredOutput(raw);
+    expect(out?.reviewComment).toBe("a\nb");
+    expect(out?.inlineComments[0]?.body).toBe("c\nd");
+    // A suggestion is committed verbatim, so its escapes are left untouched.
+    expect(out?.inlineComments[0]?.suggestion).toBe("e\\nf");
+  });
 });
 
 describe("parseReactionOutput", () => {
@@ -87,6 +122,18 @@ describe("parseReactionOutput", () => {
       updatedVerdict: "approve",
       updatedReviewComment: "done",
     });
+  });
+
+  test("repairs over-escaped reply and updatedReviewComment, keeps null", () => {
+    const withUpdate = parseReactionOutput(
+      JSON.stringify({ reply: "a\\nb", updatedVerdict: "comment", updatedReviewComment: "c\\nd" })
+    );
+    expect(withUpdate?.reply).toBe("a\nb");
+    expect(withUpdate?.updatedReviewComment).toBe("c\nd");
+
+    const noUpdate = parseReactionOutput(JSON.stringify({ reply: "x\\ny" }));
+    expect(noUpdate?.reply).toBe("x\ny");
+    expect(noUpdate?.updatedReviewComment).toBeNull();
   });
 });
 

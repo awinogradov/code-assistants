@@ -6,7 +6,7 @@
  * GH_TOKEN=xxx REPO=owner/repo PR_NUMBER=123 COMMENT_ID=456 STRUCTURED_OUTPUT='{"reply":"..."}' bun run scripts/reactToComment.ts
  */
 import type { ReviewEvent } from "./github/githubReview.ts";
-import { parseReactionOutput } from "./reviewOutput/reviewOutput.ts";
+import { parseReactionOutput, repairOverEscapedWhitespace } from "./reviewOutput/reviewOutput.ts";
 import {
   deletePendingReviews,
   fetchReviewThreads,
@@ -134,7 +134,7 @@ if (!output || !output.reply) {
   }
   console.log("Structured output missing, falling back to execution result as reply");
   output = {
-    reply: resultText,
+    reply: repairOverEscapedWhitespace(resultText),
     resolveComments: [],
     updatedVerdict: null,
     updatedReviewComment: null,

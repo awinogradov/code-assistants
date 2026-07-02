@@ -14,6 +14,7 @@ import {
   formatInvalidComments,
   isAlreadyMentioned,
   parseStructuredOutput,
+  repairOverEscapedWhitespace,
   type InlineComment,
   type ValidLine,
 } from "./reviewOutput/reviewOutput.ts";
@@ -115,7 +116,7 @@ if (!output) {
   console.log("Structured output missing, falling back to execution result as COMMENT review");
   output = {
     verdict: "comment",
-    reviewComment: resultText,
+    reviewComment: repairOverEscapedWhitespace(resultText),
     inlineComments: [],
   };
 }
