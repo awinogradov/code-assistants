@@ -153,11 +153,11 @@ const invalidComments = anchored
 // Fail-open: no footer when RUN_SUMMARY is absent or invalid.
 const reviewBody = output.reviewComment + formatInvalidComments(invalidComments);
 const runSummary = parseRunSummary(process.env.RUN_SUMMARY);
-// Drop the footer's usage-hint TIP and the random review tip on a clean approval —
-// the "No issues found" line shouldn't be padded with extra prompts.
+// Skip the random review tip on a clean approval — the "No issues found" line
+// shouldn't be padded with extra prompts. The footer renders either way.
 const hasInlineComments = validComments.length > 0;
 const cleanApproval = isCleanApproval(reviewBody, hasInlineComments);
-const footer = runSummary ? renderRunSummaryFooter(runSummary, reviewer, !cleanApproval) : "";
+const footer = runSummary ? renderRunSummaryFooter(runSummary) : "";
 
 // Roll the rare review tip, excluding tips this PR already saw (their hidden markers
 // in prior bot reviews). Fail-open: a listing failure posts the review untipped.

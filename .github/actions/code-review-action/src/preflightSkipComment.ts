@@ -52,7 +52,6 @@ try {
       failed,
       process.env.STRUCTURED_OUTPUT,
       process.env.RUN_SUMMARY,
-      reviewer,
     );
     await postSkipComment(octokit, owner, repoName, pullNumber, reviewer, body);
   }

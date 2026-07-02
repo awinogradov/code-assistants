@@ -8,7 +8,7 @@
 import { Octokit } from "@octokit/rest";
 
 import { stripReviewTips } from "../reviewTip.ts";
-import { stripRunSummaryFooter } from "../runSummaryFooter.ts";
+import { stripLegacyUsageHint, stripRunSummaryFooter } from "../runSummaryFooter.ts";
 
 /** GitHub PR review event type */
 export type ReviewEvent = "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
@@ -84,13 +84,16 @@ export function normalizeBody(body: string): string {
 
 /**
  * Canonical dedup key for review-body comparison: strips the run-varying
- * summary footer and any review-tip block, then normalizes whitespace, so
- * two reviews differing only in metrics or a rolled tip compare as
- * identical. Every duplicate-suppression comparison must go through this
- * one composition — a site applying its own subset silently defeats dedup.
+ * summary footer, any review-tip block, and the retired always-on usage hint
+ * still present in pre-hotfix review bodies, then normalizes whitespace — so
+ * two reviews differing only in metrics, a rolled tip, or the legacy hint
+ * compare as identical. Tip blocks are consumed whole (marker-shaped) before
+ * the legacy matcher runs. Every duplicate-suppression comparison must go
+ * through this one composition — a site applying its own subset silently
+ * defeats dedup.
  */
 export function reviewDedupKey(body: string): string {
-  return normalizeBody(stripRunSummaryFooter(stripReviewTips(body)));
+  return normalizeBody(stripLegacyUsageHint(stripRunSummaryFooter(stripReviewTips(body))));
 }
 
 /** Minimal shape of a submitted review needed for dedup comparison. */

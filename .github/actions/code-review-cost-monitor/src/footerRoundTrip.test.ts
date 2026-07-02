@@ -33,7 +33,7 @@ const summary: RunSummary = {
 
 describe("run-summary writer ↔ parser contract", () => {
   test("parseFooterMetrics recovers what renderRunSummaryFooter wrote", () => {
-    const body = `### Review\n\nLGTM${renderRunSummaryFooter(summary, "review-bot")}`;
+    const body = `### Review\n\nLGTM${renderRunSummaryFooter(summary)}`;
     expect(parseFooterMetrics(body)).toEqual({
       mode: "review",
       modelMs: 34000,
@@ -51,7 +51,7 @@ describe("run-summary writer ↔ parser contract", () => {
     // Simulate a future restyle: <sub>-wrap every rendered table cell (the
     // historical drift). The data comment carries no pipes, so it is untouched
     // and the monitor still recovers the metrics.
-    const restyled = renderRunSummaryFooter(summary, "review-bot").replace(
+    const restyled = renderRunSummaryFooter(summary).replace(
       /\| ([^|]+) \| ([^|]+) \|/g,
       "| <sub>$1</sub> | <sub>$2</sub> |",
     );
