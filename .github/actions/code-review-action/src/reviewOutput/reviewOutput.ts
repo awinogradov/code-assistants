@@ -71,14 +71,66 @@ function parseJsonWithSchema<T>(rawOutput: string, schema: z.ZodType<T>): T | nu
   return result.success ? result.data : null;
 }
 
-/** Parse and validate structured review output from Claude (null on any failure). */
-export function parseStructuredOutput(rawOutput: string): StructuredOutput | null {
-  return parseJsonWithSchema(rawOutput, structuredOutputSchema);
+/**
+ * Repair whitespace escape sequences the review model over-escaped.
+ *
+ * Under strict `json_schema` output the model sometimes serializes a line break
+ * as a literal backslash-n (`\\n`) instead of a control newline, so after
+ * `JSON.parse` the string carries the two characters `\` + `n` and GitHub renders
+ * the body as one wall of text with visible `\n` (the defect this fixes). This
+ * restores the real characters in a single pass — `\r\n`/`\r`/`\n` become a
+ * newline, `\t` a tab — so an emitted newline can never be re-matched.
+ *
+ * Whole-field guard: when the text already holds a real newline the model
+ * produced structure, so it is returned untouched. That protects a healthy
+ * multi-paragraph body legitimately quoting `` `\n` `` inside a code span from
+ * being rewritten. The confirmed defect is uniform — one JSON string value is
+ * either wholly over-escaped or not — so the guard misses nothing real.
+ *
+ * Residual ambiguity: after `JSON.parse` an intentionally-literal `\n`/`\t` (or a
+ * backslash path such as `C:\newfolder`) in a single-line field is byte-identical
+ * to an over-escaped newline and is converted. This is rare, applies only to
+ * prose fields (callers leave committed `suggestion` code untouched), and beats
+ * leaving every multi-line body broken.
+ */
+export function repairOverEscapedWhitespace(text: string): string {
+  if (text.includes("\n")) return text;
+  return text.replaceAll(/\\r\\n|\\r|\\n|\\t/g, (match) => (match === "\\t" ? "\t" : "\n"));
 }
 
-/** Parse and validate structured reaction output from Claude (null on any failure). */
+/**
+ * Parse and validate structured review output from Claude (null on any failure).
+ * Repairs over-escaped whitespace in the prose fields (`reviewComment`, inline
+ * `body`); an inline `suggestion` is committed verbatim, so it is left untouched.
+ */
+export function parseStructuredOutput(rawOutput: string): StructuredOutput | null {
+  const parsed = parseJsonWithSchema(rawOutput, structuredOutputSchema);
+  if (!parsed) return null;
+  return {
+    ...parsed,
+    reviewComment: repairOverEscapedWhitespace(parsed.reviewComment),
+    inlineComments: parsed.inlineComments.map((comment) => ({
+      ...comment,
+      body: repairOverEscapedWhitespace(comment.body),
+    })),
+  };
+}
+
+/**
+ * Parse and validate structured reaction output from Claude (null on any failure).
+ * Repairs over-escaped whitespace in the prose fields (`reply`, `updatedReviewComment`).
+ */
 export function parseReactionOutput(rawOutput: string): ReactionOutput | null {
-  return parseJsonWithSchema(rawOutput, reactionOutputSchema);
+  const parsed = parseJsonWithSchema(rawOutput, reactionOutputSchema);
+  if (!parsed) return null;
+  return {
+    ...parsed,
+    reply: repairOverEscapedWhitespace(parsed.reply),
+    updatedReviewComment:
+      parsed.updatedReviewComment === null
+        ? null
+        : repairOverEscapedWhitespace(parsed.updatedReviewComment),
+  };
 }
 
 /** Expand a single unified-diff hunk header match into its added-line locations. */
