@@ -33,6 +33,7 @@ import {
   verdictToEvent,
 } from "./github/githubReview.ts";
 import { extractShownTipIds, renderReviewTip, selectReviewTip } from "./reviewTip.ts";
+import { resolveGeneratedTipBlock } from "./reviewTipGeneration.ts";
 import {
   buildReviewBody,
   isCleanApproval,
@@ -78,6 +79,32 @@ async function cleanupBotThreads(
   }
 
   return toResolve.length;
+}
+
+/**
+ * Roll the static review tip (the default path): list the bot's prior reviews to
+ * exclude tips this PR already saw, pick one against the 5% gate, and render it.
+ * Fail-open — any listing failure posts the review untipped.
+ */
+async function rollStaticTipBlock(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  pullNumber: number,
+  reviewer: string,
+): Promise<string> {
+  try {
+    const bodies = await listBotReviewBodies(octokit, owner, repo, pullNumber, reviewer);
+    const tip = selectReviewTip(Math.random(), extractShownTipIds(bodies));
+    if (tip) {
+      console.log("Review tip selected:", tip.id);
+      return renderReviewTip(tip);
+    }
+    return "";
+  } catch (error) {
+    console.log("Skipping review tip (fail-open):", error);
+    return "";
+  }
 }
 
 // Main execution
@@ -160,20 +187,17 @@ const hasInlineComments = validComments.length > 0;
 const cleanApproval = isCleanApproval(reviewBody, hasInlineComments);
 const footer = runSummary ? renderRunSummaryFooter(runSummary) : "";
 
-// Roll the rare review tip, excluding tips this PR already saw (their hidden markers
-// in prior bot reviews). Fail-open: a listing failure posts the review untipped.
+// Roll the rare review tip. When generation is enabled (TIP_GENERATION=true), the
+// Prepare/Generate steps already rolled and (optionally) generated a consumer-aware
+// tip — consume their decision here. Otherwise roll inline against the static pool
+// (unchanged default behavior). Both paths fail open to no tip and are suppressed on
+// a clean approval, where the "No issues found" line shouldn't be padded with prompts.
 let tipBlock = "";
 if (!cleanApproval) {
-  try {
-    const bodies = await listBotReviewBodies(octokit, owner, repoName, pullNumber, reviewer);
-    const tip = selectReviewTip(Math.random(), extractShownTipIds(bodies));
-    if (tip) {
-      tipBlock = renderReviewTip(tip);
-      console.log("Review tip selected:", tip.id);
-    }
-  } catch (error) {
-    console.log("Skipping review tip (fail-open):", error);
-  }
+  tipBlock =
+    process.env.TIP_GENERATION === "true"
+      ? resolveGeneratedTipBlock(process.env.FALLBACK_TIP, process.env.TIP_STRUCTURED_OUTPUT)
+      : await rollStaticTipBlock(octokit, owner, repoName, pullNumber, reviewer);
 }
 const finalBody = buildReviewBody(reviewBody, tipBlock + footer, hasInlineComments);
 
