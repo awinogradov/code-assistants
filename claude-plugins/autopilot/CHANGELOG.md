@@ -2,6 +2,117 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.7.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.6.0...autopilot@v1.7.0) (2026-07-02)
+
+## Release Notes
+
+Reference formatting compliance is the headline of this release: generated PR bodies, review comments, issue bodies, and release notes now all emit clickable links for files, tickets, and commit SHAs instead of dead text or bare identifiers.
+
+## ✨ What's New
+
+### RFC & Docs Standards Enforced in AI Review
+
+The AI code review now checks pull changes against the repository's own `rfc/` and `docs/` conventions. Accepted-RFC violations are flagged as blockers, while contradictions with Draft RFCs or docs conventions surface as suggestions. New hygiene checks also catch an Accepted RFC that was edited without a version bump and any RFC missing from the `rfc/README.md` index. Repositories that don't have `rfc/` or `docs/` folders are unaffected — no behavior change, no added cost.
+
+<details><summary>Related issues</summary>
+
+- [#403: Enforce consumer rfc/ and docs/ standards in code review](https://github.com/awinogradov/code-assistants/issues/403)
+</details>
+
+### Auto-Linked References in Generated Issue Bodies
+
+When Autopilot generates a GitHub issue body, it now automatically links any mentioned repo files to their source and any cited external resources to their canonical URLs. This keeps generated issues navigable and compliant with the reference formatting standard without any extra effort from the author.
+
+<details><summary>Related issues</summary>
+
+- [#386: Auto-link mentioned files and external resources in generated issue bodies](https://github.com/awinogradov/code-assistants/issues/386)
+</details>
+
+### Self-Assign in One Step with Linear Issue Creation
+
+The `/autopilot:linear-create` assignee picker now lists you first, labelled **(you) — recommended**, so self-assigning a new Linear issue takes a single keystroke instead of scrolling through the full team list. Assignee resolution also now works correctly when you're running your own Linear MCP server rather than the bundled one.
+
+<details><summary>Related issues</summary>
+
+- [#410: Put the current user first in the Linear assignee picklist](https://github.com/awinogradov/code-assistants/issues/410)
+</details>
+
+### Faster Review Reply Flow — No Approval Prompt
+
+`pr:resolve` now posts drafted review replies immediately after showing the summary, skipping the confirmation step that previously interrupted the workflow. If a re-run is needed, it automatically skips threads already answered and continues past any reply posts that failed, so the command is safely re-entrant.
+
+<details><summary>Related issues</summary>
+
+- [#397: Post drafted review replies without asking for approval](https://github.com/awinogradov/code-assistants/issues/397)
+</details>
+
+---
+
+## 🐛 Bug Fixes
+
+### Linear Status Transitions Now Work with a User-Configured MCP Server
+
+Linear ticket status transitions, issue creation, and listing were silently doing nothing for users who run their own Linear MCP server. The bundled server was being shadowed by endpoint deduplication, so calls never reached Linear. Linear-aware skills now resolve tools under any server prefix and surface a clear error when no Linear MCP is available at all. **Action required:** reload or update the plugin after deploying this release — a cached older plugin keeps the stale tool references.
+
+<details><summary>Related issues</summary>
+
+- [#401: Linear status transitions silently no-op with a user-configured Linear MCP](https://github.com/awinogradov/code-assistants/issues/401)
+</details>
+
+### PR Titles Now Always Carry the Linear Ticket Prefix
+
+`pr:create` and `pr:update` now run a mandatory title self-check so that any Linear-tracked PR always carries the `TEAM-N:` prefix before it's submitted. `pr:validate` also enforces the `TEAM-N:` title and `<team>-<number>-<slug>` branch conventions, gated on the repository's `agents.trackers` config. Previously a PR could be created without the prefix and pass validation silently.
+
+<details><summary>Related issues</summary>
+
+- [#390: Document and validate the Linear ticket-ID PR title prefix](https://github.com/awinogradov/code-assistants/issues/390)
+</details>
+
+### Clickable Links for Tracker IDs and Commit SHAs in Generated Output
+
+Linear ticket references in generated PR bodies and review output are now rendered as clickable links. Review replies cite the fixing commit as a linked SHA rather than a bare hash. This applies to all output that previously emitted unlinked identifiers in violation of RFC-0001.
+
+<details><summary>Related issues</summary>
+
+- [#387: PR bodies and review replies still emit unlinked references violating RFC-0001](https://github.com/awinogradov/code-assistants/issues/387)
+</details>
+
+### File and Doc References Linked in AI Review Comments
+
+AI review comments now link every file, doc, and standard reference to a permalink at the reviewed commit. Previously these were rendered as backticked dead text, making it tedious to navigate to the referenced location directly from a review thread.
+
+<details><summary>Related issues</summary>
+
+- [#279: Apply RFC-0001 formatting to generated PR descriptions and release notes](https://github.com/awinogradov/code-assistants/issues/279)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #410 | [#411](https://github.com/awinogradov/code-assistants/pull/411) | @awinogradov |
+| #386 | [#407](https://github.com/awinogradov/code-assistants/pull/407) | @awinogradov |
+| #279 | [#406](https://github.com/awinogradov/code-assistants/pull/406) | @awinogradov |
+| #403 | [#404](https://github.com/awinogradov/code-assistants/pull/404) | @awinogradov |
+| #401 | [#402](https://github.com/awinogradov/code-assistants/pull/402) | @awinogradov |
+| #397 | [#398](https://github.com/awinogradov/code-assistants/pull/398) | @awinogradov |
+| #390 | [#391](https://github.com/awinogradov/code-assistants/pull/391) | @awinogradov |
+| #387 | [#388](https://github.com/awinogradov/code-assistants/pull/388) | @awinogradov |
+
+### Features
+
+* **autopilot:** enforce repo rfc and docs standards in review ([1348297](https://github.com/awinogradov/code-assistants/commit/13482974363e8355dc488a23b1cfb61f51c8b6a1))
+* **autopilot:** link file and external refs in issue bodies ([1fc148d](https://github.com/awinogradov/code-assistants/commit/1fc148d247ad6a33563f401a43f8d29218af6210))
+* **autopilot:** post drafted replies without approval prompt ([8cf91b1](https://github.com/awinogradov/code-assistants/commit/8cf91b1513ec48e231a1ce450564159a60e5465a))
+* **autopilot:** put current linear user first in assignee list ([16d6779](https://github.com/awinogradov/code-assistants/commit/16d6779ad95c35a020f2d1b08e9057db5cdd5a37))
+
+### Bug Fixes
+
+* **autopilot:** enforce linear ticket prefix on pr titles ([248bfb5](https://github.com/awinogradov/code-assistants/commit/248bfb5df02f69f254edaee3fda0294639e5ffe3))
+* **autopilot:** link file and doc refs in review output ([d32d15c](https://github.com/awinogradov/code-assistants/commit/d32d15c03a7dc4ac4a287040951178fcb38bab1f))
+* **autopilot:** match linear mcp tools by name in skills ([7694baf](https://github.com/awinogradov/code-assistants/commit/7694baf5ea9193a95c3456d67d34deb585327826))
+* link tracker ids and shas in generated output ([56e8668](https://github.com/awinogradov/code-assistants/commit/56e8668bfe800373f2cdaa0da4615924c8f87c67))
 ## [1.6.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.5.0...autopilot@v1.6.0) (2026-06-29)
 
 ## Release Notes
