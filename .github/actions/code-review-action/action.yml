@@ -99,6 +99,10 @@ inputs:
     description: "Plugins to install before the run, one `plugin@marketplace` per line; the marketplace must be registered via `marketplaces` (or the consumer repo's own settings). Their slash commands then resolve for `review_prompt` / `react_prompt`."
     required: false
     default: ""
+  generate_review_tips:
+    description: "Opt-in: on the rare (~5%) review-tip roll, generate the tip from bounded consumer context (this repo's CONTRIBUTING.md, its docs listing, and the PR's changed files) via one small model call, instead of picking from the static pool. Falls back to the static pool on any failure, so generation never blocks or degrades the review. Requires anthropic_api_key or claude_oauth_token. The consumer context is treated as untrusted data. Default false keeps the static pool only."
+    required: false
+    default: "false"
 
 runs:
   using: composite
@@ -578,6 +582,42 @@ runs:
         LOG_LEVEL: ${{ inputs.debug_logs == 'true' && 'debug' || 'info' }}
       run: bun run "${{ github.action_path }}/src/runClaude.ts"
 
+    - name: Prepare review tip
+      id: prep_tip
+      if: steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.mode == 'review' && steps.preflight.outputs.skip_review != 'true' && inputs.generate_review_tips == 'true' && always() && (steps.review.outcome == 'success' || steps.review.outcome == 'failure')
+      continue-on-error: true
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.bot_token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ steps.ctx.outputs.pr_number }}
+        REVIEWER: ${{ inputs.reviewer }}
+        STRUCTURED_OUTPUT: ${{ steps.review.outputs.structured_output }}
+        GITHUB_WORKSPACE: ${{ github.workspace }}
+        RUNNER_TEMP: ${{ runner.temp }}
+      run: bun run "${{ github.action_path }}/src/prepareReviewTip.ts"
+
+    - name: Generate review tip
+      id: gen_tip
+      if: steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.mode == 'review' && steps.preflight.outputs.skip_review != 'true' && inputs.generate_review_tips == 'true' && steps.prep_tip.outputs.generate == 'true'
+      continue-on-error: true
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        ANTHROPIC_AUTH_TOKEN: ${{ inputs.anthropic_auth_token }}
+        ANTHROPIC_BASE_URL: ${{ inputs.anthropic_base_url }}
+        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude_oauth_token }}
+        CLAUDE_MODEL: ${{ inputs.model }}
+        CLAUDE_RUN_MODE: tip
+        CLAUDE_JSON_SCHEMA: '{"type":"object","properties":{"id":{"type":"string"},"text":{"type":"string"}},"required":["id","text"]}'
+        EXECUTION_OUTPUT_FILE: ${{ runner.temp }}/claude-tip-output.json
+        TIP_PROMPT_FILE: ${{ steps.prep_tip.outputs.tip_prompt_file }}
+        LOG_LEVEL: ${{ inputs.debug_logs == 'true' && 'debug' || 'info' }}
+      run: |
+        CLAUDE_PROMPT="$(cat "$TIP_PROMPT_FILE")"
+        export CLAUDE_PROMPT
+        bun run "${{ github.action_path }}/src/runClaude.ts"
+
     - name: Submit Review
       if: steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.mode == 'review' && steps.preflight.outputs.skip_review != 'true' && always() && (steps.review.outcome == 'success' || steps.review.outcome == 'failure')
       shell: bash
@@ -592,6 +632,9 @@ runs:
         PR_HEAD_SHA: ${{ steps.ctx.outputs.pr_head_sha }}
         RUNNER_TEMP: ${{ runner.temp }}
         CLAUDE_PLUGIN_DIR: ${{ steps.plugin.outputs.dir }}
+        TIP_GENERATION: ${{ inputs.generate_review_tips }}
+        FALLBACK_TIP: ${{ steps.prep_tip.outputs.fallback_tip }}
+        TIP_STRUCTURED_OUTPUT: ${{ steps.gen_tip.outputs.structured_output }}
       run: bun run "${{ github.action_path }}/src/submitReview.ts"
 
     - name: Upload review execution artifact
