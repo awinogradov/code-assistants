@@ -37801,6 +37801,7 @@ allowed-tools:
   - Read
   - Bash(gh *)
   - MCP(linear:*)
+  - ToolSearch
   - AskUserQuestion
   - Skill(autopilot:preflight-check)
 ---
@@ -37868,7 +37869,11 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
 
 **Skip this phase entirely for special prefix flag branches (--hotfix, --trivial, --maintenance, --proposal, --security).**
 
-**If `provider` is `linear`:** fetch the ticket via `mcp__plugin_autopilot_linear__get_issue` with `{ "id": "<LINEAR-ID>" }` and read its `title` (for the slug) and `state.name`. Skip the GitHub `gh` steps below and do NOT self-assign — Linear assignment is deferred to a later phase; emit `unassigned — Linear assignment deferred`. Then continue to [Phase 3](#phase-3-generate-branch-slug). The steps below apply to **GitHub** issues only.
+**If `provider` is `linear`:** fetch the ticket via the Linear MCP `get_issue` tool with `{ "id": "<LINEAR-ID>" }` and read its `title` (for the slug) and `state.name`; if no Linear MCP tool resolves (see the access note below), stop with its `No Linear MCP available …` message instead of continuing without ticket data. Skip the GitHub `gh` steps below and do NOT self-assign — Linear assignment is deferred to a later phase; emit `unassigned — Linear assignment deferred`. Then continue to [Phase 3](#phase-3-generate-branch-slug). The steps below apply to **GitHub** issues only.
+
+<!-- Canonical: [linear:create SKILL.md](../linear:create/SKILL.md#completion-requirement) Linear MCP access note — keep this paragraph in sync with it (only the tool list varies). -->
+
+**Linear MCP access:** Linear operations here use the session's connected Linear MCP server, matching tools by name — the suffix after the final `__` (`get_issue`, `list_issue_statuses`, `save_issue`) — under whatever server prefix the session exposes: the bundled `mcp__plugin_autopilot_linear__*` or a user-configured Linear server such as `mcp__linear-server__*` (Claude Code connects one server per endpoint; a user-scope server shadows the bundled one). The prefix must identify a Linear server (a `linear` server name or the `mcp.linear.app` endpoint) — never bind a generic tool name like `get_issue` to a non-Linear MCP. If a tool is not visible, search for it with ToolSearch by bare tool name before concluding it is absent. Only when no Linear MCP tool resolves under any prefix, stop and tell the user: `No Linear MCP available — check /mcp for a disconnected or unauthenticated Linear server, or connect one: claude mcp add --transport http linear https://mcp.linear.app/mcp`.
 
 1. **Determine the repository** and bind it to `REPO` so every `gh` call in this phase targets the same repo (important in worktrees and multi-remote checkouts):
 
@@ -38060,7 +38065,7 @@ Only proceed to [Phase 6](#phase-6-execute) after user selects "Create branch". 
    git push -u origin <branch-name>
    ```
 
-3. **If `provider` is `linear` AND `--start` was passed:** move the ticket to "In Progress" — best-effort, never blocks the branch. Resolve the target state id with `mcp__plugin_autopilot_linear__list_issue_statuses` for the ticket's team, then call `mcp__plugin_autopilot_linear__save_issue` with `{ "id": "<LINEAR-ID>", "state": "<In Progress state>" }`. On success, emit `✓ Ticket <LINEAR-ID> moved to In Progress`; on any failure, emit `issue not started — <reason>` and continue.
+3. **If `provider` is `linear` AND `--start` was passed:** move the ticket to "In Progress" — best-effort, never blocks the branch. Resolve the target state id with the Linear MCP `list_issue_statuses` tool for the ticket's team, then call the Linear MCP `save_issue` tool with `{ "id": "<LINEAR-ID>", "state": "<In Progress state>" }` — tool resolution per the [Phase 2](#phase-2-fetch-github-issue) Linear MCP access note. On success, emit `✓ Ticket <LINEAR-ID> moved to In Progress`; when no Linear MCP tool resolves under any prefix, emit `issue not started — no Linear MCP available (check /mcp or connect one)`; on any other failure, emit `issue not started — <reason>`. Always continue — but the emitted line MUST reach the step 4 output block, never only intermediate text.
 
 4. **Output result:**
 
@@ -38074,7 +38079,7 @@ Only proceed to [Phase 6](#phase-6-execute) after user selects "Create branch". 
    - Use /autopilot:pr-create when ready
    ```
 
-   When `--start` moved a Linear ticket (step 3 success), add a `✓ Ticket <LINEAR-ID> moved to In Progress` line after the push confirmation.
+   When `--start` was passed for a Linear ticket, add the step 3 outcome line after the push confirmation — `✓ Ticket <LINEAR-ID> moved to In Progress` on success, or the `issue not started — <reason>` line on failure — so a skipped transition is visible in the final output, not just mid-run.
 
 ## Examples
 
@@ -39589,6 +39594,7 @@ allowed-tools:
   - Bash(gh *)
   - Read
   - MCP(linear:*)
+  - ToolSearch
   - AskUserQuestion
   - Skill(autopilot:run)
 ---
@@ -39670,11 +39676,15 @@ If `$ARGUMENTS` already supplies an issue identifier (a GitHub number or a Linea
 
 ## Phase 1: Fetch Recent Open Issues
 
-**If the provider is Linear:** first pick the team to browse. With exactly one `linear` tracker, use its `team` (no prompt). With two or more, ask via AskUserQuestion (single-select) — one option per team, `{ label: "<team>", description: "<comma-joined keys, or 'no keys'>" }` — and use the chosen `team`. Then list that team's recent open issues via `mcp__plugin_autopilot_linear__list_issues` (open only, ordered by most-recently-updated; without `--all`, prefer unassigned when the tool exposes an assignee filter). Then mirror the GitHub empty-state handling:
+**If the provider is Linear:** first pick the team to browse. With exactly one `linear` tracker, use its `team` (no prompt). With two or more, ask via AskUserQuestion (single-select) — one option per team, `{ label: "<team>", description: "<comma-joined keys, or 'no keys'>" }` — and use the chosen `team`. Then list that team's recent open issues via the Linear MCP `list_issues` tool (open only, ordered by most-recently-updated; without `--all`, prefer unassigned when the tool exposes an assignee filter). Then mirror the GitHub empty-state handling:
 
 - Non-empty — map each to a picker option `{ label: "<identifier> <title>", description: "<labels or 'no labels'>" }` and continue at [Phase 2](#phase-2-select-an-issue).
 - Empty with `--all` — there are genuinely no open issues to pick from; tell the user and stop (they can re-invoke as `/issue:run <id>`).
 - Empty without `--all` — re-list once without the unassigned preference; if still empty, stop with the same message.
+
+<!-- Canonical: [linear:create SKILL.md](../linear:create/SKILL.md#completion-requirement) Linear MCP access note — keep this paragraph in sync with it (only the tool list varies). -->
+
+**Linear MCP access:** Linear operations here use the session's connected Linear MCP server, matching tools by name — the suffix after the final `__` (`list_issues`) — under whatever server prefix the session exposes: the bundled `mcp__plugin_autopilot_linear__*` or a user-configured Linear server such as `mcp__linear-server__*` (Claude Code connects one server per endpoint; a user-scope server shadows the bundled one). The prefix must identify a Linear server (a `linear` server name or the `mcp.linear.app` endpoint) — never bind a generic tool name like `get_issue` to a non-Linear MCP. If a tool is not visible, search for it with ToolSearch by bare tool name before concluding it is absent. Only when no Linear MCP tool resolves under any prefix, stop and tell the user: `No Linear MCP available — check /mcp for a disconnected or unauthenticated Linear server, or connect one: claude mcp add --transport http linear https://mcp.linear.app/mcp`.
 
 The GitHub steps below apply to **GitHub** projects.
 
@@ -39788,6 +39798,7 @@ allowed-tools:
   - Grep
   - Glob
   - MCP(linear:*)
+  - ToolSearch
   - MCP(repomix:*)
   - MCP(context7:*)
   - MCP(Ref:*)
@@ -39823,7 +39834,11 @@ Expected form:
 
 ## Completion Requirement
 
-This workflow is not complete until [Phase 7](#phase-7-create-issue) calls `mcp__plugin_autopilot_linear__save_issue` and outputs the created issue identifier and URL. Generating a title, body, or wizard selections does not constitute completion.
+This workflow is not complete until [Phase 7](#phase-7-create-issue) calls the Linear MCP `save_issue` tool and outputs the created issue identifier and URL. Generating a title, body, or wizard selections does not constitute completion.
+
+<!-- Canonical Linear MCP access note. The same paragraph in branch:create, issue:run, and todo-cleanup SKILL.md mirrors this one (only the tool list varies) — keep the four in sync. -->
+
+**Linear MCP access:** Linear operations here use the session's connected Linear MCP server, matching tools by name — the suffix after the final `__` (`save_issue`, `list_issue_statuses`, `list_issue_labels`) — under whatever server prefix the session exposes: the bundled `mcp__plugin_autopilot_linear__*` or a user-configured Linear server such as `mcp__linear-server__*` (Claude Code connects one server per endpoint; a user-scope server shadows the bundled one). The prefix must identify a Linear server (a `linear` server name or the `mcp.linear.app` endpoint) — never bind a generic tool name like `get_issue` to a non-Linear MCP. If a tool is not visible, search for it with ToolSearch by bare tool name before concluding it is absent. Only when no Linear MCP tool resolves under any prefix, stop and tell the user: `No Linear MCP available — check /mcp for a disconnected or unauthenticated Linear server, or connect one: claude mcp add --transport http linear https://mcp.linear.app/mcp`.
 
 ## Phase 0: Resolve Team and Hint
 
@@ -39859,7 +39874,7 @@ Mirror `issue:create` so the body reflects real code, not hallucinated structure
 Fetch the team's workflow states and let the user choose (default to the team's initial state — e.g. `Triage` or `Todo`):
 
 ```
-mcp__plugin_autopilot_linear__list_issue_statuses  with { "team": "<team>" }
+Linear MCP list_issue_statuses  with { "team": "<team>" }
 ```
 
 Present the states via AskUserQuestion (single-select).
@@ -39869,7 +39884,7 @@ Present the states via AskUserQuestion (single-select).
 Fetch the team's labels; pre-select the `label` from `agents.trackers` (when present):
 
 ```
-mcp__plugin_autopilot_linear__list_issue_labels  with { "team": "<team>" }
+Linear MCP list_issue_labels  with { "team": "<team>" }
 ```
 
 Present via AskUserQuestion (multi-select). Only labels returned by the call may be selected — never invent a label.
@@ -39896,7 +39911,7 @@ Present the full issue via AskUserQuestion with a `preview` carrying the title, 
 This phase is mandatory. Create the ticket:
 
 ```
-mcp__plugin_autopilot_linear__save_issue  with {
+Linear MCP save_issue  with {
   "title": "<title>",
   "team": "<team>",
   "description": "<five-section body>",
@@ -48021,6 +48036,7 @@ allowed-tools:
   - Bash(mypy *)
   - Bash(gh *)
   - MCP(linear:*)
+  - ToolSearch
   - AskUserQuestion
 ---
 
@@ -48157,7 +48173,11 @@ For each stale TODO:
 
    c. Create the issue:
    - **GitHub:** `gh issue create --title "<title>" --body "<body>"`
-   - **Linear:** `mcp__plugin_autopilot_linear__save_issue` with `{ "title": "<title>", "team": "<team>", "description": "<body>" }` (the `team` resolved in step 1 above)
+   - **Linear:** the Linear MCP `save_issue` tool with `{ "title": "<title>", "team": "<team>", "description": "<body>" }` (the `team` resolved in step 1 above)
+
+     <!-- Canonical: [linear:create SKILL.md](../linear:create/SKILL.md#completion-requirement) Linear MCP access note — keep this paragraph in sync with it (only the tool list varies). -->
+
+     **Linear MCP access:** Linear operations here use the session's connected Linear MCP server, matching tools by name — the suffix after the final `__` (`save_issue`) — under whatever server prefix the session exposes: the bundled `mcp__plugin_autopilot_linear__*` or a user-configured Linear server such as `mcp__linear-server__*` (Claude Code connects one server per endpoint; a user-scope server shadows the bundled one). The prefix must identify a Linear server (a `linear` server name or the `mcp.linear.app` endpoint) — never bind a generic tool name like `get_issue` to a non-Linear MCP. If a tool is not visible, search for it with ToolSearch by bare tool name before concluding it is absent. Only when no Linear MCP tool resolves under any prefix, stop and tell the user — never silently skip ticket creation: `No Linear MCP available — check /mcp for a disconnected or unauthenticated Linear server, or connect one: claude mcp add --transport http linear https://mcp.linear.app/mcp`.
 
    d. Capture the created issue's URL (GitHub prints it on the last line; for Linear use the returned ticket URL).
 
@@ -51303,7 +51323,7 @@ Reading an issue never prompts — the id's key prefix already names the team. C
 
 Autopilot reaches Linear two ways:
 
-- **Linear MCP server (interactive).** The plugin ships a `linear` server in [`.mcp.json`](../claude-plugins/autopilot/.mcp.json) (`https://mcp.linear.app/mcp`, OAuth). Interactive sessions call `mcp__plugin_autopilot_linear__*` tools — no secrets to manage.
+- **Linear MCP server (interactive).** The plugin ships a `linear` server in [`.mcp.json`](../claude-plugins/autopilot/.mcp.json) (`https://mcp.linear.app/mcp`, OAuth). Interactive sessions call the connected Linear MCP server's tools — the bundled `mcp__plugin_autopilot_linear__*` prefix, or a user-configured Linear server such as `mcp__linear-server__*`, which shadows the bundled one when it points at the same endpoint (Claude Code connects one server per endpoint) — no secrets to manage.
 - **GraphQL helper (headless/CI).** Where the OAuth flow cannot run, a bundled zero-dependency helper — [`fetch-issue.mjs`](../claude-plugins/autopilot/lib/linear/fetch-issue.mjs) (Node 18+, global `fetch`, no install step) — calls the Linear GraphQL API keyed by `LINEAR_API_KEY` and prints the same JSON contract as the MCP path.
 
 ## The single resolution seam
