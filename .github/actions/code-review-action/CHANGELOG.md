@@ -2,6 +2,92 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.6.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.5.0...code-review-action@v1.6.0) (2026-07-02)
+
+## Release Notes
+
+The default AI review model is now Claude Sonnet 5, delivering sharper analysis out of the box alongside a set of quality and presentation improvements across review output.
+
+## ✨ What's New
+
+### Upgraded Default Model: Claude Sonnet 5
+
+AI code reviews now run on Claude Sonnet 5 by default, with no configuration changes required. Teams that need to pin a specific model can still do so using the `model` input on the action. Expect noticeably more accurate and detailed review findings from this release onward.
+
+<details><summary>Related issues</summary>
+
+- [#392: Switch the code review default model to Claude Sonnet 5](https://github.com/awinogradov/code-assistants/issues/392)
+</details>
+
+### Repository RFC and Docs Standards Enforcement
+
+The AI reviewer now reads a repository's own `rfc/` and `docs/` folders and enforces their conventions as part of every review. Violations of Accepted RFCs are flagged as blocking findings; conflicts with Draft RFCs or contradictions of documented conventions surface as suggestions. Two new RFC hygiene checks are also active: editing an Accepted RFC without a version bump is flagged, as is an RFC that is missing from the `rfc/README.md` index. Repositories that have no `rfc/` or `docs/` folders see no change in review behavior or cost.
+
+<details><summary>Related issues</summary>
+
+- [#403: Enforce consumer rfc/ and docs/ standards in code review](https://github.com/awinogradov/code-assistants/issues/403)
+</details>
+
+### Rotating Usage Tips (Occasional, Non-Repeating)
+
+Roughly 1 in 20 reviews now includes a single rotating usage tip at the end of the comment. The tip pool is tracked per pull request so the same tip never appears twice on the same PR. Clean approvals never carry a tip. Duplicate-review suppression is unaffected. This replaces the static "ask the reviewer" hint that previously appeared on every review comment.
+
+<details><summary>Related issues</summary>
+
+- [#389: Show a random tip in 5% of AI review comments, never repeated within a PR](https://github.com/awinogradov/code-assistants/issues/389)
+</details>
+
+### Clickable References in Review Output
+
+All file paths, doc references, RFC citations, Linear/GitHub tracker IDs, and fixing commit SHAs in generated review comments and PR bodies now render as real, clickable links rather than backticked dead text or bare hashes. File and doc references resolve to permalinks at the reviewed commit. This applies to both new reviews and reply comments from the `react` mode.
+
+<details><summary>Related issues</summary>
+
+- [#279: Apply RFC-0001 formatting to generated PR descriptions and release notes](https://github.com/awinogradov/code-assistants/issues/279)
+- [#387: PR bodies and review replies still emit unlinked references violating RFC-0001](https://github.com/awinogradov/code-assistants/issues/387)
+</details>
+
+## 🐛 Bug Fixes
+
+### Garbled Line Breaks in Review Comments
+
+Review comments were rendering literal `\n` escape sequences instead of actual line breaks, making multi-point findings hard to read. Formatting now renders correctly in all review comment bodies.
+
+### Repeated "Ask the Reviewer" Footer Removed
+
+The static usage hint that appeared at the bottom of every review comment has been removed. That guidance now surfaces only through the rotating tip pool described above, keeping review footers clean and focused.
+
+<details><summary>Related issues</summary>
+
+- [#389: Show a random tip in 5% of AI review comments, never repeated within a PR](https://github.com/awinogradov/code-assistants/issues/389)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #389 | [#408](https://github.com/awinogradov/code-assistants/pull/408) | @awinogradov |
+| #279 | [#406](https://github.com/awinogradov/code-assistants/pull/406) | @awinogradov |
+| #403 | [#404](https://github.com/awinogradov/code-assistants/pull/404) | @awinogradov |
+| #392 | [#394](https://github.com/awinogradov/code-assistants/pull/394) | @awinogradov |
+| #387 | [#388](https://github.com/awinogradov/code-assistants/pull/388) | @awinogradov |
+
+### Features
+
+* **autopilot:** enforce repo rfc and docs standards in review ([1348297](https://github.com/awinogradov/code-assistants/commit/13482974363e8355dc488a23b1cfb61f51c8b6a1))
+* **code-review-action:** show random tip in 5% of reviews ([f7f8401](https://github.com/awinogradov/code-assistants/commit/f7f84015cbda9f5f8d7759b7a628158b877175f0))
+* **code-review:** switch default model to sonnet 5 ([1f8cb99](https://github.com/awinogradov/code-assistants/commit/1f8cb999486f34f091532930ef7718f9655773dc))
+
+### Bug Fixes
+
+* **code-review-action:** drop always-on usage hint from review footer ([c279ab2](https://github.com/awinogradov/code-assistants/commit/c279ab243134259228e2a72a6809d4d71c08bfd8))
+* **code-review:** repair over-escaped newlines in review bodies ([1c2c653](https://github.com/awinogradov/code-assistants/commit/1c2c6539e580c484a1995409bd5d2ffe71f4f7bc))
+
+### Tests
+
+* **code-review:** guard linked review body references ([9a802f6](https://github.com/awinogradov/code-assistants/commit/9a802f67047e8c08846c526a640667b3c07110e4))
+* guard linked reference forms in skills ([078b9ed](https://github.com/awinogradov/code-assistants/commit/078b9ed55d08bfd223564605726322772fb80472))
 ## [1.5.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.4.1...code-review-action@v1.5.0) (2026-06-26)
 
 ## Release Notes
