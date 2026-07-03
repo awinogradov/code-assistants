@@ -195,6 +195,37 @@
         "label": "Skill: autopilot:commits-create",
         "default_collapsed": true
       }
+    },
+    {
+      "id": "claude-skill-toolu_01KjxEoSFWgjXH5ynZ1Hq7yJ",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "autopilot:pr-create"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "f738b8dea643",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 685,
+        "end": 686,
+        "entry_ids": [
+          "9eba2a8e-a990-4949-820d-d2d887c9af86"
+        ],
+        "tool_use_id": "toolu_01KjxEoSFWgjXH5ynZ1Hq7yJ"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01KjxEoSFWgjXH5ynZ1Hq7yJ"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: autopilot:pr-create",
+        "default_collapsed": true
+      }
     }
   ],
   "session_metrics": {
