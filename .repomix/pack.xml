@@ -396,6 +396,7 @@ claude-plugins/
       1.6.0.md
       1.7.0.md
       1.8.0.md
+      1.8.1.md
     agents/
       analyze-pr-commits.md
       analyze-staged-changes.md
@@ -36238,7 +36239,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -37279,6 +37280,25 @@ Code review comments now render file paths, doc mentions, and RFC references as 
 ### Bug Fixes
 
 * **autopilot:** link file and doc mentions in review prose ([25ec5a0](https://github.com/awinogradov/code-assistants/commit/25ec5a0ce2ba993457fd4e0193a57cce870754fd))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/1.8.1.md">
+## [1.8.1](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.8.0...autopilot@v1.8.1) (2026-07-03)
+
+## Release Notes
+
+Rule-code anchor links in review comments now navigate directly to the correct rule section instead of dropping readers at the top of the rules document.
+
+## 🐛 Bug Fixes
+
+### Broken Rule-Code Anchor Links in Review Output
+
+When the AI code review posted comments referencing specific rules (e.g. `check-naming`, `check-complexity`), the links were generating uppercase fragment anchors that GitHub couldn't match to any heading — so clicking them landed at the top of the rules document rather than the relevant rule section. Anchor fragments are now always lowercased, matching GitHub's heading anchor format, so rule-code links in both review comments and replies resolve to the correct section.
+
+
+### Bug Fixes
+
+* **code-review:** lowercase check-* link fragments in review output ([976f0e1](https://github.com/awinogradov/code-assistants/commit/976f0e1cf70002069410b2d0de68ddfb4994648c))
 </file>
 
 <file path="claude-plugins/autopilot/agents/analyze-pr-commits.md">
@@ -49544,6 +49564,22 @@ Write the most helpful, readable output you can: plain, direct prose; every refe
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.8.1](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.8.0...autopilot@v1.8.1) (2026-07-03)
+
+## Release Notes
+
+Rule-code anchor links in review comments now navigate directly to the correct rule section instead of dropping readers at the top of the rules document.
+
+## 🐛 Bug Fixes
+
+### Broken Rule-Code Anchor Links in Review Output
+
+When the AI code review posted comments referencing specific rules (e.g. `check-naming`, `check-complexity`), the links were generating uppercase fragment anchors that GitHub couldn't match to any heading — so clicking them landed at the top of the rules document rather than the relevant rule section. Anchor fragments are now always lowercased, matching GitHub's heading anchor format, so rule-code links in both review comments and replies resolve to the correct section.
+
+
+### Bug Fixes
+
+* **code-review:** lowercase check-* link fragments in review output ([976f0e1](https://github.com/awinogradov/code-assistants/commit/976f0e1cf70002069410b2d0de68ddfb4994648c))
 ## [1.8.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.7.0...autopilot@v1.8.0) (2026-07-03)
 
 ## Release Notes
@@ -50575,14 +50611,14 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
   "release": {
     "type": "claude-plugin"
   },
-  "version": "1.8.0"
+  "version": "1.8.1"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.8.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.8.1-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -50996,7 +51032,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-1.8.0
+1.8.1
 </file>
 
 <file path="docs/01-workspace-structure.md">
