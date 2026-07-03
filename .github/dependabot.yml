@@ -1,0 +1,34 @@
+# Dependabot version updates for the github-actions ecosystem.
+# Options reference:
+# https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    # `/` scans .github/workflows/*.yml (and a root action.yml, if any).
+    # `/.github/actions/*` reaches every composite action.yml one level deep.
+    # Required because `directory: "/"` does NOT recurse into .github/actions/*/,
+    # where the third-party actions pinned inside composites (oven-sh/setup-bun,
+    # etc.) live. If a nested composite dir is ever added
+    # (.github/actions/<group>/<name>/action.yml), add another entry here.
+    directories:
+      - "/"
+      - "/.github/actions/*"
+    schedule:
+      # Weekly, Sunday 20:00 Asia/Dubai (UTC+4, no DST). timezone applies only
+      # when `time` is set; the default check time is 06:00 otherwise.
+      interval: "weekly"
+      day: "sunday"
+      time: "20:00"
+      timezone: "Asia/Dubai"
+    # One consolidated group across all directories -> a single weekly PR, so
+    # turbo runs test/typecheck once instead of once per touched directory.
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    # Rebase-merge replays each commit onto main and release-action classifies
+    # releases by conventional type; `ci(deps): bump ...` keeps history
+    # conventional and non-releasing.
+    commit-message:
+      prefix: "ci"
+      include: "scope"
