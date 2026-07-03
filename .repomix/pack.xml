@@ -229,6 +229,7 @@ The content is organized as follows:
     perf-report-action/
       .release_notes/
         0.2.0.md
+        0.2.1.md
       src/
         classifyDeltas.test.ts
         classifyDeltas.ts
@@ -343,6 +344,7 @@ The content is organized as follows:
         0.2.0.md
         0.2.1.md
         0.2.2.md
+        0.2.3.md
       src/
         classifyTargets.test.ts
         classifyTargets.ts
@@ -392,6 +394,7 @@ claude-plugins/
       1.5.0.md
       1.6.0.md
       1.7.0.md
+      1.8.0.md
     agents/
       analyze-pr-commits.md
       analyze-staged-changes.md
@@ -19245,6 +19248,19 @@ To use the performance reporting in your project, update your GitHub workflow wi
 * **perf-report:** render in-band cls delta as ≈ 0 ([e66dcad](https://github.com/awinogradov/code-assistants/commit/e66dcad0315295f44666c2540b90f7c0e96ae746))
 </file>
 
+<file path=".github/actions/perf-report-action/.release_notes/0.2.1.md">
+## [0.2.1](https://github.com/awinogradov/code-assistants/compare/perf-report-action@v0.2.0...perf-report-action@v0.2.1) (2026-07-03)
+
+## Release Notes
+
+Routine dependency updates with no user-facing changes in this release.
+
+
+### CI
+
+* **deps:** bump the github-actions group across 6 directories with 4 updates ([ea89dd2](https://github.com/awinogradov/code-assistants/commit/ea89dd248da6da72d90d1cfcaa36e2b415f356ee))
+</file>
+
 <file path=".github/actions/perf-report-action/src/classifyDeltas.test.ts">
 import { describe, expect, test } from "bun:test";
 
@@ -20631,6 +20647,16 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [0.2.1](https://github.com/awinogradov/code-assistants/compare/perf-report-action@v0.2.0...perf-report-action@v0.2.1) (2026-07-03)
+
+## Release Notes
+
+Routine dependency updates with no user-facing changes in this release.
+
+
+### CI
+
+* **deps:** bump the github-actions group across 6 directories with 4 updates ([ea89dd2](https://github.com/awinogradov/code-assistants/commit/ea89dd248da6da72d90d1cfcaa36e2b415f356ee))
 ## 0.2.0 (2026-06-13)
 
 ## Release Notes
@@ -20676,7 +20702,7 @@ To use the performance reporting in your project, update your GitHub workflow wi
 <file path=".github/actions/perf-report-action/package.json">
 {
   "name": "@code-assistants/perf-report-action",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Composite GitHub Action that posts a sticky PR comment with bundle-size and Lighthouse deltas against a main-branch baseline.",
   "private": true,
   "type": "module",
@@ -20706,7 +20732,7 @@ To use the performance reporting in your project, update your GitHub workflow wi
 <file path=".github/actions/perf-report-action/README.md">
 # Perf report
 
-[![GitHub Release](https://img.shields.io/badge/release-v0.2.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v0.2.1-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that builds a target, measures bundle sizes (raw / gzip / brotli) and Lighthouse headlines (Performance, Accessibility, LCP, TBT, CLS, TTI), compares them against a baseline from the default branch, and posts a single sticky PR comment with the deltas classified against per-metric noise bands.
@@ -20842,7 +20868,7 @@ Pin to a tag for explicit control, or use `@main` to always pick up the latest b
 </file>
 
 <file path=".github/actions/perf-report-action/version">
-0.2.0
+0.2.1
 </file>
 
 <file path=".github/actions/release-action/.release_notes/0.1.0.md">
@@ -34340,6 +34366,32 @@ All documentation callouts now use GitHub's native alert syntax instead of HTML/
 * adopt github alert syntax for callouts ([151e57b](https://github.com/awinogradov/code-assistants/commit/151e57bd2694b5df626833d3243cdded6f77eef9))
 </file>
 
+<file path=".github/actions/validate-actions/.release_notes/0.2.3.md">
+## [0.2.3](https://github.com/awinogradov/code-assistants/compare/validate-actions-action@v0.2.2...validate-actions-action@v0.2.3) (2026-07-03)
+
+## Release Notes
+
+`actions/checkout` is updated to v7, which blocks checkout of fork PRs in `pull_request_target` and `workflow_run` triggers — a security hardening change that affects how this action behaves in repositories using those triggers.
+
+## ✨ What's New
+
+### Hardened Fork PR Checkout Security
+
+The `actions/checkout` dependency used internally by this action has been updated from v6 to v7. The most significant change in v7 is that it now blocks checking out pull requests from forks when the workflow is triggered via `pull_request_target` or `workflow_run` events. This is a security improvement that prevents a class of privilege-escalation attacks where untrusted fork code could be executed in a context with elevated permissions.
+
+For the `validate-actions` action itself — which uses a `pull_request` trigger and `contents: read` permissions — this change has no functional impact on normal operation. However, if your repository wraps or re-uses this action in workflows with `pull_request_target` or `workflow_run` triggers, be aware that checkout of fork PRs in those contexts will now fail by design.
+
+<details><summary>Related issues</summary>
+
+- [#419: ci(deps): bump the github-actions group across 6 directories with 4 updates](https://github.com/awinogradov/code-assistants/pull/419)
+</details>
+
+
+### CI
+
+* **deps:** bump the github-actions group across 6 directories with 4 updates ([ea89dd2](https://github.com/awinogradov/code-assistants/commit/ea89dd248da6da72d90d1cfcaa36e2b415f356ee))
+</file>
+
 <file path=".github/actions/validate-actions/src/classifyTargets.test.ts">
 import { describe, expect, test } from "bun:test";
 import { classifyTarget, classifyTargets } from "./classifyTargets.ts";
@@ -35169,6 +35221,29 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [0.2.3](https://github.com/awinogradov/code-assistants/compare/validate-actions-action@v0.2.2...validate-actions-action@v0.2.3) (2026-07-03)
+
+## Release Notes
+
+`actions/checkout` is updated to v7, which blocks checkout of fork PRs in `pull_request_target` and `workflow_run` triggers — a security hardening change that affects how this action behaves in repositories using those triggers.
+
+## ✨ What's New
+
+### Hardened Fork PR Checkout Security
+
+The `actions/checkout` dependency used internally by this action has been updated from v6 to v7. The most significant change in v7 is that it now blocks checking out pull requests from forks when the workflow is triggered via `pull_request_target` or `workflow_run` events. This is a security improvement that prevents a class of privilege-escalation attacks where untrusted fork code could be executed in a context with elevated permissions.
+
+For the `validate-actions` action itself — which uses a `pull_request` trigger and `contents: read` permissions — this change has no functional impact on normal operation. However, if your repository wraps or re-uses this action in workflows with `pull_request_target` or `workflow_run` triggers, be aware that checkout of fork PRs in those contexts will now fail by design.
+
+<details><summary>Related issues</summary>
+
+- [#419: ci(deps): bump the github-actions group across 6 directories with 4 updates](https://github.com/awinogradov/code-assistants/pull/419)
+</details>
+
+
+### CI
+
+* **deps:** bump the github-actions group across 6 directories with 4 updates ([ea89dd2](https://github.com/awinogradov/code-assistants/commit/ea89dd248da6da72d90d1cfcaa36e2b415f356ee))
 ## [0.2.2](https://github.com/awinogradov/code-assistants/compare/validate-actions-action@v0.2.1...validate-actions-action@v0.2.2) (2026-06-15)
 
 ## Release Notes
@@ -35285,7 +35360,7 @@ The action now includes comprehensive documentation covering installation, confi
 <file path=".github/actions/validate-actions/package.json">
 {
   "name": "@code-assistants/validate-actions-action",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Composite GitHub Action that lints changed workflow files with actionlint and the inline run blocks of composite action.yml files with shellcheck.",
   "private": true,
   "type": "module",
@@ -35316,7 +35391,7 @@ The action now includes comprehensive documentation covering installation, confi
 <file path=".github/actions/validate-actions/README.md">
 # Validate Actions
 
-[![GitHub Release](https://img.shields.io/badge/release-v0.2.2-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v0.2.3-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that lints a pull request's **changed** GitHub Actions files:
@@ -35415,7 +35490,7 @@ Reference the action by tag, e.g. `…/validate-actions@v1`, for explicit contro
 </file>
 
 <file path=".github/actions/validate-actions/version">
-0.2.2
+0.2.3
 </file>
 
 <file path=".github/workflows/auto-label.yml">
@@ -36043,7 +36118,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -37041,6 +37116,49 @@ AI review comments now link every file, doc, and standard reference to a permali
 * **autopilot:** link file and doc refs in review output ([d32d15c](https://github.com/awinogradov/code-assistants/commit/d32d15c03a7dc4ac4a287040951178fcb38bab1f))
 * **autopilot:** match linear mcp tools by name in skills ([7694baf](https://github.com/awinogradov/code-assistants/commit/7694baf5ea9193a95c3456d67d34deb585327826))
 * link tracker ids and shas in generated output ([56e8668](https://github.com/awinogradov/code-assistants/commit/56e8668bfe800373f2cdaa0da4615924c8f87c67))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/1.8.0.md">
+## [1.8.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.7.0...autopilot@v1.8.0) (2026-07-03)
+
+## Release Notes
+
+The plan skill now discovers and enforces your repo's `rfc/` and `docs/` standards, closing the gap where review enforced conventions that planning ignored.
+
+## ✨ What's New
+
+### RFC and Docs Standards Awareness in Planning
+
+The autopilot loop's review side has long discovered and enforced a repo's versioned RFC standards and `docs/` conventions — flagging drift, checking compliance, requiring version-bump hygiene. The plan skill now does the same. When kicking off a plan, autopilot will inventory your `rfc/` directory (up to 3 applicable standards), fall back through your `docs/` chain, record the applicable standards in its Context Map, score compliance as part of Phase 5, and enforce RFC version-bump hygiene in Post-Implementation. This means plans are drafted to comply with your repo's own standards from the start, not just checked against them after the fact.
+
+The four `rules/*.md` files have also been updated to declare `rfc/` in their Mandatory Context blocks, with the precedence order: Accepted RFC → `docs/` → the rule file itself.
+
+<details><summary>Related issues</summary>
+
+- [#421: Support rfc/ and docs/ standards in the plan skills and rules](https://github.com/awinogradov/code-assistants/issues/421)
+- [#422: Support rfc/ and docs/ standards in the plan skills and rules](https://github.com/awinogradov/code-assistants/pull/422)
+</details>
+
+## 🐛 Bug Fixes
+
+### Linked File and Doc References in Review Comments
+
+Code review comments now render file paths, doc mentions, and RFC references as clickable links directly in the comment prose and summary — not just at the finding location. Previously, a reviewer reading a comment about a standards violation had to hunt for the relevant file or RFC separately; now those references resolve inline where they appear.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #421 | [#422](https://github.com/awinogradov/code-assistants/pull/422) | @awinogradov |
+
+### Features
+
+* **autopilot:** read repo rfc/docs standards in plan skill ([ee6490d](https://github.com/awinogradov/code-assistants/commit/ee6490d5b00de91c07b446765864e2d4bdffaff3))
+
+### Bug Fixes
+
+* **autopilot:** link file and doc mentions in review prose ([25ec5a0](https://github.com/awinogradov/code-assistants/commit/25ec5a0ce2ba993457fd4e0193a57cce870754fd))
 </file>
 
 <file path="claude-plugins/autopilot/agents/analyze-pr-commits.md">
@@ -49306,6 +49424,46 @@ Write the most helpful, readable output you can: plain, direct prose; every refe
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.8.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.7.0...autopilot@v1.8.0) (2026-07-03)
+
+## Release Notes
+
+The plan skill now discovers and enforces your repo's `rfc/` and `docs/` standards, closing the gap where review enforced conventions that planning ignored.
+
+## ✨ What's New
+
+### RFC and Docs Standards Awareness in Planning
+
+The autopilot loop's review side has long discovered and enforced a repo's versioned RFC standards and `docs/` conventions — flagging drift, checking compliance, requiring version-bump hygiene. The plan skill now does the same. When kicking off a plan, autopilot will inventory your `rfc/` directory (up to 3 applicable standards), fall back through your `docs/` chain, record the applicable standards in its Context Map, score compliance as part of Phase 5, and enforce RFC version-bump hygiene in Post-Implementation. This means plans are drafted to comply with your repo's own standards from the start, not just checked against them after the fact.
+
+The four `rules/*.md` files have also been updated to declare `rfc/` in their Mandatory Context blocks, with the precedence order: Accepted RFC → `docs/` → the rule file itself.
+
+<details><summary>Related issues</summary>
+
+- [#421: Support rfc/ and docs/ standards in the plan skills and rules](https://github.com/awinogradov/code-assistants/issues/421)
+- [#422: Support rfc/ and docs/ standards in the plan skills and rules](https://github.com/awinogradov/code-assistants/pull/422)
+</details>
+
+## 🐛 Bug Fixes
+
+### Linked File and Doc References in Review Comments
+
+Code review comments now render file paths, doc mentions, and RFC references as clickable links directly in the comment prose and summary — not just at the finding location. Previously, a reviewer reading a comment about a standards violation had to hunt for the relevant file or RFC separately; now those references resolve inline where they appear.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #421 | [#422](https://github.com/awinogradov/code-assistants/pull/422) | @awinogradov |
+
+### Features
+
+* **autopilot:** read repo rfc/docs standards in plan skill ([ee6490d](https://github.com/awinogradov/code-assistants/commit/ee6490d5b00de91c07b446765864e2d4bdffaff3))
+
+### Bug Fixes
+
+* **autopilot:** link file and doc mentions in review prose ([25ec5a0](https://github.com/awinogradov/code-assistants/commit/25ec5a0ce2ba993457fd4e0193a57cce870754fd))
 ## [1.7.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.6.0...autopilot@v1.7.0) (2026-07-02)
 
 ## Release Notes
@@ -50297,14 +50455,14 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
   "release": {
     "type": "claude-plugin"
   },
-  "version": "1.7.0"
+  "version": "1.8.0"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.7.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.8.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -50718,7 +50876,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-1.7.0
+1.8.0
 </file>
 
 <file path="docs/01-workspace-structure.md">
