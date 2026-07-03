@@ -100,19 +100,18 @@ async function validateTarget(t: Target): Promise<string | null> {
   }
 }
 
-const rulesSectionHeading = "## 15. Git Workflow";
+const rulesSyncedHeadings = ["## Mandatory Context", "## 15. Git Workflow"];
 
 /**
- * The rules/<stack>.md files carry a duplicated Git Workflow section that ships
- * downstream as each consumer's CLAUDE.md. Verify the section exists in every
- * file and is byte-identical across them so the copies cannot drift.
+ * Verify one `## <heading>` section is byte-identical across every rules/*.md
+ * file (the section slice runs from its heading to the next `## `).
  */
-async function validateRulesSectionSync(): Promise<string | null> {
+async function validateHeadingSync(heading: string): Promise<string | null> {
   const sections = new Map<string, string>();
   for await (const path of new Glob("rules/*.md").scan(".")) {
     const raw = await Bun.file(path).text();
-    const start = raw.indexOf(`\n${rulesSectionHeading}\n`);
-    if (start === -1) return `missing "${rulesSectionHeading}" section in ${path}`;
+    const start = raw.indexOf(`\n${heading}\n`);
+    if (start === -1) return `missing "${heading}" section in ${path}`;
     const end = raw.indexOf("\n## ", start + 1);
     sections.set(path, raw.slice(start + 1, end === -1 ? raw.length : end + 1));
   }
@@ -120,7 +119,20 @@ async function validateRulesSectionSync(): Promise<string | null> {
   const [[firstPath, firstSection], ...rest] = [...sections.entries()];
   const mismatch = rest.find(([, section]) => section !== firstSection);
   if (mismatch) {
-    return `"${rulesSectionHeading}" section in ${mismatch[0]} differs from ${firstPath}`;
+    return `"${heading}" section in ${mismatch[0]} differs from ${firstPath}`;
+  }
+  return null;
+}
+
+/**
+ * The rules/<stack>.md files carry duplicated sections that ship downstream as
+ * each consumer's CLAUDE.md. Verify every synced section exists in each file and
+ * is byte-identical across them so the copies cannot drift.
+ */
+async function validateRulesSectionSync(): Promise<string | null> {
+  for (const heading of rulesSyncedHeadings) {
+    const err = await validateHeadingSync(heading);
+    if (err) return err;
   }
   return null;
 }
@@ -164,7 +176,7 @@ async function main() {
       failed += 1;
       console.error(`✖ rules/*.md\n    ${err}`);
     } else {
-      console.log("✔ rules/*.md git workflow section in sync");
+      console.log("✔ rules/*.md synced sections in sync");
     }
   }
 
