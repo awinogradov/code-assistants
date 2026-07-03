@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "a92998c75d3a",
+  "strategy": "manual-commit",
+  "branch": "hotfix-link-file-doc-mentions-review-comment-prose",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".github/actions/code-review-action/src/prBodyReferenceFormatting.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/a9/2998c75d3a/0/metadata.json",
+      "transcript": "/a9/2998c75d3a/0/full.jsonl",
+      "compact_transcript": "/a9/2998c75d3a/0/transcript.jsonl",
+      "content_hash": "/a9/2998c75d3a/0/content_hash.txt",
+      "prompt": "/a9/2998c75d3a/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 21270,
+    "cache_creation_tokens": 235040,
+    "cache_read_tokens": 5383078,
+    "output_tokens": 48205,
+    "api_call_count": 48
+  }
+}
