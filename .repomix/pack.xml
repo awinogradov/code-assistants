@@ -5841,12 +5841,12 @@ describe("renderInlineCommentBody", () => {
       comment: {
         path: "src/a.ts",
         line: 2,
-        body: "🚧 Off-by-one [CHECK-BUG-003](https://x#CHECK-BUG-003)",
+        body: "🚧 Off-by-one [CHECK-BUG-003](https://x#check-bug-003)",
       },
       hunk,
     });
     // Human-facing finding stays verbatim...
-    expect(body).toContain("🚧 Off-by-one [CHECK-BUG-003](https://x#CHECK-BUG-003)");
+    expect(body).toContain("🚧 Off-by-one [CHECK-BUG-003](https://x#check-bug-003)");
     // ...while the embedded prompt copy is chrome-free.
     expect(body).toContain("<comment>\nOff-by-one\n</comment>");
   });
@@ -5968,7 +5968,7 @@ describe("boundHunkToLine", () => {
 
 describe("stripReviewChrome", () => {
   test("strips a leading severity emoji and a trailing single rule link", () => {
-    expect(stripReviewChrome("🚧 Off-by-one [CHECK-BUG-003](https://x#CHECK-BUG-003)")).toBe(
+    expect(stripReviewChrome("🚧 Off-by-one [CHECK-BUG-003](https://x#check-bug-003)")).toBe(
       "Off-by-one",
     );
   });
@@ -6190,6 +6190,7 @@ import {
   extractValidLines,
   formatInvalidComments,
   isAlreadyMentioned,
+  normalizeRuleLinkFragments,
   parseReactionOutput,
   parseStructuredOutput,
   repairOverEscapedWhitespace,
@@ -6213,6 +6214,26 @@ describe("repairOverEscapedWhitespace", () => {
   test("is a no-op on empty or escape-free text", () => {
     expect(repairOverEscapedWhitespace("")).toBe("");
     expect(repairOverEscapedWhitespace("plain text")).toBe("plain text");
+  });
+});
+
+describe("normalizeRuleLinkFragments", () => {
+  test("lowercases an uppercase rule-link fragment, keeping the display text", () => {
+    expect(normalizeRuleLinkFragments("[CHECK-BUG-002](https://x/SKILL.md#CHECK-BUG-002)")).toBe(
+      "[CHECK-BUG-002](https://x/SKILL.md#check-bug-002)",
+    );
+  });
+
+  test("lowercases a mixed-case fragment and every link in a merged form", () => {
+    expect(normalizeRuleLinkFragments("[[CHECK-A-1](u#Check-A-1), [CHECK-B-2](u#CHECK-B-2)]")).toBe(
+      "[[CHECK-A-1](u#check-a-1), [CHECK-B-2](u#check-b-2)]",
+    );
+  });
+
+  test("leaves lowercase fragments, bare mentions, and non-rule URLs untouched", () => {
+    const clean =
+      "[CHECK-BUG-002](u#check-bug-002) plain CHECK-BUG-002 [file.ts:8](u/file.ts#L8) [§2.5](#25-rule-codes)";
+    expect(normalizeRuleLinkFragments(clean)).toBe(clean);
   });
 });
 
@@ -6276,6 +6297,17 @@ describe("parseStructuredOutput", () => {
     // A suggestion is committed verbatim, so its escapes are left untouched.
     expect(out?.inlineComments[0]?.suggestion).toBe("e\\nf");
   });
+
+  test("lowercases uppercase rule-link fragments in reviewComment and inline body", () => {
+    const raw = JSON.stringify({
+      verdict: "comment",
+      reviewComment: "bad [CHECK-BUG-002](u#CHECK-BUG-002)",
+      inlineComments: [{ path: "x.ts", line: 1, body: "🚧 fix [CHECK-AI-002](u#CHECK-AI-002)" }],
+    });
+    const out = parseStructuredOutput(raw);
+    expect(out?.reviewComment).toBe("bad [CHECK-BUG-002](u#check-bug-002)");
+    expect(out?.inlineComments[0]?.body).toBe("🚧 fix [CHECK-AI-002](u#check-ai-002)");
+  });
 });
 
 describe("parseReactionOutput", () => {
@@ -6316,6 +6348,18 @@ describe("parseReactionOutput", () => {
     const noUpdate = parseReactionOutput(JSON.stringify({ reply: "x\\ny" }));
     expect(noUpdate?.reply).toBe("x\ny");
     expect(noUpdate?.updatedReviewComment).toBeNull();
+  });
+
+  test("lowercases uppercase rule-link fragments in reply and updatedReviewComment", () => {
+    const out = parseReactionOutput(
+      JSON.stringify({
+        reply: "see [CHECK-PR-009](u#CHECK-PR-009)",
+        updatedVerdict: "approve",
+        updatedReviewComment: "ok [CHECK-BUG-002](u#CHECK-BUG-002)",
+      })
+    );
+    expect(out?.reply).toBe("see [CHECK-PR-009](u#check-pr-009)");
+    expect(out?.updatedReviewComment).toBe("ok [CHECK-BUG-002](u#check-bug-002)");
   });
 });
 
@@ -6545,37 +6589,61 @@ export function repairOverEscapedWhitespace(text: string): string {
 }
 
 /**
+ * Lowercase the URL fragment of every `CHECK-*` rule link.
+ *
+ * GitHub rewrites the `<a id="CHECK-…">` anchors in the rendered pr:review
+ * SKILL.md to lowercase `user-content-…` ids, and URL-fragment lookup is
+ * case-sensitive — an uppercase `#CHECK-…` fragment lands at the top of the
+ * file instead of the rule. The skills prescribe lowercase fragments; this
+ * pass makes that deterministic when the model pattern-matches the uppercase
+ * display text into the URL. Display text (`[CHECK-BUG-002]`) and non-link
+ * mentions are left untouched — only a fragment inside a markdown link URL
+ * is rewritten.
+ */
+export function normalizeRuleLinkFragments(text: string): string {
+  return text.replaceAll(
+    /(\]\([^)\s]*#)(check-[a-z0-9]+(?:-[a-z0-9]+)*)(?=\))/gi,
+    (_match, prefix: string, fragment: string) => `${prefix}${fragment.toLowerCase()}`,
+  );
+}
+
+/** Prose-field repair pipeline: whitespace repair, then rule-link fragment casing. */
+function repairProse(text: string): string {
+  return normalizeRuleLinkFragments(repairOverEscapedWhitespace(text));
+}
+
+/**
  * Parse and validate structured review output from Claude (null on any failure).
- * Repairs over-escaped whitespace in the prose fields (`reviewComment`, inline
- * `body`); an inline `suggestion` is committed verbatim, so it is left untouched.
+ * Repairs over-escaped whitespace and rule-link fragment casing in the prose
+ * fields (`reviewComment`, inline `body`); an inline `suggestion` is committed
+ * verbatim, so it is left untouched.
  */
 export function parseStructuredOutput(rawOutput: string): StructuredOutput | null {
   const parsed = parseJsonWithSchema(rawOutput, structuredOutputSchema);
   if (!parsed) return null;
   return {
     ...parsed,
-    reviewComment: repairOverEscapedWhitespace(parsed.reviewComment),
+    reviewComment: repairProse(parsed.reviewComment),
     inlineComments: parsed.inlineComments.map((comment) => ({
       ...comment,
-      body: repairOverEscapedWhitespace(comment.body),
+      body: repairProse(comment.body),
     })),
   };
 }
 
 /**
  * Parse and validate structured reaction output from Claude (null on any failure).
- * Repairs over-escaped whitespace in the prose fields (`reply`, `updatedReviewComment`).
+ * Repairs over-escaped whitespace and rule-link fragment casing in the prose
+ * fields (`reply`, `updatedReviewComment`).
  */
 export function parseReactionOutput(rawOutput: string): ReactionOutput | null {
   const parsed = parseJsonWithSchema(rawOutput, reactionOutputSchema);
   if (!parsed) return null;
   return {
     ...parsed,
-    reply: repairOverEscapedWhitespace(parsed.reply),
+    reply: repairProse(parsed.reply),
     updatedReviewComment:
-      parsed.updatedReviewComment === null
-        ? null
-        : repairOverEscapedWhitespace(parsed.updatedReviewComment),
+      parsed.updatedReviewComment === null ? null : repairProse(parsed.updatedReviewComment),
   };
 }
 
@@ -9197,15 +9265,16 @@ export function stripReviewTips(body: string): string {
  * in a review) and that both skills keep documenting the action input as the one
  * canonical copy, rather than reintroducing a drift-prone duplicate.
  */
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 
 import { describe, expect, test } from "bun:test";
 
 const actionDir = join(import.meta.dirname, "..");
 const repoRoot = join(actionDir, "..", "..", "..");
-const reviewSkill = join(repoRoot, "claude-plugins/autopilot/skills/pr:review/SKILL.md");
-const answerSkill = join(repoRoot, "claude-plugins/autopilot/skills/pr:answer/SKILL.md");
+const skillsDir = join(repoRoot, "claude-plugins/autopilot/skills");
+const reviewSkill = join(skillsDir, "pr:review/SKILL.md");
+const answerSkill = join(skillsDir, "pr:answer/SKILL.md");
 
 const canonicalCopyPhrase = "`rules_doc_url` input default is the one canonical copy";
 
@@ -9221,6 +9290,21 @@ describe("rules_doc_url single source", () => {
       const content = await readFile(skill, "utf8");
       expect(content).toContain(canonicalCopyPhrase);
     }
+  });
+
+  // GitHub renders the `<a id="CHECK-…">` anchors in pr:review SKILL.md as
+  // lowercase `user-content-…` ids and URL-fragment lookup is case-sensitive,
+  // so a prescribed `#CHECK-…` fragment lands at the top of the file instead of
+  // the rule (observed in wefortis/fortune-os#120). Every skill must prescribe
+  // the fragment as the rule code lowercased (`#check-bug-002`, `#<code>`).
+  test("no skill prescribes an uppercase rule-link fragment", async () => {
+    const offenders: string[] = [];
+    for (const dir of await readdir(skillsDir)) {
+      const content = await readFile(join(skillsDir, dir, "SKILL.md"), "utf8").catch(() => "");
+      const fragments = content.match(/#(?:check-[a-z0-9<>-]+|<code[0-9]*>)/gi) ?? [];
+      offenders.push(...fragments.filter((f) => f !== f.toLowerCase()).map((f) => `${dir}: ${f}`));
+    }
+    expect(offenders).toEqual([]);
   });
 });
 </file>
@@ -45190,7 +45274,7 @@ When `NEEDS_REVERDICT` is `true`, decide from the LIVE unresolved bot-thread sta
 
 ### Review Body Update
 
-Only provide `updatedReviewComment` if `updatedVerdict` is non-null. Follow the same format as the original review body (see the pr:review skill for format rules) — including `CHECK-` rule codes rendered exactly as in the [`pr:review` skill's §2.5](../pr:review/SKILL.md#25-rule-codes): when `RULES_DOC_URL` is set, as markdown links (single: `[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002)`; shared: `[[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002), [CHECK-AI-002](<RULES_DOC_URL>#CHECK-AI-002)]`); when it is absent, as the bare code in plain text (single: `CHECK-BUG-002`; shared: `CHECK-BUG-002, CHECK-AI-002`). Do not read agent files.
+Only provide `updatedReviewComment` if `updatedVerdict` is non-null. Follow the same format as the original review body (see the pr:review skill for format rules) — including `CHECK-` rule codes rendered exactly as in the [`pr:review` skill's §2.5](../pr:review/SKILL.md#25-rule-codes): when `RULES_DOC_URL` is set, as markdown links whose fragment is the rule code lowercased — GitHub renders the `<a id>` anchors as lowercase ids, per §2.5 — (single: `[CHECK-BUG-002](<RULES_DOC_URL>#check-bug-002)`; shared: `[[CHECK-BUG-002](<RULES_DOC_URL>#check-bug-002), [CHECK-AI-002](<RULES_DOC_URL>#check-ai-002)]`); when it is absent, as the bare code in plain text (single: `CHECK-BUG-002`; shared: `CHECK-BUG-002, CHECK-AI-002`). Do not read agent files.
 
 ---
 
@@ -46513,7 +46597,7 @@ Compose replies for all processed comments. **Always mention the reviewer** with
 - **Partially addressed**: "@\<reviewer\> [What was changed and why, plus what was intentionally kept]."
 - **Declined by user**: "@\<reviewer\> Considered — [explanation of why this suggestion was not applied]."
 
-Format every reply per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) — the **Reference formatting & readability** rules inlined at the end of this skill. The reference kind that recurs here is the commit SHA: when a reply cites the commit that resolved a thread (the HEAD commit after [Phase 4](#phase-4-commit-and-push)'s push, post-rebase/squash), render the SHA as a markdown link `[<sha>](<repo-commit-url>/<sha>)` built from the repo owner/name resolved in [Phase 1](#phase-1-detect-pr-and-load-context) — never a bare or backticked SHA. Because replies post as GitHub comments, link any file, doc, skill, agent, or section you cite as an absolute `<repo-blob-url>/path#anchor` URL built from the same repo owner/name — never a bare name or a repo-relative path (relative paths do not resolve in a comment). A `CHECK-` rule code (e.g. `CHECK-PR-009`) is a reference, not a code specimen: render it as a link exactly as the [`pr:review` skill's §2.5](../pr:review/SKILL.md#25-rule-codes) prescribes — `[CHECK-PR-009](<rules-doc-url>#CHECK-PR-009)` — never the bare code. Build `<rules-doc-url>` as the absolute blob URL to the `pr:review` SKILL.md from the repo owner/name resolved in [Phase 1](#phase-1-detect-pr-and-load-context) — `<repo-blob-url>/claude-plugins/autopilot/skills/pr%3Areview/SKILL.md`, whose `#CHECK-...` fragment lands on the `<a id="...">` anchor above each rule — falling back to the bare code in plain text only when no such URL is resolvable. Replies that cite no commit (e.g. questions, declines) skip the SHA rule; all other reference kinds still follow the inlined rules. Before posting, self-check every drafted reply: a bare 7–40-char hex token or a bare tracker id (`[A-Z][A-Z0-9]*-[0-9]+`) is a violation — link it per the rules above.
+Format every reply per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) — the **Reference formatting & readability** rules inlined at the end of this skill. The reference kind that recurs here is the commit SHA: when a reply cites the commit that resolved a thread (the HEAD commit after [Phase 4](#phase-4-commit-and-push)'s push, post-rebase/squash), render the SHA as a markdown link `[<sha>](<repo-commit-url>/<sha>)` built from the repo owner/name resolved in [Phase 1](#phase-1-detect-pr-and-load-context) — never a bare or backticked SHA. Because replies post as GitHub comments, link any file, doc, skill, agent, or section you cite as an absolute `<repo-blob-url>/path#anchor` URL built from the same repo owner/name — never a bare name or a repo-relative path (relative paths do not resolve in a comment). A `CHECK-` rule code (e.g. `CHECK-PR-009`) is a reference, not a code specimen: render it as a link exactly as the [`pr:review` skill's §2.5](../pr:review/SKILL.md#25-rule-codes) prescribes — `[CHECK-PR-009](<rules-doc-url>#check-pr-009)`, the fragment being the rule code lowercased — never the bare code. Build `<rules-doc-url>` as the absolute blob URL to the `pr:review` SKILL.md from the repo owner/name resolved in [Phase 1](#phase-1-detect-pr-and-load-context) — `<repo-blob-url>/claude-plugins/autopilot/skills/pr%3Areview/SKILL.md`, whose lowercase `#check-...` fragment lands on the `<a id="...">` anchor above each rule (GitHub renders those ids lowercased, and fragment lookup is case-sensitive) — falling back to the bare code in plain text only when no such URL is resolvable. Replies that cite no commit (e.g. questions, declines) skip the SHA rule; all other reference kinds still follow the inlined rules. Before posting, self-check every drafted reply: a bare 7–40-char hex token or a bare tracker id (`[A-Z][A-Z0-9]*-[0-9]+`) is a violation — link it per the rules above.
 
 Build a summary of all drafted replies:
 
@@ -47444,10 +47528,10 @@ Render each rule code based on whether `RULES_DOC_URL` (from Input resolution) w
 
 **When `RULES_DOC_URL` is set** — emit a markdown link to the code's anchor in this file:
 
-- Single code → `[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002)`.
-- Shared location (multiple codes) → `[[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002), [CHECK-AI-002](<RULES_DOC_URL>#CHECK-AI-002)]`.
+- Single code → `[CHECK-BUG-002](<RULES_DOC_URL>#check-bug-002)`.
+- Shared location (multiple codes) → `[[CHECK-BUG-002](<RULES_DOC_URL>#check-bug-002), [CHECK-AI-002](<RULES_DOC_URL>#check-ai-002)]`.
 
-Substitute the resolved `RULES_DOC_URL` value verbatim — do not invent a different host or path. The `#CHECK-...` fragment must match the code exactly so it lands on the right anchor.
+Substitute the resolved `RULES_DOC_URL` value verbatim — do not invent a different host or path. The fragment is the rule code lowercased verbatim (e.g. `#check-bug-002`), nothing prepended — GitHub rewrites each rule's `<a id>` anchor to a lowercase `user-content-*` id and fragment lookup is case-sensitive, so an uppercase fragment never lands. The link display text keeps the uppercase code.
 
 **When `RULES_DOC_URL` is absent** (e.g. a manual local run) — emit the bare code as plain text, no link and no brackets:
 
@@ -47499,7 +47583,7 @@ Map `severity` to its emoji when rendering in [Phase 3](#phase-3-submit-review):
   "inlineComments": [
     {"path": "src/file.ts", "line": 42, "body": "🚧 Issue description"},
     {"path": "src/other.ts", "line": 15, "body": "🙋‍♂️ Suggestion here"},
-    {"path": "src/calc.ts", "line": 8, "startLine": 7, "body": "🚧 Off-by-one in the running sum [CHECK-BUG-001](<RULES_DOC_URL>#CHECK-BUG-001)", "suggestion": "    for (let i = 0; i < n; i++)\n        total += items[i];"}
+    {"path": "src/calc.ts", "line": 8, "startLine": 7, "body": "🚧 Off-by-one in the running sum [CHECK-BUG-001](<RULES_DOC_URL>#check-bug-001)", "suggestion": "    for (let i = 0; i < n; i++)\n        total += items[i];"}
   ]
 }
 ```
@@ -47545,12 +47629,12 @@ Map `severity` to its emoji when rendering in [Phase 3](#phase-3-submit-review):
 ```json
 {
   "verdict": "requestChanges",
-  "reviewComment": "Adds retry logic to the payment webhook handler.\n\n### 🚧 Blockers\n\n1. **Missing idempotency check** - [src/webhooks/payment.ts:45](<pr-blob-url>/src/webhooks/payment.ts#L45) - Retries can cause duplicate charges [CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002)\n\n### ⛔ Request Changes\n\nAdd idempotency key validation before processing payment.",
+  "reviewComment": "Adds retry logic to the payment webhook handler.\n\n### 🚧 Blockers\n\n1. **Missing idempotency check** - [src/webhooks/payment.ts:45](<pr-blob-url>/src/webhooks/payment.ts#L45) - Retries can cause duplicate charges [CHECK-BUG-002](<RULES_DOC_URL>#check-bug-002)\n\n### ⛔ Request Changes\n\nAdd idempotency key validation before processing payment.",
   "inlineComments": [
     {
       "path": "src/webhooks/payment.ts",
       "line": 45,
-      "body": "🚧 No idempotency check — retries will duplicate charges [CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002)"
+      "body": "🚧 No idempotency check — retries will duplicate charges [CHECK-BUG-002](<RULES_DOC_URL>#check-bug-002)"
     }
   ]
 }
@@ -47561,12 +47645,12 @@ Map `severity` to its emoji when rendering in [Phase 3](#phase-3-submit-review):
 ```json
 {
   "verdict": "approve",
-  "reviewComment": "Points the retry policy in [docs/webhooks.md](<pr-blob-url>/docs/webhooks.md) at the new handler.\n\n### 🙋‍♂️ Suggestions\n\n- [src/webhooks/payment.ts:62](<pr-blob-url>/src/webhooks/payment.ts#L62) - Consider exponential backoff; the `retry*` helpers in [src/webhooks/config.ts](<pr-blob-url>/src/webhooks/config.ts) still assume single-attempt delivery [CHECK-ARCH-002](<RULES_DOC_URL>#CHECK-ARCH-002)\n- [docs/webhooks.md:12](<pr-blob-url>/docs/webhooks.md?plain=1#L12) - Retry policy chapter still documents single-attempt delivery [CHECK-DOC-001](<RULES_DOC_URL>#CHECK-DOC-001)\n\n### 👍 Approve",
+  "reviewComment": "Points the retry policy in [docs/webhooks.md](<pr-blob-url>/docs/webhooks.md) at the new handler.\n\n### 🙋‍♂️ Suggestions\n\n- [src/webhooks/payment.ts:62](<pr-blob-url>/src/webhooks/payment.ts#L62) - Consider exponential backoff; the `retry*` helpers in [src/webhooks/config.ts](<pr-blob-url>/src/webhooks/config.ts) still assume single-attempt delivery [CHECK-ARCH-002](<RULES_DOC_URL>#check-arch-002)\n- [docs/webhooks.md:12](<pr-blob-url>/docs/webhooks.md?plain=1#L12) - Retry policy chapter still documents single-attempt delivery [CHECK-DOC-001](<RULES_DOC_URL>#check-doc-001)\n\n### 👍 Approve",
   "inlineComments": [
     {
       "path": "src/webhooks/payment.ts",
       "line": 62,
-      "body": "🙋‍♂️ Consider exponential backoff for retries [CHECK-ARCH-002](<RULES_DOC_URL>#CHECK-ARCH-002)"
+      "body": "🙋‍♂️ Consider exponential backoff for retries [CHECK-ARCH-002](<RULES_DOC_URL>#check-arch-002)"
     }
   ]
 }
@@ -47574,22 +47658,22 @@ Map `severity` to its emoji when rendering in [Phase 3](#phase-3-submit-review):
 
 **reviewComment body template (ONLY when there are findings):**
 
-Every blocker, suggestion, and nitpick line ends with the rule code rendered per [§2.5](#25-rule-codes) (e.g. `[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002)`). If two checks flagged the same `(path, line)`, render the merged form `[[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002), [CHECK-AI-002](<RULES_DOC_URL>#CHECK-AI-002)]`. Build the links yourself from `RULES_DOC_URL`. When a finding has no rule code, omit the suffix entirely.
+Every blocker, suggestion, and nitpick line ends with the rule code rendered per [§2.5](#25-rule-codes) (e.g. `[CHECK-BUG-002](<RULES_DOC_URL>#check-bug-002)`). If two checks flagged the same `(path, line)`, render the merged form `[[CHECK-BUG-002](<RULES_DOC_URL>#check-bug-002), [CHECK-AI-002](<RULES_DOC_URL>#check-ai-002)]`. Build the links yourself from `RULES_DOC_URL`. When a finding has no rule code, omit the suffix entirely.
 
 ```markdown
 [1 factual sentence: what this PR changes — no quality judgment]
 
 ### 🚧 Blockers
 
-1. **[Title]** - [src/path/to/file.ts:NN](<pr-blob-url>/src/path/to/file.ts#LNN) - [Problem in 1 line] [CHECK-BUG-XXX](<RULES_DOC_URL>#CHECK-BUG-XXX)
+1. **[Title]** - [src/path/to/file.ts:NN](<pr-blob-url>/src/path/to/file.ts#LNN) - [Problem in 1 line] [CHECK-BUG-XXX](<RULES_DOC_URL>#check-bug-xxx)
 
 ### 🙋‍♂️ Suggestions
 
-- [src/path/to/file.ts:NN](<pr-blob-url>/src/path/to/file.ts#LNN) - [Recommendation in 1 line] [CHECK-AI-XXX](<RULES_DOC_URL>#CHECK-AI-XXX)
+- [src/path/to/file.ts:NN](<pr-blob-url>/src/path/to/file.ts#LNN) - [Recommendation in 1 line] [CHECK-AI-XXX](<RULES_DOC_URL>#check-ai-xxx)
 
 ### 💡 Nitpicks
 
-- [src/path/to/file.ts:NN](<pr-blob-url>/src/path/to/file.ts#LNN) - [Optional fix in 1 line] [CHECK-CPLX-XXX](<RULES_DOC_URL>#CHECK-CPLX-XXX)
+- [src/path/to/file.ts:NN](<pr-blob-url>/src/path/to/file.ts#LNN) - [Optional fix in 1 line] [CHECK-CPLX-XXX](<RULES_DOC_URL>#check-cplx-xxx)
 
 ### ⛔ Request Changes / ### 👍 Approve
 
@@ -47604,7 +47688,7 @@ Add inline comments for issues with specific code locations:
 - **🙋‍♂️ Suggestion** - Add if location is specific
 - **💡 Nitpicks** - Optional, can be in summary only
 
-Each inline comment: 1-2 sentences, start with severity emoji, end with the rule code rendered per [§2.5](#25-rule-codes) (e.g. `🚧 No idempotency check — retries will duplicate charges [CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002)`).
+Each inline comment: 1-2 sentences, start with severity emoji, end with the rule code rendered per [§2.5](#25-rule-codes) (e.g. `🚧 No idempotency check — retries will duplicate charges [CHECK-BUG-002](<RULES_DOC_URL>#check-bug-002)`).
 
 ### Code suggestions
 
@@ -47626,7 +47710,7 @@ Add an optional `suggestion` to an inline comment when the fix is concrete and m
 - ALWAYS full paths for all file references, rendered per **File and doc links** (e.g. `[src/services/payment/processor.ts:66](<pr-blob-url>/src/services/payment/processor.ts#L66)`, NOT `processor.ts:66`)
 - Direct, confident language
 - Clear verdict (rationale only when requesting changes)
-- Rule code rendered per [§2.5](#25-rule-codes) (`[<CODE>](<RULES_DOC_URL>#<CODE>)`, or merged `[[<CODE1>](<RULES_DOC_URL>#<CODE1>), [<CODE2>](<RULES_DOC_URL>#<CODE2>)]` for a shared location) on every finding line (blocker, suggestion, nitpick) and every `inlineComments.body`; omit the suffix entirely when no rule code is available
+- Rule code rendered per [§2.5](#25-rule-codes) (`[<CODE>](<RULES_DOC_URL>#<code>)` with the fragment lowercased, or merged `[[<CODE1>](<RULES_DOC_URL>#<code1>), [<CODE2>](<RULES_DOC_URL>#<code2>)]` for a shared location) on every finding line (blocker, suggestion, nitpick) and every `inlineComments.body`; omit the suffix entirely when no rule code is available
 - File, section, doc, commit, and issue references follow the reference-formatting rules inlined at the end of this skill — build the links per **File and doc links** above. Exception: an inline comment is already anchored to its file and line by GitHub, so keep its location as a backticked full path (e.g. `src/services/payment/processor.ts:66`); apply the linking rules to the review-body prose and to any cross-file or out-of-diff reference inside inline bodies
 
 ### Exclude
