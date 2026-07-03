@@ -99,37 +99,61 @@ export function repairOverEscapedWhitespace(text: string): string {
 }
 
 /**
+ * Lowercase the URL fragment of every `CHECK-*` rule link.
+ *
+ * GitHub rewrites the `<a id="CHECK-…">` anchors in the rendered pr:review
+ * SKILL.md to lowercase `user-content-…` ids, and URL-fragment lookup is
+ * case-sensitive — an uppercase `#CHECK-…` fragment lands at the top of the
+ * file instead of the rule. The skills prescribe lowercase fragments; this
+ * pass makes that deterministic when the model pattern-matches the uppercase
+ * display text into the URL. Display text (`[CHECK-BUG-002]`) and non-link
+ * mentions are left untouched — only a fragment inside a markdown link URL
+ * is rewritten.
+ */
+export function normalizeRuleLinkFragments(text: string): string {
+  return text.replaceAll(
+    /(\]\([^)\s]*#)(check-[a-z0-9]+(?:-[a-z0-9]+)*)(?=\))/gi,
+    (_match, prefix: string, fragment: string) => `${prefix}${fragment.toLowerCase()}`,
+  );
+}
+
+/** Prose-field repair pipeline: whitespace repair, then rule-link fragment casing. */
+function repairProse(text: string): string {
+  return normalizeRuleLinkFragments(repairOverEscapedWhitespace(text));
+}
+
+/**
  * Parse and validate structured review output from Claude (null on any failure).
- * Repairs over-escaped whitespace in the prose fields (`reviewComment`, inline
- * `body`); an inline `suggestion` is committed verbatim, so it is left untouched.
+ * Repairs over-escaped whitespace and rule-link fragment casing in the prose
+ * fields (`reviewComment`, inline `body`); an inline `suggestion` is committed
+ * verbatim, so it is left untouched.
  */
 export function parseStructuredOutput(rawOutput: string): StructuredOutput | null {
   const parsed = parseJsonWithSchema(rawOutput, structuredOutputSchema);
   if (!parsed) return null;
   return {
     ...parsed,
-    reviewComment: repairOverEscapedWhitespace(parsed.reviewComment),
+    reviewComment: repairProse(parsed.reviewComment),
     inlineComments: parsed.inlineComments.map((comment) => ({
       ...comment,
-      body: repairOverEscapedWhitespace(comment.body),
+      body: repairProse(comment.body),
     })),
   };
 }
 
 /**
  * Parse and validate structured reaction output from Claude (null on any failure).
- * Repairs over-escaped whitespace in the prose fields (`reply`, `updatedReviewComment`).
+ * Repairs over-escaped whitespace and rule-link fragment casing in the prose
+ * fields (`reply`, `updatedReviewComment`).
  */
 export function parseReactionOutput(rawOutput: string): ReactionOutput | null {
   const parsed = parseJsonWithSchema(rawOutput, reactionOutputSchema);
   if (!parsed) return null;
   return {
     ...parsed,
-    reply: repairOverEscapedWhitespace(parsed.reply),
+    reply: repairProse(parsed.reply),
     updatedReviewComment:
-      parsed.updatedReviewComment === null
-        ? null
-        : repairOverEscapedWhitespace(parsed.updatedReviewComment),
+      parsed.updatedReviewComment === null ? null : repairProse(parsed.updatedReviewComment),
   };
 }
 

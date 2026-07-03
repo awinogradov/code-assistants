@@ -156,7 +156,7 @@ When `NEEDS_REVERDICT` is `true`, decide from the LIVE unresolved bot-thread sta
 
 ### Review Body Update
 
-Only provide `updatedReviewComment` if `updatedVerdict` is non-null. Follow the same format as the original review body (see the pr:review skill for format rules) — including `CHECK-` rule codes rendered exactly as in the [`pr:review` skill's §2.5](../pr:review/SKILL.md#25-rule-codes): when `RULES_DOC_URL` is set, as markdown links (single: `[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002)`; shared: `[[CHECK-BUG-002](<RULES_DOC_URL>#CHECK-BUG-002), [CHECK-AI-002](<RULES_DOC_URL>#CHECK-AI-002)]`); when it is absent, as the bare code in plain text (single: `CHECK-BUG-002`; shared: `CHECK-BUG-002, CHECK-AI-002`). Do not read agent files.
+Only provide `updatedReviewComment` if `updatedVerdict` is non-null. Follow the same format as the original review body (see the pr:review skill for format rules) — including `CHECK-` rule codes rendered exactly as in the [`pr:review` skill's §2.5](../pr:review/SKILL.md#25-rule-codes): when `RULES_DOC_URL` is set, as markdown links whose fragment is the rule code lowercased — GitHub renders the `<a id>` anchors as lowercase ids, per §2.5 — (single: `[CHECK-BUG-002](<RULES_DOC_URL>#check-bug-002)`; shared: `[[CHECK-BUG-002](<RULES_DOC_URL>#check-bug-002), [CHECK-AI-002](<RULES_DOC_URL>#check-ai-002)]`); when it is absent, as the bare code in plain text (single: `CHECK-BUG-002`; shared: `CHECK-BUG-002, CHECK-AI-002`). Do not read agent files.
 
 ---
 

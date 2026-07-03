@@ -8,6 +8,7 @@ import {
   extractValidLines,
   formatInvalidComments,
   isAlreadyMentioned,
+  normalizeRuleLinkFragments,
   parseReactionOutput,
   parseStructuredOutput,
   repairOverEscapedWhitespace,
@@ -31,6 +32,26 @@ describe("repairOverEscapedWhitespace", () => {
   test("is a no-op on empty or escape-free text", () => {
     expect(repairOverEscapedWhitespace("")).toBe("");
     expect(repairOverEscapedWhitespace("plain text")).toBe("plain text");
+  });
+});
+
+describe("normalizeRuleLinkFragments", () => {
+  test("lowercases an uppercase rule-link fragment, keeping the display text", () => {
+    expect(normalizeRuleLinkFragments("[CHECK-BUG-002](https://x/SKILL.md#CHECK-BUG-002)")).toBe(
+      "[CHECK-BUG-002](https://x/SKILL.md#check-bug-002)",
+    );
+  });
+
+  test("lowercases a mixed-case fragment and every link in a merged form", () => {
+    expect(normalizeRuleLinkFragments("[[CHECK-A-1](u#Check-A-1), [CHECK-B-2](u#CHECK-B-2)]")).toBe(
+      "[[CHECK-A-1](u#check-a-1), [CHECK-B-2](u#check-b-2)]",
+    );
+  });
+
+  test("leaves lowercase fragments, bare mentions, and non-rule URLs untouched", () => {
+    const clean =
+      "[CHECK-BUG-002](u#check-bug-002) plain CHECK-BUG-002 [file.ts:8](u/file.ts#L8) [§2.5](#25-rule-codes)";
+    expect(normalizeRuleLinkFragments(clean)).toBe(clean);
   });
 });
 
@@ -94,6 +115,17 @@ describe("parseStructuredOutput", () => {
     // A suggestion is committed verbatim, so its escapes are left untouched.
     expect(out?.inlineComments[0]?.suggestion).toBe("e\\nf");
   });
+
+  test("lowercases uppercase rule-link fragments in reviewComment and inline body", () => {
+    const raw = JSON.stringify({
+      verdict: "comment",
+      reviewComment: "bad [CHECK-BUG-002](u#CHECK-BUG-002)",
+      inlineComments: [{ path: "x.ts", line: 1, body: "🚧 fix [CHECK-AI-002](u#CHECK-AI-002)" }],
+    });
+    const out = parseStructuredOutput(raw);
+    expect(out?.reviewComment).toBe("bad [CHECK-BUG-002](u#check-bug-002)");
+    expect(out?.inlineComments[0]?.body).toBe("🚧 fix [CHECK-AI-002](u#check-ai-002)");
+  });
 });
 
 describe("parseReactionOutput", () => {
@@ -134,6 +166,18 @@ describe("parseReactionOutput", () => {
     const noUpdate = parseReactionOutput(JSON.stringify({ reply: "x\\ny" }));
     expect(noUpdate?.reply).toBe("x\ny");
     expect(noUpdate?.updatedReviewComment).toBeNull();
+  });
+
+  test("lowercases uppercase rule-link fragments in reply and updatedReviewComment", () => {
+    const out = parseReactionOutput(
+      JSON.stringify({
+        reply: "see [CHECK-PR-009](u#CHECK-PR-009)",
+        updatedVerdict: "approve",
+        updatedReviewComment: "ok [CHECK-BUG-002](u#CHECK-BUG-002)",
+      })
+    );
+    expect(out?.reply).toBe("see [CHECK-PR-009](u#check-pr-009)");
+    expect(out?.updatedReviewComment).toBe("ok [CHECK-BUG-002](u#check-bug-002)");
   });
 });
 
