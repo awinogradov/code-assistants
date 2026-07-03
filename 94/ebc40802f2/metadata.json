@@ -1,0 +1,29 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "94ebc40802f2",
+  "strategy": "manual-commit",
+  "branch": "hotfix-dependabot-actions-exception",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".github/actions/code-review-action/action.yml",
+    ".github/actions/contributing-check/README.md",
+    ".github/actions/contributing-check/action.yml"
+  ],
+  "sessions": [
+    {
+      "metadata": "/94/ebc40802f2/0/metadata.json",
+      "transcript": "/94/ebc40802f2/0/full.jsonl",
+      "compact_transcript": "/94/ebc40802f2/0/transcript.jsonl",
+      "content_hash": "/94/ebc40802f2/0/content_hash.txt",
+      "prompt": "/94/ebc40802f2/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 17996,
+    "cache_creation_tokens": 201884,
+    "cache_read_tokens": 6306648,
+    "output_tokens": 59923,
+    "api_call_count": 45
+  }
+}

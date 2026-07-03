@@ -1,0 +1,3 @@
+/autopilot:plan need add an exception for dependabot in actions
+https://github.com/wefortis/fortune-os/actions/runs/28658283349/job/84992568837?pr=101
+must be hotfixed
