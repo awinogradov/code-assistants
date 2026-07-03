@@ -424,7 +424,7 @@ runs:
 
     - name: Checkout repository
       if: steps.ctx.outputs.skip != 'true'
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
       with:
         # Depth 20: lets sub-agent git history walks (HEAD~N) succeed without paying for a full clone.
         fetch-depth: 20
