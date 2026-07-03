@@ -282,14 +282,18 @@ Use all available documentation sources. If a source is unavailable or returns n
 
 ### Repository Documentation (MANDATORY)
 
-Before planning, read the repository's own documentation as the project's source of truth (it overrides defaults per CLAUDE.md):
+Before planning, read the repository's own documentation as the project's source of truth (it overrides defaults per CLAUDE.md). The `pr:review` skill enforces these same standards on the diff ([its §1.4](../pr:review/SKILL.md#14-project-context-read-before-reviewing)); planning must **comply** with them so the plan never proposes a change the review will then block:
 
-- Read the root `README.md`.
-- Inspect every file under `docs/` and its subfolders, and read those relevant to the task.
+- **README + `docs/*` (project conventions)** — read the root `README.md` and the docs it links; treat `docs/` as the source of truth for project-specific conventions. When the root README carries no docs index, fall back to `docs/README.md`, then to the Glob `docs/*.md` file names.
+- **`rfc/` (versioned standards)** — if `rfc/` exists at the repository root, build a standards inventory and read the diff-relevant standards so the plan complies with them:
+  - **Inventory** — read the `rfc/README.md` index table into `{id, title, status, path}`; when it is absent, Glob `rfc/[0-9]*.md` and read each file's frontmatter block. Derive a missing id/title from the `NNNN-slug` filename (or the first H1). A missing or unparseable `status` counts as Draft — record it as defaulted. `Superseded` entries are never sources.
+  - **Selection** — match each entry's title+slug tokens against the files the plan will touch and its visible domains (log calls → a logging standard, HTTP routes → an API standard, new files → a file-structure standard). When in doubt whether a standard applies, load it — capped at 3 standards, ranked by match strength; record dropped candidates in the [Context Map](#phase-1-context-gathering) (no silent truncation).
+  - **Reads** — use the Read tool on matched standards (do not rely on the pack; a fallback pack may omit nested markdown); for a standard longer than ~300 lines, read only the matched sections.
+  - **Comply** — the plan must not propose any change that violates a clause of an **Accepted** RFC (the repo's ratified, blocking standard); a **Draft** RFC is advisory — follow it where practical and call out any deliberate deviation.
 
-Feed the project-specific conventions found there into analysis and the plan.
+Feed the project-specific conventions and applicable standards found there into analysis and the plan.
 
-The generated plan MUST update this documentation after implementation: its `## Post-Implementation` block must require updating any `README.md` and `docs/*` affected by the change so the documented source of truth stays current. When such an update needs a diagram, the plan must generate it via `Skill(autopilot:ascii-schemas)` and embed the output verbatim — never hand-draw.
+The generated plan MUST update this documentation after implementation: its `## Post-Implementation` block must require updating any `README.md`, `docs/*`, and `rfc/*` affected by the change so the documented source of truth stays current. When the change edits the content of an **Accepted** RFC, the plan MUST also require bumping that RFC's `version` frontmatter and adding a Changelog entry (mirrors the review's CHECK-RFC-003), so the review does not block its own standard's edit. When such an update needs a diagram, the plan must generate it via `Skill(autopilot:ascii-schemas)` and embed the output verbatim — never hand-draw.
 
 ### Plan File Header (MANDATORY)
 
@@ -486,6 +490,7 @@ This is the pipeline's single codebase-reading pass: [Phase 0](#phase-0-input-re
    - Key types, interfaces, and Zod schemas in play
    - Test conventions and fixtures that apply
    - In-flight changes from the branch diff (step 1) the snapshot does not reflect
+   - **Applicable standards** — the `rfc/`/`docs/` standards selected in [Repository Documentation](#repository-documentation-mandatory): each as id + status (marked "defaulted" when inferred) with a one-line why the plan must honor it, plus any dropped candidates; "none" when nothing matched or the folders are absent. This is the plan's audit log of what it planned against.
 
 After completing all context gathering, call TaskUpdate to set task 2 ("Gather context") to `status: "completed"`.
 
@@ -538,7 +543,7 @@ Every step MUST include a `verify:` line — an observable check (test name, com
 
 After all implementation steps and verification are complete:
 
-1. **Update documentation (MANDATORY)** — update any `README.md` and `docs/*` affected by these changes so the documented source of truth stays current. When an update needs a diagram, generate it via `Skill(autopilot:ascii-schemas)` and embed the output verbatim — do not hand-draw.
+1. **Update documentation (MANDATORY)** — update any `README.md`, `docs/*`, and `rfc/*` affected by these changes so the documented source of truth stays current. If a change edits the content of an Accepted RFC, bump its `version` frontmatter and add a Changelog entry (mirrors the review's CHECK-RFC-003). When an update needs a diagram, generate it via `Skill(autopilot:ascii-schemas)` and embed the output verbatim — do not hand-draw.
 2. Present next actions using AskUserQuestion.
 
 **If the implementation included user-facing changes** (feat: or fix: commits created during this session), use `--release-notes` in the "Create PR" option. Otherwise, use the plain option.
@@ -593,7 +598,7 @@ Rate the reviewed plan (20 points each dimension = 100 total):
 
 | Dimension        | Criteria                                                                                                                            | Score |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----- |
-| **Alignment**    | Follows CLAUDE.md, project patterns, naming conventions                                                                             | /20   |
+| **Alignment**    | Follows CLAUDE.md, project patterns, naming conventions, and complies with Accepted RFCs / `docs/` conventions                      | /20   |
 | **Completeness** | All requirements addressed, no missing steps                                                                                        | /20   |
 | **Type Safety**  | Proper types, Zod schemas, no unsafe `as` assertions                                                                                | /20   |
 | **Testability**  | Clear test strategy, edge cases identified                                                                                          | /20   |
