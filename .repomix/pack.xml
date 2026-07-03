@@ -44344,14 +44344,18 @@ Use all available documentation sources. If a source is unavailable or returns n
 
 ### Repository Documentation (MANDATORY)
 
-Before planning, read the repository's own documentation as the project's source of truth (it overrides defaults per CLAUDE.md):
+Before planning, read the repository's own documentation as the project's source of truth (it overrides defaults per CLAUDE.md). The `pr:review` skill enforces these same standards on the diff ([its §1.4](../pr:review/SKILL.md#14-project-context-read-before-reviewing)); planning must **comply** with them so the plan never proposes a change the review will then block:
 
-- Read the root `README.md`.
-- Inspect every file under `docs/` and its subfolders, and read those relevant to the task.
+- **README + `docs/*` (project conventions)** — read the root `README.md` and the docs it links; treat `docs/` as the source of truth for project-specific conventions. When the root README carries no docs index, fall back to `docs/README.md`, then to the Glob `docs/*.md` file names.
+- **`rfc/` (versioned standards)** — if `rfc/` exists at the repository root, build a standards inventory and read the diff-relevant standards so the plan complies with them:
+  - **Inventory** — read the `rfc/README.md` index table into `{id, title, status, path}`; when it is absent, Glob `rfc/[0-9]*.md` and read each file's frontmatter block. Derive a missing id/title from the `NNNN-slug` filename (or the first H1). A missing or unparseable `status` counts as Draft — record it as defaulted. `Superseded` entries are never sources.
+  - **Selection** — match each entry's title+slug tokens against the files the plan will touch and its visible domains (log calls → a logging standard, HTTP routes → an API standard, new files → a file-structure standard). When in doubt whether a standard applies, load it — capped at 3 standards, ranked by match strength; record dropped candidates in the [Context Map](#phase-1-context-gathering) (no silent truncation).
+  - **Reads** — use the Read tool on matched standards (do not rely on the pack; a fallback pack may omit nested markdown); for a standard longer than ~300 lines, read only the matched sections.
+  - **Comply** — the plan must not propose any change that violates a clause of an **Accepted** RFC (the repo's ratified, blocking standard); a **Draft** RFC is advisory — follow it where practical and call out any deliberate deviation.
 
-Feed the project-specific conventions found there into analysis and the plan.
+Feed the project-specific conventions and applicable standards found there into analysis and the plan.
 
-The generated plan MUST update this documentation after implementation: its `## Post-Implementation` block must require updating any `README.md` and `docs/*` affected by the change so the documented source of truth stays current. When such an update needs a diagram, the plan must generate it via `Skill(autopilot:ascii-schemas)` and embed the output verbatim — never hand-draw.
+The generated plan MUST update this documentation after implementation: its `## Post-Implementation` block must require updating any `README.md`, `docs/*`, and `rfc/*` affected by the change so the documented source of truth stays current. When the change edits the content of an **Accepted** RFC, the plan MUST also require bumping that RFC's `version` frontmatter and adding a Changelog entry (mirrors the review's CHECK-RFC-003), so the review does not block its own standard's edit. When such an update needs a diagram, the plan must generate it via `Skill(autopilot:ascii-schemas)` and embed the output verbatim — never hand-draw.
 
 ### Plan File Header (MANDATORY)
 
@@ -44548,6 +44552,7 @@ This is the pipeline's single codebase-reading pass: [Phase 0](#phase-0-input-re
    - Key types, interfaces, and Zod schemas in play
    - Test conventions and fixtures that apply
    - In-flight changes from the branch diff (step 1) the snapshot does not reflect
+   - **Applicable standards** — the `rfc/`/`docs/` standards selected in [Repository Documentation](#repository-documentation-mandatory): each as id + status (marked "defaulted" when inferred) with a one-line why the plan must honor it, plus any dropped candidates; "none" when nothing matched or the folders are absent. This is the plan's audit log of what it planned against.
 
 After completing all context gathering, call TaskUpdate to set task 2 ("Gather context") to `status: "completed"`.
 
@@ -44600,7 +44605,7 @@ Every step MUST include a `verify:` line — an observable check (test name, com
 
 After all implementation steps and verification are complete:
 
-1. **Update documentation (MANDATORY)** — update any `README.md` and `docs/*` affected by these changes so the documented source of truth stays current. When an update needs a diagram, generate it via `Skill(autopilot:ascii-schemas)` and embed the output verbatim — do not hand-draw.
+1. **Update documentation (MANDATORY)** — update any `README.md`, `docs/*`, and `rfc/*` affected by these changes so the documented source of truth stays current. If a change edits the content of an Accepted RFC, bump its `version` frontmatter and add a Changelog entry (mirrors the review's CHECK-RFC-003). When an update needs a diagram, generate it via `Skill(autopilot:ascii-schemas)` and embed the output verbatim — do not hand-draw.
 2. Present next actions using AskUserQuestion.
 
 **If the implementation included user-facing changes** (feat: or fix: commits created during this session), use `--release-notes` in the "Create PR" option. Otherwise, use the plain option.
@@ -44655,7 +44660,7 @@ Rate the reviewed plan (20 points each dimension = 100 total):
 
 | Dimension        | Criteria                                                                                                                            | Score |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----- |
-| **Alignment**    | Follows CLAUDE.md, project patterns, naming conventions                                                                             | /20   |
+| **Alignment**    | Follows CLAUDE.md, project patterns, naming conventions, and complies with Accepted RFCs / `docs/` conventions                      | /20   |
 | **Completeness** | All requirements addressed, no missing steps                                                                                        | /20   |
 | **Type Safety**  | Proper types, Zod schemas, no unsafe `as` assertions                                                                                | /20   |
 | **Testability**  | Clear test strategy, edge cases identified                                                                                          | /20   |
@@ -51523,7 +51528,7 @@ The skill then emits, for the user's review (all derived from the resolved issue
 Declared once and applied throughout — both the orchestrator phases and the shared pipeline reference them rather than restating them:
 
 - **Documentation Lookup Protocol** — look up docs for every task-relevant library across context7, Ref, Exa, and Perplexity (skip any source that is unavailable or returns nothing).
-- **Repository Documentation** — read the root `README.md` and the relevant files under `docs/` as the project's source of truth; the generated plan must keep them current after implementation.
+- **Repository Documentation** — read the root `README.md` and the relevant files under `docs/` as the project's source of truth, and when an `rfc/` folder exists build a standards inventory and read the diff-relevant standards (cap 3) so the plan complies with Accepted RFCs (a Draft RFC is advisory); the generated plan must keep `README.md`, `docs/*`, and any edited `rfc/*` current after implementation. This is the compliance mirror of the enforcement the `pr:review` skill applies — see [Code review repository standards](./12-code-review-repository-standards.md).
 - **Plan File Header** — every plan file begins with a single `# <Title>` line and a fixed section order.
 - **CLAUDE.md Compliance** — map each planned change to the project's rules.
 - **Visualize with ASCII Schemas** — for structural/visual changes, generate diagrams via `Skill(autopilot:ascii-schemas)` and embed them verbatim, inline in the section each explains.
@@ -51554,7 +51559,7 @@ The delegated stack skill discovers the planning tasks (via `TaskList`) and runs
 
 ### Phase 1 · Context Gathering
 
-This is the pipeline's **single codebase-reading pass** — Phase 0 reads no code and Phase 2 only synthesizes. Gather the branch diff (`git log/diff origin/main...HEAD`), then decide **where context comes from** before crawling: the Phase 0 snapshot serves broad/whole-repo reads, while live tools (Explore agents / Grep / Glob) serve only what the snapshot cannot — in-flight working-tree code or targeted fresh reads. The pass ends by recording a **Context Map** — files and their roles, patterns to mirror, key types/schemas, test conventions, and in-flight changes — which becomes the single artifact every later phase reasons over instead of re-reading. Documentation lookup, repository documentation, and CLAUDE.md compliance follow the Common Instructions.
+This is the pipeline's **single codebase-reading pass** — Phase 0 reads no code and Phase 2 only synthesizes. Gather the branch diff (`git log/diff origin/main...HEAD`), then decide **where context comes from** before crawling: the Phase 0 snapshot serves broad/whole-repo reads, while live tools (Explore agents / Grep / Glob) serve only what the snapshot cannot — in-flight working-tree code or targeted fresh reads. The pass ends by recording a **Context Map** — files and their roles, patterns to mirror, key types/schemas, test conventions, in-flight changes, and the **applicable standards** (the selected `rfc/`/`docs/` entries with their status, plus any dropped candidates) the plan must honor — which becomes the single artifact every later phase reasons over instead of re-reading. Documentation lookup, repository documentation, and CLAUDE.md compliance follow the Common Instructions.
 
 ### Phase 2 · Deep Analysis
 
@@ -52482,6 +52487,10 @@ An RFC modified by the diff is enforced at its base-branch version, so a single 
 ## Cost behavior
 
 Discovery is index-first: one small read builds the inventory, and only matched standards (at most 3) are read further, section-targeted for large files. The rule catalog grows by five codes total; per-review cost stays within the normal band for repositories with standards and is unchanged for repositories without them.
+
+## Planning against the same standards
+
+Enforcement is only half the loop. The [plan skill](../claude-plugins/autopilot/skills/plan/SKILL.md#repository-documentation-mandatory) reads the same `rfc/`/`docs/` inventory during its context-gathering pass and records the selected standards in its Context Map, so a plan is shaped to **comply** with Accepted RFCs rather than propose a change this review would then block — review enforces, plan complies. The plan skill uses the identical discovery and selection contract (index-first inventory, token-match selection capped at 3); it adds no `CHECK-*` codes of its own, and when a change edits an Accepted RFC the plan requires the same `version` bump + Changelog entry that `CHECK-RFC-003` guards.
 </file>
 
 <file path="packages/actions-core/src/anthropicAuth.test.ts">
@@ -53794,6 +53803,7 @@ Before making any changes:
 2. Inspect all file names under `docs/` and subfolders in the current repository — some files may be missing from the README
 3. Read files that appear relevant to the current task
 4. Treat `docs/` as the source of truth for project-specific conventions and follow those documents over this file when they conflict
+5. When an `rfc/` folder exists, treat its Accepted RFCs as binding versioned standards — follow them over `docs/` and this file when they conflict; see `rfc/README.md` for the convention
 
 **Rule Markers Legend:**
 
@@ -54066,6 +54076,7 @@ Before making any changes:
 2. Inspect all file names under `docs/` and subfolders in the current repository — some files may be missing from the README
 3. Read files that appear relevant to the current task
 4. Treat `docs/` as the source of truth for project-specific conventions and follow those documents over this file when they conflict
+5. When an `rfc/` folder exists, treat its Accepted RFCs as binding versioned standards — follow them over `docs/` and this file when they conflict; see `rfc/README.md` for the convention
 
 **Rule Markers Legend:**
 
@@ -54469,6 +54480,7 @@ Before making any changes:
 2. Inspect all file names under `docs/` and subfolders in the current repository — some files may be missing from the README
 3. Read files that appear relevant to the current task
 4. Treat `docs/` as the source of truth for project-specific conventions and follow those documents over this file when they conflict
+5. When an `rfc/` folder exists, treat its Accepted RFCs as binding versioned standards — follow them over `docs/` and this file when they conflict; see `rfc/README.md` for the convention
 
 **Rule Markers Legend:**
 
@@ -54859,6 +54871,7 @@ Before making any changes:
 2. Inspect all file names under `docs/` and subfolders in the current repository — some files may be missing from the README
 3. Read files that appear relevant to the current task
 4. Treat `docs/` as the source of truth for project-specific conventions and follow those documents over this file when they conflict
+5. When an `rfc/` folder exists, treat its Accepted RFCs as binding versioned standards — follow them over `docs/` and this file when they conflict; see `rfc/README.md` for the convention
 
 **Rule Markers Legend:**
 
@@ -55390,19 +55403,18 @@ async function validateTarget(t: Target): Promise<string | null> {
   }
 }
 
-const rulesSectionHeading = "## 15. Git Workflow";
+const rulesSyncedHeadings = ["## Mandatory Context", "## 15. Git Workflow"];
 
 /**
- * The rules/<stack>.md files carry a duplicated Git Workflow section that ships
- * downstream as each consumer's CLAUDE.md. Verify the section exists in every
- * file and is byte-identical across them so the copies cannot drift.
+ * Verify one `## <heading>` section is byte-identical across every rules/*.md
+ * file (the section slice runs from its heading to the next `## `).
  */
-async function validateRulesSectionSync(): Promise<string | null> {
+async function validateHeadingSync(heading: string): Promise<string | null> {
   const sections = new Map<string, string>();
   for await (const path of new Glob("rules/*.md").scan(".")) {
     const raw = await Bun.file(path).text();
-    const start = raw.indexOf(`\n${rulesSectionHeading}\n`);
-    if (start === -1) return `missing "${rulesSectionHeading}" section in ${path}`;
+    const start = raw.indexOf(`\n${heading}\n`);
+    if (start === -1) return `missing "${heading}" section in ${path}`;
     const end = raw.indexOf("\n## ", start + 1);
     sections.set(path, raw.slice(start + 1, end === -1 ? raw.length : end + 1));
   }
@@ -55410,7 +55422,20 @@ async function validateRulesSectionSync(): Promise<string | null> {
   const [[firstPath, firstSection], ...rest] = [...sections.entries()];
   const mismatch = rest.find(([, section]) => section !== firstSection);
   if (mismatch) {
-    return `"${rulesSectionHeading}" section in ${mismatch[0]} differs from ${firstPath}`;
+    return `"${heading}" section in ${mismatch[0]} differs from ${firstPath}`;
+  }
+  return null;
+}
+
+/**
+ * The rules/<stack>.md files carry duplicated sections that ship downstream as
+ * each consumer's CLAUDE.md. Verify every synced section exists in each file and
+ * is byte-identical across them so the copies cannot drift.
+ */
+async function validateRulesSectionSync(): Promise<string | null> {
+  for (const heading of rulesSyncedHeadings) {
+    const err = await validateHeadingSync(heading);
+    if (err) return err;
   }
   return null;
 }
@@ -55454,7 +55479,7 @@ async function main() {
       failed += 1;
       console.error(`✖ rules/*.md\n    ${err}`);
     } else {
-      console.log("✔ rules/*.md git workflow section in sync");
+      console.log("✔ rules/*.md synced sections in sync");
     }
   }
 
