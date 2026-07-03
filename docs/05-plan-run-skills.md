@@ -121,7 +121,7 @@ The skill then emits, for the user's review (all derived from the resolved issue
 Declared once and applied throughout — both the orchestrator phases and the shared pipeline reference them rather than restating them:
 
 - **Documentation Lookup Protocol** — look up docs for every task-relevant library across context7, Ref, Exa, and Perplexity (skip any source that is unavailable or returns nothing).
-- **Repository Documentation** — read the root `README.md` and the relevant files under `docs/` as the project's source of truth; the generated plan must keep them current after implementation.
+- **Repository Documentation** — read the root `README.md` and the relevant files under `docs/` as the project's source of truth, and when an `rfc/` folder exists build a standards inventory and read the diff-relevant standards (cap 3) so the plan complies with Accepted RFCs (a Draft RFC is advisory); the generated plan must keep `README.md`, `docs/*`, and any edited `rfc/*` current after implementation. This is the compliance mirror of the enforcement the `pr:review` skill applies — see [Code review repository standards](./12-code-review-repository-standards.md).
 - **Plan File Header** — every plan file begins with a single `# <Title>` line and a fixed section order.
 - **CLAUDE.md Compliance** — map each planned change to the project's rules.
 - **Visualize with ASCII Schemas** — for structural/visual changes, generate diagrams via `Skill(autopilot:ascii-schemas)` and embed them verbatim, inline in the section each explains.
@@ -152,7 +152,7 @@ The delegated stack skill discovers the planning tasks (via `TaskList`) and runs
 
 ### Phase 1 · Context Gathering
 
-This is the pipeline's **single codebase-reading pass** — Phase 0 reads no code and Phase 2 only synthesizes. Gather the branch diff (`git log/diff origin/main...HEAD`), then decide **where context comes from** before crawling: the Phase 0 snapshot serves broad/whole-repo reads, while live tools (Explore agents / Grep / Glob) serve only what the snapshot cannot — in-flight working-tree code or targeted fresh reads. The pass ends by recording a **Context Map** — files and their roles, patterns to mirror, key types/schemas, test conventions, and in-flight changes — which becomes the single artifact every later phase reasons over instead of re-reading. Documentation lookup, repository documentation, and CLAUDE.md compliance follow the Common Instructions.
+This is the pipeline's **single codebase-reading pass** — Phase 0 reads no code and Phase 2 only synthesizes. Gather the branch diff (`git log/diff origin/main...HEAD`), then decide **where context comes from** before crawling: the Phase 0 snapshot serves broad/whole-repo reads, while live tools (Explore agents / Grep / Glob) serve only what the snapshot cannot — in-flight working-tree code or targeted fresh reads. The pass ends by recording a **Context Map** — files and their roles, patterns to mirror, key types/schemas, test conventions, in-flight changes, and the **applicable standards** (the selected `rfc/`/`docs/` entries with their status, plus any dropped candidates) the plan must honor — which becomes the single artifact every later phase reasons over instead of re-reading. Documentation lookup, repository documentation, and CLAUDE.md compliance follow the Common Instructions.
 
 ### Phase 2 · Deep Analysis
 

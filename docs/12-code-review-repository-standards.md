@@ -38,3 +38,7 @@ An RFC modified by the diff is enforced at its base-branch version, so a single 
 ## Cost behavior
 
 Discovery is index-first: one small read builds the inventory, and only matched standards (at most 3) are read further, section-targeted for large files. The rule catalog grows by five codes total; per-review cost stays within the normal band for repositories with standards and is unchanged for repositories without them.
+
+## Planning against the same standards
+
+Enforcement is only half the loop. The [plan skill](../claude-plugins/autopilot/skills/plan/SKILL.md#repository-documentation-mandatory) reads the same `rfc/`/`docs/` inventory during its context-gathering pass and records the selected standards in its Context Map, so a plan is shaped to **comply** with Accepted RFCs rather than propose a change this review would then block — review enforces, plan complies. The plan skill uses the identical discovery and selection contract (index-first inventory, token-match selection capped at 3); it adds no `CHECK-*` codes of its own, and when a change edits an Accepted RFC the plan requires the same `version` bump + Changelog entry that `CHECK-RFC-003` guards.
