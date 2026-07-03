@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [0.2.1](https://github.com/awinogradov/code-assistants/compare/perf-report-action@v0.2.0...perf-report-action@v0.2.1) (2026-07-03)
+
+## Release Notes
+
+Routine dependency updates with no user-facing changes in this release.
+
+
+### CI
+
+* **deps:** bump the github-actions group across 6 directories with 4 updates ([ea89dd2](https://github.com/awinogradov/code-assistants/commit/ea89dd248da6da72d90d1cfcaa36e2b415f356ee))
 ## 0.2.0 (2026-06-13)
 
 ## Release Notes
