@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [0.2.3](https://github.com/awinogradov/code-assistants/compare/validate-actions-action@v0.2.2...validate-actions-action@v0.2.3) (2026-07-03)
+
+## Release Notes
+
+`actions/checkout` is updated to v7, which blocks checkout of fork PRs in `pull_request_target` and `workflow_run` triggers — a security hardening change that affects how this action behaves in repositories using those triggers.
+
+## ✨ What's New
+
+### Hardened Fork PR Checkout Security
+
+The `actions/checkout` dependency used internally by this action has been updated from v6 to v7. The most significant change in v7 is that it now blocks checking out pull requests from forks when the workflow is triggered via `pull_request_target` or `workflow_run` events. This is a security improvement that prevents a class of privilege-escalation attacks where untrusted fork code could be executed in a context with elevated permissions.
+
+For the `validate-actions` action itself — which uses a `pull_request` trigger and `contents: read` permissions — this change has no functional impact on normal operation. However, if your repository wraps or re-uses this action in workflows with `pull_request_target` or `workflow_run` triggers, be aware that checkout of fork PRs in those contexts will now fail by design.
+
+<details><summary>Related issues</summary>
+
+- [#419: ci(deps): bump the github-actions group across 6 directories with 4 updates](https://github.com/awinogradov/code-assistants/pull/419)
+</details>
+
+
+### CI
+
+* **deps:** bump the github-actions group across 6 directories with 4 updates ([ea89dd2](https://github.com/awinogradov/code-assistants/commit/ea89dd248da6da72d90d1cfcaa36e2b415f356ee))
 ## [0.2.2](https://github.com/awinogradov/code-assistants/compare/validate-actions-action@v0.2.1...validate-actions-action@v0.2.2) (2026-06-15)
 
 ## Release Notes
