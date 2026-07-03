@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "0b7a865b7821",
+  "strategy": "manual-commit",
+  "branch": "hotfix-link-file-doc-mentions-review-comment-prose",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "claude-plugins/autopilot/skills/pr:review/SKILL.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0b/7a865b7821/0/metadata.json",
+      "transcript": "/0b/7a865b7821/0/full.jsonl",
+      "compact_transcript": "/0b/7a865b7821/0/transcript.jsonl",
+      "content_hash": "/0b/7a865b7821/0/content_hash.txt",
+      "prompt": "/0b/7a865b7821/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 21139,
+    "cache_creation_tokens": 234622,
+    "cache_read_tokens": 5217434,
+    "output_tokens": 47922,
+    "api_call_count": 47
+  }
+}
