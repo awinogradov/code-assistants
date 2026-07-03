@@ -1,0 +1,1 @@
+/autopilot:plan setup dependabot for github-actions group, pay attention on turbo and monorepo. Weekly, Sunday evening, Dubai time

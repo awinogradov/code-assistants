@@ -1,0 +1,137 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_id": "dd693e10275e",
+  "session_id": "cf1211b6-a3f9-4fbd-a159-1d68556db49d",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-03T16:55:14.66152Z",
+  "branch": "maintenance-dependabot-github-actions",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".github/dependabot.yml"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-8[1m]",
+  "turn_id": "766fa47f0d13",
+  "token_usage": {
+    "input_tokens": 16429,
+    "cache_creation_tokens": 179577,
+    "cache_read_tokens": 5205975,
+    "output_tokens": 45247,
+    "api_call_count": 48
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "prompt-skill-claude-code-autopilot:plan-2026-07-03T16:40:34.045283Z",
+      "event_type": "prompt_invocation",
+      "skill": {
+        "name": "autopilot:plan"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "prompt_slash_command",
+        "confidence": "explicit"
+      },
+      "turn_id": "766fa47f0d13",
+      "timestamp": "2026-07-03T16:40:34.045283Z",
+      "native": {
+        "command": "/autopilot:plan"
+      },
+      "collapse": {
+        "target": "user_message",
+        "label": "/autopilot:plan",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01MnvoVn3MaxyBPbWXD2Lgx5",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "autopilot:branch-create"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "766fa47f0d13",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 205,
+        "end": 206,
+        "entry_ids": [
+          "c0258125-5a5f-4473-a078-c33d15606d99"
+        ],
+        "tool_use_id": "toolu_01MnvoVn3MaxyBPbWXD2Lgx5"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01MnvoVn3MaxyBPbWXD2Lgx5"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: autopilot:branch-create",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01EgZYMjSr56ruE5hUnYdsEt",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "autopilot:commits-create"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "766fa47f0d13",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 272,
+        "end": 273,
+        "entry_ids": [
+          "02f43545-ffac-4756-a620-c7ed5b946510"
+        ],
+        "tool_use_id": "toolu_01EgZYMjSr56ruE5hUnYdsEt"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01EgZYMjSr56ruE5hUnYdsEt"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: autopilot:commits-create",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "initial_attribution": {
+    "calculated_at": "2026-07-03T16:55:14.637215Z",
+    "agent_lines": 34,
+    "agent_removed": 0,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 34,
+    "total_lines_changed": 34,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 20,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".husky/_/commit-msg": 4,
+        ".husky/_/post-commit": 4,
+        ".husky/_/post-rewrite": 4,
+        ".husky/_/pre-push": 5,
+        ".husky/_/prepare-commit-msg": 3
+      }
+    }
+  ]
+}
