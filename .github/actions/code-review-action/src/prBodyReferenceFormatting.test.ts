@@ -113,4 +113,21 @@ describe("review body file links", () => {
     expect(content).not.toContain("`src/webhooks/payment.ts:45`");
     expect(content).not.toContain("`src/webhooks/payment.ts:62`");
   });
+
+  // wefortis/fortune-os PR 116 review 4627462294: finding LOCATIONS linked, but file/doc
+  // mentions in the prose and summary sentence (apps/.../steps.ts, docs/03-playwright.md,
+  // RFC-0002) stayed backticked — the self-check only flagged paths WITH a line number and
+  // no example modeled an in-prose mention. These pin the broadened self-check plus a worked
+  // example that links a no-line mention while sparing a glob code specimen.
+  test("links no-line prose/summary mentions while sparing code-specimen paths", async () => {
+    const content = await readFile(reviewSkill, "utf8");
+    // self-check broadened: covers no-line mentions and the summary sentence
+    expect(content).toContain("with OR without a line number");
+    expect(content).toContain("including the summary sentence");
+    // example models a linked doc in the summary + a linked no-line file mention in prose
+    expect(content).toContain("[docs/webhooks.md](<pr-blob-url>/docs/webhooks.md)");
+    expect(content).toContain("[src/webhooks/config.ts](<pr-blob-url>/src/webhooks/config.ts)");
+    // globs/keys stay backticked, not linked
+    expect(content).toContain("code specimen, not a reference");
+  });
 });
