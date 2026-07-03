@@ -117,6 +117,7 @@ The content is organized as follows:
         1.4.1.md
         1.5.0.md
         1.6.0.md
+        1.6.1.md
       src/
         github/
           githubReview.test.ts
@@ -5067,6 +5068,37 @@ The static usage hint that appeared at the bottom of every review comment has be
 
 * **code-review:** guard linked review body references ([9a802f6](https://github.com/awinogradov/code-assistants/commit/9a802f67047e8c08846c526a640667b3c07110e4))
 * guard linked reference forms in skills ([078b9ed](https://github.com/awinogradov/code-assistants/commit/078b9ed55d08bfd223564605726322772fb80472))
+</file>
+
+<file path=".github/actions/code-review-action/.release_notes/1.6.1.md">
+## [1.6.1](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.6.0...code-review-action@v1.6.1) (2026-07-03)
+
+## Release Notes
+
+Dependabot PRs now pass validation checks automatically instead of failing, eliminating false-positive review failures on automated dependency updates.
+
+## 🐛 Bug Fixes
+
+### Dependabot PRs No Longer Fail Validation
+
+Previously, Dependabot's automated dependency update PRs would fail the Contributing checks (branch name, commit message, and PR title validation) and trigger the AI Code Review workflow, causing noise and requiring manual intervention. Both checks now recognize Dependabot as an automated author and skip gracefully, so dependency updates flow through without generating false failures.
+
+### Linked File and Doc References in Review Comments
+
+AI code review comments now render file paths, documentation references, and RFC mentions as clickable links throughout the full comment body and summary — not just at the finding's source location. This makes it easier to navigate directly from a review finding to the relevant file or spec without having to hunt for it manually.
+
+
+### Bug Fixes
+
+* **actions:** skip dependabot pull requests in checks ([4e82a92](https://github.com/awinogradov/code-assistants/commit/4e82a92da5212a90a351fc85b7e74560a3916852))
+
+### Tests
+
+* **code-review:** guard no-line review body mentions ([06d4029](https://github.com/awinogradov/code-assistants/commit/06d40291a029a2fe8688d00df0f7137f81d8527e))
+
+### CI
+
+* **deps:** bump the github-actions group across 6 directories with 4 updates ([ea89dd2](https://github.com/awinogradov/code-assistants/commit/ea89dd248da6da72d90d1cfcaa36e2b415f356ee))
 </file>
 
 <file path=".github/actions/code-review-action/src/github/githubReview.test.ts">
@@ -12251,6 +12283,34 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.6.1](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.6.0...code-review-action@v1.6.1) (2026-07-03)
+
+## Release Notes
+
+Dependabot PRs now pass validation checks automatically instead of failing, eliminating false-positive review failures on automated dependency updates.
+
+## 🐛 Bug Fixes
+
+### Dependabot PRs No Longer Fail Validation
+
+Previously, Dependabot's automated dependency update PRs would fail the Contributing checks (branch name, commit message, and PR title validation) and trigger the AI Code Review workflow, causing noise and requiring manual intervention. Both checks now recognize Dependabot as an automated author and skip gracefully, so dependency updates flow through without generating false failures.
+
+### Linked File and Doc References in Review Comments
+
+AI code review comments now render file paths, documentation references, and RFC mentions as clickable links throughout the full comment body and summary — not just at the finding's source location. This makes it easier to navigate directly from a review finding to the relevant file or spec without having to hunt for it manually.
+
+
+### Bug Fixes
+
+* **actions:** skip dependabot pull requests in checks ([4e82a92](https://github.com/awinogradov/code-assistants/commit/4e82a92da5212a90a351fc85b7e74560a3916852))
+
+### Tests
+
+* **code-review:** guard no-line review body mentions ([06d4029](https://github.com/awinogradov/code-assistants/commit/06d40291a029a2fe8688d00df0f7137f81d8527e))
+
+### CI
+
+* **deps:** bump the github-actions group across 6 directories with 4 updates ([ea89dd2](https://github.com/awinogradov/code-assistants/commit/ea89dd248da6da72d90d1cfcaa36e2b415f356ee))
 ## [1.6.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.5.0...code-review-action@v1.6.0) (2026-07-02)
 
 ## Release Notes
@@ -13134,7 +13194,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/package.json">
 {
   "name": "@code-assistants/code-review-action",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Composite GitHub Action that runs AI code review on pull requests via Claude Code.",
   "private": true,
   "type": "module",
@@ -13168,7 +13228,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/README.md">
 # Code review action
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.6.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.6.1-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that runs AI code review on pull requests using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Has two modes:
@@ -13349,7 +13409,7 @@ uses: awinogradov/code-assistants/.github/actions/code-review-action@v1
 </file>
 
 <file path=".github/actions/code-review-action/version">
-1.6.0
+1.6.1
 </file>
 
 <file path=".github/actions/code-review-cost-monitor/.release_notes/0.1.0.md">
