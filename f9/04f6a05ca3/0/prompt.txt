@@ -1,0 +1,11 @@
+/autopilot:pr-monitor
+
+---
+
+<task-notification>
+<task-id>bslaotraz</task-id>
+<tool-use-id>toolu_01GtoBKgabwj8za95i7n8cun</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-cholla-prairie-dog/7e78fa76-8cb2-444f-b6ad-bfa1ef20ac4c/tasks/bslaotraz.output</output-file>
+<status>completed</status>
+<summary>Background command "Poll PR #422 for review/CI in background" completed (exit code 0)</summary>
+</task-notification>
