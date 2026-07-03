@@ -375,11 +375,12 @@ example/       # multiple modules: a directory, no index.ts barrel
 
 ### 16.2 MCP Servers
 
-**context7**, **Ref**, **Exa**: Look up documentation for all technologies
+Prefer the project-registered MCP servers declared in the repo's own `.mcp.json`. The repository README and `docs/` are the authoritative list of which servers are registered and when to reach for each — consult them before hand-rolling work a registered server handles.
 
-**Playwright**: Verify UI state with browser_snapshot
-
-**Chrome DevTools**: Performance analysis, network debugging, console logging, etc.
+- 👤 **Documentation servers** (context7, Ref, Exa) — look up docs for any technology, framework, or API (global/user servers, not project-registered)
+- 👤 **Playwright MCP server** — persistent, exploratory UI verification with `browser_snapshot`; prefer the token-efficient `@playwright/cli` CLI for high-throughput agent runs
+- 👤 **Chrome DevTools MCP server** — performance traces, network inspection, console debugging
+- 👤 **Repomix MCP server** — pack the codebase into one digest and grep/read it for codebase-wide analysis instead of loading every file
 
 ## 17. Code Review
 
