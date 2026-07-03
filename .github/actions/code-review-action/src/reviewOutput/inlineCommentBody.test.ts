@@ -64,12 +64,12 @@ describe("renderInlineCommentBody", () => {
       comment: {
         path: "src/a.ts",
         line: 2,
-        body: "🚧 Off-by-one [CHECK-BUG-003](https://x#CHECK-BUG-003)",
+        body: "🚧 Off-by-one [CHECK-BUG-003](https://x#check-bug-003)",
       },
       hunk,
     });
     // Human-facing finding stays verbatim...
-    expect(body).toContain("🚧 Off-by-one [CHECK-BUG-003](https://x#CHECK-BUG-003)");
+    expect(body).toContain("🚧 Off-by-one [CHECK-BUG-003](https://x#check-bug-003)");
     // ...while the embedded prompt copy is chrome-free.
     expect(body).toContain("<comment>\nOff-by-one\n</comment>");
   });
@@ -191,7 +191,7 @@ describe("boundHunkToLine", () => {
 
 describe("stripReviewChrome", () => {
   test("strips a leading severity emoji and a trailing single rule link", () => {
-    expect(stripReviewChrome("🚧 Off-by-one [CHECK-BUG-003](https://x#CHECK-BUG-003)")).toBe(
+    expect(stripReviewChrome("🚧 Off-by-one [CHECK-BUG-003](https://x#check-bug-003)")).toBe(
       "Off-by-one",
     );
   });
