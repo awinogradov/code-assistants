@@ -2,6 +2,46 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.8.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.7.0...autopilot@v1.8.0) (2026-07-03)
+
+## Release Notes
+
+The plan skill now discovers and enforces your repo's `rfc/` and `docs/` standards, closing the gap where review enforced conventions that planning ignored.
+
+## ✨ What's New
+
+### RFC and Docs Standards Awareness in Planning
+
+The autopilot loop's review side has long discovered and enforced a repo's versioned RFC standards and `docs/` conventions — flagging drift, checking compliance, requiring version-bump hygiene. The plan skill now does the same. When kicking off a plan, autopilot will inventory your `rfc/` directory (up to 3 applicable standards), fall back through your `docs/` chain, record the applicable standards in its Context Map, score compliance as part of Phase 5, and enforce RFC version-bump hygiene in Post-Implementation. This means plans are drafted to comply with your repo's own standards from the start, not just checked against them after the fact.
+
+The four `rules/*.md` files have also been updated to declare `rfc/` in their Mandatory Context blocks, with the precedence order: Accepted RFC → `docs/` → the rule file itself.
+
+<details><summary>Related issues</summary>
+
+- [#421: Support rfc/ and docs/ standards in the plan skills and rules](https://github.com/awinogradov/code-assistants/issues/421)
+- [#422: Support rfc/ and docs/ standards in the plan skills and rules](https://github.com/awinogradov/code-assistants/pull/422)
+</details>
+
+## 🐛 Bug Fixes
+
+### Linked File and Doc References in Review Comments
+
+Code review comments now render file paths, doc mentions, and RFC references as clickable links directly in the comment prose and summary — not just at the finding location. Previously, a reviewer reading a comment about a standards violation had to hunt for the relevant file or RFC separately; now those references resolve inline where they appear.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #421 | [#422](https://github.com/awinogradov/code-assistants/pull/422) | @awinogradov |
+
+### Features
+
+* **autopilot:** read repo rfc/docs standards in plan skill ([ee6490d](https://github.com/awinogradov/code-assistants/commit/ee6490d5b00de91c07b446765864e2d4bdffaff3))
+
+### Bug Fixes
+
+* **autopilot:** link file and doc mentions in review prose ([25ec5a0](https://github.com/awinogradov/code-assistants/commit/25ec5a0ce2ba993457fd4e0193a57cce870754fd))
 ## [1.7.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.6.0...autopilot@v1.7.0) (2026-07-02)
 
 ## Release Notes
