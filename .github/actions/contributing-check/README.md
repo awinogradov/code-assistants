@@ -63,6 +63,8 @@ The action never writes to the repository or to the PR, so writes are not reques
 
 The action runs four steps sequentially. The first failure short-circuits the job — later steps do not run.
 
+Dependabot-authored PRs (author `dependabot[bot]`) skip every step — their machine-generated `dependabot/...` branches and update titles do not follow the human conventions. Each step is gated on the PR author, so the "Validate PR" job still reports success (green) rather than a stuck or failed required check.
+
 1. **Branch name** — [`deepakputhraya/action-branch-name@v1.0.0`](https://github.com/deepakputhraya/action-branch-name) enforces the regex `^(issue-\d+-[a-z0-9]+(-[a-z0-9]+)*|[a-z][a-z0-9]*-\d+-[a-z0-9]+(-[a-z0-9]+)*|(hotfix|trivial|maintenance|proposal|security)-[a-z0-9]+(-[a-z0-9]+)*|release-([a-z0-9]+(-[a-z0-9]+)*-)?\d+\.\d+\.\d+)$` — the GitHub `issue-<n>-<slug>` form, the Linear `<team>-<n>-<slug>` form, the special prefixes, and release branches — with `min_length: 5`, `max_length: 100`, and `ignore: main,master`. This matches the CONTRIBUTING.md `Branches` section.
 2. **Checkout** — `actions/checkout@v4` with `fetch-depth: 0` so commitlint can resolve the full PR commit range.
 3. **Commit messages** — [`wagoid/commitlint-github-action@v6`](https://github.com/wagoid/commitlint-github-action) runs against `./commitlint.config.mjs` with `failOnWarnings: false`. Level-1 (warning) rules — `body-max-line-length` and `footer-max-line-length` — are surfaced as warnings but do not block merge. Level-2 (error) rules — including the custom `body-required-for-types`, `no-issue-id-in-subject`, and `no-ai-coauthored-by` — block merge.

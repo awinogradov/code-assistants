@@ -4,7 +4,15 @@ description: Validate branch name, commit messages, and PR title against the con
 runs:
   using: composite
   steps:
+    # Dependabot PRs deviate from the branch-name and PR-title conventions (e.g.
+    # `dependabot/github_actions/...` branches), so every step below is gated to
+    # skip them. Keying on the PR author (not github.actor) survives synchronize
+    # events and is not spoofable — only GitHub can author under `dependabot[bot]`.
+    # Gating each step (not the job) keeps the required "Validate PR" check GREEN.
+    # Every step MUST carry this identical guard; a new step without it re-blocks
+    # dependabot. Actions do not support YAML anchors, so it is repeated verbatim.
     - name: Validate branch name
+      if: ${{ github.event.pull_request.user.login != 'dependabot[bot]' }}
       uses: deepakputhraya/action-branch-name@v1.0.0
       with:
         regex: '^(issue-\d+-[a-z0-9]+(-[a-z0-9]+)*|[a-z][a-z0-9]*-\d+-[a-z0-9]+(-[a-z0-9]+)*|(hotfix|trivial|maintenance|proposal|security)-[a-z0-9]+(-[a-z0-9]+)*|release-([a-z0-9]+(-[a-z0-9]+)*-)?\d+\.\d+\.\d+)$'
@@ -13,17 +21,20 @@ runs:
         ignore: main,master
 
     - name: Checkout
+      if: ${{ github.event.pull_request.user.login != 'dependabot[bot]' }}
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
     - name: Validate commit messages
+      if: ${{ github.event.pull_request.user.login != 'dependabot[bot]' }}
       uses: wagoid/commitlint-github-action@v6
       with:
         configFile: ./commitlint.config.mjs
         failOnWarnings: false
 
     - name: Validate PR title (semantic)
+      if: ${{ github.event.pull_request.user.login != 'dependabot[bot]' }}
       uses: amannn/action-semantic-pull-request@v6
       env:
         GITHUB_TOKEN: ${{ github.token }}
@@ -44,6 +55,7 @@ runs:
           PR title must not end with a period. See CONTRIBUTING.md §pr-title.
 
     - name: Validate PR title length
+      if: ${{ github.event.pull_request.user.login != 'dependabot[bot]' }}
       shell: bash
       env:
         PR_TITLE: ${{ github.event.pull_request.title }}

@@ -105,7 +105,12 @@ runs:
   steps:
     # ── Validation ──
 
+    # Skip for dependabot PRs: their runs use the Dependabot secrets store, so
+    # anthropic_api_key/bot_token are empty and this gate would hard-exit before
+    # "Detect context" reaches its existing dependabot skip. Gating here lets that
+    # skip run (it needs only bot_token) and set skip=true, so the job stays GREEN.
     - name: Validate tokens
+      if: ${{ github.event.pull_request.user.login != 'dependabot[bot]' }}
       shell: bash
       env:
         BOT_TOKEN: ${{ inputs.bot_token }}
