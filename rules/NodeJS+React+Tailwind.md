@@ -19,6 +19,7 @@ Before making any changes:
 2. Inspect all file names under `docs/` and subfolders in the current repository — some files may be missing from the README
 3. Read files that appear relevant to the current task
 4. Treat `docs/` as the source of truth for project-specific conventions and follow those documents over this file when they conflict
+5. When an `rfc/` folder exists, treat its Accepted RFCs as binding versioned standards — follow them over `docs/` and this file when they conflict; see `rfc/README.md` for the convention
 
 **Rule Markers Legend:**
 
