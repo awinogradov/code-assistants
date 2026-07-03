@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "dd4c8688c0ec",
+  "strategy": "manual-commit",
+  "branch": "issue-421-plan-rfc-docs-standards",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "rules/Bun+React+Tailwind.md",
+    "rules/Bun.md",
+    "rules/NodeJS+React+Tailwind.md",
+    "rules/NodeJS+React.md",
+    "scripts/validate-plugins.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/dd/4c8688c0ec/0/metadata.json",
+      "transcript": "/dd/4c8688c0ec/0/full.jsonl",
+      "compact_transcript": "/dd/4c8688c0ec/0/transcript.jsonl",
+      "content_hash": "/dd/4c8688c0ec/0/content_hash.txt",
+      "prompt": "/dd/4c8688c0ec/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 38750,
+    "cache_creation_tokens": 345576,
+    "cache_read_tokens": 17239011,
+    "output_tokens": 78455,
+    "api_call_count": 103
+  }
+}
