@@ -259,7 +259,10 @@ example/       # multiple modules: a directory, no index.ts barrel
 
 ### 16.2 MCP Servers
 
-**context7**, **Ref**, **Exa**: Look up documentation for all technologies
+Prefer the project-registered MCP servers declared in the repo's own `.mcp.json`. The repository README and `docs/` are the authoritative list of which servers are registered and when to reach for each — consult them before hand-rolling work a registered server handles.
+
+- 👤 **Documentation servers** (context7, Ref, Exa) — look up docs for any technology, framework, or API (global/user servers, not project-registered)
+- 👤 **Repomix MCP server** — pack the codebase into one digest and grep/read it for codebase-wide analysis instead of loading every file
 
 ## 17. Code Review
 
