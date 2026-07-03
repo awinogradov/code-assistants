@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "75fa209937c8",
+  "strategy": "manual-commit",
+  "branch": "hotfix-check-rule-anchor-links",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".github/actions/code-review-action/src/reviewOutput/inlineCommentBody.test.ts",
+    ".github/actions/code-review-action/src/reviewOutput/reviewOutput.test.ts",
+    ".github/actions/code-review-action/src/reviewOutput/reviewOutput.ts",
+    ".github/actions/code-review-action/src/rulesDocUrlSync.test.ts",
+    "claude-plugins/autopilot/skills/pr:answer/SKILL.md",
+    "claude-plugins/autopilot/skills/pr:resolve/SKILL.md",
+    "claude-plugins/autopilot/skills/pr:review/SKILL.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/75/fa209937c8/0/metadata.json",
+      "transcript": "/75/fa209937c8/0/full.jsonl",
+      "compact_transcript": "/75/fa209937c8/0/transcript.jsonl",
+      "content_hash": "/75/fa209937c8/0/content_hash.txt",
+      "prompt": "/75/fa209937c8/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 24310,
+    "cache_creation_tokens": 273051,
+    "cache_read_tokens": 15383077,
+    "output_tokens": 80912,
+    "api_call_count": 87
+  }
+}

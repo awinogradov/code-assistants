@@ -1,0 +1,238 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_id": "75fa209937c8",
+  "session_id": "7be2cdd0-9dac-4852-8028-bf65a900ce66",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-03T22:38:09.937983Z",
+  "branch": "hotfix-check-rule-anchor-links",
+  "checkpoints_count": 1,
+  "save_step_count": 1,
+  "files_touched": [
+    ".github/actions/code-review-action/src/reviewOutput/inlineCommentBody.test.ts",
+    ".github/actions/code-review-action/src/reviewOutput/reviewOutput.test.ts",
+    ".github/actions/code-review-action/src/reviewOutput/reviewOutput.ts",
+    ".github/actions/code-review-action/src/rulesDocUrlSync.test.ts",
+    "claude-plugins/autopilot/skills/pr:answer/SKILL.md",
+    "claude-plugins/autopilot/skills/pr:resolve/SKILL.md",
+    "claude-plugins/autopilot/skills/pr:review/SKILL.md"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-4-8[1m]",
+  "turn_id": "f738b8dea643",
+  "token_usage": {
+    "input_tokens": 24310,
+    "cache_creation_tokens": 273051,
+    "cache_read_tokens": 15383077,
+    "output_tokens": 80912,
+    "api_call_count": 87
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "prompt-skill-claude-code-autopilot:plan-2026-07-03T22:04:07.448039Z",
+      "event_type": "prompt_invocation",
+      "skill": {
+        "name": "autopilot:plan"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "prompt_slash_command",
+        "confidence": "explicit"
+      },
+      "turn_id": "16f81d328052",
+      "timestamp": "2026-07-03T22:04:07.448039Z",
+      "native": {
+        "command": "/autopilot:plan"
+      },
+      "collapse": {
+        "target": "user_message",
+        "label": "/autopilot:plan",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "prompt-skill-claude-code-autopilot:plan-2026-07-03T22:04:35.069902Z",
+      "event_type": "prompt_invocation",
+      "skill": {
+        "name": "autopilot:plan"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "prompt_slash_command",
+        "confidence": "explicit"
+      },
+      "turn_id": "e627454fbbf8",
+      "timestamp": "2026-07-03T22:04:35.069902Z",
+      "native": {
+        "command": "/autopilot:plan"
+      },
+      "collapse": {
+        "target": "user_message",
+        "label": "/autopilot:plan",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01TUpSRztoauahzWmpacLWyq",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "autopilot:preflight-check"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "f738b8dea643",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 84,
+        "end": 85,
+        "entry_ids": [
+          "b0791f46-73e9-4e72-b0ae-98f0e4cd7c8f"
+        ],
+        "tool_use_id": "toolu_01TUpSRztoauahzWmpacLWyq"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01TUpSRztoauahzWmpacLWyq"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: autopilot:preflight-check",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_0148dDmJLgjLQj2SDmQWGzxz",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "autopilot:plan-bun"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "f738b8dea643",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 108,
+        "end": 109,
+        "entry_ids": [
+          "b6f9948e-923d-4b4e-8e11-ef41151c5563"
+        ],
+        "tool_use_id": "toolu_0148dDmJLgjLQj2SDmQWGzxz"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_0148dDmJLgjLQj2SDmQWGzxz"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: autopilot:plan-bun",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01Lz7tELY4eAJdxidQ1SCd6G",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "autopilot:branch-create"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "f738b8dea643",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 321,
+        "end": 322,
+        "entry_ids": [
+          "a0d9be18-6705-4b93-970f-56c2407bd8db"
+        ],
+        "tool_use_id": "toolu_01Lz7tELY4eAJdxidQ1SCd6G"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01Lz7tELY4eAJdxidQ1SCd6G"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: autopilot:branch-create",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01FkQtz3byC5y4vv3dhis7Ub",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "autopilot:commits-create"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "f738b8dea643",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 647,
+        "end": 648,
+        "entry_ids": [
+          "29da802f-32cc-47e6-8187-3199c6483e5e"
+        ],
+        "tool_use_id": "toolu_01FkQtz3byC5y4vv3dhis7Ub"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01FkQtz3byC5y4vv3dhis7Ub"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: autopilot:commits-create",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-03T22:38:09.889689Z",
+    "agent_lines": 118,
+    "agent_removed": 34,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 118,
+    "total_lines_changed": 152,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 20,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".husky/_/commit-msg": 4,
+        ".husky/_/post-commit": 4,
+        ".husky/_/post-rewrite": 4,
+        ".husky/_/pre-push": 5,
+        ".husky/_/prepare-commit-msg": 3
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 115,
+      "agent_lines_removed": 31
+    }
+  ]
+}

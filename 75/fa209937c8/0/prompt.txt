@@ -1,0 +1,7 @@
+/autopilot:plan I see the broken link to the ancor in doc https://github.com/wefortis/fortune-os/pull/120#pullrequestreview-4628162263
+analyze and hotfix
+
+---
+
+/autopilot:plan I see the broken link to the ancor in doc https://github.com/wefortis/fortune-os/pull/120#pullrequestreview-4628162263
+  analyze and hotfix
