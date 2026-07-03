@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.6.2](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.6.1...code-review-action@v1.6.2) (2026-07-03)
+
+## Release Notes
+
+Review comment rule-code anchor links now navigate directly to the correct rule section instead of dropping readers at the top of the document.
+
+## 🐛 Bug Fixes
+
+### Rule-Code Anchor Links Navigate to the Correct Section
+
+When the AI reviewer references a specific rule in its comments (e.g. `check-naming` or `check-complexity`), the link now jumps directly to that rule's anchor in the rules document. Previously, these links were broken — they resolved to the top of the document regardless of which rule was cited, forcing readers to manually search for the relevant section. All rule-code links in both review comments and reply threads are now fixed.
+
+
+### Bug Fixes
+
+* **code-review:** lowercase check-* link fragments in review output ([976f0e1](https://github.com/awinogradov/code-assistants/commit/976f0e1cf70002069410b2d0de68ddfb4994648c))
 ## [1.6.1](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.6.0...code-review-action@v1.6.1) (2026-07-03)
 
 ## Release Notes
