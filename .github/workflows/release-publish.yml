@@ -36,7 +36,7 @@ jobs:
       # commit (version + .release_notes) is already on the default branch.
       # Checking out a PR-derived ref would run untrusted code in this privileged
       # pull_request_target context (CodeQL actions/untrusted-checkout, CWE-829).
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: awinogradov/code-assistants/.github/actions/release-action@main
         with:

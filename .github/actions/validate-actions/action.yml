@@ -12,7 +12,7 @@ runs:
   using: composite
   steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         # Full history so the merge-base with the PR's base branch can be resolved.
         fetch-depth: 0

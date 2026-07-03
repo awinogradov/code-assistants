@@ -48,7 +48,7 @@ jobs:
     steps:
       # Full history so the attribution step can diff the review process
       # between the baseline window and now.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
