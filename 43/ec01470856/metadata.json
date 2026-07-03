@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "43ec01470856",
+  "strategy": "manual-commit",
+  "branch": "issue-421-plan-rfc-docs-standards",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "claude-plugins/autopilot/skills/plan/SKILL.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/43/ec01470856/0/metadata.json",
+      "transcript": "/43/ec01470856/0/full.jsonl",
+      "compact_transcript": "/43/ec01470856/0/transcript.jsonl",
+      "content_hash": "/43/ec01470856/0/content_hash.txt",
+      "prompt": "/43/ec01470856/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 38302,
+    "cache_creation_tokens": 304108,
+    "cache_read_tokens": 12445607,
+    "output_tokens": 64047,
+    "api_call_count": 83
+  }
+}
