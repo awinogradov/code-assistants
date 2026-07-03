@@ -1,0 +1,1 @@
+/autopilot:plan we added support for rfc/ and docs/ recently for code-review-action and pr:review skill. plan skills must support it too. Also, I think we need to declare it in the rules/. Analyze, discuss with me for a clear context and best solution. Create an issue then and continue.
