@@ -1,6 +1,6 @@
 {
   "name": "@code-assistants/perf-report-action",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Composite GitHub Action that posts a sticky PR comment with bundle-size and Lighthouse deltas against a main-branch baseline.",
   "private": true,
   "type": "module",
