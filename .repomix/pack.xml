@@ -11972,7 +11972,7 @@ runs:
 
     - name: Checkout repository
       if: steps.ctx.outputs.skip != 'true'
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
       with:
         # Depth 20: lets sub-agent git history walks (HEAD~N) succeed without paying for a full clone.
         fetch-depth: 20
@@ -16040,7 +16040,7 @@ runs:
 
     - name: Checkout
       if: ${{ github.event.pull_request.user.login != 'dependabot[bot]' }}
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         fetch-depth: 0
 
@@ -18824,7 +18824,7 @@ runs:
 
     - name: Checkout PR branch (same-repo; writable)
       if: steps.src.outputs.same_repo == 'true'
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         ref: ${{ github.head_ref }}
         fetch-depth: 0
@@ -18833,7 +18833,7 @@ runs:
 
     - name: Checkout (fork PR; read-only)
       if: steps.src.outputs.same_repo == 'false'
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         ref: ${{ github.event.pull_request.head.sha }}
         persist-credentials: false
@@ -18862,7 +18862,7 @@ runs:
 
     - name: Setup Node
       if: steps.pm.outputs.skip == 'false'
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v6
       with:
         node-version-file: ${{ inputs.node-version-file }}
 
@@ -20524,7 +20524,7 @@ runs:
     - name: Sticky perf comment
       if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
       continue-on-error: true
-      uses: marocchino/sticky-pull-request-comment@v2
+      uses: marocchino/sticky-pull-request-comment@v3
       with:
         header: ${{ inputs.comment-header }}
         path: perf-comment.md
@@ -20536,7 +20536,7 @@ runs:
     # the baseline name.
     - name: Upload perf snapshot
       if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref_name == github.event.repository.default_branch)
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: >-
           ${{
@@ -35037,7 +35037,7 @@ runs:
   using: composite
   steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         # Full history so the merge-base with the PR's base branch can be resolved.
         fetch-depth: 0
@@ -35437,7 +35437,7 @@ jobs:
     steps:
       # Full history so the attribution step can diff the review process
       # between the baseline window and now.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -35668,7 +35668,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: awinogradov/code-assistants/.github/actions/release-action@main
@@ -35721,7 +35721,7 @@ jobs:
       # commit (version + .release_notes) is already on the default branch.
       # Checking out a PR-derived ref would run untrusted code in this privileged
       # pull_request_target context (CodeQL actions/untrusted-checkout, CWE-829).
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: awinogradov/code-assistants/.github/actions/release-action@main
         with:
@@ -35767,7 +35767,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: main
           token: ${{ secrets.BOT_TOKEN }}
