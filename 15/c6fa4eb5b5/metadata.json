@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "15c6fa4eb5b5",
+  "strategy": "manual-commit",
+  "branch": "issue-421-plan-rfc-docs-standards",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "docs/05-plan-run-skills.md",
+    "docs/12-code-review-repository-standards.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/15/c6fa4eb5b5/0/metadata.json",
+      "transcript": "/15/c6fa4eb5b5/0/full.jsonl",
+      "compact_transcript": "/15/c6fa4eb5b5/0/transcript.jsonl",
+      "content_hash": "/15/c6fa4eb5b5/0/content_hash.txt",
+      "prompt": "/15/c6fa4eb5b5/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 38304,
+    "cache_creation_tokens": 304489,
+    "cache_read_tokens": 12663522,
+    "output_tokens": 64535,
+    "api_call_count": 84
+  }
+}
