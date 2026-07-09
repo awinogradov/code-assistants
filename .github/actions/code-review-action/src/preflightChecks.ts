@@ -1,13 +1,15 @@
 /**
  * Preflight PR check status polling before AI code review.
  * Polls GitHub Check Runs and Commit Statuses APIs until all sibling checks complete.
- * Skips review and posts a comment if any check has failed or if polling times out.
+ * Skips review and posts a comment if any check has failed. On a polling timeout it
+ * posts a comment and fails the job — checks never converged, so a green review
+ * result would be misleading.
  *
  * On failed checks this step does NOT post the skip comment itself: it emits the
  * failed checks plus an "explain" prompt as step outputs, and the separate
  * `runClaude` explain step + `preflightSkipComment.ts` post step assemble and
  * post the enriched comment (mirroring the review/react flow). The timeout path,
- * which makes no model call, still posts its comment inline here.
+ * which makes no model call, posts its comment inline here and then fails the job.
  *
  * @example
  * GH_TOKEN=xxx REPO=owner/repo PR_NUMBER=123 PR_HEAD_SHA=abc JOB_NAME=review POLL_INTERVAL=10 CHECKS_TIMEOUT=600 PR_AUTHOR=user bun run scripts/preflightChecks.ts
@@ -184,6 +186,14 @@ try {
       comment,
     );
     await setOutput("skip_review", "true");
+    // A checks timeout means CI never converged, so the review could not run — fail
+    // the job instead of reporting a misleading green. Set process.exitCode rather
+    // than throwing (a throw hits the fail-open catch below and would proceed with
+    // review) or calling process.exit (which would cut off pending log flushes).
+    console.log(
+      `::error title=Preflight checks timed out::${outcome.pendingNames.length} check(s) still pending after ${timeoutMin}min`,
+    );
+    process.exitCode = 1;
   }
 } catch (error) {
   // Fail open so a preflight glitch never blocks review — but surface it as a
