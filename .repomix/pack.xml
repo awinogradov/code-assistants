@@ -119,6 +119,7 @@ The content is organized as follows:
         1.6.0.md
         1.6.1.md
         1.6.2.md
+        1.6.3.md
       src/
         github/
           githubReview.test.ts
@@ -397,6 +398,7 @@ claude-plugins/
       1.7.0.md
       1.8.0.md
       1.8.1.md
+      1.9.0.md
     agents/
       analyze-pr-commits.md
       analyze-staged-changes.md
@@ -5123,6 +5125,42 @@ When the AI reviewer references a specific rule in its comments (e.g. `check-nam
 ### Bug Fixes
 
 * **code-review:** lowercase check-* link fragments in review output ([976f0e1](https://github.com/awinogradov/code-assistants/commit/976f0e1cf70002069410b2d0de68ddfb4994648c))
+</file>
+
+<file path=".github/actions/code-review-action/.release_notes/1.6.3.md">
+## [1.6.3](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.6.2...code-review-action@v1.6.3) (2026-07-10)
+
+## Release Notes
+
+The code review action no longer silently reports success when it times out waiting for CI checks, and no longer crashes on PRs with emoji-heavy content.
+
+## 🐛 Bug Fixes
+
+### Preflight Timeout Now Fails the Check Run
+
+When the code review action times out waiting for other CI checks to complete during preflight, it now correctly fails its own check run instead of silently reporting success. Previously, a timeout would leave the impression that the review passed when it actually never ran, making it easy to miss that no real review had occurred.
+
+### Crash on Emoji-Heavy Pull Requests
+
+Code review runs no longer crash with a "no low surrogate" API error on pull requests that contain a lot of emoji. The crash happened when the review payload was truncated mid-emoji — splitting a surrogate pair — which caused the AI review check to get stuck in a permanent red state. The underlying SDK has been updated to handle this gracefully.
+
+<details><summary>Related issues</summary>
+
+- [#431: code-review-action: verdict crashes with "no low surrogate" when payload truncation splits an emoji surrogate pair](https://github.com/awinogradov/code-assistants/issues/431)
+- [#432: Fix code review verdict crash on emoji-heavy pull requests](https://github.com/awinogradov/code-assistants/pull/432)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #431 | [#432](https://github.com/awinogradov/code-assistants/pull/432) | @awinogradov |
+
+### Bug Fixes
+
+* **code-review-action:** upgrade claude-agent-sdk to 0.3.202 ([4ac793b](https://github.com/awinogradov/code-assistants/commit/4ac793b923bd7a02fa05176d5dd9de15fefa083f))
+* **code-review:** fail job when preflight checks time out ([b951799](https://github.com/awinogradov/code-assistants/commit/b95179935c31e799499fafa58de33d3e81df81a7))
 </file>
 
 <file path=".github/actions/code-review-action/src/github/githubReview.test.ts">
@@ -12401,6 +12439,39 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.6.3](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.6.2...code-review-action@v1.6.3) (2026-07-10)
+
+## Release Notes
+
+The code review action no longer silently reports success when it times out waiting for CI checks, and no longer crashes on PRs with emoji-heavy content.
+
+## 🐛 Bug Fixes
+
+### Preflight Timeout Now Fails the Check Run
+
+When the code review action times out waiting for other CI checks to complete during preflight, it now correctly fails its own check run instead of silently reporting success. Previously, a timeout would leave the impression that the review passed when it actually never ran, making it easy to miss that no real review had occurred.
+
+### Crash on Emoji-Heavy Pull Requests
+
+Code review runs no longer crash with a "no low surrogate" API error on pull requests that contain a lot of emoji. The crash happened when the review payload was truncated mid-emoji — splitting a surrogate pair — which caused the AI review check to get stuck in a permanent red state. The underlying SDK has been updated to handle this gracefully.
+
+<details><summary>Related issues</summary>
+
+- [#431: code-review-action: verdict crashes with "no low surrogate" when payload truncation splits an emoji surrogate pair](https://github.com/awinogradov/code-assistants/issues/431)
+- [#432: Fix code review verdict crash on emoji-heavy pull requests](https://github.com/awinogradov/code-assistants/pull/432)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #431 | [#432](https://github.com/awinogradov/code-assistants/pull/432) | @awinogradov |
+
+### Bug Fixes
+
+* **code-review-action:** upgrade claude-agent-sdk to 0.3.202 ([4ac793b](https://github.com/awinogradov/code-assistants/commit/4ac793b923bd7a02fa05176d5dd9de15fefa083f))
+* **code-review:** fail job when preflight checks time out ([b951799](https://github.com/awinogradov/code-assistants/commit/b95179935c31e799499fafa58de33d3e81df81a7))
 ## [1.6.2](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.6.1...code-review-action@v1.6.2) (2026-07-03)
 
 ## Release Notes
@@ -13328,7 +13399,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/package.json">
 {
   "name": "@code-assistants/code-review-action",
-  "version": "1.6.2",
+  "version": "1.6.3",
   "description": "Composite GitHub Action that runs AI code review on pull requests via Claude Code.",
   "private": true,
   "type": "module",
@@ -13364,7 +13435,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/README.md">
 # Code review action
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.6.2-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.6.3-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that runs AI code review on pull requests using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Has two modes:
@@ -13545,7 +13616,7 @@ uses: awinogradov/code-assistants/.github/actions/code-review-action@v1
 </file>
 
 <file path=".github/actions/code-review-action/version">
-1.6.2
+1.6.3
 </file>
 
 <file path=".github/actions/code-review-cost-monitor/.release_notes/0.1.0.md">
@@ -36251,7 +36322,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "1.8.1",
+  "version": "1.9.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -37311,6 +37382,49 @@ When the AI code review posted comments referencing specific rules (e.g. `check-
 ### Bug Fixes
 
 * **code-review:** lowercase check-* link fragments in review output ([976f0e1](https://github.com/awinogradov/code-assistants/commit/976f0e1cf70002069410b2d0de68ddfb4994648c))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/1.9.0.md">
+## [1.9.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.8.1...autopilot@v1.9.0) (2026-07-10)
+
+## Release Notes
+
+The plan skill now enters plan mode automatically, so you no longer need to toggle it manually before running a planning session.
+
+## ✨ What's New
+
+### Automatic Plan Mode in `/autopilot:plan`
+
+`/autopilot:plan` now enters the harness plan mode on its own and holds for your approval before exiting. Previously, you had to manually enable plan mode before invoking the skill — if you forgot, it would run without the approval gate. Now the handoff is built in: invoke the skill, review the plan, approve, done. `/autopilot:run` is unchanged and continues to execute without a plan-approval step.
+
+<details><summary>Related issues</summary>
+
+- [#436: Switch autopilot plan skills to the harness plan mode (EnterPlanMode / ExitPlanMode)](https://github.com/awinogradov/code-assistants/issues/436)
+- [#437: Switch autopilot plan skills to the harness plan mode](https://github.com/awinogradov/code-assistants/pull/437)
+</details>
+
+### Richer, Sharper Issue Bodies
+
+Issues generated for GitHub and Linear now include as much context as the work actually needs — the per-section paragraph caps that previously truncated longer changes are gone. At the same time, each section (Context, What, Why, Scope, Solution) has been tightened to a single clearly-scoped job, so sections no longer repeat each other. Solution diagrams are now suggested whenever a diagram would genuinely aid understanding, not only for changes that touch multiple components.
+
+<details><summary>Related issues</summary>
+
+- [#438: Remove issue-body size caps and sharpen sections to exclude duplication](https://github.com/awinogradov/code-assistants/issues/438)
+- [#439: Remove issue-body size caps and sharpen sections to exclude duplication](https://github.com/awinogradov/code-assistants/pull/439)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #438 | [#439](https://github.com/awinogradov/code-assistants/pull/439) | @awinogradov |
+| #436 | [#437](https://github.com/awinogradov/code-assistants/pull/437) | @awinogradov |
+
+### Features
+
+* **autopilot:** enter plan mode in plan skill ([8064b81](https://github.com/awinogradov/code-assistants/commit/8064b81560ae2eda762b4a30bde7808804a5ca6a))
+* **autopilot:** sharpen issue sections, drop size caps ([45e3401](https://github.com/awinogradov/code-assistants/commit/45e3401764a23908a42de246ee16b5b31a2fced8))
 </file>
 
 <file path="claude-plugins/autopilot/agents/analyze-pr-commits.md">
@@ -49607,6 +49721,46 @@ Write the most helpful, readable output you can: plain, direct prose; every refe
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.9.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.8.1...autopilot@v1.9.0) (2026-07-10)
+
+## Release Notes
+
+The plan skill now enters plan mode automatically, so you no longer need to toggle it manually before running a planning session.
+
+## ✨ What's New
+
+### Automatic Plan Mode in `/autopilot:plan`
+
+`/autopilot:plan` now enters the harness plan mode on its own and holds for your approval before exiting. Previously, you had to manually enable plan mode before invoking the skill — if you forgot, it would run without the approval gate. Now the handoff is built in: invoke the skill, review the plan, approve, done. `/autopilot:run` is unchanged and continues to execute without a plan-approval step.
+
+<details><summary>Related issues</summary>
+
+- [#436: Switch autopilot plan skills to the harness plan mode (EnterPlanMode / ExitPlanMode)](https://github.com/awinogradov/code-assistants/issues/436)
+- [#437: Switch autopilot plan skills to the harness plan mode](https://github.com/awinogradov/code-assistants/pull/437)
+</details>
+
+### Richer, Sharper Issue Bodies
+
+Issues generated for GitHub and Linear now include as much context as the work actually needs — the per-section paragraph caps that previously truncated longer changes are gone. At the same time, each section (Context, What, Why, Scope, Solution) has been tightened to a single clearly-scoped job, so sections no longer repeat each other. Solution diagrams are now suggested whenever a diagram would genuinely aid understanding, not only for changes that touch multiple components.
+
+<details><summary>Related issues</summary>
+
+- [#438: Remove issue-body size caps and sharpen sections to exclude duplication](https://github.com/awinogradov/code-assistants/issues/438)
+- [#439: Remove issue-body size caps and sharpen sections to exclude duplication](https://github.com/awinogradov/code-assistants/pull/439)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #438 | [#439](https://github.com/awinogradov/code-assistants/pull/439) | @awinogradov |
+| #436 | [#437](https://github.com/awinogradov/code-assistants/pull/437) | @awinogradov |
+
+### Features
+
+* **autopilot:** enter plan mode in plan skill ([8064b81](https://github.com/awinogradov/code-assistants/commit/8064b81560ae2eda762b4a30bde7808804a5ca6a))
+* **autopilot:** sharpen issue sections, drop size caps ([45e3401](https://github.com/awinogradov/code-assistants/commit/45e3401764a23908a42de246ee16b5b31a2fced8))
 ## [1.8.1](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.8.0...autopilot@v1.8.1) (2026-07-03)
 
 ## Release Notes
@@ -50654,14 +50808,14 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
   "release": {
     "type": "claude-plugin"
   },
-  "version": "1.8.1"
+  "version": "1.9.0"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.8.1-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.9.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -51075,7 +51229,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-1.8.1
+1.9.0
 </file>
 
 <file path="docs/01-workspace-structure.md">
