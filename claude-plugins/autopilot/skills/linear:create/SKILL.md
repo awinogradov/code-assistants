@@ -71,13 +71,13 @@ Mirror `issue:create` so the body reflects real code, not hallucinated structure
 
 **Title:** capitalized, ≤ 80 characters, no trailing period, business-focused, NOT Conventional Commits, no prefix.
 
-**Body — section ordering is MANDATORY** (exact `## ` headings, no trailing colon, no bold). The five-section spec is canonical in [issue:create Phase 5](../issue:create/SKILL.md#phase-5-generate-body) — keep this list in sync with it:
+**Body — section ordering is MANDATORY** (exact `## ` headings, no trailing colon, no bold). The five-section spec is canonical in [issue:create Phase 5](../issue:create/SKILL.md#phase-5-generate-body) — keep this list in sync with it. Each section has one non-overlapping job and must not repeat what another covers; length follows the content, with no fixed paragraph cap:
 
-1. `## Context` — 1-2 paragraphs on the situation and why it matters now.
-2. `## What` — the deliverable in plain terms.
-3. `## Why` — user impact / business motivation.
-4. `## Scope` — a bullet list with `**In scope:**` and `**Out of scope:**` sub-headings.
-5. `## Solution` — the high-level approach. Invoke `Skill(autopilot:ascii-schemas)` for a diagram when the Solution describes a flow between ≥ 2 components; embed it verbatim in a fenced ` ```text ` block.
+1. `## Context` — the situation and background only: state of the world and what surfaced it now (not impact — that's Why; not the fix — that's Solution).
+2. `## What` — the deliverable / observable end state (not the how).
+3. `## Why` — user impact and motivation only; assumes Context, never restates it.
+4. `## Scope` — a bullet list with `**In scope:**` and `**Out of scope:**` sub-headings that reference What rather than re-describe it.
+5. `## Solution` — the high-level approach (how), not a restatement of the deliverable. Invoke `Skill(autopilot:ascii-schemas)` for a diagram whenever one would aid understanding — a flow, sequence, architecture, data schema, UI layout, comparison, or logical relationship; embed it verbatim in a fenced ` ```text ` block.
 
 After drafting, run the linkability pass from [issue:create Phase 5](../issue:create/SKILL.md#phase-5-generate-body) — every prose mention of a file or path that exists in the repo becomes an absolute `<repo-blob-url>` link, and every cited external source whose URL is in context becomes an inline `[title](url)` link; never invent a URL for an unlinkable mention.
 

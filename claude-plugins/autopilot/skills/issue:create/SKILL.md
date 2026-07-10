@@ -170,9 +170,12 @@ For each open item returned by [Phase 3](#phase-3-find-related-issues-and-prs), 
 
 Heading format MUST be exact: `## Context` (single space, no trailing colon, no bold `**Heading:**`). Reordering sections is a format violation.
 
+**Single-responsibility rule:** each section answers exactly one question and MUST NOT repeat what another section already covers — cross-reference a sibling section instead of restating it. Length follows the content: include as much context as a reader needs to act on the issue, and never cap a section at a fixed paragraph count. Do not pad — every sentence must add information.
+
 **Section 1: Context**
 
-- 1-2 paragraphs describing the situation, what work area this touches, why we're noticing it now
+- The situation and background only: the current state of the world, what work area this touches, and what surfaced it now. Do NOT state user impact or motivation (that is Why), and do NOT propose a fix (that is Solution)
+- As many paragraphs as the background genuinely needs
 - Single continuous line per paragraph (no hard-wrapping — GitHub renders single newlines as visible line breaks)
 - If [Phase 3](#phase-3-find-related-issues-and-prs) returned related items, end the section with a single `Related:` line:
   ```
@@ -182,28 +185,29 @@ Heading format MUST be exact: `## Context` (single space, no trailing colon, no 
 
 **Section 2: What**
 
-- 1 paragraph or short bullet list
-- The deliverable in plain terms — what changes when this is done
+- The deliverable: the observable end state once this is done, in plain terms. Describe WHAT changes, not HOW to achieve it (the approach is Solution)
+- A paragraph or bullet list, as long as needed to enumerate the deliverables
 - Single continuous line per item
 
 **Section 3: Why**
 
-- 1 paragraph
-- User impact / business motivation / what problem this solves
-- A reader on day one should understand
+- User impact and business motivation only: what problem this solves and the cost of leaving it unsolved
+- Assume the reader has already read Context — do NOT restate the situation
+- A reader on day one should understand the stakes
 
 **Section 4: Scope**
 
 - Bullet list with two sub-headings: `**In scope:**` and `**Out of scope:**`
+- Bound the work by referencing the What deliverables — do NOT re-describe them in full here
 - If there are no out-of-scope items, write `_None — this is the entire change._` under "Out of scope"
 - Never invent out-of-scope items just to fill the section
 
 **Section 5: Solution**
 
-- Paragraph(s) describing the high-level approach
-- **Diagram trigger rule:** invoke `Skill(autopilot:ascii-schemas)` when the Solution describes a flow between ≥ 2 components, an architectural relationship, a sequence, or a UI layout
+- The high-level approach: HOW the What gets delivered. Do NOT restate the deliverable itself (that is What)
+- As detailed as the approach warrants
+- **Diagram trigger rule:** invoke `Skill(autopilot:ascii-schemas)` whenever a diagram would aid understanding — a flow or sequence between components, an architecture or data schema, a UI layout, a comparison, or a logical relationship worth seeing at a glance. Default to including one whenever it makes the approach clearer; skip it only when prose alone is unambiguous
 - Embed the schema output verbatim in a fenced ` ```text ` block
-- Skip the diagram for pure logic/refactor issues
 
 **Linkability pass (after drafting all five sections):**
 
