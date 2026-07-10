@@ -91,7 +91,7 @@ example/       # multiple modules: a directory, no index.ts barrel
 ### 3.3 Tailwind CSS
 
 - 👤 Use Tailwind utility classes directly in JSX via `className`
-- 👤 Use `cn()` helper (clsx + tailwind-merge) for conditional classes
+- 👤 Use a `cn()` helper for conditional, Tailwind-aware class merging with conflict resolution (e.g. `clsx` + `tailwind-merge`, or an equivalent drop-in such as `cnfast`)
 - 👤 Extract reusable components instead of `@apply` for repeated patterns
 - 👤 Use Tailwind config for design tokens (colors, spacing, typography)
 - 👤 Use responsive prefixes (`sm:`, `md:`, `lg:`) for breakpoints
