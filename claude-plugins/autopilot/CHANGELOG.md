@@ -2,6 +2,51 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.10.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.9.0...autopilot@v1.10.0) (2026-07-10)
+
+## Release Notes
+
+The `plan` skill can now file a tracked issue on GitHub or Linear before planning, and the commit skill enforces commitlint validation so malformed subjects no longer slip through.
+
+## ✨ What's New
+
+### Issue-First Planning with `--issue` and `--linear-issue`
+
+`/autopilot:plan` now accepts `--issue` (GitHub) and `--linear-issue` (Linear) flags, letting you file a tracked issue directly from your description before the plan is built. This means every planning session can start with a real, linkable ticket in your tracker rather than living only in the AI conversation — useful for teams that require work to be tracked before development begins.
+
+<details><summary>Related issues</summary>
+
+- [#445: Add --issue and --linear-issue flags to the plan skill to file a tracked issue first](https://github.com/awinogradov/code-assistants/issues/445)
+- [#446: Let plan file a tracked issue first via --issue and --linear-issue](https://github.com/awinogradov/code-assistants/pull/446)
+</details>
+
+## 🐛 Bug Fixes
+
+### Commit Skill Now Enforces commitlint Validation
+
+The commit skill was previously allowing messages with camelCase subjects and other commitlint-invalid formats to be committed without complaint. Messages are now validated against commitlint before the commit is made, so non-conforming subjects are caught and rejected before they land in the repository's history.
+
+<details><summary>Related issues</summary>
+
+- [#443: Commit skill lets camelCase subjects bypass commitlint validation](https://github.com/awinogradov/code-assistants/issues/443)
+- [#444: Validate commit messages against commitlint before committing](https://github.com/awinogradov/code-assistants/pull/444)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #445 | [#446](https://github.com/awinogradov/code-assistants/pull/446) | @awinogradov |
+| #443 | [#444](https://github.com/awinogradov/code-assistants/pull/444) | @awinogradov |
+
+### Features
+
+* **autopilot:** add --issue/--linear-issue flags to plan skill ([3afc173](https://github.com/awinogradov/code-assistants/commit/3afc1737e4d9109b0a4ef78c3af19644b6d4e539))
+
+### Bug Fixes
+
+* **commits:** validate commit message before committing ([fe45bd0](https://github.com/awinogradov/code-assistants/commit/fe45bd01ba5a89a4e7027b2ba6dd20e903d25afa))
 ## [1.9.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.8.1...autopilot@v1.9.0) (2026-07-10)
 
 ## Release Notes
