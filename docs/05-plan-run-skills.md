@@ -112,6 +112,12 @@ The classifier matches **top-to-bottom**: the code-scanning-alert row is checked
 
 The skill then emits, for the user's review (all derived from the resolved issue JSON and TODOs, not a codebase scan): the rendered **issue context**, a one-line **steelmanned intent** (the request restated in its strongest form — the stable target for expert reviewers, copied verbatim into the plan's `## Summary`), and **Assumptions & Open Questions**. Any load-bearing open question is raised via `AskUserQuestion` before delegating.
 
+### `--issue` / `--linear-issue`: file a tracked issue first
+
+`plan` accepts two flags that turn a free-form description into a tracked issue before planning. A [Create-issue flags](../claude-plugins/autopilot/skills/plan/SKILL.md#create-issue-flags) pre-step runs ahead of the detection table: `--issue` files a GitHub issue via `Skill(autopilot:issue-create)`, `--linear-issue` files a Linear issue via `Skill(autopilot:linear-create)` (which needs a `linear` tracker — see [Linear tracker](./11-linear-tracker.md)). It then captures the created identifier, pins the input as that `github-issue` / `linear-issue`, and continues Phase 0 unchanged — so the branch becomes `issue-<N>-slug` and the PR `Closes` the issue. Guards fail fast **before** anything is filed: both flags at once, `--linear-issue` with no Linear tracker, or `--issue` with no GitHub tracker each stop with a message. Without a flag, behavior is unchanged.
+
+`run` deliberately does **not** carry these flags — its "keep in sync" note with `plan`'s Phase 0 covers the detection table and issue resolution, not this plan-only pre-step.
+
 ## Preflight check
 
 `Skill(autopilot:preflight-check)` (mode `plan`) validates git state: current branch, stale/merged branches, issue-ID mismatches, and whether `main` is up to date. If it cancels, planning stops immediately.

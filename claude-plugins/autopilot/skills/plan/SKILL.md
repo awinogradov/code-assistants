@@ -1,7 +1,7 @@
 ---
 name: plan
 description: Perform deep analysis of the codebase, recent changes, and the requested task. Create a validated, expert-reviewed implementation plan
-argument-hint: "<task description, GitHub issue number, or GitHub issue URL>"
+argument-hint: "<task description, GitHub/Linear issue, or GitHub issue URL> [--issue | --linear-issue]"
 allowed-tools:
   - TaskCreate
   - TaskUpdate
@@ -23,6 +23,8 @@ allowed-tools:
   - Skill(autopilot:plan-bun)
   - Skill(autopilot:plan-nodejs-react)
   - Skill(autopilot:branch-create)
+  - Skill(autopilot:issue-create)
+  - Skill(autopilot:linear-create)
   - Skill(autopilot:ascii-schemas)
 ---
 
@@ -37,12 +39,15 @@ Expected forms:
 - `<task description>` — free-form description (e.g., `"add user authentication"`)
 - `<GitHub-issue-number>` — bare number (e.g., `123`) or with `#` prefix (`#123`)
 - `<GitHub-issue-URL>` — full URL (e.g., `https://github.com/org/repo/issues/789`)
+- `<task description> --issue` — file a GitHub issue from the description first (via `Skill(autopilot:issue-create)`), then plan against it
+- `<task description> --linear-issue` — file a Linear issue from the description first (via `Skill(autopilot:linear-create)`), then plan against it — requires a `linear` tracker (see [Linear tracker](../../../../docs/11-linear-tracker.md))
 
 Additional free-form context can be appended after any of the forms above (e.g., `#42 I think we should start with the auth module`).
 
 ## Input resolution
 
 - **Task description / issue identifier** — parsed from `$ARGUMENTS`. If empty, prompt once via `AskUserQuestion`: "What should we plan?" with free-form slot. Do not abort silently.
+- **`--issue` / `--linear-issue` flags** — parsed from `$ARGUMENTS` by the [Create-issue flags](#create-issue-flags) pre-step before input-type detection; when present, an issue is filed from the remaining description and planning continues against it. Neither flag ⇒ today's behavior.
 - **Current branch / worktree / issue-ID mismatch** — resolved via `git` commands and [Phase 0](#phase-0-input-resolution) context. No prompts beyond the preflight skill's own prompts.
 - **Repository root** — `git rev-parse --show-toplevel`. No prompt.
 
@@ -89,6 +94,31 @@ $ARGUMENTS
 
 1. Create all 6 tasks as defined in the Task Progress Protocol above (call TaskCreate 6 times)
 2. Call TaskUpdate to set task 1 ("Resolve input") to `status: "in_progress"`
+
+### Create-issue flags
+
+Run this pre-step **before** the input-type detection table below. It lets a free-form description file a tracked issue first, then plan against it — so the branch becomes `issue-<N>-slug` and the PR can `Closes` the issue, instead of the untracked plain-description path. When neither flag is present, skip this entire subsection: behavior is exactly as today.
+
+1. **Parse and strip** `--issue` or `--linear-issue` from `$ARGUMENTS`. The remaining text is the issue description hint. Neither flag ⇒ skip to the detection table.
+
+2. **Guards — evaluate these before creating anything** (a rejected combination must never leave a filed issue behind):
+   - Both `--issue` and `--linear-issue` present ⇒ stop with: `Pass only one of --issue or --linear-issue.`
+   - `--linear-issue` but no `linear` tracker in `agents.trackers` ⇒ stop with: `--linear-issue requires a linear tracker in package.json agents.trackers. Use --issue for a GitHub issue.` (mirrors [linear:create](../linear:create/SKILL.md)'s own guard).
+   - `--issue` but no `github` tracker configured — present by default when `agents.trackers` is absent; absent only in a linear-only config ⇒ stop with: `--issue requires a github tracker. Use --linear-issue instead.`
+
+3. **File the issue** by invoking the matching create skill with the flag-stripped description as its title hint:
+   - `--issue` ⇒ `Skill(autopilot:issue-create)`
+   - `--linear-issue` ⇒ `Skill(autopilot:linear-create)`
+
+   The create skill runs its full flow, including its own confirmation prompt — that prompt is the human gate for issue creation. An empty description simply makes the create skill prompt for a hint.
+
+4. **Cancellation** — if the create skill did not emit its success line (the user chose "Cancel", or it stopped on one of its own guards), stop here: there is no issue to plan against.
+
+5. **Capture the created identifier** from the create skill's exact final output line (the strings below mirror [issue:create](../issue:create/SKILL.md) and [linear:create](../linear:create/SKILL.md) — if either is reworded, update this capture):
+   - `issue:create` prints `✓ Created issue: <url>`. The GitHub issue number is the last path segment of `<url>` (e.g. `.../issues/445` ⇒ `445`). Set input type `github-issue`, issue id `#<N>` (the captured number).
+   - `linear:create` prints `✓ Created Linear issue: <identifier> — <url>`. Take `<identifier>` (e.g. `ENG-123`). Set input type `linear-issue`, issue id `<KEY-N>` (the captured identifier), team = the matched `linear` tracker's `team`.
+
+6. **Continue with the captured identifier.** Pin the input type and id from step 5 and do **not** re-run the detection table below (the flag already determined the type). Proceed straight into that type's parallel context launch (`resolve-issue-context` + `search-codebase-todos` + snapshot attach). That `resolve-issue-context` fetch is the positive verification of the captured id: if it returns unresolved, surface the error and stop — never proceed against a fabricated id.
 
 ### Codebase Context and Issue Resolution (MANDATORY - DO FIRST)
 
