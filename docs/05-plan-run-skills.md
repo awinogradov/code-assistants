@@ -116,6 +116,12 @@ The skill then emits, for the user's review (all derived from the resolved issue
 
 `Skill(autopilot:preflight-check)` (mode `plan`) validates git state: current branch, stale/merged branches, issue-ID mismatches, and whether `main` is up to date. If it cancels, planning stops immediately.
 
+## Plan mode
+
+Once preflight passes, `plan` switches the session into the harness plan mode via `EnterPlanMode` before any codebase exploration or plan-file write. Plan mode makes the rest of planning read-only and supplies the plan-file path — the single file the pipeline's Finalize Output writes to and that `ExitPlanMode` later reads back for approval, so `plan` no longer depends on the user having already been in plan mode. The call is idempotent (skipped when the session is already in plan mode). After the plan file is finalized and the branch block embedded, `plan` calls `ExitPlanMode` to request approval; on approval the session leaves plan mode and implementation begins.
+
+Both mode calls live in the orchestrator, deliberately **outside** the shared Stack Pipeline. `run` reuses only that pipeline and authorizes the whole flow up front, so it never enters plan mode and never calls `ExitPlanMode` — keeping the two calls out of the pipeline is what lets `run` share it without inheriting the approval gate (see [How run differs](#how-run-differs-automated-post-implementation)).
+
 ## Common Instructions
 
 Declared once and applied throughout — both the orchestrator phases and the shared pipeline reference them rather than restating them:

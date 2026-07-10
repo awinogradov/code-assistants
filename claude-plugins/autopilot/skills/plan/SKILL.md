@@ -17,6 +17,8 @@ allowed-tools:
   - MCP(perplexity:*)
   - MCP(repomix:*)
   - AskUserQuestion
+  - EnterPlanMode
+  - ExitPlanMode
   - Skill(autopilot:preflight-check)
   - Skill(autopilot:plan-bun)
   - Skill(autopilot:plan-nodejs-react)
@@ -242,6 +244,19 @@ The skill receives `mode: plan` and the [Phase 0](#phase-0-input-resolution) con
 
 If the skill outputs "Planning cancelled", stop execution immediately — do not proceed to [Phase 1](#phase-1-detect-stack-and-delegate).
 
+## Enter Plan Mode
+
+Once the preflight passes, switch the session into the harness plan mode **before** any codebase exploration or plan-file write:
+
+```
+EnterPlanMode
+```
+
+This makes the rest of planning read-only (the stack pipeline's [Context Gathering](#phase-1-context-gathering) explores without mutating the tree) and gives the harness-provided plan-file path — the single file the pipeline's [Finalize Output](#phase-6-finalize-output) writes to and the [Phase 2](#phase-2-embed-branch-creation-in-plan-file) `ExitPlanMode` step then reads back for approval. Do not compute a separate plan-file path; the plan file **is** the plan-mode file.
+
+- **Idempotency** — if the session is already in plan mode (the user invoked `/autopilot:plan` from plan mode), skip this call; a second `EnterPlanMode` is unnecessary.
+- **`/autopilot:plan` only** — this step and its paired `ExitPlanMode` ([Phase 2](#phase-2-embed-branch-creation-in-plan-file)) live in the orchestrator, outside the shared [**Stack Pipeline (Phases 1–6)**](#stack-pipeline-phases-16). `/autopilot:run` reuses only that pipeline and authorizes the whole flow up front, so it never enters plan mode and never gates on approval — keep both mode calls out of the pipeline section so `run` cannot reach them.
+
 ## Common Instructions
 
 The following apply to ALL stacks throughout planning — both the orchestrator phases below and the shared [**Stack Pipeline (Phases 1–6)**](#stack-pipeline-phases-16) the stack skills execute, which points back here rather than restating them:
@@ -377,7 +392,7 @@ Tool parameters:
 
 ## Phase 2: Embed Branch Creation in Plan File
 
-**BEFORE calling ExitPlanMode**, embed branch creation into the plan file so it executes as the first post-approval step.
+**BEFORE calling `ExitPlanMode`** (the [Request Approval](#request-approval) step below), embed branch creation into the plan file so it executes as the first post-approval step.
 
 ### Check conditions
 
@@ -450,6 +465,18 @@ Then invoke `/autopilot:branch-create --<chosen-prefix> "<description>"` using t
 ### Otherwise (not on `main` AND (`isWorktree` is false OR `worktreeNeedsBranch` is false))
 
 Do NOT add `## Pre-Implementation` — already on a feature branch with active work.
+
+### Request Approval
+
+Once the shared [**Stack Pipeline (Phases 1–6)**](#stack-pipeline-phases-16) has written the finalized plan file (its [Finalize Output](#phase-6-finalize-output)) and the branch block above is embedded, request the user's approval of the plan:
+
+```
+ExitPlanMode
+```
+
+`ExitPlanMode` reads the plan back from the plan-mode file that [Enter Plan Mode](#enter-plan-mode) established and asks the user to approve it. On approval the session leaves plan mode and implementation begins with the embedded `## Pre-Implementation` branch step, then the plan's `## Implementation Steps`.
+
+This step is `/autopilot:plan` only. `/autopilot:run` replaces it: invoking `/autopilot:run` is itself the authorization, so run never enters plan mode and never calls `ExitPlanMode` — it proceeds straight from the written plan into implementation (see [`run/SKILL.md`](../run/SKILL.md)). Keeping this call in the orchestrator, outside the Stack Pipeline section below, is what lets `run` reuse the pipeline without inheriting the gate.
 
 ## Stack Pipeline (Phases 1–6)
 
