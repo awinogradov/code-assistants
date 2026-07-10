@@ -30,7 +30,7 @@ allowed-tools:
   - Skill(autopilot:pr-create)
 ---
 
-<!-- Phase 0 mirrors the plan skill. Keep in sync. -->
+<!-- Phase 0 mirrors the plan skill (detection table + issue resolution). Keep in sync. The plan skill's --issue/--linear-issue create-issue-flags pre-step is plan-exclusive by design — do NOT copy it here. -->
 
 Plan, implement, commit, create PR, and monitor until approved. Extended version of `/autopilot:plan` that automates post-implementation steps.
 
