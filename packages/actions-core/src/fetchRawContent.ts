@@ -24,6 +24,28 @@ interface FetchRawContentArgs {
   ref?: string;
 }
 
+const maxDetailLength = 200;
+
+/**
+ * Condense an Octokit error into one short line.
+ *
+ * A GitHub 5xx answers with a full HTML error page, and Octokit lifts that whole
+ * page into `error.message` — which then floods the Actions annotation and buries
+ * the only part that matters, the status code. Lead with the status and keep just
+ * the head of the body.
+ */
+function summarizeRequestError(error: RequestError): string {
+  const firstLine = (error.message ?? '').split('\n')[0]?.trim() ?? '';
+  const detail =
+    firstLine.length > maxDetailLength ? `${firstLine.slice(0, maxDetailLength)}…` : firstLine;
+
+  if (typeof error.status !== 'number') {
+    return detail === '' ? 'request failed' : detail;
+  }
+
+  return detail === '' ? `HTTP ${error.status}` : `HTTP ${error.status}: ${detail}`;
+}
+
 export async function fetchRawContent({
   octokit,
   owner,
@@ -58,7 +80,7 @@ export async function fetchRawContent({
     }
 
     throw new Error(
-      `Failed to fetch ${owner}/${repo}:${path}${ref ? `@${ref}` : ''}: ${requestError.message}`,
+      `Failed to fetch ${owner}/${repo}:${path}${ref ? `@${ref}` : ''}: ${summarizeRequestError(requestError)}`,
     );
   }
 }

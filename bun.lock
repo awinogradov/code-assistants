@@ -51,7 +51,7 @@
     },
     ".github/actions/code-review-action": {
       "name": "@code-assistants/code-review-action",
-      "version": "1.6.2",
+      "version": "1.6.3",
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "0.3.202",
         "@anthropic-ai/sdk": "0.110.0",
@@ -162,12 +162,13 @@
     },
     "claude-plugins/autopilot": {
       "name": "autopilot",
-      "version": "1.8.1",
+      "version": "1.10.0",
     },
     "packages/actions-core": {
       "name": "@code-assistants/actions-core",
       "version": "0.0.0",
       "dependencies": {
+        "@octokit/plugin-retry": "8.1.0",
         "@octokit/request-error": "7.1.0",
         "@octokit/rest": "22.0.1",
       },

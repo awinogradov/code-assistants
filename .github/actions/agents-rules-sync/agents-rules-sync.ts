@@ -7,9 +7,9 @@
  */
 
 import * as core from '@actions/core';
-import { Octokit } from '@octokit/rest';
 import { stringify as stringifyYaml } from 'yaml';
 
+import { createOctokit } from '@code-assistants/actions-core/createOctokit';
 import { fetchRawContent } from '@code-assistants/actions-core/fetchRawContent';
 
 import { buildSyncEntries } from './src/buildSyncEntries.ts';
@@ -96,7 +96,7 @@ function readEnv(): Env {
 
 async function main(): Promise<void> {
   const env = readEnv();
-  const octokit = new Octokit({ auth: env.token });
+  const octokit = createOctokit(env.token);
 
   const raw = await fetchRawContent({
     octokit,

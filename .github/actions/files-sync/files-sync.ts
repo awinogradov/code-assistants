@@ -17,7 +17,8 @@
  */
 
 import * as core from '@actions/core';
-import { Octokit } from '@octokit/rest';
+
+import { createOctokit } from '@code-assistants/actions-core/createOctokit';
 
 import { resolveBotIdentity } from './src/botIdentity.ts';
 import { computeChanges } from './src/changeDetector.ts';
@@ -144,7 +145,7 @@ async function main(): Promise<void> {
 
   core.info(`Resolved ${entries.length} sync entr${entries.length === 1 ? 'y' : 'ies'}.`);
 
-  const octokit = new Octokit({ auth: env.token });
+  const octokit = createOctokit(env.token);
   const identity = await resolveBotIdentity(octokit, process.env.INPUT_BOT_USERNAME);
 
   const changes = await computeChanges({
