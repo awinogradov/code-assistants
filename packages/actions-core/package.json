@@ -10,6 +10,7 @@
     "language": "typescript"
   },
   "exports": {
+    "./createOctokit": "./src/createOctokit.ts",
     "./fetchRawContent": "./src/fetchRawContent.ts",
     "./checkStatus": "./src/checkStatus.ts",
     "./parseRepo": "./src/parseRepo.ts",
@@ -22,6 +23,7 @@
     "clean": "rm -rf node_modules .turbo"
   },
   "dependencies": {
+    "@octokit/plugin-retry": "8.1.0",
     "@octokit/request-error": "7.1.0",
     "@octokit/rest": "22.0.1"
   },
