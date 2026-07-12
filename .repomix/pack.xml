@@ -564,6 +564,9 @@ packages/
       anthropicAuth.ts
       checkStatus.test.ts
       checkStatus.ts
+      createOctokit.test.ts
+      createOctokit.ts
+      fetchRawContent.test.ts
       fetchRawContent.ts
       parseRepo.test.ts
       parseRepo.ts
@@ -1813,9 +1816,9 @@ runs:
  */
 
 import * as core from '@actions/core';
-import { Octokit } from '@octokit/rest';
 import { stringify as stringifyYaml } from 'yaml';
 
+import { createOctokit } from '@code-assistants/actions-core/createOctokit';
 import { fetchRawContent } from '@code-assistants/actions-core/fetchRawContent';
 
 import { buildSyncEntries } from './src/buildSyncEntries.ts';
@@ -1902,7 +1905,7 @@ function readEnv(): Env {
 
 async function main(): Promise<void> {
   const env = readEnv();
-  const octokit = new Octokit({ auth: env.token });
+  const octokit = createOctokit(env.token);
 
   const raw = await fetchRawContent({
     octokit,
@@ -19190,7 +19193,8 @@ A token with elevated permissions is now mandatory for the sync actions to work 
  */
 
 import * as core from '@actions/core';
-import { Octokit } from '@octokit/rest';
+
+import { createOctokit } from '@code-assistants/actions-core/createOctokit';
 
 import { resolveBotIdentity } from './src/botIdentity.ts';
 import { computeChanges } from './src/changeDetector.ts';
@@ -19317,7 +19321,7 @@ async function main(): Promise<void> {
 
   core.info(`Resolved ${entries.length} sync entr${entries.length === 1 ? 'y' : 'ies'}.`);
 
-  const octokit = new Octokit({ auth: env.token });
+  const octokit = createOctokit(env.token);
   const identity = await resolveBotIdentity(octokit, process.env.INPUT_BOT_USERNAME);
 
   const changes = await computeChanges({
@@ -54523,6 +54527,214 @@ export async function pollCheckStatuses(
 }
 </file>
 
+<file path="packages/actions-core/src/createOctokit.test.ts">
+import { describe, expect, test } from "bun:test";
+
+import { createOctokit } from "./createOctokit.ts";
+
+/**
+ * Drive the client through a stubbed `fetch` rather than an Octokit hook: the retry
+ * plugin listens on the request error hook, so only a failure raised by the real
+ * transport exercises the retry path we care about.
+ */
+function stubFetch(responses: Array<() => Response>): {
+  fetch: typeof globalThis.fetch;
+  calls: () => number;
+} {
+  let calls = 0;
+
+  return {
+    fetch: (() => {
+      const next = responses[Math.min(calls, responses.length - 1)]!;
+      calls += 1;
+
+      return Promise.resolve(next());
+    }) as unknown as typeof globalThis.fetch,
+    calls: () => calls,
+  };
+}
+
+const unicornPage = () =>
+  new Response("<!DOCTYPE html>\n<html>Unicorn!</html>", {
+    status: 500,
+    headers: { "content-type": "text/html" },
+  });
+
+const rawFile = () =>
+  new Response("# Rules\n", { status: 200, headers: { "content-type": "text/plain" } });
+
+const contentsRoute = "GET /repos/{owner}/{repo}/contents/{path}";
+const route = { owner: "awinogradov", repo: "code-assistants", path: "CLAUDE.md" };
+
+// plugin-retry backs off for `(retryCount + 1) ** 2` seconds on a 5xx and offers no
+// per-request knob to shorten it, so the 5xx cases allow a single retry (one ~1s wait)
+// to stay well inside the default test timeout. The 404 case must NOT set `retries`:
+// an explicit budget makes Bottleneck retry regardless of status, which would bypass
+// the very `doNotRetry` default the test is pinning.
+const singleRetry = { retries: 1 };
+
+describe("createOctokit", () => {
+  test("retries a transient 5xx and returns the eventual success", async () => {
+    const transport = stubFetch([unicornPage, rawFile]);
+    const octokit = createOctokit("token");
+
+    const response = await octokit.request(contentsRoute, {
+      ...route,
+      request: { fetch: transport.fetch, ...singleRetry },
+    });
+
+    expect(transport.calls()).toBe(2);
+    expect(response.status).toBe(200);
+    // The contents route is typed as structured JSON; `Accept: raw` hands back a plain body.
+    expect(String(response.data)).toBe("# Rules\n");
+  });
+
+  test("does not retry a 404 — a genuinely missing file fails fast", async () => {
+    const transport = stubFetch([
+      () =>
+        new Response(JSON.stringify({ message: "Not Found" }), {
+          status: 404,
+          headers: { "content-type": "application/json" },
+        }),
+    ]);
+    const octokit = createOctokit("token");
+
+    await expect(
+      octokit.request(contentsRoute, {
+        ...route,
+        request: { fetch: transport.fetch },
+      }),
+    ).rejects.toThrow("Not Found");
+
+    expect(transport.calls()).toBe(1);
+  });
+
+  test("gives up after the retry budget and surfaces the last failure", async () => {
+    const transport = stubFetch([unicornPage]);
+    const octokit = createOctokit("token");
+
+    await expect(
+      octokit.request(contentsRoute, {
+        ...route,
+        request: { fetch: transport.fetch, ...singleRetry },
+      }),
+    ).rejects.toMatchObject({ status: 500 });
+
+    expect(transport.calls()).toBe(2);
+  });
+});
+</file>
+
+<file path="packages/actions-core/src/createOctokit.ts">
+/**
+ * Build an authenticated Octokit client that retries transient GitHub failures.
+ *
+ * GitHub occasionally answers a perfectly valid API call with a 5xx (the "Unicorn"
+ * error page) or drops the connection. A single such blip is enough to fail an
+ * entire scheduled sync run, so every client that talks to the API on an
+ * unattended code path should be built here rather than with a bare `new Octokit`.
+ * The retry plugin backs off and re-issues the request; it deliberately does not
+ * retry 4xx statuses, so a genuine 404 still surfaces immediately.
+ *
+ * @example
+ *   const octokit = createOctokit(token);
+ *   await octokit.rest.repos.getCommit({ owner, repo, ref });
+ */
+
+import { retry } from "@octokit/plugin-retry";
+import { Octokit } from "@octokit/rest";
+
+const RetryingOctokit = Octokit.plugin(retry);
+
+export function createOctokit(token: string): Octokit {
+  return new RetryingOctokit({ auth: token });
+}
+</file>
+
+<file path="packages/actions-core/src/fetchRawContent.test.ts">
+import { describe, expect, test } from "bun:test";
+
+import type { Octokit } from "@octokit/rest";
+
+import { fetchRawContent } from "./fetchRawContent.ts";
+
+const args = {
+  owner: "awinogradov",
+  repo: "code-assistants",
+  path: "CLAUDE.md",
+  ref: "main",
+};
+
+function octokitThrowing(error: unknown): Octokit {
+  return {
+    request: () => Promise.reject(error),
+  } as unknown as Octokit;
+}
+
+function octokitReturning(data: unknown): Octokit {
+  return {
+    request: () => Promise.resolve({ data }),
+  } as unknown as Octokit;
+}
+
+async function captureFailure(octokit: Octokit): Promise<Error> {
+  try {
+    await fetchRawContent({ octokit, ...args });
+  } catch (error) {
+    return error as Error;
+  }
+
+  throw new Error("Expected fetchRawContent to reject");
+}
+
+describe("fetchRawContent", () => {
+  test("returns the raw file body", async () => {
+    const content = await fetchRawContent({ octokit: octokitReturning("# Rules\n"), ...args });
+
+    expect(content).toBe("# Rules\n");
+  });
+
+  test("returns null when the file is missing", async () => {
+    const error = Object.assign(new Error("Not Found"), { status: 404 });
+    const content = await fetchRawContent({ octokit: octokitThrowing(error), ...args });
+
+    expect(content).toBeNull();
+  });
+
+  test("summarizes a 5xx HTML error page instead of dumping it", async () => {
+    // GitHub's "Unicorn" page: Octokit lifts the whole document into `message`.
+    const htmlPage = `<!DOCTYPE html>\n<html>\n${"  <p>padding</p>\n".repeat(50)}</html>`;
+    const error = Object.assign(new Error(htmlPage), { status: 500 });
+
+    const failure = await captureFailure(octokitThrowing(error));
+
+    expect(failure.message).toStartWith(
+      "Failed to fetch awinogradov/code-assistants:CLAUDE.md@main: HTTP 500: <!DOCTYPE html>",
+    );
+    expect(failure.message).not.toInclude("padding");
+    expect(failure.message.split("\n")).toHaveLength(1);
+  });
+
+  test("truncates an over-long single-line message", async () => {
+    const error = Object.assign(new Error("x".repeat(500)), { status: 502 });
+
+    const failure = await captureFailure(octokitThrowing(error));
+
+    expect(failure.message).toInclude("HTTP 502: ");
+    expect(failure.message).toEndWith("…");
+    expect(failure.message.length).toBeLessThan(300);
+  });
+
+  test("keeps a statusless error message intact", async () => {
+    const failure = await captureFailure(octokitReturning({ notAString: true }));
+
+    expect(failure.message).toBe(
+      "Failed to fetch awinogradov/code-assistants:CLAUDE.md@main: Expected raw string content from awinogradov/code-assistants:CLAUDE.md@main, got object",
+    );
+  });
+});
+</file>
+
 <file path="packages/actions-core/src/fetchRawContent.ts">
 /**
  * Fetch raw file content from a GitHub repository via the contents API.
@@ -54548,6 +54760,28 @@ interface FetchRawContentArgs {
   repo: string;
   path: string;
   ref?: string;
+}
+
+const maxDetailLength = 200;
+
+/**
+ * Condense an Octokit error into one short line.
+ *
+ * A GitHub 5xx answers with a full HTML error page, and Octokit lifts that whole
+ * page into `error.message` — which then floods the Actions annotation and buries
+ * the only part that matters, the status code. Lead with the status and keep just
+ * the head of the body.
+ */
+function summarizeRequestError(error: RequestError): string {
+  const firstLine = (error.message ?? '').split('\n')[0]?.trim() ?? '';
+  const detail =
+    firstLine.length > maxDetailLength ? `${firstLine.slice(0, maxDetailLength)}…` : firstLine;
+
+  if (typeof error.status !== 'number') {
+    return detail === '' ? 'request failed' : detail;
+  }
+
+  return detail === '' ? `HTTP ${error.status}` : `HTTP ${error.status}: ${detail}`;
 }
 
 export async function fetchRawContent({
@@ -54584,7 +54818,7 @@ export async function fetchRawContent({
     }
 
     throw new Error(
-      `Failed to fetch ${owner}/${repo}:${path}${ref ? `@${ref}` : ''}: ${requestError.message}`,
+      `Failed to fetch ${owner}/${repo}:${path}${ref ? `@${ref}` : ''}: ${summarizeRequestError(requestError)}`,
     );
   }
 }
@@ -55144,6 +55378,7 @@ export function readRootRelease(packageJson: unknown): RootReleaseConfig {
     "language": "typescript"
   },
   "exports": {
+    "./createOctokit": "./src/createOctokit.ts",
     "./fetchRawContent": "./src/fetchRawContent.ts",
     "./checkStatus": "./src/checkStatus.ts",
     "./parseRepo": "./src/parseRepo.ts",
@@ -55156,6 +55391,7 @@ export function readRootRelease(packageJson: unknown): RootReleaseConfig {
     "clean": "rm -rf node_modules .turbo"
   },
   "dependencies": {
+    "@octokit/plugin-retry": "8.1.0",
     "@octokit/request-error": "7.1.0",
     "@octokit/rest": "22.0.1"
   },
