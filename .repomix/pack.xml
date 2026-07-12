@@ -120,6 +120,7 @@ The content is organized as follows:
         1.6.1.md
         1.6.2.md
         1.6.3.md
+        1.7.0.md
       src/
         github/
           githubReview.test.ts
@@ -5165,6 +5166,64 @@ Code review runs no longer crash with a "no low surrogate" API error on pull req
 
 * **code-review-action:** upgrade claude-agent-sdk to 0.3.202 ([4ac793b](https://github.com/awinogradov/code-assistants/commit/4ac793b923bd7a02fa05176d5dd9de15fefa083f))
 * **code-review:** fail job when preflight checks time out ([b951799](https://github.com/awinogradov/code-assistants/commit/b95179935c31e799499fafa58de33d3e81df81a7))
+</file>
+
+<file path=".github/actions/code-review-action/.release_notes/1.7.0.md">
+## [1.7.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.6.3...code-review-action@v1.7.0) (2026-07-12)
+
+## Release Notes
+
+The AI reviewer's tips are now drawn from your own repository's conventions rather than a fixed pool of generic advice.
+
+## ✨ What's New
+
+### Context-Aware Review Tips
+
+The code review action occasionally surfaces a "review tip" alongside its feedback. Previously these tips came from a static, built-in pool with no connection to your project. Now, when enabled, the action generates the tip dynamically by reading your repository's `CONTRIBUTING.md`, its docs listing, and the changed files in the PR — so the advice is grounded in your own conventions and contribution guidelines. If anything goes wrong during generation (missing file, model error, etc.), the action falls back to the static pool automatically, so reviews are never blocked.
+
+This is opt-in via a new `generate_review_tips` input (see [⚙️ Configuration Required](#️-configuration-required) below).
+
+<details><summary>Related issues</summary>
+
+- [#395: Generate review tips dynamically with a model call and consumer context](https://github.com/awinogradov/code-assistants/issues/395)
+- [#416: Generate review tips from the consumer's own repository context](https://github.com/awinogradov/code-assistants/pull/416)
+</details>
+
+## ⚙️ Configuration Required
+
+### `generate_review_tips` Input
+
+To opt in to context-aware tip generation, add the new `generate_review_tips` input to your action step:
+
+```yaml
+- uses: awinogradov/code-assistants/.github/actions/code-review-action@v1
+  with:
+    reviewer: ${{ vars.BOT_USERNAME }}
+    bot_token: ${{ secrets.BOT_TOKEN }}
+    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+    generate_review_tips: true   # ← add this
+```
+
+This is optional and defaults to the previous static-pool behaviour when omitted. When enabled, the action will attempt to read your repo's `CONTRIBUTING.md` and docs structure at review time, so the service account identified by `bot_token` needs read access to repository contents — which the standard `contents: read` permission already covers.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #395 | [#416](https://github.com/awinogradov/code-assistants/pull/416) | @awinogradov |
+
+### Features
+
+* **code-review:** generate review tips from context ([5ee88f1](https://github.com/awinogradov/code-assistants/commit/5ee88f1ed95a4ba4dc65e25044dcc7e9da8f8afa))
+
+### Documentation
+
+* **code-review:** document generated review tips ([b735394](https://github.com/awinogradov/code-assistants/commit/b7353940ebeacc75330c19c24f213dfce9135b60))
+
+### Tests
+
+* **code-review:** cover review tip generation ([d89a20c](https://github.com/awinogradov/code-assistants/commit/d89a20c830d457a774adc0ff0c9e655620b091ff))
 </file>
 
 <file path=".github/actions/code-review-action/src/github/githubReview.test.ts">
@@ -13055,6 +13114,61 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.7.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.6.3...code-review-action@v1.7.0) (2026-07-12)
+
+## Release Notes
+
+The AI reviewer's tips are now drawn from your own repository's conventions rather than a fixed pool of generic advice.
+
+## ✨ What's New
+
+### Context-Aware Review Tips
+
+The code review action occasionally surfaces a "review tip" alongside its feedback. Previously these tips came from a static, built-in pool with no connection to your project. Now, when enabled, the action generates the tip dynamically by reading your repository's `CONTRIBUTING.md`, its docs listing, and the changed files in the PR — so the advice is grounded in your own conventions and contribution guidelines. If anything goes wrong during generation (missing file, model error, etc.), the action falls back to the static pool automatically, so reviews are never blocked.
+
+This is opt-in via a new `generate_review_tips` input (see [⚙️ Configuration Required](#️-configuration-required) below).
+
+<details><summary>Related issues</summary>
+
+- [#395: Generate review tips dynamically with a model call and consumer context](https://github.com/awinogradov/code-assistants/issues/395)
+- [#416: Generate review tips from the consumer's own repository context](https://github.com/awinogradov/code-assistants/pull/416)
+</details>
+
+## ⚙️ Configuration Required
+
+### `generate_review_tips` Input
+
+To opt in to context-aware tip generation, add the new `generate_review_tips` input to your action step:
+
+```yaml
+- uses: awinogradov/code-assistants/.github/actions/code-review-action@v1
+  with:
+    reviewer: ${{ vars.BOT_USERNAME }}
+    bot_token: ${{ secrets.BOT_TOKEN }}
+    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+    generate_review_tips: true   # ← add this
+```
+
+This is optional and defaults to the previous static-pool behaviour when omitted. When enabled, the action will attempt to read your repo's `CONTRIBUTING.md` and docs structure at review time, so the service account identified by `bot_token` needs read access to repository contents — which the standard `contents: read` permission already covers.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #395 | [#416](https://github.com/awinogradov/code-assistants/pull/416) | @awinogradov |
+
+### Features
+
+* **code-review:** generate review tips from context ([5ee88f1](https://github.com/awinogradov/code-assistants/commit/5ee88f1ed95a4ba4dc65e25044dcc7e9da8f8afa))
+
+### Documentation
+
+* **code-review:** document generated review tips ([b735394](https://github.com/awinogradov/code-assistants/commit/b7353940ebeacc75330c19c24f213dfce9135b60))
+
+### Tests
+
+* **code-review:** cover review tip generation ([d89a20c](https://github.com/awinogradov/code-assistants/commit/d89a20c830d457a774adc0ff0c9e655620b091ff))
 ## [1.6.3](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.6.2...code-review-action@v1.6.3) (2026-07-10)
 
 ## Release Notes
@@ -14015,7 +14129,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/package.json">
 {
   "name": "@code-assistants/code-review-action",
-  "version": "1.6.3",
+  "version": "1.7.0",
   "description": "Composite GitHub Action that runs AI code review on pull requests via Claude Code.",
   "private": true,
   "type": "module",
@@ -14051,7 +14165,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/README.md">
 # Code review action
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.6.3-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.7.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that runs AI code review on pull requests using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Has two modes:
@@ -14235,7 +14349,7 @@ uses: awinogradov/code-assistants/.github/actions/code-review-action@v1
 </file>
 
 <file path=".github/actions/code-review-action/version">
-1.6.3
+1.7.0
 </file>
 
 <file path=".github/actions/code-review-cost-monitor/.release_notes/0.1.0.md">
