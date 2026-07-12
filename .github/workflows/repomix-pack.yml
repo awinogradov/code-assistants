@@ -54,7 +54,7 @@ jobs:
           fi
           git config user.name "${BOT_USERNAME:-github-actions[bot]}"
           git config user.email "${BOT_USERNAME:-github-actions[bot]}@users.noreply.github.com"
-          git commit -m "chore(repomix): refresh pack from #${PR_NUMBER}"
+          git commit -m "chore(repomix): refresh pack from #${PR_NUMBER} [ci skip]"
           # main can advance between checkout and push (concurrent merge, the
           # preceding pack commit, or a re-run); rebase onto it and retry.
           for attempt in 1 2 3; do
