@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [2.1.1](https://github.com/awinogradov/code-assistants/compare/agents-rules-sync-action@v2.1.0...agents-rules-sync-action@v2.1.1) (2026-07-13)
+
+## Release Notes
+
+The upstream sync action now retries automatically when GitHub returns a transient server error, instead of failing the entire run on a momentary blip.
+
+## 🐛 Bug Fixes
+
+### Resilient Retry on GitHub Server Errors
+
+Previously, a single transient GitHub 5xx response during the upstream sync would fail the workflow run immediately, often dumping a raw HTML error page into the job annotation with no useful context. The sync now automatically retries these transient failures, and if a request ultimately does not succeed, the error report includes the HTTP status code and a short excerpt rather than a full HTML page — making it much easier to understand what went wrong at a glance.
+
+
+### Bug Fixes
+
+* **actions-core:** retry transient github 5xx in sync ([63e8289](https://github.com/awinogradov/code-assistants/commit/63e82892eea86fd76b9e437466cf6bf6e420da68))
 ## [2.1.0](https://github.com/awinogradov/code-assistants/compare/agents-rules-sync-action@v2.0.2...agents-rules-sync-action@v2.1.0) (2026-06-29)
 
 ## Release Notes
