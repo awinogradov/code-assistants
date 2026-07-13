@@ -329,6 +329,7 @@ The content is organized as follows:
         0.2.0.md
         0.2.1.md
         0.2.2.md
+        0.2.3.md
       src/
         automerge.test.ts
         automerge.ts
@@ -33715,6 +33716,37 @@ Documentation callouts and tips now render with GitHub's native alert styling, m
 * adopt github alert syntax for callouts ([151e57b](https://github.com/awinogradov/code-assistants/commit/151e57bd2694b5df626833d3243cdded6f77eef9))
 </file>
 
+<file path=".github/actions/release-automerge/.release_notes/0.2.3.md">
+## [0.2.3](https://github.com/awinogradov/code-assistants/compare/release-automerge@v0.2.2...release-automerge@v0.2.3) (2026-07-13)
+
+## Release Notes
+
+Transient GitHub API errors (502s, 429s) no longer cause the auto-merge action to fail mid-flight — it now retries with backoff and recovers automatically.
+
+## 🐛 Bug Fixes
+
+### Resilience Against Transient GitHub API Errors
+
+Previously, a temporary GitHub API hiccup — such as a 502 Bad Gateway or a 429 rate-limit response — could cause the auto-merge job to fail outright, leaving a release PR approved and green but unmerged. The action now retries those requests automatically with backoff, so brief API instability is absorbed silently and the merge completes as expected without any manual intervention.
+
+<details><summary>Related issues</summary>
+
+- [#450: Auto label fails on transient GitHub 502 responses](https://github.com/awinogradov/code-assistants/issues/450)
+- [#453: Keep Auto label green when GitHub returns a transient 502](https://github.com/awinogradov/code-assistants/pull/453)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #450 | [#453](https://github.com/awinogradov/code-assistants/pull/453) | @awinogradov |
+
+### Bug Fixes
+
+* retry transient github errors in action clients ([88529bf](https://github.com/awinogradov/code-assistants/commit/88529bfb976a72852df74767604e3276df180786))
+</file>
+
 <file path=".github/actions/release-automerge/src/automerge.test.ts">
 /**
  * Tests for automerge.ts pure helpers.
@@ -34306,6 +34338,34 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [0.2.3](https://github.com/awinogradov/code-assistants/compare/release-automerge@v0.2.2...release-automerge@v0.2.3) (2026-07-13)
+
+## Release Notes
+
+Transient GitHub API errors (502s, 429s) no longer cause the auto-merge action to fail mid-flight — it now retries with backoff and recovers automatically.
+
+## 🐛 Bug Fixes
+
+### Resilience Against Transient GitHub API Errors
+
+Previously, a temporary GitHub API hiccup — such as a 502 Bad Gateway or a 429 rate-limit response — could cause the auto-merge job to fail outright, leaving a release PR approved and green but unmerged. The action now retries those requests automatically with backoff, so brief API instability is absorbed silently and the merge completes as expected without any manual intervention.
+
+<details><summary>Related issues</summary>
+
+- [#450: Auto label fails on transient GitHub 502 responses](https://github.com/awinogradov/code-assistants/issues/450)
+- [#453: Keep Auto label green when GitHub returns a transient 502](https://github.com/awinogradov/code-assistants/pull/453)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #450 | [#453](https://github.com/awinogradov/code-assistants/pull/453) | @awinogradov |
+
+### Bug Fixes
+
+* retry transient github errors in action clients ([88529bf](https://github.com/awinogradov/code-assistants/commit/88529bfb976a72852df74767604e3276df180786))
 ## [0.2.2](https://github.com/awinogradov/code-assistants/compare/release-automerge@v0.2.1...release-automerge@v0.2.2) (2026-06-15)
 
 ## Release Notes
@@ -34488,7 +34548,7 @@ The release creation workflow documentation now explains why release PRs must be
 <file path=".github/actions/release-automerge/package.json">
 {
   "name": "@code-assistants/release-automerge",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Composite GitHub Action that merges an approved, all-green release PR.",
   "private": true,
   "type": "module",
@@ -34519,7 +34579,7 @@ The release creation workflow documentation now explains why release PRs must be
 <file path=".github/actions/release-automerge/README.md">
 # Release auto-merge
 
-[![GitHub Release](https://img.shields.io/badge/release-v0.2.2-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v0.2.3-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that merges a release PR once it is fully green and
@@ -34677,7 +34737,7 @@ uses: awinogradov/code-assistants/.github/actions/release-automerge@v1
 </file>
 
 <file path=".github/actions/release-automerge/version">
-0.2.2
+0.2.3
 </file>
 
 <file path=".github/actions/release-sync/action.yml">
