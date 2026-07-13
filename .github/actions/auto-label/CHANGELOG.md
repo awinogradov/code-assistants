@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [0.2.3](https://github.com/awinogradov/code-assistants/compare/auto-label-action@v0.2.2...auto-label-action@v0.2.3) (2026-07-13)
+
+## Release Notes
+
+The auto-label action now automatically retries when GitHub returns a temporary error, preventing false job failures during transient API hiccups.
+
+## 🐛 Bug Fixes
+
+### Resilient Handling of Transient GitHub API Errors
+
+Previously, a temporary GitHub API hiccup — such as a `502 Bad Gateway` or a `429 Too Many Requests` response — would cause the auto-label job to fail outright, requiring a manual re-run. The action clients now detect these transient errors and automatically retry with backoff, so short-lived GitHub instability no longer interrupts your labelling workflow.
+
+<details><summary>Related issues</summary>
+
+- [#450: Auto label fails on transient GitHub 502 responses](https://github.com/awinogradov/code-assistants/issues/450)
+- [#453: Keep Auto label green when GitHub returns a transient 502](https://github.com/awinogradov/code-assistants/pull/453)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #450 | [#453](https://github.com/awinogradov/code-assistants/pull/453) | @awinogradov |
+
+### Bug Fixes
+
+* retry transient github errors in action clients ([88529bf](https://github.com/awinogradov/code-assistants/commit/88529bfb976a72852df74767604e3276df180786))
 ## [0.2.2](https://github.com/awinogradov/code-assistants/compare/auto-label-action@v0.2.1...auto-label-action@v0.2.2) (2026-06-26)
 
 ## Release Notes
