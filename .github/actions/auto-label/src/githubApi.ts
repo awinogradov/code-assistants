@@ -5,7 +5,7 @@
  * `null` on 404) to read `package.json` at a ref — no checkout or `git` required.
  *
  * @example
- *   const api = createGitHubApi(new Octokit({ auth: token }), owner, repo);
+ *   const api = createGitHubApi(createOctokit(token), owner, repo);
  *   const pkg = await api.readPackageJson(".github/actions/files-sync", headSha);
  */
 import { Octokit } from "@octokit/rest";

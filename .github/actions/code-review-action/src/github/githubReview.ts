@@ -5,7 +5,8 @@
  * @example
  * import { fetchReviewThreads, resolveThread, parseRepoEnv } from "./github/githubReview.ts";
  */
-import { Octokit } from "@octokit/rest";
+import { createOctokit } from "@code-assistants/actions-core/createOctokit";
+import type { Octokit } from "@octokit/rest";
 
 import { stripReviewTips } from "../reviewTip.ts";
 import { stripLegacyUsageHint, stripRunSummaryFooter } from "../runSummaryFooter.ts";
@@ -165,7 +166,7 @@ export function parseRepoEnv(): RepoEnv {
   }
 
   return {
-    octokit: new Octokit({ auth: token }),
+    octokit: createOctokit(token),
     owner,
     repoName,
     pullNumber: Number(prNumber),

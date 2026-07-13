@@ -6,8 +6,8 @@
  * All inputs/payloads are validated before any label is mutated.
  */
 import * as core from "@actions/core";
-import { Octokit } from "@octokit/rest";
 
+import { createOctokit } from "@code-assistants/actions-core/createOctokit";
 import { parseRepo } from "@code-assistants/actions-core/parseRepo";
 
 import { deriveLabelPrefix } from "./enumerateWorkspaces.ts";
@@ -76,7 +76,7 @@ async function run(): Promise<void> {
   const { owner, repo } = parseRepo(requireEnv("GITHUB_REPOSITORY"));
   const prefixOverride = (process.env.LABEL_PREFIX ?? "").trim();
 
-  const api = createGitHubApi(new Octokit({ auth: token }), owner, repo);
+  const api = createGitHubApi(createOctokit(token), owner, repo);
 
   if (eventName === "pull_request") {
     await runPullRequest(api, prefixOverride);

@@ -15,10 +15,11 @@
  * GH_TOKEN=xxx REPO=owner/repo HEAD_SHA=abc JOB_NAME=automerge bun run src/automerge.ts
  */
 import { fetchCheckStatuses, pollCheckStatuses } from "@code-assistants/actions-core/checkStatus";
+import { createOctokit } from "@code-assistants/actions-core/createOctokit";
 import { fetchRawContent } from "@code-assistants/actions-core/fetchRawContent";
 import { parseRepo } from "@code-assistants/actions-core/parseRepo";
 import { readRootRelease } from "@code-assistants/actions-core/releaseField";
-import { Octokit } from "@octokit/rest";
+import type { Octokit } from "@octokit/rest";
 
 /** Minimal PR shape needed to pick the release PR for a commit. */
 export interface PrRef {
@@ -44,6 +45,10 @@ const rootPackageJsonPath = "package.json";
 const releaseNotesFile = /(?:^|\/)\.release_notes\/[^/]+\.md$/;
 // GitHub merge-API responses that mean "nothing to do" rather than a real error:
 // 405 not mergeable / already merged, 409 head SHA moved (sha mismatch), 422 unprocessable.
+// The retrying client (createOctokit) does not fast-fail 405/409 — only 422 is in
+// plugin-retry's doNotRetry list — so those two surface here after ~14s of backoff.
+// That is intended: GitHub computes mergeability asynchronously, so a 405 often clears
+// on retry, and the skip below stays correct either way.
 const idempotentMergeStatuses = new Set([405, 409, 422]);
 // An approval usually triggers this action while CI is still running, and GitHub
 // does not redeliver `check_suite` events for `GITHUB_TOKEN` check suites — so no
@@ -75,7 +80,7 @@ function parseEnv(): AutomergeConfig {
 
   const { owner, repo } = parseRepo(repository);
 
-  return { octokit: new Octokit({ auth: token }), owner, repo, headSha, jobName };
+  return { octokit: createOctokit(token), owner, repo, headSha, jobName };
 }
 
 /** Pick the open release PR (head ref `^release-`) from commit-associated PRs. */
