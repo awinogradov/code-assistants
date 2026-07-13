@@ -20,7 +20,7 @@
     },
     ".github/actions/agents-rules-sync": {
       "name": "@code-assistants/agents-rules-sync-action",
-      "version": "2.1.0",
+      "version": "2.1.1",
       "dependencies": {
         "@actions/core": "3.0.1",
         "@code-assistants/actions-core": "workspace:*",
@@ -51,7 +51,7 @@
     },
     ".github/actions/code-review-action": {
       "name": "@code-assistants/code-review-action",
-      "version": "1.6.3",
+      "version": "1.7.0",
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "0.3.202",
         "@anthropic-ai/sdk": "0.110.0",
@@ -72,7 +72,6 @@
       "dependencies": {
         "@actions/core": "3.0.1",
         "@code-assistants/actions-core": "workspace:*",
-        "@octokit/plugin-retry": "8.1.0",
         "@octokit/rest": "22.0.1",
         "zod": "4.4.3",
       },
@@ -83,7 +82,7 @@
     },
     ".github/actions/files-sync": {
       "name": "@code-assistants/files-sync-action",
-      "version": "2.0.2",
+      "version": "2.0.3",
       "dependencies": {
         "@actions/core": "3.0.1",
         "@code-assistants/actions-core": "workspace:*",
