@@ -1,6 +1,6 @@
 # Code review cost monitor
 
-[![GitHub Release](https://img.shields.io/badge/release-v0.2.1-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v0.2.2-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that watches the per-run cost of [`code-review-action`](../code-review-action/README.md) and opens (or updates) a single deduplicated cost-report issue when it regresses. The data source is the "Review run summary" footer the review action appends to every review comment — a durable, per-run record of cost, tokens, and round-trips — so the monitor needs no extra instrumentation and no time-series store.
