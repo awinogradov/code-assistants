@@ -207,6 +207,7 @@ The content is organized as follows:
         2.0.0.md
         2.0.1.md
         2.0.2.md
+        2.0.3.md
       src/
         botIdentity.test.ts
         botIdentity.ts
@@ -17623,6 +17624,25 @@ When the sync action found an existing open pull request and reused it rather th
 * **files-sync:** refresh reused pull request title and body ([d60e1dc](https://github.com/awinogradov/code-assistants/commit/d60e1dc470c2c23858ec3fb32f2395c53f34a200))
 </file>
 
+<file path=".github/actions/files-sync/.release_notes/2.0.3.md">
+## [2.0.3](https://github.com/awinogradov/code-assistants/compare/files-sync-action@v2.0.2...files-sync-action@v2.0.3) (2026-07-13)
+
+## Release Notes
+
+Transient GitHub server errors during upstream file sync no longer fail the entire workflow run — the action now retries automatically and reports clean error summaries if the problem persists.
+
+## 🐛 Bug Fixes
+
+### Automatic Retry on GitHub Server Errors
+
+Previously, a single transient GitHub 5xx error (such as a brief outage or overloaded API endpoint) during an upstream sync would immediately fail the workflow run. The sync now retries these temporary failures automatically, meaning short-lived GitHub hiccups no longer require a manual re-run. When a failure does persist beyond retries, the job annotation now shows the HTTP status code and a short message excerpt instead of a full raw HTML error page, making it much easier to diagnose what went wrong.
+
+
+### Bug Fixes
+
+* **actions-core:** retry transient github 5xx in sync ([63e8289](https://github.com/awinogradov/code-assistants/commit/63e82892eea86fd76b9e437466cf6bf6e420da68))
+</file>
+
 <file path=".github/actions/files-sync/src/botIdentity.test.ts">
 import { describe, expect, mock, test } from 'bun:test';
 
@@ -18947,6 +18967,22 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [2.0.3](https://github.com/awinogradov/code-assistants/compare/files-sync-action@v2.0.2...files-sync-action@v2.0.3) (2026-07-13)
+
+## Release Notes
+
+Transient GitHub server errors during upstream file sync no longer fail the entire workflow run — the action now retries automatically and reports clean error summaries if the problem persists.
+
+## 🐛 Bug Fixes
+
+### Automatic Retry on GitHub Server Errors
+
+Previously, a single transient GitHub 5xx error (such as a brief outage or overloaded API endpoint) during an upstream sync would immediately fail the workflow run. The sync now retries these temporary failures automatically, meaning short-lived GitHub hiccups no longer require a manual re-run. When a failure does persist beyond retries, the job annotation now shows the HTTP status code and a short message excerpt instead of a full raw HTML error page, making it much easier to diagnose what went wrong.
+
+
+### Bug Fixes
+
+* **actions-core:** retry transient github 5xx in sync ([63e8289](https://github.com/awinogradov/code-assistants/commit/63e82892eea86fd76b9e437466cf6bf6e420da68))
 ## [2.0.2](https://github.com/awinogradov/code-assistants/compare/files-sync-action@v2.0.1...files-sync-action@v2.0.2) (2026-06-29)
 
 ## Release Notes
@@ -19394,7 +19430,7 @@ await main().catch((error: unknown) => {
 <file path=".github/actions/files-sync/package.json">
 {
   "name": "@code-assistants/files-sync-action",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "Composite GitHub Action that syncs declared files from upstream repositories.",
   "private": true,
   "type": "module",
@@ -19429,7 +19465,7 @@ await main().catch((error: unknown) => {
 <file path=".github/actions/files-sync/README.md">
 # Files sync
 
-[![GitHub Release](https://img.shields.io/badge/release-v2.0.2-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v2.0.3-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that syncs declared files from one or more source repositories into
@@ -19567,7 +19603,7 @@ uses: awinogradov/code-assistants/.github/actions/files-sync@v1
 </file>
 
 <file path=".github/actions/files-sync/version">
-2.0.2
+2.0.3
 </file>
 
 <file path=".github/actions/licenses-audit/src/licenses-report.test.ts">
@@ -36880,7 +36916,7 @@ jobs:
           fi
           git config user.name "${BOT_USERNAME:-github-actions[bot]}"
           git config user.email "${BOT_USERNAME:-github-actions[bot]}@users.noreply.github.com"
-          git commit -m "chore(repomix): refresh pack from #${PR_NUMBER}"
+          git commit -m "chore(repomix): refresh pack from #${PR_NUMBER} [ci skip]"
           # main can advance between checkout and push (concurrent merge, the
           # preceding pack commit, or a re-run); rebase onto it and retry.
           for attempt in 1 2 3; do
