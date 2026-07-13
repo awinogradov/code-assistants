@@ -15103,23 +15103,22 @@ describe("collectRuns()", () => {
  *
  * Walks pull requests by `updated` descending and stops paginating once a page
  * falls fully outside the lookback window, then parses every review body via
- * `parseFooterMetrics`. The Octokit instance is injected so tests mock it;
- * `createRetryingOctokit` wires `@octokit/plugin-retry` so a transient 5xx or
- * secondary rate limit doesn't redden a scheduled run. Failure semantics are
- * deliberate: an API error (after retries) throws, and so does a scan where at
- * least `minRuns` reviews carry a run-summary data comment yet none parse —
- * genuine format drift. A window with too few footers to judge degrades to an
- * empty result instead, mirroring the `minRuns` gate, so a newly-adopting or
+ * `parseFooterMetrics`. The Octokit instance is injected so tests mock it; build
+ * it with actions-core's `createOctokit`, which wires `@octokit/plugin-retry` so
+ * a transient 5xx or secondary rate limit doesn't redden a scheduled run. Failure
+ * semantics are deliberate: an API error (after retries) throws, and so does a
+ * scan where at least `minRuns` reviews carry a run-summary data comment yet none
+ * parse — genuine format drift. A window with too few footers to judge degrades to
+ * an empty result instead, mirroring the `minRuns` gate, so a newly-adopting or
  * quiet repo never reddens its scheduled run.
  *
  * @example
- * const octokit = createRetryingOctokit(token);
+ * const octokit = createOctokit(token);
  * const { runs, scannedReviews } = await collectRuns(octokit, {
  *   owner, repo, lookbackDays: 30, now: new Date(), minRuns: 8,
  * });
  */
-import { retry } from "@octokit/plugin-retry";
-import { Octokit } from "@octokit/rest";
+import type { Octokit } from "@octokit/rest";
 
 import type { RunMetrics } from "./footerMetrics.ts";
 import { hasRunSummaryData, parseFooterMetrics } from "./footerMetrics.ts";
@@ -15170,12 +15169,6 @@ export class FooterDriftError extends Error {
     );
     this.name = "FooterDriftError";
   }
-}
-
-/** Build an authenticated Octokit with transient-failure retries wired in. */
-export function createRetryingOctokit(token: string): Octokit {
-  const RetryingOctokit = Octokit.plugin(retry);
-  return new RetryingOctokit({ auth: token });
 }
 
 /**
@@ -15328,11 +15321,12 @@ describe("parseMonitorConfig()", () => {
 import { mkdir } from "node:fs/promises";
 
 import { setOutput } from "@actions/core";
+import { createOctokit } from "@code-assistants/actions-core/createOctokit";
 import { parseRepo } from "@code-assistants/actions-core/parseRepo";
 import { z } from "zod";
 
 import { buildAttributionPrompt, buildReport } from "./buildReport.ts";
-import { collectRuns, createRetryingOctokit } from "./collectRuns.ts";
+import { collectRuns } from "./collectRuns.ts";
 import type { ThresholdConfig } from "./evaluateThresholds.ts";
 import { evaluateThresholds } from "./evaluateThresholds.ts";
 
@@ -15397,7 +15391,7 @@ export function parseMonitorConfig(env: Record<string, string | undefined>): Mon
 
 async function run(): Promise<void> {
   const config = parseMonitorConfig(process.env);
-  const octokit = createRetryingOctokit(config.token);
+  const octokit = createOctokit(config.token);
   const now = new Date();
 
   const collected = await collectRuns(octokit, {
@@ -16246,10 +16240,9 @@ describe("reportAnnotation()", () => {
  */
 import { notice, setOutput, summary } from "@actions/core";
 import type { Octokit } from "@octokit/rest";
+import { createOctokit } from "@code-assistants/actions-core/createOctokit";
 import { parseRepo } from "@code-assistants/actions-core/parseRepo";
 import { z } from "zod";
-
-import { createRetryingOctokit } from "./collectRuns.ts";
 
 /** HTML marker identifying cost-report issues and comments for dedup. */
 export const reportMarker = "<!-- code-review-cost-report -->";
@@ -16407,7 +16400,7 @@ async function run(): Promise<void> {
   const report = await Bun.file(env.REPORT_FILE).text();
   const attribution = parseAttribution(env.ATTRIBUTION_REQUESTED === "true", env.ATTRIBUTION_JSON);
 
-  const result = await postReport(createRetryingOctokit(env.GH_TOKEN), {
+  const result = await postReport(createOctokit(env.GH_TOKEN), {
     owner,
     repo,
     issueLabel: env.ISSUE_LABEL,
@@ -16767,7 +16760,6 @@ If you're using the code-review upstream sync, the cost monitor workflow (`code-
   "dependencies": {
     "@actions/core": "3.0.1",
     "@code-assistants/actions-core": "workspace:*",
-    "@octokit/plugin-retry": "8.1.0",
     "@octokit/rest": "22.0.1",
     "zod": "4.4.3"
   },
@@ -54914,6 +54906,12 @@ export async function fetchRawContent({
  *
  * The check covers doc comments too, not just code: the auto-label bug propagated through
  * a stale `@example` in `githubApi.ts` that showed the bare form for a contributor to copy.
+ *
+ * It also rejects `Octokit.plugin(` — an action that plugs the retry plugin itself ends up
+ * constructing `new RetryingOctokit(`, which the bare-client pattern never matches. That is
+ * how code-review-cost-monitor's private `createRetryingOctokit` copy escaped both the guard
+ * and the grep that was meant to find it (issue #454). The one legitimate `Octokit.plugin`
+ * call lives in `createOctokit`, inside actions-core — outside the walked tree.
  */
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -54927,7 +54925,15 @@ const actionsDir = join(repoRoot, ".github/actions");
 // `new Octokit(` — walking into them would fail this test against our own dependencies.
 const prunedDirs = new Set(["node_modules", "dist"]);
 
-const bareOctokit = /new\s+Octokit\s*\(/;
+// Two ways to end up with a client actions-core does not own: construct it bare, or plug the
+// retry plugin locally and construct the resulting class under any name.
+const forbiddenConstruction: Array<{ pattern: RegExp; reason: string }> = [
+  { pattern: /new\s+Octokit\s*\(/, reason: 'a bare "new Octokit" has no retry policy' },
+  {
+    pattern: /Octokit\.plugin\s*\(/,
+    reason: 'a local "Octokit.plugin" duplicates the shared retry policy',
+  },
+];
 
 async function collectSources(dir: string): Promise<string[]> {
   const entries = await readdir(dir, { withFileTypes: true });
@@ -54952,21 +54958,23 @@ async function collectSources(dir: string): Promise<string[]> {
 }
 
 describe("octokit construction", () => {
-  test("no action builds a bare Octokit — all clients go through createOctokit", async () => {
+  test("no action builds its own Octokit — all clients go through createOctokit", async () => {
     const sources = await collectSources(actionsDir);
     expect(sources.length).toBeGreaterThan(0);
 
     const offenders: string[] = [];
     for (const path of sources) {
       const content = await readFile(path, "utf8");
-      if (bareOctokit.test(content)) {
-        offenders.push(path.slice(repoRoot.length + 1));
+      for (const { pattern, reason } of forbiddenConstruction) {
+        if (pattern.test(content)) {
+          offenders.push(`${path.slice(repoRoot.length + 1)} — ${reason}`);
+        }
       }
     }
 
     expect(
       offenders,
-      `Build the client with createOctokit(token) from @code-assistants/actions-core/createOctokit — a bare "new Octokit" has no retry policy and dies on a transient GitHub 5xx:\n${offenders.map((file) => `  - ${file}`).join("\n")}`,
+      `Build the client with createOctokit(token) from @code-assistants/actions-core/createOctokit, which owns the one retry policy:\n${offenders.map((offender) => `  - ${offender}`).join("\n")}`,
     ).toEqual([]);
   });
 });
