@@ -81,6 +81,7 @@ The content is organized as follows:
         0.2.0.md
         0.2.1.md
         0.2.2.md
+        0.2.3.md
       src/
         autoLabel.ts
         collectMembers.test.ts
@@ -122,6 +123,7 @@ The content is organized as follows:
         1.6.2.md
         1.6.3.md
         1.7.0.md
+        1.7.1.md
       src/
         github/
           githubReview.test.ts
@@ -173,6 +175,7 @@ The content is organized as follows:
         0.1.0.md
         0.2.0.md
         0.2.1.md
+        0.2.2.md
       src/
         buildReport.test.ts
         buildReport.ts
@@ -2629,6 +2632,37 @@ Consumer repos that use `pnpm-workspace.yaml` to declare their workspace members
 * **auto-label:** read workspace members from pnpm-workspace.yaml ([f1b9df6](https://github.com/awinogradov/code-assistants/commit/f1b9df6ff8bf54ecdd5923818e7def3fd57438b2))
 </file>
 
+<file path=".github/actions/auto-label/.release_notes/0.2.3.md">
+## [0.2.3](https://github.com/awinogradov/code-assistants/compare/auto-label-action@v0.2.2...auto-label-action@v0.2.3) (2026-07-13)
+
+## Release Notes
+
+The auto-label action now automatically retries when GitHub returns a temporary error, preventing false job failures during transient API hiccups.
+
+## 🐛 Bug Fixes
+
+### Resilient Handling of Transient GitHub API Errors
+
+Previously, a temporary GitHub API hiccup — such as a `502 Bad Gateway` or a `429 Too Many Requests` response — would cause the auto-label job to fail outright, requiring a manual re-run. The action clients now detect these transient errors and automatically retry with backoff, so short-lived GitHub instability no longer interrupts your labelling workflow.
+
+<details><summary>Related issues</summary>
+
+- [#450: Auto label fails on transient GitHub 502 responses](https://github.com/awinogradov/code-assistants/issues/450)
+- [#453: Keep Auto label green when GitHub returns a transient 502](https://github.com/awinogradov/code-assistants/pull/453)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #450 | [#453](https://github.com/awinogradov/code-assistants/pull/453) | @awinogradov |
+
+### Bug Fixes
+
+* retry transient github errors in action clients ([88529bf](https://github.com/awinogradov/code-assistants/commit/88529bfb976a72852df74767604e3276df180786))
+</file>
+
 <file path=".github/actions/auto-label/src/autoLabel.ts">
 /**
  * Entry point for the auto-label composite action. Reads the GitHub Actions
@@ -3684,6 +3718,34 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [0.2.3](https://github.com/awinogradov/code-assistants/compare/auto-label-action@v0.2.2...auto-label-action@v0.2.3) (2026-07-13)
+
+## Release Notes
+
+The auto-label action now automatically retries when GitHub returns a temporary error, preventing false job failures during transient API hiccups.
+
+## 🐛 Bug Fixes
+
+### Resilient Handling of Transient GitHub API Errors
+
+Previously, a temporary GitHub API hiccup — such as a `502 Bad Gateway` or a `429 Too Many Requests` response — would cause the auto-label job to fail outright, requiring a manual re-run. The action clients now detect these transient errors and automatically retry with backoff, so short-lived GitHub instability no longer interrupts your labelling workflow.
+
+<details><summary>Related issues</summary>
+
+- [#450: Auto label fails on transient GitHub 502 responses](https://github.com/awinogradov/code-assistants/issues/450)
+- [#453: Keep Auto label green when GitHub returns a transient 502](https://github.com/awinogradov/code-assistants/pull/453)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #450 | [#453](https://github.com/awinogradov/code-assistants/pull/453) | @awinogradov |
+
+### Bug Fixes
+
+* retry transient github errors in action clients ([88529bf](https://github.com/awinogradov/code-assistants/commit/88529bfb976a72852df74767604e3276df180786))
 ## [0.2.2](https://github.com/awinogradov/code-assistants/compare/auto-label-action@v0.2.1...auto-label-action@v0.2.2) (2026-06-26)
 
 ## Release Notes
@@ -3798,7 +3860,7 @@ Add the auto-label workflow to your repository's `.github/workflows/` directory.
 <file path=".github/actions/auto-label/package.json">
 {
   "name": "@code-assistants/auto-label-action",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Composite GitHub Action that labels pull requests with `<scope>/<workspace-member>` labels and prunes orphan labels on the default branch.",
   "private": true,
   "type": "module",
@@ -3832,7 +3894,7 @@ Add the auto-label workflow to your repository's `.github/workflows/` directory.
 <file path=".github/actions/auto-label/README.md">
 # Auto label
 
-[![GitHub Release](https://img.shields.io/badge/release-v0.2.2-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v0.2.3-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that keeps `<scope>/<workspace-member>` labels in sync with the workspace
@@ -4023,7 +4085,7 @@ the latest behavior. Pin to a tag if you want explicit control.
 </file>
 
 <file path=".github/actions/auto-label/version">
-0.2.2
+0.2.3
 </file>
 
 <file path=".github/actions/ban-patterns/action.yml">
@@ -5266,6 +5328,37 @@ This is optional and defaults to the previous static-pool behaviour when omitted
 ### Tests
 
 * **code-review:** cover review tip generation ([d89a20c](https://github.com/awinogradov/code-assistants/commit/d89a20c830d457a774adc0ff0c9e655620b091ff))
+</file>
+
+<file path=".github/actions/code-review-action/.release_notes/1.7.1.md">
+## [1.7.1](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.7.0...code-review-action@v1.7.1) (2026-07-13)
+
+## Release Notes
+
+Transient GitHub API errors (502s, 429s) no longer cause the code review action to fail mid-job — requests are now retried automatically with backoff.
+
+## 🐛 Bug Fixes
+
+### Automatic Retry on GitHub API Errors
+
+When GitHub returns a temporary error — such as a `502 Bad Gateway` or a `429 Too Many Requests` — the action previously failed the job outright, requiring a manual re-run. The action now detects these transient responses and retries the request with backoff, so auto-labelling, release-automerge, and code review jobs recover on their own without any intervention.
+
+<details><summary>Related issues</summary>
+
+- [#450: Auto label fails on transient GitHub 502 responses](https://github.com/awinogradov/code-assistants/issues/450)
+- [#453: Keep Auto label green when GitHub returns a transient 502](https://github.com/awinogradov/code-assistants/pull/453)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #450 | [#453](https://github.com/awinogradov/code-assistants/pull/453) | @awinogradov |
+
+### Bug Fixes
+
+* retry transient github errors in action clients ([88529bf](https://github.com/awinogradov/code-assistants/commit/88529bfb976a72852df74767604e3276df180786))
 </file>
 
 <file path=".github/actions/code-review-action/src/github/githubReview.test.ts">
@@ -13157,6 +13250,34 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.7.1](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.7.0...code-review-action@v1.7.1) (2026-07-13)
+
+## Release Notes
+
+Transient GitHub API errors (502s, 429s) no longer cause the code review action to fail mid-job — requests are now retried automatically with backoff.
+
+## 🐛 Bug Fixes
+
+### Automatic Retry on GitHub API Errors
+
+When GitHub returns a temporary error — such as a `502 Bad Gateway` or a `429 Too Many Requests` — the action previously failed the job outright, requiring a manual re-run. The action now detects these transient responses and retries the request with backoff, so auto-labelling, release-automerge, and code review jobs recover on their own without any intervention.
+
+<details><summary>Related issues</summary>
+
+- [#450: Auto label fails on transient GitHub 502 responses](https://github.com/awinogradov/code-assistants/issues/450)
+- [#453: Keep Auto label green when GitHub returns a transient 502](https://github.com/awinogradov/code-assistants/pull/453)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #450 | [#453](https://github.com/awinogradov/code-assistants/pull/453) | @awinogradov |
+
+### Bug Fixes
+
+* retry transient github errors in action clients ([88529bf](https://github.com/awinogradov/code-assistants/commit/88529bfb976a72852df74767604e3276df180786))
 ## [1.7.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.6.3...code-review-action@v1.7.0) (2026-07-12)
 
 ## Release Notes
@@ -14172,7 +14293,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/package.json">
 {
   "name": "@code-assistants/code-review-action",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "Composite GitHub Action that runs AI code review on pull requests via Claude Code.",
   "private": true,
   "type": "module",
@@ -14208,7 +14329,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/README.md">
 # Code review action
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.7.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.7.1-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that runs AI code review on pull requests using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Has two modes:
@@ -14392,7 +14513,7 @@ uses: awinogradov/code-assistants/.github/actions/code-review-action@v1
 </file>
 
 <file path=".github/actions/code-review-action/version">
-1.7.0
+1.7.1
 </file>
 
 <file path=".github/actions/code-review-cost-monitor/.release_notes/0.1.0.md">
@@ -14569,6 +14690,37 @@ The hint no longer appears in the review footer. Usage guidance now surfaces occ
 ### Bug Fixes
 
 * **code-review-action:** drop always-on usage hint from review footer ([c279ab2](https://github.com/awinogradov/code-assistants/commit/c279ab243134259228e2a72a6809d4d71c08bfd8))
+</file>
+
+<file path=".github/actions/code-review-cost-monitor/.release_notes/0.2.2.md">
+## [0.2.2](https://github.com/awinogradov/code-assistants/compare/code-review-cost-monitor-action@v0.2.1...code-review-cost-monitor-action@v0.2.2) (2026-07-13)
+
+## Release Notes
+
+The cost monitor now uses the same retrying GitHub client as the rest of the system, so retry behavior is consistent and maintained in one place.
+
+## 🐛 Bug Fixes
+
+### Unified GitHub Client in Cost Monitor
+
+Previously, the cost monitor maintained its own separate GitHub API client, meaning the retry policy (how the action handles rate limits and transient API errors) was duplicated and could drift out of sync with the shared client used elsewhere. The monitor now uses the single shared retrying Octokit client, so all GitHub API calls across the action suite behave consistently — no separate copy to maintain or misconfigure.
+
+<details><summary>Related issues</summary>
+
+- [#454: Dedupe the retrying Octokit factory in code-review-cost-monitor](https://github.com/awinogradov/code-assistants/issues/454)
+- [#455: Dedupe the retrying Octokit client in code-review-cost-monitor](https://github.com/awinogradov/code-assistants/pull/455)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #454 | [#455](https://github.com/awinogradov/code-assistants/pull/455) | @awinogradov |
+
+### Bug Fixes
+
+* reuse the shared octokit client in cost monitor ([387183f](https://github.com/awinogradov/code-assistants/commit/387183fa4cbfce2ddc73d718153001a4eae9b619))
 </file>
 
 <file path=".github/actions/code-review-cost-monitor/src/buildReport.test.ts">
@@ -16569,6 +16721,34 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [0.2.2](https://github.com/awinogradov/code-assistants/compare/code-review-cost-monitor-action@v0.2.1...code-review-cost-monitor-action@v0.2.2) (2026-07-13)
+
+## Release Notes
+
+The cost monitor now uses the same retrying GitHub client as the rest of the system, so retry behavior is consistent and maintained in one place.
+
+## 🐛 Bug Fixes
+
+### Unified GitHub Client in Cost Monitor
+
+Previously, the cost monitor maintained its own separate GitHub API client, meaning the retry policy (how the action handles rate limits and transient API errors) was duplicated and could drift out of sync with the shared client used elsewhere. The monitor now uses the single shared retrying Octokit client, so all GitHub API calls across the action suite behave consistently — no separate copy to maintain or misconfigure.
+
+<details><summary>Related issues</summary>
+
+- [#454: Dedupe the retrying Octokit factory in code-review-cost-monitor](https://github.com/awinogradov/code-assistants/issues/454)
+- [#455: Dedupe the retrying Octokit client in code-review-cost-monitor](https://github.com/awinogradov/code-assistants/pull/455)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #454 | [#455](https://github.com/awinogradov/code-assistants/pull/455) | @awinogradov |
+
+### Bug Fixes
+
+* reuse the shared octokit client in cost monitor ([387183f](https://github.com/awinogradov/code-assistants/commit/387183fa4cbfce2ddc73d718153001a4eae9b619))
 ## [0.2.1](https://github.com/awinogradov/code-assistants/compare/code-review-cost-monitor-action@v0.2.0...code-review-cost-monitor-action@v0.2.1) (2026-07-02)
 
 ## Release Notes
@@ -16741,7 +16921,7 @@ If you're using the code-review upstream sync, the cost monitor workflow (`code-
 <file path=".github/actions/code-review-cost-monitor/package.json">
 {
   "name": "@code-assistants/code-review-cost-monitor-action",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Composite GitHub Action that watches the code-review run-summary footers for cost regressions and opens (or updates) a deduplicated cost-report issue.",
   "private": true,
   "type": "module",
@@ -16774,7 +16954,7 @@ If you're using the code-review upstream sync, the cost monitor workflow (`code-
 <file path=".github/actions/code-review-cost-monitor/README.md">
 # Code review cost monitor
 
-[![GitHub Release](https://img.shields.io/badge/release-v0.2.1-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v0.2.2-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that watches the per-run cost of [`code-review-action`](../code-review-action/README.md) and opens (or updates) a single deduplicated cost-report issue when it regresses. The data source is the "Review run summary" footer the review action appends to every review comment — a durable, per-run record of cost, tokens, and round-trips — so the monitor needs no extra instrumentation and no time-series store.
@@ -16889,7 +17069,7 @@ GH_TOKEN=$(gh auth token) GITHUB_REPOSITORY=owner/repo \
 </file>
 
 <file path=".github/actions/code-review-cost-monitor/version">
-0.2.1
+0.2.2
 </file>
 
 <file path=".github/actions/code-review-sync/action.yml">
