@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [2.0.3](https://github.com/awinogradov/code-assistants/compare/files-sync-action@v2.0.2...files-sync-action@v2.0.3) (2026-07-13)
+
+## Release Notes
+
+Transient GitHub server errors during upstream file sync no longer fail the entire workflow run — the action now retries automatically and reports clean error summaries if the problem persists.
+
+## 🐛 Bug Fixes
+
+### Automatic Retry on GitHub Server Errors
+
+Previously, a single transient GitHub 5xx error (such as a brief outage or overloaded API endpoint) during an upstream sync would immediately fail the workflow run. The sync now retries these temporary failures automatically, meaning short-lived GitHub hiccups no longer require a manual re-run. When a failure does persist beyond retries, the job annotation now shows the HTTP status code and a short message excerpt instead of a full raw HTML error page, making it much easier to diagnose what went wrong.
+
+
+### Bug Fixes
+
+* **actions-core:** retry transient github 5xx in sync ([63e8289](https://github.com/awinogradov/code-assistants/commit/63e82892eea86fd76b9e437466cf6bf6e420da68))
 ## [2.0.2](https://github.com/awinogradov/code-assistants/compare/files-sync-action@v2.0.1...files-sync-action@v2.0.2) (2026-06-29)
 
 ## Release Notes
