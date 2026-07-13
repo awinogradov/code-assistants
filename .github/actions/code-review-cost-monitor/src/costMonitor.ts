@@ -15,11 +15,12 @@
 import { mkdir } from "node:fs/promises";
 
 import { setOutput } from "@actions/core";
+import { createOctokit } from "@code-assistants/actions-core/createOctokit";
 import { parseRepo } from "@code-assistants/actions-core/parseRepo";
 import { z } from "zod";
 
 import { buildAttributionPrompt, buildReport } from "./buildReport.ts";
-import { collectRuns, createRetryingOctokit } from "./collectRuns.ts";
+import { collectRuns } from "./collectRuns.ts";
 import type { ThresholdConfig } from "./evaluateThresholds.ts";
 import { evaluateThresholds } from "./evaluateThresholds.ts";
 
@@ -84,7 +85,7 @@ export function parseMonitorConfig(env: Record<string, string | undefined>): Mon
 
 async function run(): Promise<void> {
   const config = parseMonitorConfig(process.env);
-  const octokit = createRetryingOctokit(config.token);
+  const octokit = createOctokit(config.token);
   const now = new Date();
 
   const collected = await collectRuns(octokit, {

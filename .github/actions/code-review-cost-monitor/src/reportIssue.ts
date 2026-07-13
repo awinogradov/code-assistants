@@ -15,10 +15,9 @@
  */
 import { notice, setOutput, summary } from "@actions/core";
 import type { Octokit } from "@octokit/rest";
+import { createOctokit } from "@code-assistants/actions-core/createOctokit";
 import { parseRepo } from "@code-assistants/actions-core/parseRepo";
 import { z } from "zod";
-
-import { createRetryingOctokit } from "./collectRuns.ts";
 
 /** HTML marker identifying cost-report issues and comments for dedup. */
 export const reportMarker = "<!-- code-review-cost-report -->";
@@ -176,7 +175,7 @@ async function run(): Promise<void> {
   const report = await Bun.file(env.REPORT_FILE).text();
   const attribution = parseAttribution(env.ATTRIBUTION_REQUESTED === "true", env.ATTRIBUTION_JSON);
 
-  const result = await postReport(createRetryingOctokit(env.GH_TOKEN), {
+  const result = await postReport(createOctokit(env.GH_TOKEN), {
     owner,
     repo,
     issueLabel: env.ISSUE_LABEL,

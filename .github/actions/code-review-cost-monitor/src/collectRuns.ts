@@ -4,23 +4,22 @@
  *
  * Walks pull requests by `updated` descending and stops paginating once a page
  * falls fully outside the lookback window, then parses every review body via
- * `parseFooterMetrics`. The Octokit instance is injected so tests mock it;
- * `createRetryingOctokit` wires `@octokit/plugin-retry` so a transient 5xx or
- * secondary rate limit doesn't redden a scheduled run. Failure semantics are
- * deliberate: an API error (after retries) throws, and so does a scan where at
- * least `minRuns` reviews carry a run-summary data comment yet none parse —
- * genuine format drift. A window with too few footers to judge degrades to an
- * empty result instead, mirroring the `minRuns` gate, so a newly-adopting or
+ * `parseFooterMetrics`. The Octokit instance is injected so tests mock it; build
+ * it with actions-core's `createOctokit`, which wires `@octokit/plugin-retry` so
+ * a transient 5xx or secondary rate limit doesn't redden a scheduled run. Failure
+ * semantics are deliberate: an API error (after retries) throws, and so does a
+ * scan where at least `minRuns` reviews carry a run-summary data comment yet none
+ * parse — genuine format drift. A window with too few footers to judge degrades to
+ * an empty result instead, mirroring the `minRuns` gate, so a newly-adopting or
  * quiet repo never reddens its scheduled run.
  *
  * @example
- * const octokit = createRetryingOctokit(token);
+ * const octokit = createOctokit(token);
  * const { runs, scannedReviews } = await collectRuns(octokit, {
  *   owner, repo, lookbackDays: 30, now: new Date(), minRuns: 8,
  * });
  */
-import { retry } from "@octokit/plugin-retry";
-import { Octokit } from "@octokit/rest";
+import type { Octokit } from "@octokit/rest";
 
 import type { RunMetrics } from "./footerMetrics.ts";
 import { hasRunSummaryData, parseFooterMetrics } from "./footerMetrics.ts";
@@ -71,12 +70,6 @@ export class FooterDriftError extends Error {
     );
     this.name = "FooterDriftError";
   }
-}
-
-/** Build an authenticated Octokit with transient-failure retries wired in. */
-export function createRetryingOctokit(token: string): Octokit {
-  const RetryingOctokit = Octokit.plugin(retry);
-  return new RetryingOctokit({ auth: token });
 }
 
 /**
