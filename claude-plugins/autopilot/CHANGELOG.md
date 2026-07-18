@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.11.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.10.0...autopilot@v1.11.0) (2026-07-18)
+
+## Release Notes
+
+## [1.11.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.10.0...autopilot@v1.11.0) (2026-07-18)
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #461 | [#462](https://github.com/awinogradov/code-assistants/pull/462) | @awinogradov |
+
+### Features
+
+* **skills:** support principles folder across rules and skills ([7f27044](https://github.com/awinogradov/code-assistants/commit/7f27044ba823d83c30409170443631a7a0ee56f2))
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #461 | [#462](https://github.com/awinogradov/code-assistants/pull/462) | @awinogradov |
+
+### Features
+
+* **skills:** support principles folder across rules and skills ([7f27044](https://github.com/awinogradov/code-assistants/commit/7f27044ba823d83c30409170443631a7a0ee56f2))
 ## [1.10.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.9.0...autopilot@v1.10.0) (2026-07-10)
 
 ## Release Notes
