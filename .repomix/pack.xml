@@ -14431,9 +14431,9 @@ The `pr:review` skill carries the full review rubric (all `CHECK-*` rules) inlin
 
 To run a different repo's skills instead — e.g. a consumer's own `pr:review` — point `review_prompt` / `react_prompt` at them and install the plugin that provides them (see below).
 
-## Repository standards (rfc/ and docs/)
+## Repository standards (rfc/, docs/, and principles/)
 
-When the reviewed repository carries an `rfc/` folder (versioned standards with `status` frontmatter) or a `docs/` folder, the review enforces those standards on the diff — no input or config needed; the folders are the opt-in. Severity follows source stability: an Accepted RFC violation blocks (`CHECK-RFC-001`), a Draft RFC conflict and a `docs/` convention contradiction are non-blocking suggestions (`CHECK-RFC-002`, `CHECK-DOC-005`), and two hygiene checks protect the `rfc/` contract itself (`CHECK-RFC-003/004`).
+When the reviewed repository carries an `rfc/` folder (versioned standards with `status` frontmatter), a `docs/` folder, or a root-level `principles/` folder (long-lived values), the review enforces those standards on the diff — no input or config needed; the folders are the opt-in. Severity follows source stability: an Accepted RFC violation blocks (`CHECK-RFC-001`), while a Draft RFC conflict, a `docs/` convention contradiction, and a conflict with a stated principle are non-blocking suggestions (`CHECK-RFC-002`, `CHECK-DOC-005`, `CHECK-PRINCIPLE-001`), and two hygiene checks protect the `rfc/` contract itself (`CHECK-RFC-003/004`).
 
 See [Code review repository standards](../../../docs/12-code-review-repository-standards.md) for the discovery, selection, and citation contract.
 
@@ -45972,6 +45972,7 @@ Before planning, read the repository's own documentation as the project's source
   - **Selection** — match each entry's title+slug tokens against the files the plan will touch and its visible domains (log calls → a logging standard, HTTP routes → an API standard, new files → a file-structure standard). When in doubt whether a standard applies, load it — capped at 3 standards, ranked by match strength; record dropped candidates in the [Context Map](#phase-1-context-gathering) (no silent truncation).
   - **Reads** — use the Read tool on matched standards (do not rely on the pack; a fallback pack may omit nested markdown); for a standard longer than ~300 lines, read only the matched sections.
   - **Comply** — the plan must not propose any change that violates a clause of an **Accepted** RFC (the repo's ratified, blocking standard); a **Draft** RFC is advisory — follow it where practical and call out any deliberate deviation.
+- **`principles/` (long-lived values)** — if `principles/` exists at the repository root, read its `README.md` index and any principle whose title matches the plan's domain. Principles are the values that `rfc/` and `docs/` appeal to, not normative clauses, so they shape the approach rather than bind it: when the plan deliberately contradicts a stated principle, say so explicitly in the plan instead of leaving the conflict silent. The folder is root-only — values are repo-wide, so unlike `docs/` there is no per-workspace variant.
 
 Feed the project-specific conventions and applicable standards found there into analysis and the plan.
 
@@ -46184,7 +46185,7 @@ This is the pipeline's single codebase-reading pass: [Phase 0](#phase-0-input-re
    - Key types, interfaces, and Zod schemas in play
    - Test conventions and fixtures that apply
    - In-flight changes from the branch diff (step 1) the snapshot does not reflect
-   - **Applicable standards** — the `rfc/`/`docs/` standards selected in [Repository Documentation](#repository-documentation-mandatory): each as id + status (marked "defaulted" when inferred) with a one-line why the plan must honor it, plus any dropped candidates; "none" when nothing matched or the folders are absent. This is the plan's audit log of what it planned against.
+   - **Applicable standards** — the `rfc/`/`docs/` standards and any `principles/` values selected in [Repository Documentation](#repository-documentation-mandatory): each as id + status (marked "defaulted" when inferred) with a one-line why the plan must honor it, plus any dropped candidates; "none" when nothing matched or the folders are absent. This is the plan's audit log of what it planned against.
 
 After completing all context gathering, call TaskUpdate to set task 2 ("Gather context") to `status: "completed"`.
 
@@ -48230,6 +48231,7 @@ Read the project's own conventions before judging the diff — you enforce them,
   - **Inventory** — read the `rfc/README.md` index table into `{id, title, status, path}`; when it is absent, Glob `rfc/[0-9]*.md` and read each file's frontmatter block. Derive a missing id/title from the `NNNN-slug` filename (or the first H1). A missing or unparseable `status` counts as Draft — record it as defaulted. `Superseded` entries are never enforcement sources.
   - **Selection** — match each entry's title+slug tokens against the changed file paths and the diff's visible domains (log calls → a logging standard, HTTP routes → an API standard, new files → a file-structure standard). When in doubt whether a standard applies, load it — capped at 3 standards per review, ranked by match strength; record dropped candidates in the Context Map (no silent truncation).
   - **Reads** — use the Read tool on matched standards (do not rely on the pack; a fallback pack may omit nested markdown); for a standard longer than ~300 lines, read only the matched sections. An RFC the diff itself modifies is enforced at its **base-branch version** — fetch it via `gh api repos/<REPO>/contents/<path>?ref=<baseRefOid>` (from [§1.1](#11-pr-context)) — so a PR cannot legalize its own diff by editing the standard; the hygiene checks still apply to the modified version.
+- **`principles/` (long-lived values)** — if `principles/` exists at the repository root, read its `README.md` index and any principle whose title matches the diff's domain; the [Repository Principles check](#repository-principles) enforces them. The folder is root-only, and its entries carry no `status` frontmatter — a principle is prose, never a blocking source.
 - **context7 / Ref / Exa** — MANDATORY for any unfamiliar library or API the diff touches; never guess an API's behavior.
 - **Perplexity** — web search for general or architectural questions.
 
@@ -48242,7 +48244,7 @@ Read the project's own conventions before judging the diff — you enforce them,
 - **Related work** — TODOs and `#<issue>` references in the codebase from `search-codebase-todos` ([§1.2](#12-load-context-via-sub-agents)): flag whether the diff resolves or conflicts with a related TODO, leaves a referenced issue half-addressed, or duplicates work tracked elsewhere; "none" when no issue is linked or none found.
 - **Prior-review findings** — unresolved findings from prior review bodies ([§1.1](#11-pr-context)) and inline threads from `fetch-pr-reviews` ([§1.2](#12-load-context-via-sub-agents)); empty on first review.
 - **Project conventions** — the CLAUDE.md / README / `docs/*` points that bear on the diff ([§1.4](#14-project-context-read-before-reviewing)).
-- **Applicable standards** — the standards selected in [§1.4](#14-project-context-read-before-reviewing): each as id + status (marked "defaulted" when the status was inferred) with a one-line why, plus any dropped candidates; "none" when nothing matched or the folders are absent. This map is the audit log of what was loaded and why.
+- **Applicable standards** — the standards and any `principles/` values selected in [§1.4](#14-project-context-read-before-reviewing): each as id + status (marked "defaulted" when the status was inferred) with a one-line why, plus any dropped candidates; "none" when nothing matched or the folders are absent. This map is the audit log of what was loaded and why.
 - **Codebase pointers** — only the targeted pack-`grep` hits pulled for cross-file checks; "none" when the diff is self-contained.
 - **Stack** — `agents.rules` value (drives [§2](#phase-2-review-the-diff) thresholds), or `unknown`.
 
@@ -48860,6 +48862,18 @@ A new or renamed RFC is missing from the `rfc/README.md` index, its filename doe
 
 - Example: adding an `rfc/0008-*.md` standard without an index row; an RFC whose frontmatter lacks `status`.
 - Skip: repositories with no `rfc/README.md` index at all — the Glob fallback is the index there; flag only frontmatter problems.
+
+#### Repository Principles
+
+Applies to repositories carrying a `principles/` folder ([§1.4](#14-project-context-read-before-reviewing) builds the inventory). Skip when the [§1.5](#15-context-map) Applicable standards map lists no principle. Principles are prose values rather than normative clauses, so this family never blocks — the same reasoning that caps CHECK-DOC-005 at suggestion; a value that must block belongs in an Accepted RFC.
+
+<a id="CHECK-PRINCIPLE-001"></a>
+**CHECK-PRINCIPLE-001: Diff conflicts with a stated repository principle** — Severity: suggestion
+
+A change works against a value stated in `principles/` — the repository's long-lived design values, which its standards and reviews appeal to. Quote the principle verbatim (≤2 lines) in the finding detail and cite it as a `<pr-blob-url>` link (defined in [reviewComment Format](#reviewcomment-format-30-lines-max)), matching CHECK-RFC-001/002; a finding that only paraphrases the value is not reportable.
+
+- Example: a stated simplicity principle argues against configuration knobs and the diff adds an unrequested feature flag.
+- Skip: an Accepted RFC or a `docs/*` convention already covers the same ground — report that check once and cite the principle in its detail; the diff itself amends the principle.
 
 #### Service Standards
 
@@ -53359,7 +53373,7 @@ The delegated stack skill discovers the planning tasks (via `TaskList`) and runs
 
 ### Phase 1 · Context Gathering
 
-This is the pipeline's **single codebase-reading pass** — Phase 0 reads no code and Phase 2 only synthesizes. Gather the branch diff (`git log/diff origin/main...HEAD`), then decide **where context comes from** before crawling: the Phase 0 snapshot serves broad/whole-repo reads, while live tools (Explore agents / Grep / Glob) serve only what the snapshot cannot — in-flight working-tree code or targeted fresh reads. The pass ends by recording a **Context Map** — files and their roles, patterns to mirror, key types/schemas, test conventions, in-flight changes, and the **applicable standards** (the selected `rfc/`/`docs/` entries with their status, plus any dropped candidates) the plan must honor — which becomes the single artifact every later phase reasons over instead of re-reading. Documentation lookup, repository documentation, and CLAUDE.md compliance follow the Common Instructions.
+This is the pipeline's **single codebase-reading pass** — Phase 0 reads no code and Phase 2 only synthesizes. Gather the branch diff (`git log/diff origin/main...HEAD`), then decide **where context comes from** before crawling: the Phase 0 snapshot serves broad/whole-repo reads, while live tools (Explore agents / Grep / Glob) serve only what the snapshot cannot — in-flight working-tree code or targeted fresh reads. The pass ends by recording a **Context Map** — files and their roles, patterns to mirror, key types/schemas, test conventions, in-flight changes, and the **applicable standards** (the selected `rfc/`/`docs/`/`principles/` entries with their status, plus any dropped candidates) the plan must honor — which becomes the single artifact every later phase reasons over instead of re-reading. Documentation lookup, repository documentation, and CLAUDE.md compliance follow the Common Instructions.
 
 ### Phase 2 · Deep Analysis
 
@@ -54251,12 +54265,13 @@ The shared CI gates accept both conventions: the branch-name and semantic-PR-tit
 
 > Chapter 12 of the [repository docs](../README.md#repository-docs).
 
-`code-review-action` reviews every PR against the repo's `CLAUDE.md` and the generic `CHECK-*` catalog in the [pr:review skill](../claude-plugins/autopilot/skills/pr:review/SKILL.md). This chapter defines the additional, convention-based contract: when a consumer repository carries `rfc/` or `docs/`, the review enforces those standards too. There is no workflow input or config key — the folders are the opt-in, and repositories without them see no change and pay no cost.
+`code-review-action` reviews every PR against the repo's `CLAUDE.md` and the generic `CHECK-*` catalog in the [pr:review skill](../claude-plugins/autopilot/skills/pr:review/SKILL.md). This chapter defines the additional, convention-based contract: when a consumer repository carries `rfc/`, `docs/`, or `principles/`, the review enforces those standards too. There is no workflow input or config key — the folders are the opt-in, and repositories without them see no change and pay no cost.
 
 ## Discovery
 
 - **`rfc/` (versioned standards)** — the review builds an inventory `{id, title, status, path}` from the `rfc/README.md` index table; when no index exists it globs `rfc/[0-9]*.md` and reads each file's frontmatter. A missing id or title is derived from the `NNNN-slug` filename (or the first H1); a missing or unparseable `status` counts as Draft and is recorded as defaulted — visible in the review, never a silent downgrade.
 - **`docs/` (project conventions)** — indexed via the root `README.md` docs table, else `docs/README.md`, else the `docs/*.md` file names.
+- **`principles/` (long-lived values)** — indexed via `principles/README.md`, matched by title against the diff's domain. The folder is root-only: values are repo-wide, so unlike `docs/` there is no per-workspace variant. Principles carry no `status` frontmatter, because the lifecycle is the point — docs change continuously, RFCs change on an explicit version bump, and a change to a principle is itself an RFC.
 
 ## Selection
 
@@ -54272,8 +54287,9 @@ Severity follows source stability:
 | RFC                    | Draft (or defaulted) | CHECK-RFC-002 — suggestion (advisory) |
 | RFC                    | Superseded           | never enforced                        |
 | docs/README convention | —                    | CHECK-DOC-005 — suggestion            |
+| Principle              | —                    | CHECK-PRINCIPLE-001 — suggestion      |
 
-Ratifying an RFC (status Accepted) is what makes a standard blocking — a docs convention can advise but never block. Every finding quotes the violated clause verbatim (≤2 lines) and cites the standard as a link at the PR head commit, so citations stay grounded and resolvable. A violation that also matches a generic `CHECK-*` rule is reported once under the generic code, with the RFC cited in its detail.
+Ratifying an RFC (status Accepted) is what makes a standard blocking — a docs convention or a stated principle can advise but never block. Capping principles at suggestion is deliberate: an unversioned prose value should not gate a merge, and the non-blocking channel is exactly where a design concern no RFC covers yet gets raised — which is often where the next RFC comes from. Every finding quotes the violated clause verbatim (≤2 lines) and cites the standard as a link at the PR head commit, so citations stay grounded and resolvable. A violation that also matches a generic `CHECK-*` rule is reported once under the generic code, with the RFC cited in its detail.
 
 ## RFC hygiene
 
@@ -54286,11 +54302,11 @@ An RFC modified by the diff is enforced at its base-branch version, so a single 
 
 ## Cost behavior
 
-Discovery is index-first: one small read builds the inventory, and only matched standards (at most 3) are read further, section-targeted for large files. The rule catalog grows by five codes total; per-review cost stays within the normal band for repositories with standards and is unchanged for repositories without them.
+Discovery is index-first: one small read builds the inventory, and only matched standards (at most 3) are read further, section-targeted for large files. The rule catalog grows by six codes total; per-review cost stays within the normal band for repositories with standards and is unchanged for repositories without them.
 
 ## Planning against the same standards
 
-Enforcement is only half the loop. The [plan skill](../claude-plugins/autopilot/skills/plan/SKILL.md#repository-documentation-mandatory) reads the same `rfc/`/`docs/` inventory during its context-gathering pass and records the selected standards in its Context Map, so a plan is shaped to **comply** with Accepted RFCs rather than propose a change this review would then block — review enforces, plan complies. The plan skill uses the identical discovery and selection contract (index-first inventory, token-match selection capped at 3); it adds no `CHECK-*` codes of its own, and when a change edits an Accepted RFC the plan requires the same `version` bump + Changelog entry that `CHECK-RFC-003` guards.
+Enforcement is only half the loop. The [plan skill](../claude-plugins/autopilot/skills/plan/SKILL.md#repository-documentation-mandatory) reads the same `rfc/`/`docs/`/`principles/` inventory during its context-gathering pass and records the selected standards in its Context Map, so a plan is shaped to **comply** with Accepted RFCs rather than propose a change this review would then block — review enforces, plan complies. The plan skill uses the identical discovery and selection contract (index-first inventory, token-match selection capped at 3); it adds no `CHECK-*` codes of its own, and when a change edits an Accepted RFC the plan requires the same `version` bump + Changelog entry that `CHECK-RFC-003` guards.
 </file>
 
 <file path="packages/actions-core/src/anthropicAuth.test.ts">
@@ -55921,6 +55937,7 @@ Before making any changes:
 3. Read files that appear relevant to the current task
 4. Treat `docs/` as the source of truth for project-specific conventions and follow those documents over this file when they conflict
 5. When an `rfc/` folder exists, treat its Accepted RFCs as binding versioned standards — follow them over `docs/` and this file when they conflict; see `rfc/README.md` for the convention
+6. When a `principles/` folder exists, read its `README.md` and the principles relevant to the task — they are the long-lived values that standards and reviews appeal to; follow `rfc/` and `docs/` over them for concrete rules
 
 **Rule Markers Legend:**
 
@@ -56194,6 +56211,7 @@ Before making any changes:
 3. Read files that appear relevant to the current task
 4. Treat `docs/` as the source of truth for project-specific conventions and follow those documents over this file when they conflict
 5. When an `rfc/` folder exists, treat its Accepted RFCs as binding versioned standards — follow them over `docs/` and this file when they conflict; see `rfc/README.md` for the convention
+6. When a `principles/` folder exists, read its `README.md` and the principles relevant to the task — they are the long-lived values that standards and reviews appeal to; follow `rfc/` and `docs/` over them for concrete rules
 
 **Rule Markers Legend:**
 
@@ -56598,6 +56616,7 @@ Before making any changes:
 3. Read files that appear relevant to the current task
 4. Treat `docs/` as the source of truth for project-specific conventions and follow those documents over this file when they conflict
 5. When an `rfc/` folder exists, treat its Accepted RFCs as binding versioned standards — follow them over `docs/` and this file when they conflict; see `rfc/README.md` for the convention
+6. When a `principles/` folder exists, read its `README.md` and the principles relevant to the task — they are the long-lived values that standards and reviews appeal to; follow `rfc/` and `docs/` over them for concrete rules
 
 **Rule Markers Legend:**
 
@@ -56989,6 +57008,7 @@ Before making any changes:
 3. Read files that appear relevant to the current task
 4. Treat `docs/` as the source of truth for project-specific conventions and follow those documents over this file when they conflict
 5. When an `rfc/` folder exists, treat its Accepted RFCs as binding versioned standards — follow them over `docs/` and this file when they conflict; see `rfc/README.md` for the convention
+6. When a `principles/` folder exists, read its `README.md` and the principles relevant to the task — they are the long-lived values that standards and reviews appeal to; follow `rfc/` and `docs/` over them for concrete rules
 
 **Rule Markers Legend:**
 
@@ -59002,7 +59022,7 @@ The `docs/` guides are numbered chapters in reading order — start at chapter 1
 | 9   | [Committed Repomix pack](./docs/09-repomix-pack.md)                               | the `.repomix/pack.xml` snapshot, its merge-triggered refresh, and the snapshot-first contract      |
 | 10  | [The `pdf:create` skill](./docs/10-pdf-create-skill.md)                           | the portable `@react-pdf/renderer` pipeline that renders a themed PDF, decoupled from the workspace |
 | 11  | [Linear tracker support](./docs/11-linear-tracker.md)                             | how `agents.trackers` opts a project into Linear and other issue trackers behind one JSON contract  |
-| 12  | [Code review repository standards](./docs/12-code-review-repository-standards.md) | how the review enforces a consumer repo's `rfc/` and `docs/` standards with status-based severity   |
+| 12  | [Code review repository standards](./docs/12-code-review-repository-standards.md) | how the review enforces a consumer repo's `rfc/`, `docs/`, and `principles/` with status severity   |
 
 **Standards.**
 
