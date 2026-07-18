@@ -124,6 +124,7 @@ The content is organized as follows:
         1.6.3.md
         1.7.0.md
         1.7.1.md
+        1.7.2.md
       src/
         github/
           githubReview.test.ts
@@ -5359,6 +5360,35 @@ When GitHub returns a temporary error — such as a `502 Bad Gateway` or a `429 
 ### Bug Fixes
 
 * retry transient github errors in action clients ([88529bf](https://github.com/awinogradov/code-assistants/commit/88529bfb976a72852df74767604e3276df180786))
+</file>
+
+<file path=".github/actions/code-review-action/.release_notes/1.7.2.md">
+## [1.7.2](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.7.1...code-review-action@v1.7.2) (2026-07-18)
+
+## Release Notes
+
+## [1.7.2](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.7.1...code-review-action@v1.7.2) (2026-07-18)
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #461 | [#462](https://github.com/awinogradov/code-assistants/pull/462) | @awinogradov |
+
+### Documentation
+
+* add principles folder to repository standards docs ([2b495a4](https://github.com/awinogradov/code-assistants/commit/2b495a4924af76b0885dd244bf6a552eb4c1fa5d))
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #461 | [#462](https://github.com/awinogradov/code-assistants/pull/462) | @awinogradov |
+
+### Documentation
+
+* add principles folder to repository standards docs ([2b495a4](https://github.com/awinogradov/code-assistants/commit/2b495a4924af76b0885dd244bf6a552eb4c1fa5d))
 </file>
 
 <file path=".github/actions/code-review-action/src/github/githubReview.test.ts">
@@ -13250,6 +13280,32 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.7.2](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.7.1...code-review-action@v1.7.2) (2026-07-18)
+
+## Release Notes
+
+## [1.7.2](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.7.1...code-review-action@v1.7.2) (2026-07-18)
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #461 | [#462](https://github.com/awinogradov/code-assistants/pull/462) | @awinogradov |
+
+### Documentation
+
+* add principles folder to repository standards docs ([2b495a4](https://github.com/awinogradov/code-assistants/commit/2b495a4924af76b0885dd244bf6a552eb4c1fa5d))
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #461 | [#462](https://github.com/awinogradov/code-assistants/pull/462) | @awinogradov |
+
+### Documentation
+
+* add principles folder to repository standards docs ([2b495a4](https://github.com/awinogradov/code-assistants/commit/2b495a4924af76b0885dd244bf6a552eb4c1fa5d))
 ## [1.7.1](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.7.0...code-review-action@v1.7.1) (2026-07-13)
 
 ## Release Notes
@@ -14293,7 +14349,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/package.json">
 {
   "name": "@code-assistants/code-review-action",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "description": "Composite GitHub Action that runs AI code review on pull requests via Claude Code.",
   "private": true,
   "type": "module",
@@ -14329,7 +14385,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/README.md">
 # Code review action
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.7.1-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.7.2-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that runs AI code review on pull requests using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Has two modes:
@@ -14513,7 +14569,7 @@ uses: awinogradov/code-assistants/.github/actions/code-review-action@v1
 </file>
 
 <file path=".github/actions/code-review-action/version">
-1.7.1
+1.7.2
 </file>
 
 <file path=".github/actions/code-review-cost-monitor/.release_notes/0.1.0.md">
