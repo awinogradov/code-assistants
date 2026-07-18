@@ -102,9 +102,9 @@ The `pr:review` skill carries the full review rubric (all `CHECK-*` rules) inlin
 
 To run a different repo's skills instead — e.g. a consumer's own `pr:review` — point `review_prompt` / `react_prompt` at them and install the plugin that provides them (see below).
 
-## Repository standards (rfc/ and docs/)
+## Repository standards (rfc/, docs/, and principles/)
 
-When the reviewed repository carries an `rfc/` folder (versioned standards with `status` frontmatter) or a `docs/` folder, the review enforces those standards on the diff — no input or config needed; the folders are the opt-in. Severity follows source stability: an Accepted RFC violation blocks (`CHECK-RFC-001`), a Draft RFC conflict and a `docs/` convention contradiction are non-blocking suggestions (`CHECK-RFC-002`, `CHECK-DOC-005`), and two hygiene checks protect the `rfc/` contract itself (`CHECK-RFC-003/004`).
+When the reviewed repository carries an `rfc/` folder (versioned standards with `status` frontmatter), a `docs/` folder, or a root-level `principles/` folder (long-lived values), the review enforces those standards on the diff — no input or config needed; the folders are the opt-in. Severity follows source stability: an Accepted RFC violation blocks (`CHECK-RFC-001`), while a Draft RFC conflict, a `docs/` convention contradiction, and a conflict with a stated principle are non-blocking suggestions (`CHECK-RFC-002`, `CHECK-DOC-005`, `CHECK-PRINCIPLE-001`), and two hygiene checks protect the `rfc/` contract itself (`CHECK-RFC-003/004`).
 
 See [Code review repository standards](../../../docs/12-code-review-repository-standards.md) for the discovery, selection, and citation contract.
 

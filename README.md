@@ -35,7 +35,7 @@ The `docs/` guides are numbered chapters in reading order — start at chapter 1
 | 9   | [Committed Repomix pack](./docs/09-repomix-pack.md)                               | the `.repomix/pack.xml` snapshot, its merge-triggered refresh, and the snapshot-first contract      |
 | 10  | [The `pdf:create` skill](./docs/10-pdf-create-skill.md)                           | the portable `@react-pdf/renderer` pipeline that renders a themed PDF, decoupled from the workspace |
 | 11  | [Linear tracker support](./docs/11-linear-tracker.md)                             | how `agents.trackers` opts a project into Linear and other issue trackers behind one JSON contract  |
-| 12  | [Code review repository standards](./docs/12-code-review-repository-standards.md) | how the review enforces a consumer repo's `rfc/` and `docs/` standards with status-based severity   |
+| 12  | [Code review repository standards](./docs/12-code-review-repository-standards.md) | how the review enforces a consumer repo's `rfc/`, `docs/`, and `principles/` with status severity   |
 
 **Standards.**
 
