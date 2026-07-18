@@ -335,6 +335,7 @@ Before planning, read the repository's own documentation as the project's source
   - **Selection** — match each entry's title+slug tokens against the files the plan will touch and its visible domains (log calls → a logging standard, HTTP routes → an API standard, new files → a file-structure standard). When in doubt whether a standard applies, load it — capped at 3 standards, ranked by match strength; record dropped candidates in the [Context Map](#phase-1-context-gathering) (no silent truncation).
   - **Reads** — use the Read tool on matched standards (do not rely on the pack; a fallback pack may omit nested markdown); for a standard longer than ~300 lines, read only the matched sections.
   - **Comply** — the plan must not propose any change that violates a clause of an **Accepted** RFC (the repo's ratified, blocking standard); a **Draft** RFC is advisory — follow it where practical and call out any deliberate deviation.
+- **`principles/` (long-lived values)** — if `principles/` exists at the repository root, read its `README.md` index and any principle whose title matches the plan's domain. Principles are the values that `rfc/` and `docs/` appeal to, not normative clauses, so they shape the approach rather than bind it: when the plan deliberately contradicts a stated principle, say so explicitly in the plan instead of leaving the conflict silent. The folder is root-only — values are repo-wide, so unlike `docs/` there is no per-workspace variant.
 
 Feed the project-specific conventions and applicable standards found there into analysis and the plan.
 
@@ -547,7 +548,7 @@ This is the pipeline's single codebase-reading pass: [Phase 0](#phase-0-input-re
    - Key types, interfaces, and Zod schemas in play
    - Test conventions and fixtures that apply
    - In-flight changes from the branch diff (step 1) the snapshot does not reflect
-   - **Applicable standards** — the `rfc/`/`docs/` standards selected in [Repository Documentation](#repository-documentation-mandatory): each as id + status (marked "defaulted" when inferred) with a one-line why the plan must honor it, plus any dropped candidates; "none" when nothing matched or the folders are absent. This is the plan's audit log of what it planned against.
+   - **Applicable standards** — the `rfc/`/`docs/` standards and any `principles/` values selected in [Repository Documentation](#repository-documentation-mandatory): each as id + status (marked "defaulted" when inferred) with a one-line why the plan must honor it, plus any dropped candidates; "none" when nothing matched or the folders are absent. This is the plan's audit log of what it planned against.
 
 After completing all context gathering, call TaskUpdate to set task 2 ("Gather context") to `status: "completed"`.
 
