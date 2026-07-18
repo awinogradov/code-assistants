@@ -150,6 +150,7 @@ Read the project's own conventions before judging the diff — you enforce them,
   - **Inventory** — read the `rfc/README.md` index table into `{id, title, status, path}`; when it is absent, Glob `rfc/[0-9]*.md` and read each file's frontmatter block. Derive a missing id/title from the `NNNN-slug` filename (or the first H1). A missing or unparseable `status` counts as Draft — record it as defaulted. `Superseded` entries are never enforcement sources.
   - **Selection** — match each entry's title+slug tokens against the changed file paths and the diff's visible domains (log calls → a logging standard, HTTP routes → an API standard, new files → a file-structure standard). When in doubt whether a standard applies, load it — capped at 3 standards per review, ranked by match strength; record dropped candidates in the Context Map (no silent truncation).
   - **Reads** — use the Read tool on matched standards (do not rely on the pack; a fallback pack may omit nested markdown); for a standard longer than ~300 lines, read only the matched sections. An RFC the diff itself modifies is enforced at its **base-branch version** — fetch it via `gh api repos/<REPO>/contents/<path>?ref=<baseRefOid>` (from [§1.1](#11-pr-context)) — so a PR cannot legalize its own diff by editing the standard; the hygiene checks still apply to the modified version.
+- **`principles/` (long-lived values)** — if `principles/` exists at the repository root, read its `README.md` index and any principle whose title matches the diff's domain; the [Repository Principles check](#repository-principles) enforces them. The folder is root-only, and its entries carry no `status` frontmatter — a principle is prose, never a blocking source.
 - **context7 / Ref / Exa** — MANDATORY for any unfamiliar library or API the diff touches; never guess an API's behavior.
 - **Perplexity** — web search for general or architectural questions.
 
@@ -162,7 +163,7 @@ Read the project's own conventions before judging the diff — you enforce them,
 - **Related work** — TODOs and `#<issue>` references in the codebase from `search-codebase-todos` ([§1.2](#12-load-context-via-sub-agents)): flag whether the diff resolves or conflicts with a related TODO, leaves a referenced issue half-addressed, or duplicates work tracked elsewhere; "none" when no issue is linked or none found.
 - **Prior-review findings** — unresolved findings from prior review bodies ([§1.1](#11-pr-context)) and inline threads from `fetch-pr-reviews` ([§1.2](#12-load-context-via-sub-agents)); empty on first review.
 - **Project conventions** — the CLAUDE.md / README / `docs/*` points that bear on the diff ([§1.4](#14-project-context-read-before-reviewing)).
-- **Applicable standards** — the standards selected in [§1.4](#14-project-context-read-before-reviewing): each as id + status (marked "defaulted" when the status was inferred) with a one-line why, plus any dropped candidates; "none" when nothing matched or the folders are absent. This map is the audit log of what was loaded and why.
+- **Applicable standards** — the standards and any `principles/` values selected in [§1.4](#14-project-context-read-before-reviewing): each as id + status (marked "defaulted" when the status was inferred) with a one-line why, plus any dropped candidates; "none" when nothing matched or the folders are absent. This map is the audit log of what was loaded and why.
 - **Codebase pointers** — only the targeted pack-`grep` hits pulled for cross-file checks; "none" when the diff is self-contained.
 - **Stack** — `agents.rules` value (drives [§2](#phase-2-review-the-diff) thresholds), or `unknown`.
 
@@ -780,6 +781,18 @@ A new or renamed RFC is missing from the `rfc/README.md` index, its filename doe
 
 - Example: adding an `rfc/0008-*.md` standard without an index row; an RFC whose frontmatter lacks `status`.
 - Skip: repositories with no `rfc/README.md` index at all — the Glob fallback is the index there; flag only frontmatter problems.
+
+#### Repository Principles
+
+Applies to repositories carrying a `principles/` folder ([§1.4](#14-project-context-read-before-reviewing) builds the inventory). Skip when the [§1.5](#15-context-map) Applicable standards map lists no principle. Principles are prose values rather than normative clauses, so this family never blocks — the same reasoning that caps CHECK-DOC-005 at suggestion; a value that must block belongs in an Accepted RFC.
+
+<a id="CHECK-PRINCIPLE-001"></a>
+**CHECK-PRINCIPLE-001: Diff conflicts with a stated repository principle** — Severity: suggestion
+
+A change works against a value stated in `principles/` — the repository's long-lived design values, which its standards and reviews appeal to. Quote the principle verbatim (≤2 lines) in the finding detail and cite it as a `<pr-blob-url>` link (defined in [reviewComment Format](#reviewcomment-format-30-lines-max)), matching CHECK-RFC-001/002; a finding that only paraphrases the value is not reportable.
+
+- Example: a stated simplicity principle argues against configuration knobs and the diff adds an unrequested feature flag.
+- Skip: an Accepted RFC or a `docs/*` convention already covers the same ground — report that check once and cite the principle in its detail; the diff itself amends the principle.
 
 #### Service Standards
 
