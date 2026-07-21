@@ -9,8 +9,6 @@ on:
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened]
-  push:
-    branches: [main]
 
 # Per-PR concurrency: concurrent PRs never cancel each other's label sync, and a
 # newer sync for the same PR supersedes the older run. The push-prune runs in its
