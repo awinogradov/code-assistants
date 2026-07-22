@@ -12741,7 +12741,7 @@ runs:
 
         # Skip draft PRs for issue_comment events (draft status not in payload)
         if [[ "$EVENT_NAME" == "issue_comment" && "$EVENT_IS_PR_COMMENT" == "true" ]]; then
-          if [[ "$(gh pr view "$EVENT_ISSUE_NUMBER" --json isDraft --jq '.isDraft' 2>/dev/null)" == "true" ]]; then
+          if [[ "$(gh pr view "$EVENT_ISSUE_NUMBER" -R "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft' 2>/dev/null)" == "true" ]]; then
             echo "Skipping: draft PR"
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -12940,10 +12940,13 @@ runs:
         # is CHANGES_REQUESTED. The bot is the sole approver and the author cannot
         # self-approve, so reviewDecision is a faithful, pagination-free proxy for the
         # bot's own verdict. classifyReaction uses it to arm a verdict re-evaluation
-        # when the author says a blocker is addressed. A failed query degrades to
-        # "not blocking" (today's behaviour); only a genuine gh failure warns, so a
-        # null decision (no reviews yet) stays quiet.
-        if REACT_REVIEW_DECISION=$(gh pr view "$REACT_PR_NUMBER" --json reviewDecision --jq '.reviewDecision // ""' 2>/dev/null); then
+        # when the author says a blocker is addressed. This step runs before the
+        # repo checkout, so pass -R explicitly — gh otherwise resolves the repo from
+        # the local git remote, which does not exist yet, and the query fails with
+        # "not a git repository", permanently disarming the re-verdict. A genuine
+        # query failure still degrades to "not blocking" and warns; a null decision
+        # (no reviews yet) stays quiet.
+        if REACT_REVIEW_DECISION=$(gh pr view "$REACT_PR_NUMBER" -R "$GITHUB_REPOSITORY" --json reviewDecision --jq '.reviewDecision // ""' 2>/dev/null); then
           :
         else
           REACT_REVIEW_DECISION=""
@@ -12977,7 +12980,7 @@ runs:
       env:
         GH_TOKEN: ${{ inputs.bot_token }}
       run: |
-        echo "sha=$(gh pr view ${{ steps.ctx.outputs.pr_number }} --json headRefOid --jq '.headRefOid')" >> "$GITHUB_OUTPUT"
+        echo "sha=$(gh pr view ${{ steps.ctx.outputs.pr_number }} -R ${{ github.repository }} --json headRefOid --jq '.headRefOid')" >> "$GITHUB_OUTPUT"
 
     - name: Checkout repository
       if: steps.ctx.outputs.skip != 'true'
