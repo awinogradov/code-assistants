@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.12.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.11.0...autopilot@v1.12.0) (2026-07-22)
+
+## Release Notes
+
+Linear issues created by `linear:create` now preserve your original prompt in a collapsed section at the top, so the full context behind every issue is always one click away.
+
+## ✨ What's New
+
+### Original Prompt Preserved on Linear Issues
+
+When `linear:create` generates a Linear issue, it now prepends your original prompt in a collapsible section at the top of the issue body. Previously, the raw prompt you typed was lost once the issue was written — now it's tucked away but always accessible. This is especially useful when reviewing issues later or handing them off, since anyone can expand the section to see exactly what was asked and why the issue was created.
+
+<details><summary>Related issues</summary>
+
+- [#466: Prepend the original user prompt in a collapsible section on Linear issues](https://github.com/awinogradov/code-assistants/issues/466)
+- [#467: Keep the author's original prompt in a collapsed section on Linear issues](https://github.com/awinogradov/code-assistants/pull/467)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #466 | [#467](https://github.com/awinogradov/code-assistants/pull/467) | @awinogradov |
+
+### Features
+
+* **linear-create:** prepend original prompt collapsible ([2e9d752](https://github.com/awinogradov/code-assistants/commit/2e9d7527fcbcbcfb9b368db1008ee2fdc9922576))
 ## [1.11.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.10.0...autopilot@v1.11.0) (2026-07-18)
 
 ## Release Notes
