@@ -3,6 +3,11 @@
 # Edits made downstream are overwritten on the next run.
 # To change it, open a pull request against the source file above.
 #
+# Repository requirements:
+#   - The repo's PR quality-gate workflow MUST be named `PR` (`name: PR`). Review runs
+#     event-driven off its completion via `on: workflow_run`, and GitHub does not allow
+#     an expression in `on.workflow_run.workflows`, so the name is hardcoded below.
+#
 # Repository variables consumed by this workflow:
 #   - `BOT_USERNAME` (required): GitHub login of the AI reviewer bot. Without this the
 #     `ai-review` job is skipped entirely.
@@ -14,8 +19,15 @@
 name: AI Code Review
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, edited]
+  # Review runs AFTER the PR gate completes, not on every push — the review no longer
+  # polls sibling checks (the old `pull_request` trigger + a 600s preflight budget that
+  # raced the gate's wall clock and flapped red on timeout). `workflows: [PR]` keys off
+  # the repo's quality-gate workflow; the job `if:` requires it to have concluded
+  # `success` for a same-repo `pull_request` head, so review runs only on a green PR.
+  workflow_run:
+    workflows: [PR]
+    types: [completed]
+  # React flows are NOT gated on CI and keep their immediate triggers.
   issue_comment:
     types: [created]
   pull_request_review_comment:
@@ -23,27 +35,38 @@ on:
 
 concurrency:
   # comment.id gives each comment its own group so bursty replies aren't cancelled;
-  # it's empty for pull_request events, which stay grouped per-PR (event_name + number).
-  group: code-review-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event.comment.id }}
-  # Cancel superseded runs so only the latest push/comment is reviewed. The action
-  # no longer edits the PR body, so no bot self-edit can abort an in-flight review.
+  # it's empty for the review event, which stays grouped per-PR (event_name + number).
+  group: code-review-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number || github.event.issue.number }}-${{ github.event.comment.id }}
+  # Cancel superseded runs so only the latest gate-completion/comment is reviewed. The
+  # action no longer edits the PR body, so no bot self-edit can abort an in-flight review.
   cancel-in-progress: true
 
 jobs:
   ai-review:
-    # The bot's own events (its review and inline comments) are skipped here so they
-    # don't spawn a no-op react run — the in-action guard would skip them only after a
-    # runner spins up, so filtering at the job `if:` is cheaper.
-    #
-    # The last clause re-runs review when a user edits a PR title/body, so a
-    # description fix clears a stale CHANGES_REQUESTED verdict without the prior
-    # close/reopen workaround (introduced de-facto by #233's alignment checks).
-    # Base retargets (changes.base) are skipped — a later push re-covers them.
+    # Three arms, one per event:
+    #   - workflow_run (review): the gate finished. Run only when it ran for a
+    #     `pull_request` and concluded `success`, and the head branch lives in this
+    #     repo — `actions/checkout` refuses a fork head under `workflow_run`, so a fork
+    #     PR would fail rather than review; skip it cleanly instead. The sender is NOT
+    #     checked here on purpose: an unrelated bot push (e.g. a license-regen chore
+    #     landing on top of the PR) must not suppress the review. The bot reviewing its
+    #     OWN authored PR is still skipped, by the action's PR-author guard.
+    #   - issue_comment / pull_request_review_comment (react): the bot's own comment and
+    #     review events are skipped here (sender == BOT_USERNAME) so they don't spawn a
+    #     no-op react run — cheaper than letting a runner spin up first.
     if: >-
-      (github.event_name != 'issue_comment' || github.event.issue.pull_request)
-      && vars.BOT_USERNAME != ''
-      && github.event.sender.login != vars.BOT_USERNAME
-      && (github.event.action != 'edited' || github.event.changes.title || github.event.changes.body)
+      vars.BOT_USERNAME != ''
+      && (
+        (github.event_name == 'workflow_run'
+          && github.event.workflow_run.event == 'pull_request'
+          && github.event.workflow_run.conclusion == 'success'
+          && github.event.workflow_run.head_repository.full_name == github.event.repository.full_name)
+        || (github.event_name == 'issue_comment'
+          && github.event.issue.pull_request
+          && github.event.sender.login != vars.BOT_USERNAME)
+        || (github.event_name == 'pull_request_review_comment'
+          && github.event.sender.login != vars.BOT_USERNAME)
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -55,3 +78,7 @@ jobs:
           bot_token: ${{ secrets.BOT_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_CODE_REVIEW }}
           release_pr_authors: ${{ vars.RELEASE_PR_AUTHORS }}
+          # The gate already concluded `success` (job `if:`), so there is nothing left
+          # to wait for — skip the preflight poll on the workflow_run path. (React
+          # events never use preflight; this expression is simply false for them too.)
+          preflight_checks: ${{ github.event_name != 'workflow_run' }}

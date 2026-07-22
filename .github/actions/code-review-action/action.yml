@@ -177,8 +177,38 @@ runs:
         EVENT_REVIEW_AUTHOR: ${{ github.event.review.user.login }}
         REVIEW_BODY_RAW: ${{ github.event.review.body }}
         EVENT_SENDER: ${{ github.event.sender.login }}
+        # workflow_run (review): the PR gate finished. The payload carries the head SHA
+        # and the associated PR array (empty for fork PRs — resolved via gh below).
+        EVENT_WR_PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+        EVENT_WR_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         GH_TOKEN: ${{ inputs.bot_token }}
       run: |
+        # Normalize a workflow_run (PR gate completed) into the pull_request review
+        # path: resolve the PR's fields once via gh, then rewrite EVENT_NAME so every
+        # downstream branch (draft-skip, release-branch, bot-author, dependabot, the
+        # review-mode detection) works unchanged. github.event.pull_request is absent
+        # under workflow_run, so these must come from gh, not the payload.
+        if [[ "$EVENT_NAME" == "workflow_run" ]]; then
+          WR_PR="$EVENT_WR_PR_NUMBER"
+          if [[ -z "$WR_PR" ]]; then
+            # Fork PRs omit pull_requests[]; resolve from the head SHA.
+            WR_PR=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${EVENT_WR_HEAD_SHA}/pulls" \
+              --jq '.[0].number // ""' 2>/dev/null || echo "")
+          fi
+          if [[ -z "$WR_PR" ]]; then
+            echo "Skipping: workflow_run has no associated PR"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          WR_JSON=$(gh pr view "$WR_PR" --json isDraft,headRefName,headRefOid,author 2>/dev/null || echo '{}')
+          EVENT_PR_NUMBER="$WR_PR"
+          EVENT_PR_HEAD_SHA="${EVENT_WR_HEAD_SHA:-$(jq -r '.headRefOid // ""' <<<"$WR_JSON")}"
+          EVENT_PR_DRAFT=$(jq -r '.isDraft // false' <<<"$WR_JSON")
+          EVENT_PR_HEAD_REF=$(jq -r '.headRefName // ""' <<<"$WR_JSON")
+          EVENT_PR_AUTHOR=$(jq -r '.author.login // ""' <<<"$WR_JSON")
+          EVENT_NAME="pull_request"
+        fi
+
         # Skip draft PRs (covers pull_request and pull_request_review_comment events)
         if [[ "$EVENT_PR_DRAFT" == "true" ]]; then
           echo "Skipping: draft PR"
