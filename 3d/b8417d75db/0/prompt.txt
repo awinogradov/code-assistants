@@ -1,0 +1,15 @@
+/autopilot:pr-monitor
+
+---
+
+/goal merge when no issues found and run release create action
+
+---
+
+<task-notification>
+<task-id>bmqarp7nd</task-id>
+<tool-use-id>toolu_0162NNcyAHBfMtqNxrRLCH1r</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-escarpment-starlight/686869e1-e7e8-41b6-b41d-88cd1d285b76/tasks/bmqarp7nd.output</output-file>
+<status>completed</status>
+<summary>Background command "Poll PR 469 until review decision and checks settle" completed (exit code 0)</summary>
+</task-notification>
