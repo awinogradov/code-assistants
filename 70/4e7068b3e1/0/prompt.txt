@@ -1,0 +1,5 @@
+/autopilot:plan
+
+---
+
+/autopilot:plan restruct rules/* to use plan skill in the any planning context --issue
