@@ -402,6 +402,7 @@ claude-plugins/
       1.1.0.md
       1.10.0.md
       1.11.0.md
+      1.12.0.md
       1.2.0.md
       1.3.0.md
       1.3.1.md
@@ -37425,7 +37426,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -37968,6 +37969,37 @@ The commit skill was previously allowing messages with camelCase subjects and ot
 ### Features
 
 * **skills:** support principles folder across rules and skills ([7f27044](https://github.com/awinogradov/code-assistants/commit/7f27044ba823d83c30409170443631a7a0ee56f2))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/1.12.0.md">
+## [1.12.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.11.0...autopilot@v1.12.0) (2026-07-22)
+
+## Release Notes
+
+Linear issues created by `linear:create` now preserve your original prompt in a collapsed section at the top, so the full context behind every issue is always one click away.
+
+## ✨ What's New
+
+### Original Prompt Preserved on Linear Issues
+
+When `linear:create` generates a Linear issue, it now prepends your original prompt in a collapsible section at the top of the issue body. Previously, the raw prompt you typed was lost once the issue was written — now it's tucked away but always accessible. This is especially useful when reviewing issues later or handing them off, since anyone can expand the section to see exactly what was asked and why the issue was created.
+
+<details><summary>Related issues</summary>
+
+- [#466: Prepend the original user prompt in a collapsible section on Linear issues](https://github.com/awinogradov/code-assistants/issues/466)
+- [#467: Keep the author's original prompt in a collapsed section on Linear issues](https://github.com/awinogradov/code-assistants/pull/467)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #466 | [#467](https://github.com/awinogradov/code-assistants/pull/467) | @awinogradov |
+
+### Features
+
+* **linear-create:** prepend original prompt collapsible ([2e9d752](https://github.com/awinogradov/code-assistants/commit/2e9d7527fcbcbcfb9b368db1008ee2fdc9922576))
 </file>
 
 <file path="claude-plugins/autopilot/.release_notes/1.2.0.md">
@@ -50990,6 +51022,34 @@ Write the most helpful, readable output you can: plain, direct prose; every refe
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.12.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.11.0...autopilot@v1.12.0) (2026-07-22)
+
+## Release Notes
+
+Linear issues created by `linear:create` now preserve your original prompt in a collapsed section at the top, so the full context behind every issue is always one click away.
+
+## ✨ What's New
+
+### Original Prompt Preserved on Linear Issues
+
+When `linear:create` generates a Linear issue, it now prepends your original prompt in a collapsible section at the top of the issue body. Previously, the raw prompt you typed was lost once the issue was written — now it's tucked away but always accessible. This is especially useful when reviewing issues later or handing them off, since anyone can expand the section to see exactly what was asked and why the issue was created.
+
+<details><summary>Related issues</summary>
+
+- [#466: Prepend the original user prompt in a collapsible section on Linear issues](https://github.com/awinogradov/code-assistants/issues/466)
+- [#467: Keep the author's original prompt in a collapsed section on Linear issues](https://github.com/awinogradov/code-assistants/pull/467)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #466 | [#467](https://github.com/awinogradov/code-assistants/pull/467) | @awinogradov |
+
+### Features
+
+* **linear-create:** prepend original prompt collapsible ([2e9d752](https://github.com/awinogradov/code-assistants/commit/2e9d7527fcbcbcfb9b368db1008ee2fdc9922576))
 ## [1.11.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.10.0...autopilot@v1.11.0) (2026-07-18)
 
 ## Release Notes
@@ -52148,14 +52208,14 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
   "release": {
     "type": "claude-plugin"
   },
-  "version": "1.11.0"
+  "version": "1.12.0"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.11.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.12.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -52569,7 +52629,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-1.11.0
+1.12.0
 </file>
 
 <file path="docs/01-workspace-structure.md">
