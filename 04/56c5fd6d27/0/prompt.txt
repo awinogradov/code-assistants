@@ -1,0 +1,5 @@
+/autopilot:plan need to save original user prompt under the cut in the beggining of result of linear:create skill --issue
+
+---
+
+/autopilot:plan need to save original user prompt under the cut in the beggining of result of linear:create skill --issue

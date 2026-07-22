@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "0456c5fd6d27",
+  "strategy": "manual-commit",
+  "branch": "issue-466-linear-prompt-collapsible",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "claude-plugins/autopilot/skills/linear:create/SKILL.md",
+    "docs/11-linear-tracker.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/04/56c5fd6d27/0/metadata.json",
+      "transcript": "/04/56c5fd6d27/0/full.jsonl",
+      "compact_transcript": "/04/56c5fd6d27/0/transcript.jsonl",
+      "content_hash": "/04/56c5fd6d27/0/content_hash.txt",
+      "prompt": "/04/56c5fd6d27/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 67,
+    "cache_creation_tokens": 180261,
+    "cache_read_tokens": 5042149,
+    "output_tokens": 42861,
+    "api_call_count": 35
+  }
+}
