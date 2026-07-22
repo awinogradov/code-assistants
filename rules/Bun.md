@@ -44,7 +44,7 @@ Before making any changes:
 - 👤 When deleting unused code, only remove orphans your changes created; mention pre-existing dead code instead of deleting it
 - 👤 Be consistent with existing code style
 - 👤 Do not remove existing code/comments unless necessary
-- 👤 Write plan before changes, not report after
+- 👤 Write plan before changes, not report after — draft it via `Skill(autopilot:plan)` (if the autopilot plugin is not installed, follow CONTRIBUTING.md)
 
 ## 2. Architecture
 
@@ -237,6 +237,7 @@ example/       # multiple modules: a directory, no index.ts barrel
 - 👤 No raw `git checkout -b` / `git branch` — use `Skill(autopilot:branch:create)`
 - 👤 No raw `gh pr create` — use `Skill(autopilot:pr:create)`
 - 👤 No raw `gh issue create` — use `Skill(autopilot:issue:create)`
+- 👤 No ad-hoc planning — use `Skill(autopilot:plan)`
 
 ## 15. Git Workflow
 
@@ -258,6 +259,7 @@ example/       # multiple modules: a directory, no index.ts barrel
 - 👤 **MANDATORY**: Create branches only via `Skill(autopilot:branch:create)` — no raw `git checkout -b`, `git branch`, or `git switch -c`. If the autopilot plugin is not installed, follow CONTRIBUTING.md
 - 👤 **MANDATORY**: Create PRs only via `Skill(autopilot:pr:create)` — no raw `gh pr create` or web-UI PR creation. If the autopilot plugin is not installed, follow CONTRIBUTING.md
 - 👤 **MANDATORY**: Create issues only via `Skill(autopilot:issue:create)` — no raw `gh issue create` or web-UI issue creation. If the autopilot plugin is not installed, follow CONTRIBUTING.md
+- 👤 **MANDATORY**: Plan only via `Skill(autopilot:plan)` — no ad-hoc implementation planning. If the autopilot plugin is not installed, follow CONTRIBUTING.md
 
 ### 16.2 MCP Servers
 
