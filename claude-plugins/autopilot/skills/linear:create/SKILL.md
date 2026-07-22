@@ -52,7 +52,7 @@ This workflow is not complete until [Phase 7](#phase-7-create-issue) calls the L
 
 ## Phase 0: Resolve Team and Hint
 
-1. Parse `$ARGUMENTS` as an optional title hint; if empty, prompt once via AskUserQuestion.
+1. Parse `$ARGUMENTS` as an optional title hint; if empty, prompt once via AskUserQuestion. Retain the resolved hint **verbatim** (the raw `$ARGUMENTS`, or the user's exact AskUserQuestion answer — unmodified, un-paraphrased) as the original prompt; [Phase 2](#phase-2-generate-title-and-body) emits it as a collapsed preamble at the top of the body.
 2. Read `package.json` and collect **all** `linear` entries from `agents.trackers`, then resolve a single target `team`:
    - **None** ⇒ stop: `This project is not Linear-tracked. Use /autopilot:issue-create for a GitHub issue.`
    - **Exactly one** ⇒ use its `team` (and `label`) — no prompt.
@@ -80,6 +80,20 @@ Mirror `issue:create` so the body reflects real code, not hallucinated structure
 5. `## Solution` — the high-level approach (how), not a restatement of the deliverable. Invoke `Skill(autopilot:ascii-schemas)` for a diagram whenever one would aid understanding — a flow, sequence, architecture, data schema, UI layout, comparison, or logical relationship; embed it verbatim in a fenced ` ```text ` block.
 
 After drafting, run the linkability pass from [issue:create Phase 5](../issue:create/SKILL.md#phase-5-generate-body) — every prose mention of a file or path that exists in the repo becomes an absolute `<repo-blob-url>` link, and every cited external source whose URL is in context becomes an inline `[title](url)` link; never invent a URL for an unlinkable mention.
+
+**Original-prompt preamble (prepend last).** After the linkability pass, prepend the user's original prompt — the title hint resolved verbatim in [Phase 0](#phase-0-resolve-team-and-hint) — to the top of the body as a collapsed section, so the ticket records exactly what was asked, not only its structured interpretation. Use Linear's GraphQL collapsible fence (`+++ Section title` to open, `+++` to close), documented in the [Linear API docs](https://linear.app/developers/graphql); its content renders initially hidden. Do NOT use `<details>` HTML — Linear does not render it. Emit the block above `## Context`:
+
+```text
++++ Original prompt
+
+<the Phase 0 hint, verbatim>
+
++++
+```
+
+then a blank line, then the five-section body. This preamble is a permitted metadata block **above** `## Context`; it is not one of the five sections, so it does not change the mandatory section order. Prepend it **after** the linkability pass and treat the fence content as opaque — like a code specimen, the user's text inside it is never link-transformed or reworded.
+
+Because the hint is reproduced verbatim (unlike the five sections, which paraphrase the input), any secret or PII pasted into it lands unfiltered in the ticket. Do not put credentials, tokens, or personal data in the hint; the [Phase 6](#phase-6-verify-with-user) preview is the checkpoint to catch and remove any that slipped in before the ticket is created.
 
 ## Phase 3: Select Status
 
@@ -116,17 +130,17 @@ Present the returned candidates via AskUserQuestion (single-select), preserving 
 
 ## Phase 6: Verify with User
 
-Present the full issue via AskUserQuestion with a `preview` carrying the title, the five-section body, and a metadata line `Team: <team> · Status: <status> · Labels: <labels> · Assignee: <assignee or unassigned>`. Options: `Create issue` / `Edit content` / `Cancel`, all sharing the same preview. Only proceed to [Phase 7](#phase-7-create-issue) after `Create issue`.
+Present the full issue via AskUserQuestion with a `preview` carrying the title, the collapsible original-prompt preamble followed by the five-section body, and a metadata line `Team: <team> · Status: <status> · Labels: <labels> · Assignee: <assignee or unassigned>`. Options: `Create issue` / `Edit content` / `Cancel`, all sharing the same preview. Only proceed to [Phase 7](#phase-7-create-issue) after `Create issue`.
 
 ## Phase 7: Create Issue
 
-This phase is mandatory. Create the ticket:
+This phase is mandatory. Create the ticket. The `description` is the full body assembled in [Phase 2](#phase-2-generate-title-and-body) — the collapsible original-prompt preamble followed by the five-section body — so the created ticket carries the preamble, not only its [Phase 6](#phase-6-verify-with-user) preview:
 
 ```
 Linear MCP save_issue  with {
   "title": "<title>",
   "team": "<team>",
-  "description": "<five-section body>",
+  "description": "<original-prompt preamble + five-section body>",
   "state": "<selected status>",
   "labels": ["<selected labels>"],
   "assignee": "<selected assignee, omit when unassigned>"
