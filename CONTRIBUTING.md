@@ -16,6 +16,7 @@ Thank you for your interest in contributing! This guide will help you get starte
 - [Code of Conduct](#code-of-conduct)
 - [Quick Start](#quick-start)
 - [How to Contribute](#how-to-contribute)
+- [Planning](#planning)
 - [Git Workflow](#git-workflow)
 - [PR Guidelines](#pr-guidelines)
 - [Code Standards](#code-standards)
@@ -59,6 +60,13 @@ Use [README.md](./README.md) for development setup instructions.
 2. Make your changes following [code standards](#code-standards).
 3. Write tests for new functionality.
 4. Submit a PR following the [PR guidelines](#pr-guidelines).
+
+## Planning
+
+Before writing code, plan the change: gather context, define verifiable success criteria, and outline the implementation steps so the approach is reviewable before any code exists.
+
+> [!TIP]
+> Use the `/autopilot:plan` slash command to research, draft, and validate an implementation plan before writing code.
 
 ## Git Workflow
 
