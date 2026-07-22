@@ -1,0 +1,15 @@
+/autopilot:pr-monitor
+
+---
+
+/goal merge when green and no issues found
+
+---
+
+<task-notification>
+<task-id>bazh96rr2</task-id>
+<tool-use-id>toolu_01XaQCqCBqFLwBy3puTTUXrS</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-butte-tin/1061db32-1e7c-4feb-b2cc-965da9094b07/tasks/bazh96rr2.output</output-file>
+<status>completed</status>
+<summary>Background command "Background poll loop for PR #467 review/CI status" completed (exit code 0)</summary>
+</task-notification>
