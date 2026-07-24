@@ -1,8 +1,8 @@
 /**
  * Guards that the output-generating autopilot skills explicitly instruct the model to
  * apply the inlined reference-formatting rules (RFC-0001): pr:create and pr:update (PR
- * bodies, issue #279) plus plan, plan-bun, plan-nodejs-react, run, and issue:create
- * (plan files and issue bodies, issue #334), and pr:review (review verdict bodies —
+ * bodies, issue #279) plus plan, gather-context, run, and issue:create
+ * (plan files, Context Maps, and issue bodies, issue #334), and pr:review (review verdict bodies —
  * wefortis/fortune-os PR 93 review 4619732611 cited files and standards as backticked
  * dead text). Each already inlines the canonical block —
  * the referenceFormattingSync test guards that copy stays byte-identical — but inlining
@@ -31,7 +31,7 @@ const startSentinel = "<!-- ref-format:start -->";
 // generation phase. Reword it only alongside this test.
 const applyInstruction = "reference-formatting rules inlined at the end";
 
-const skills = ["pr:create", "pr:update", "plan", "plan-bun", "plan-nodejs-react", "run", "issue:create", "linear:create", "pr:review"];
+const skills = ["pr:create", "pr:update", "plan", "gather-context", "run", "issue:create", "linear:create", "pr:review"];
 
 describe("output reference-formatting wiring", () => {
   test.each(skills)("%s instructs the body generator to apply RFC-0001", async (skill) => {
