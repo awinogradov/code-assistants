@@ -1,0 +1,46 @@
+/autopilot:plan #477
+
+---
+
+go ahaed and monitor
+
+---
+
+<task-notification>
+<task-id>bs4lgmj9x</task-id>
+<summary>Monitor event: "PR 478 CI checks + review verdict"</summary>
+<event>Auto label: pass
+GitGuardian Security Checks: pass</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bs4lgmj9x</task-id>
+<summary>Monitor event: "PR 478 CI checks + review verdict"</summary>
+<event>Analyze (actions): pass
+CodeQL: pass
+Validate PR: pass</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bs4lgmj9x</task-id>
+<summary>Monitor event: "PR 478 CI checks + review verdict"</summary>
+<event>Analyze (javascript-typescript): pass</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bs4lgmj9x</task-id>
+<summary>Monitor event: "PR 478 CI checks + review verdict"</summary>
+<event>ai-review: pass
+automerge: skipping
+ALL CHECKS SETTLED</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>

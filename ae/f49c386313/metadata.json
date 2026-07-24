@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "aef49c386313",
+  "strategy": "manual-commit",
+  "branch": "issue-477-drop-derivable-confirmations",
+  "checkpoints_count": 5,
+  "files_touched": [
+    "claude-plugins/autopilot/skills/branch:create/SKILL.md",
+    "claude-plugins/autopilot/skills/commits:create/SKILL.md",
+    "claude-plugins/autopilot/skills/commits:restructure/SKILL.md",
+    "claude-plugins/autopilot/skills/plan/references/branch-blocks.md",
+    "claude-plugins/autopilot/skills/run/SKILL.md",
+    "docs/05-plan-run-skills.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/ae/f49c386313/0/metadata.json",
+      "transcript": "/ae/f49c386313/0/full.jsonl",
+      "compact_transcript": "/ae/f49c386313/0/transcript.jsonl",
+      "content_hash": "/ae/f49c386313/0/content_hash.txt",
+      "prompt": "/ae/f49c386313/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 615,
+    "cache_creation_tokens": 333274,
+    "cache_read_tokens": 30807762,
+    "output_tokens": 112752,
+    "api_call_count": 130
+  }
+}
