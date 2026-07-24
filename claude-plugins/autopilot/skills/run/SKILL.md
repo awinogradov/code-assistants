@@ -109,7 +109,7 @@ Embed both blocks into the plan file, then implement it. **Do NOT pause for plan
 
 ### Pre-Implementation (branch creation)
 
-Pick the body by input type from [branch-blocks.md](../plan/references/branch-blocks.md), using the **run variant** noted for each — it appends `--autopilot` so branch-create skips its confirmation. That file also defines when the block is emitted at all.
+Pick the body by input type from [branch-blocks.md](../plan/references/branch-blocks.md), using the **run variant** where one is noted — it appends `--autopilot` so branch-create skips its confirmation. Issue and Linear inputs have no run variant: their names are derived from the tracked issue and are never confirmed, so both callers emit the same body. That file also defines when the block is emitted at all.
 
 ### Post-Implementation (REPLACES the pipeline's default)
 
@@ -122,7 +122,7 @@ After all implementation steps and verification are complete, execute the follow
 
 ### Step 1: Auto-Commit
 
-Set task 6 ("Commit changes") to `in_progress`. Invoke `Skill(autopilot:commits-create)` with `--autopilot`. The flag suppresses the commit-strategy prompt, the commit-message confirmation, and the PR-update offer. Follow the skill's full workflow — do NOT run `git commit` directly.
+Set task 6 ("Commit changes") to `in_progress`. Invoke `Skill(autopilot:commits-create)` with `--autopilot`. The flag suppresses the commit-strategy prompt and the skill's own PR update (this chain creates or updates the PR itself in Step 3), and turns a validation failure into a loud abort instead of a prompt. Follow the skill's full workflow — do NOT run `git commit` directly.
 
 If the commit fails due to a pre-commit hook, check `git status` for modified files (the hook may have auto-formatted), re-stage with `git add -u`, and retry once. If it still fails, report the error and stop.
 

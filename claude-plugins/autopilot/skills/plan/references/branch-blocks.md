@@ -2,7 +2,7 @@
 
 Reference for [`plan/SKILL.md`](../SKILL.md) and [`run/SKILL.md`](../../run/SKILL.md).
 
-The plan file's `## Pre-Implementation` section is what creates the branch after approval. Pick the body by input type, then by caller: `plan` prompts for confirmation, `run` passes `--autopilot` to suppress it (invoking `/autopilot:run` is itself the authorization).
+The plan file's `## Pre-Implementation` section is what creates the branch after approval. Pick the body by input type. Whether the user is asked to confirm the name depends on that input type, not on the caller: an issue-derived name is created directly, while a special-prefix name — whose prefix and slug come from a free-form description — is confirmed. Only the blocks that still carry a confirmation have a `run` variant, which passes `--autopilot` to suppress it (invoking `/autopilot:run` is itself the authorization).
 
 Each fenced block below is the literal section body to insert into the plan file.
 
@@ -27,10 +27,10 @@ Bare number, `#`-prefixed number, or GitHub issue URL.
 ```
 ## Pre-Implementation
 
-Invoke `Skill(autopilot:branch-create)` with the resolved issue number (e.g., `42` for `#42`). The branch-create skill fetches the issue, generates an `issue-<number>-<slug>` branch name, and prompts the user to confirm before creation. Do NOT present a Hotfix/Trivial/Maintenance prefix prompt — issue inputs always use the `issue-<number>-<slug>` convention so the PR can link back via `Closes #<number>`.
+Invoke `Skill(autopilot:branch-create)` with the resolved issue number (e.g., `42` for `#42`). The branch-create skill fetches the issue, generates an `issue-<number>-<slug>` branch name, and creates the branch directly — the name is derived from an issue the user already chose, so it is not confirmed. Do NOT present a Hotfix/Trivial/Maintenance prefix prompt — issue inputs always use the `issue-<number>-<slug>` convention so the PR can link back via `Closes #<number>`.
 ```
 
-**run variant:** pass `<issue-number> --autopilot`. The flag suppresses branch-create's Phase 5 confirmation so the branch is created directly. Conflict resolution still surfaces if the branch already exists.
+**No run variant** — `plan` and `run` emit the same body. Conflict resolution still surfaces if the branch already exists.
 
 ## Linear issue
 
@@ -39,10 +39,10 @@ A Linear id such as `ENG-123`, or a Linear issue URL.
 ```
 ## Pre-Implementation
 
-Invoke `Skill(autopilot:branch-create)` with arguments `<LINEAR-ID> --start` (e.g., `ENG-123 --start`). The branch-create skill fetches the ticket, generates a `<team>-<number>-<slug>` branch name, moves the ticket to "In Progress" via `--start` (best-effort — it never blocks branch creation), and prompts the user to confirm before creation. Do NOT present a Hotfix/Trivial/Maintenance prefix prompt — Linear inputs always use the `<team>-<number>-<slug>` convention so the PR can link back via `Closes <LINEAR-ID>`.
+Invoke `Skill(autopilot:branch-create)` with arguments `<LINEAR-ID> --start` (e.g., `ENG-123 --start`). The branch-create skill fetches the ticket, generates a `<team>-<number>-<slug>` branch name, moves the ticket to "In Progress" via `--start` (best-effort — it never blocks branch creation), and creates the branch directly — the name is derived from a ticket the user already chose, so it is not confirmed. Do NOT present a Hotfix/Trivial/Maintenance prefix prompt — Linear inputs always use the `<team>-<number>-<slug>` convention so the PR can link back via `Closes <LINEAR-ID>`.
 ```
 
-**run variant:** pass `<LINEAR-ID> --start --autopilot`. `--start` mirrors how GitHub issues are auto-assigned the moment work begins.
+**No run variant** — `plan` and `run` emit the same body. `--start` is in both, mirroring how GitHub issues are auto-assigned the moment work begins.
 
 ## Code-scanning alert
 

@@ -34,7 +34,7 @@ Expected forms:
 - `<ISSUE-NUMBER|LINEAR-ID> "<description>"` — issue identifier plus custom branch slug description
 - `--start` — Linear only: also move the Linear ticket to "In Progress" after the branch is created (best-effort). Ignored for GitHub and special-prefix branches.
 - `--hotfix "<description>"` / `--trivial "<description>"` / `--maintenance "<description>"` / `--proposal "<description>"` / `--security "<description>"` — special prefix branches without a GitHub issue (use `--security` for code-scanning alert fixes → `security-<slug>`)
-- `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips the [Phase 5](#phase-5-verify-with-user) confirmation prompt and creates the branch directly with the auto-generated name. Conflict resolution ([Phase 4](#phase-4-check-for-conflicts)) and validation errors still surface.
+- `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips the [Phase 5](#phase-5-confirm-special-prefix-branch-name) confirmation prompt, which only special-prefix branches still reach. Issue and Linear branches are created directly for every caller, so the flag has no effect on them. Conflict resolution ([Phase 4](#phase-4-check-for-conflicts)) and validation errors still surface.
 
 ## Input resolution
 
@@ -226,15 +226,17 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
      ]
    - `multiSelect`: false
 
-## Phase 5: Verify with User
+## Phase 5: Confirm Special-Prefix Branch Name
+
+**Issue-input bypass:** If `provider` is `github` or `linear`, skip this entire phase and proceed directly to [Phase 6](#phase-6-execute) with the resolved branch name. Do NOT call AskUserQuestion. The name is derived from an issue the user already chose, so confirming it carries no decision — and a name that turns out wrong costs a rename before any PR exists.
 
 **Autopilot bypass:** If `autopilotMode` is true (from [Phase 1](#phase-1-input-validation)), skip this entire phase and proceed directly to [Phase 6](#phase-6-execute) with the resolved branch name. Do NOT call AskUserQuestion.
 
-Present branch details and confirm using **AskUserQuestion tool**.
+Only special-prefix branches (`--hotfix`, `--trivial`, `--maintenance`, `--proposal`, `--security`) reach this phase: their prefix and slug come from a free-form description rather than from an issue, so there is a real choice to confirm. Present branch details and confirm using **AskUserQuestion tool**.
 
-**Preview substitution rules (MANDATORY):** The `<number>`, `<slug>`, `<issue title>`, `<prefix>`, and `<PREFIX>` tokens in the templates below are PLACEHOLDERS. Before invoking AskUserQuestion, substitute each placeholder with the concrete value you resolved in earlier phases (e.g., `<number>` → `123`, `<slug>` → `jwt-refresh`, `<issue title>` → `Add JWT token refresh endpoint`). NEVER pass the literal `issue-<number>-<slug>\n\nIssue: <issue title>...` string — every option's `preview` must contain the fully resolved branch preview string. No shorthand (`"..."`, `"<same>"`, empty string) is permitted; always write out the full resolved preview for every option.
+**Preview substitution rules (MANDATORY):** The `<prefix>`, `<PREFIX>`, and `<slug>` tokens in the template below are PLACEHOLDERS. Before invoking AskUserQuestion, substitute each with the concrete value you resolved in earlier phases (e.g., `<prefix>` → `hotfix`, `<PREFIX>` → `HOTFIX`, `<slug>` → `memory-leak-editor`). NEVER pass the literal `<prefix>-<slug>\n\nType: <PREFIX>...` string — every option's `preview` must contain the fully resolved branch preview string. No shorthand (`"..."`, `"<same>"`, empty string) is permitted; always write out the full resolved preview for every option.
 
-**One dialog template for every branch kind.** Tool parameters:
+**One dialog template.** Tool parameters:
 
 - `question`: "Review the branch name and choose an action."
 - `header`: "Create branch"
@@ -244,15 +246,7 @@ Present branch details and confirm using **AskUserQuestion tool**.
   ]
 - `multiSelect`: false
 
-Both options carry the same `<preview>` content since the user is choosing an action, not content; the shared preview enables a side-by-side layout in the UI. Substitute `<preview>` with the body for the resolved branch kind:
-
-| Branch kind    | `<preview>` body                                                   |
-| -------------- | ------------------------------------------------------------------ |
-| GitHub issue   | `issue-<number>-<slug>\n\nIssue: <issue title>\nFrom: origin/main` |
-| Special prefix | `<prefix>-<slug>\n\nType: <PREFIX>\nFrom: origin/main`             |
-| Linear ticket  | `<team>-<number>-<slug>\n\nTicket: <LINEAR-ID>\nFrom: origin/main` |
-
-When a custom description was provided, drop the `Issue:` line (no issue title to show) — e.g. `issue-<number>-<slug>\n\nFrom: origin/main`.
+Both options carry the same `<preview>` content since the user is choosing an action, not content; the shared preview enables a side-by-side layout in the UI. Substitute `<preview>` with `<prefix>-<slug>\n\nType: <PREFIX>\nFrom: origin/main` — e.g. `hotfix-memory-leak-editor\n\nType: HOTFIX\nFrom: origin/main`.
 
 Only proceed to [Phase 6](#phase-6-execute) after user selects "Create branch". If "Edit slug" selected, ask for new slug and regenerate branch name.
 
@@ -289,7 +283,7 @@ Only proceed to [Phase 6](#phase-6-execute) after user selects "Create branch". 
 
 ## Examples
 
-Every example uses the one [Phase 5](#phase-5-verify-with-user) dialog template — only the resolved `<preview>` body changes per branch kind (see the table there). Two worked cases below; Linear and the other special prefixes follow identically.
+An issue branch is created without a dialog; a special-prefix branch confirms via the one [Phase 5](#phase-5-confirm-special-prefix-branch-name) template. Two worked cases below; Linear follows the issue case and the other special prefixes follow the hotfix case.
 
 ### GitHub issue (auto-generated slug)
 
@@ -300,9 +294,7 @@ Fetching GitHub issue #123...
 Title: "Add JWT token refresh endpoint for authentication service"
 ```
 
-AskUserQuestion with the [Phase 5](#phase-5-verify-with-user) template, both options' `<preview>` resolved to `issue-123-jwt-refresh\n\nIssue: Add JWT token refresh endpoint\nFrom: origin/main`.
-
-User selects "Create branch".
+No confirmation dialog — the name is derived from the issue, so [Phase 5](#phase-5-confirm-special-prefix-branch-name) is skipped and the branch is created directly.
 
 ```
 ✓ Branch created: issue-123-jwt-refresh
@@ -315,7 +307,7 @@ User selects "Create branch".
 /autopilot:branch-create --hotfix "memory leak in editor"
 ```
 
-AskUserQuestion with the [Phase 5](#phase-5-verify-with-user) template, both options' `<preview>` resolved to `hotfix-memory-leak-editor\n\nType: HOTFIX\nFrom: origin/main`.
+AskUserQuestion with the [Phase 5](#phase-5-confirm-special-prefix-branch-name) template, both options' `<preview>` resolved to `hotfix-memory-leak-editor\n\nType: HOTFIX\nFrom: origin/main`.
 
 User selects "Create branch".
 
