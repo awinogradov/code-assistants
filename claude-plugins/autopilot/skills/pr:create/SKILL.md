@@ -144,151 +144,15 @@ If the agent reports breaking changes, treat `--release-notes` as mandatory — 
 
 ## Phase 3: Generate PR Title
 
-> **Canonical:** title/branch grammar is owned by [pr:validate Rules](../pr:validate/SKILL.md#rules); the title rules here mirror it — keep in sync.
-
-**Standard (GitHub) format:** `<Business-valuable description>`
-**Linear format:** `<LINEAR-ID>: <Business-valuable description>` (e.g., `ENG-123: Allow theme selection`)
-**Special prefix format:** `<PREFIX>: <Business-valuable description>` where `<PREFIX>` is one of `HOTFIX`, `TRIVIAL`, `MAINTENANCE`, `PROPOSAL`, `SECURITY`
-
-**Rules:**
-
-- Standard (GitHub) title is the business description only — do NOT include the issue number in the title (it goes in the `**Issues:**` section via `Closes #<n>`)
-- Linear title is prefixed with the uppercase Linear id and a colon (`ENG-123: …`) so the ticket shows in the PR list; the `**Issues:**` section still carries the magic word with the plain issue URL (`Closes https://linear.app/<workspace>/issue/ENG-123`), bare id only when no URL is resolvable
-- Special prefixes are uppercase, followed by a colon and a space
-- Description is capitalized, business-focused, no period
-- Under 120 characters total
-- NOT Conventional Commits format
-- Must be understandable without reading the code
-
-**Generate a title that:**
-
-- Describes the business value or user impact
-- Is understandable by someone on their first day
-- Avoids implementation details
-- Avoids technical jargon without context
+Read [`pr-title-grammar.md`](../shared-rules/references/pr-title-grammar.md) and generate a title that conforms to it. Beyond the grammar, the title must describe business value or user impact, be understandable by someone on their first day, and avoid implementation details and unexplained jargon.
 
 **Title self-check (MANDATORY):** re-verify the drafted title against the [Phase 1](#phase-1-validate-current-state) provider immediately before [Phase 6](#phase-6-create-pull-request) — when composing the [Phase 5](#phase-5-verify-with-user) preview on the interactive path, and in the autopilot bypass. If `provider = linear`, the title MUST start with the branch's `<team>-<number>` uppercased plus `: ` (branch `frtns-28-pr-gate` → title starts with `FRTNS-28: `); if the prefix is missing or names a different id, fix the title now. If `provider = github` or a special prefix, the title MUST NOT start with a `TEAM-N:` ticket prefix. A rule stated only here demonstrably gets dropped when the title is composed from commit context — this check is the gate, exactly like the reference-formatting self-check in [Phase 4](#phase-4-generate-pr-description) is for the body.
 
 ## Phase 4: Generate PR Description
 
-> **Canonical:** this section is the canonical PR-body grammar (sections, ordering, formatting, magic words); [pr:update Phase 5](../pr:update/SKILL.md#phase-5-generate-updated-pr-title-and-body) mirrors it — keep the two in sync.
+Read [`pr-body-grammar.md`](../shared-rules/references/pr-body-grammar.md) and compose the body to it — section set, ordering, `---` separators, release-notes heading, and the `**Issues:**` magic-word rules.
 
-**Reference formatting (MANDATORY):** The generated body — both the description and the release-notes section — MUST follow the reference-formatting rules inlined at the end of this skill. The rule that keeps regressing: render every mention of a standard consistently as a link to its versioned RFC by stable ID (e.g., `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`), never a mix of bare text and links in the same body. Before finalizing, self-check the drafted body: a bare 7–40-char hex token or a bare tracker id (`[A-Z][A-Z0-9]*-[0-9]+`) outside the `**Issues:**` section is a violation — link it per the inlined rules.
-
-The PR body uses `---` separators to divide three sections: description, release notes (optional), and issue links.
-
-**CRITICAL — Section ordering is MANDATORY and MUST NOT be rearranged:**
-
-1. Description (FIRST — always at the top, no heading)
-2. Release notes (MIDDLE — only when applicable, headed `**Release notes:**`)
-3. Issue links (LAST — always at the bottom, headed `**Issues:**`)
-
-Each section is separated by `---`. The `**Issues:**` section is ALWAYS last. Placing it before the description or release notes is a format violation.
-
-**Section 1: Description**
-
-- Brief description of what and why (1-2 sentences)
-- Bullet list for important implementation details
-
-**Formatting rule (no hard-wrapping):**
-
-- Do NOT hard-wrap or line-break text within paragraphs or bullet items at any column width
-- Each paragraph must be a single continuous line (let GitHub handle word wrapping)
-- Each bullet item must be a single continuous line
-- GitHub renders single newlines as visible line breaks — hard-wrapping creates ugly broken text
-
-**Section 2: Release Notes (conditional)**
-
-Include this section (titled `**Release notes:**`) with a `---` separator when:
-
-- `--release-notes` flag is present, OR
-- Breaking changes were detected by the [analyze-pr-commits](../../agents/analyze-pr-commits.md#phase-3-analyze-change-significance) agent in [Phase 2](#phase-2-gather-context) (mandatory)
-
-Content rules:
-
-- Short, user-facing descriptions of changes (not implementation details)
-- Written for someone reading a project changelog
-- Focus on what changed from the user/API consumer perspective
-- Use bullet points, one per distinct user-facing change
-- Keep each bullet to 1 sentence
-- For breaking changes, prefix with "BREAKING:" and describe the impact
-
-**Format rules (exact heading required):**
-
-- The heading MUST be exactly `**Release notes:**` — bold, lowercase "n" in "notes", with colon
-- DO NOT use `## Release Notes` (H2 heading) — that format is for `.release_notes/*.md` files only
-- DO NOT use `**Release Notes:**` (capital "N") — use lowercase `**Release notes:**`
-- The section MUST be placed between the description and the `**Issues:**` section
-- The section MUST be separated from adjacent sections by `---` on both sides
-
-**Section 3: Issue Links (titled `**Issues:**`)**
-
-**Format rules (exact section required):**
-
-- The heading MUST be exactly `**Issues:**` — bold, with colon
-- The section MUST be separated from the previous section by `---`
-- There MUST be a blank line between the `---` separator and the `**Issues:**` heading
-- The section MUST be present when any issue-linking magic words exist
-- DO NOT place magic words (e.g., `Closes #N`, `Related to #N`) as bare text in the description — they MUST be inside the `**Issues:**` section
-- Issue links MUST use magic words — NEVER use markdown links like `[#N](url)` (they break the GitHub and Linear close-parsers); for a Linear issue the magic word takes the plain issue URL, which GitHub auto-links and Linear detects
-- The section is omitted ONLY for special prefix branches (HOTFIX / TRIVIAL / MAINTENANCE / PROPOSAL / SECURITY) when no issue numbers are provided
-- For a `security-` branch (code-scanning alert fix), the `**Issues:**` section is omitted and replaced by an `**Alert:**` section recording the alert reference — a `---` separator, then `**Alert:**` on its own line, then the alert URL. The URL is the `htmlUrl` from the [`run` skill's Phase 0](../run/SKILL.md#phase-0-resolve-input) `resolve-alert-context` output, carried in conversation context; when `pr:create` runs standalone (no parent context), resolve it via `gh api repos/{owner}/{repo}/code-scanning/alerts/{n}` if the alert number is known, otherwise ask the user for the alert URL. Emit NO `Closes #`: code-scanning alerts close on the next scan, not via PR magic words. The `**Alert:**` section is last, in the same slot `**Issues:**` would occupy.
-
-**Magic Words:**
-
-- `Closes #N` — Links and closes the issue on merge
-- `Fixes #N` — Links and closes the issue on merge
-- `Resolves #N` — Links and closes the issue on merge
-- `Part of #N` — Plain reference (auto-linked, no close)
-- `Related to #N` — Plain reference (auto-linked, no close)
-
-For a **Linear** branch, use the plain Linear issue URL in place of `#N` (e.g., `Closes https://linear.app/<workspace>/issue/ENG-123`, `Part of https://linear.app/<workspace>/issue/ENG-100`) — a bare Linear id is dead text on GitHub, while [Linear's magic-word parser](https://linear.app/docs/github#linking-linear-issues-to-github-prs) accepts the URL form and GitHub renders it as a clickable autolink. Take the URL from the [Phase 2](#phase-2-gather-context) issue context; when no URL is resolvable there, fall back to the bare id and state "issue URL unresolvable — emitting bare Linear id" in the run output. Linear auto-closes the ticket on merge only when the GitHub↔Linear integration is configured for the repository; otherwise the magic word is a tracked reference.
-
-**Issue linking rules:**
-
-1. Always include `Closes #<N>` (GitHub) or `Closes <linear-issue-url>` (Linear; bare-id fallback per the rule above) for the issue derived from the branch name (skip for special prefix branches — no issue exists)
-2. If `--closes` provided, add `Closes #<n>` for each additional issue
-3. If `--related` provided, add `Related to #<n>` for each related issue
-4. Each magic word on its own line
-
-**Example format (with release notes):**
-
-```
-<Brief description of what this PR does and why it's needed.>
-
-- <Important implementation detail 1>
-- <Important implementation detail 2>
-
----
-
-**Release notes:**
-
-- <User-facing change 1>
-- <User-facing change 2>
-
----
-
-**Issues:**
-
-Closes #<issue-from-branch>
-Closes #<issue-from-closes-arg>
-Related to #<issue-from-related-arg>
-```
-
-**Example format (without release notes):**
-
-```
-<Brief description of what this PR does and why it's needed.>
-
-- <Important implementation detail 1>
-- <Important implementation detail 2>
-
----
-
-**Issues:**
-
-Closes #<issue-from-branch>
-```
+**Reference formatting (MANDATORY):** the generated body — both the description and the release-notes section — MUST follow the reference-formatting rules in [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) — read it first. The rule that keeps regressing: render every mention of a standard consistently as a link to its versioned RFC by stable ID (e.g., `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`), never a mix of bare text and links in the same body. Before finalizing, self-check the drafted body: a bare 7–40-char hex token or a bare tracker id (`[A-Z][A-Z0-9]*-[0-9]+`) outside the `**Issues:**` section is a violation — link it per the block.
 
 ## Phase 5: Verify with User
 
@@ -580,22 +444,4 @@ User selects "Create PR".
 ✓ Created PR: https://github.com/org/repo/pull/130
 ```
 
-<!-- ref-format:start -->
-
-### Reference formatting & readability
-
-These rules govern references — when you point the reader at a real file, standard, section, commit, or issue. (A token named only as an example, with no real target, is a code specimen in backticks, like any code identifier.) Every reference must resolve: render it as a real link whose target exists, and prefer the most stable link form so it does not rot. Render the same kind of reference the same way everywhere:
-
-- Code specimens — backticks, e.g. `buildReviewComments`, `reviewOutput.ts`. A backticked token names a thing as an example; it is not a reference and carries no link.
-- Files, docs, skills, agents, and actions you point the reader at — link them, e.g. `[release field spec](<repo-blob-url>/docs/06-release-field.md)`. Use a repo-relative path in repository files and the absolute `<repo-blob-url>` form in generated output posted outside the repo (PR/issue bodies, review comments, release notes), where relative paths do not resolve. Any prose mention of a file or path that exists in the repo is such a reference — link it so it resolves on the default branch at writing time; a path that does not exist yet (a file the text proposes to create) or one shown inside a command or fenced block is a code specimen, not a reference.
-- Standards and conventions — ALWAYS link the versioned RFC by its stable ID, e.g. `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`; an Accepted RFC is immutable except through an explicit version bump, so the link never rots.
-- External resources — articles, posts, vendor docs, and web standards or specs you cite — link them inline as `[title](url)` to the canonical source, taking the title from the source (or the site name). Use only a URL present in your input or context — never produce one from memory; a source with no known URL stays plain prose. When several sources back one document, they may be gathered into a short references list.
-- Sections — link the heading by its anchor. Same document: a bare `#anchor`, e.g. `[Phase 6](#phase-6-reply-to-review-threads)`. Another document: `path#anchor` — a repo-relative path in repository files, the absolute `<repo-blob-url>/path#anchor` form in generated output. A GitHub anchor is the heading lower-cased, spaces turned to hyphens, punctuation dropped.
-- Commit SHAs — ALWAYS a link, e.g. `[0328a61](<repo-commit-url>/0328a61)`; a commit is immutable. If you cannot build the URL, leave the bare SHA un-backticked.
-- Issue / PR references — leave the bare number (GitHub auto-links it) or write a full link. A tracker ID GitHub does not auto-link (e.g. Linear `ENG-123`) is dead text when bare: in prose, ALWAYS render it as a markdown link, e.g. `[ENG-123](https://linear.app/<workspace>/issue/ENG-123)` — a slug-less issue URL resolves. On a magic-word line (`Closes`/`Fixes`/`Related to` in a PR body's `**Issues:**` section) use plain forms only: bare `#N` for GitHub, the plain issue URL for other trackers — never a markdown-bracket link, which breaks the close-parsers.
-
-Backticks suppress GitHub autolinking: a commit SHA or issue/PR number inside a code span renders as dead text — that is why a backticked SHA was un-clickable in a prior review. Never wrap a SHA or issue/PR number in backticks; link it, or leave it bare so GitHub auto-links it.
-
-Write the most helpful, readable output you can: plain, direct prose; every reference resolvable; explain the "why", not the obvious "what".
-
-<!-- ref-format:end -->
+**Reference self-check (MANDATORY):** after composing the output, re-read it against [`reference-formatting.md`](../shared-rules/references/reference-formatting.md). A bare commit SHA, a bare tracker id outside a magic-word line, or an unlinked mention of a file that exists in the repo is a violation — fix it before emitting.

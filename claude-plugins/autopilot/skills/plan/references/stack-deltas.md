@@ -27,7 +27,7 @@ When `package.json` is missing, has no `agents` field, or carries an unrecognize
   ]
 - `multiSelect`: false
 
-Do not use markdown formatting in an AskUserQuestion `question` — it renders as raw text.
+**Formatting Note:** Read [`askuserquestion-format.md`](../../shared-rules/references/askuserquestion-format.md) and apply it before composing the `question` parameter.
 
 ## Bun
 

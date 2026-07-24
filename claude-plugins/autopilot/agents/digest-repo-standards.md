@@ -45,7 +45,11 @@ Read its `README.md` index and any principle whose title matches the task's doma
 
 ## Phase 4: Output
 
+<!-- agent-json:start -->
+
 Output ONLY a single JSON object matching the schema below — no preamble, no surrounding code fence, no commentary. The parent parses it directly, so any extra text breaks consumption.
+
+<!-- agent-json:end -->
 
 | Field         | Type     | Constraint                                                                                                           |
 | ------------- | -------- | -------------------------------------------------------------------------------------------------------------------- |
