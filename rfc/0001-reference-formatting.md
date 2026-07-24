@@ -1,16 +1,16 @@
 ---
 number: 1
-version: 5
+version: 6
 title: Reference formatting & readability
 status: Accepted
 author: "@awinogradov"
 created: 2026-06-04
-updated: 2026-07-02
+updated: 2026-07-25
 ---
 
 # RFC-0001: Reference formatting & readability
 
-The single source of truth for how every reference in generated output is formatted — issue bodies, pull request descriptions, code-review comments, and release notes. The block below is inlined verbatim into every autopilot skill (`claude-plugins/autopilot/skills/*/SKILL.md`) and into the release-notes prompt (`releaseNotesPrompt.ts`); the `referenceFormattingSync` test keeps every copy byte-identical with this RFC. As of v3 every reference — including cross-document files and sections — is a real, resolvable link; the `linkResolution` test checks that every local link target and heading anchor exists. Because this RFC is versioned and Accepted, skills, prompts, and the output they generate cite it as RFC-0001 instead of linking a doc that moves.
+The single source of truth for how every reference in generated output is formatted — issue bodies, pull request descriptions, code-review comments, and release notes. The block below is distributed to skills through the [`shared-rules`](../claude-plugins/autopilot/skills/shared-rules/SKILL.md) skill: its `references/reference-formatting.md` is a guarded copy of this RFC's block, and each skill reads that file rather than carrying its own copy. Two runtimes can read nothing — the release-notes prompt (`releaseNotesPrompt.ts`), which reaches the Anthropic API as a raw system prompt, and the structured-output agents, which declare restrictive `tools` — so they keep an inlined copy; the `sharedBlockSync` test keeps every remaining copy byte-identical with this RFC. As of v3 every reference — including cross-document files and sections — is a real, resolvable link; the `linkResolution` test checks that every local link target and heading anchor exists. Because this RFC is versioned and Accepted, skills, prompts, and the output they generate cite it as RFC-0001 instead of linking a doc that moves.
 
 <!-- ref-format:start -->
 
@@ -34,6 +34,7 @@ Write the most helpful, readable output you can: plain, direct prose; every refe
 
 ## Changelog
 
+- **v6** (2026-07-25) — Distribution changed, rules unchanged. Skills no longer inline this block; they read it from the [`shared-rules`](../claude-plugins/autopilot/skills/shared-rules/SKILL.md) skill, whose `references/reference-formatting.md` this RFC pins byte-identical. Only the two runtimes that cannot read a file — the release-notes prompt and the structured-output agents — keep an inlined copy, now guarded by `sharedBlockSync` in place of `referenceFormattingSync` ([#479](https://github.com/awinogradov/code-assistants/issues/479)).
 - **v5** (2026-07-02) — Prose mentions of existing repo files are references to link, not specimens — existence is the test (planned files and paths inside commands or fenced blocks stay backticked). New external-resources rule: cite articles, posts, vendor docs, and standards as inline titled links to a URL present in context; never produce a URL from memory ([#386](https://github.com/awinogradov/code-assistants/issues/386)).
 - **v4** (2026-07-02) — Tracker IDs GitHub does not auto-link (e.g. Linear `ENG-123`) must resolve: a markdown link in prose, the plain issue URL on magic-word lines (`Closes`/`Fixes`) — the form both GitHub's autolinker and Linear's magic-word parser accept. Bare tracker IDs are no longer allowed ([#387](https://github.com/awinogradov/code-assistants/issues/387)).
 - **v3** (2026-06-17) — Cross-document references are now linked, not inlined. Link any file, doc, skill, agent, or action you point the reader at, and link cross-document sections by `path#anchor` (repo-relative in repository files, absolute `<repo-blob-url>` in generated output). Every reference must resolve; the `linkResolution` test enforces it. Reverses the v1–v2 rule that cross-document references use an inline gist.
