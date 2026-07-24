@@ -1,0 +1,29 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "62122315c03a",
+  "strategy": "manual-commit",
+  "branch": "issue-479-dedupe-instruction-blocks",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "README.md",
+    "claude-plugins/autopilot/README.md",
+    "docs/13-shared-rules-skill.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/62/122315c03a/0/metadata.json",
+      "transcript": "/62/122315c03a/0/full.jsonl",
+      "compact_transcript": "/62/122315c03a/0/transcript.jsonl",
+      "content_hash": "/62/122315c03a/0/content_hash.txt",
+      "prompt": "/62/122315c03a/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 7686,
+    "cache_creation_tokens": 821770,
+    "cache_read_tokens": 41203100,
+    "output_tokens": 169226,
+    "api_call_count": 137
+  }
+}
