@@ -29,7 +29,7 @@ Expected form:
 
 - (no arguments) — auto-analyze staged changes
 - `"<context>"` — free-form context that helps generate a better commit message (e.g., `"add auth feature"`)
-- `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips commit-strategy, commit-message, and PR-update prompts and commits directly using the auto-generated messages.
+- `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips the commit-strategy prompt and the [Phase 5](#phase-5-update-pr) PR update, and commits directly using the auto-generated messages.
 
 ## Input resolution
 
@@ -38,58 +38,37 @@ Arguments are optional. When `$ARGUMENTS` is empty:
 - **Commit context** — skip; rely on the diff itself (`git diff --staged`) plus recent conversation history (skill analyses, user instructions) to generate the message. Do NOT prompt.
 - **`--autopilot`** — `$ARGUMENTS` only. Never inferred. Default: `false` (interactive mode). Strip from `$ARGUMENTS` before parsing the remainder as commit context.
 - **Repository conventions** — read `CONTRIBUTING.md` directly from the repository root.
-- **Existing PR** — detect via `gh pr view --json number,url 2>/dev/null` at [Phase 5](#phase-5-offer-pr-update). No user prompt needed.
+- **Existing PR** — detect via `gh pr view --json number,url 2>/dev/null` at [Phase 5](#phase-5-update-pr). No user prompt needed.
 
 ## AskUserQuestion Contract (MANDATORY)
 
-**Autopilot bypass:** When `autopilotMode` is true (from [Phase 1](#phase-1-check-for-changes)), this entire contract is moot — every AskUserQuestion call in Phases 3, 4, and 5 is skipped. Generate the commit message(s), commit directly, and exit without prompting.
+**Autopilot bypass:** When `autopilotMode` is true (from [Phase 1](#phase-1-check-for-changes)), this contract is moot — the strategy prompt is skipped and a validation failure aborts instead of prompting. Generate the commit message(s), commit directly, and exit without prompting.
 
-Every AskUserQuestion call that presents content for review (commit messages) MUST follow these exact rules. Simple choice dialogs ([Phase 3](#phase-3-choose-commit-strategy) commit strategy, [Phase 5](#phase-5-offer-pr-update) PR update offer) are exempt from the preview requirement.
+The rules below govern two dialogs, and both MUST follow them:
 
-1. **`question` is FIXED TEXT** — use the EXACT string specified in each phase. NEVER add commit messages, file names, diffs, metadata, or any other content to the question field.
-2. **`header` is FIXED TEXT** — use the EXACT string specified in each phase.
-3. **`preview` is MANDATORY** — every option MUST include a `preview` field. The commit message goes ONLY in `preview`. NEVER put content in `question`, `label`, or `description`.
-4. **`label` values are EXACT** — use the exact text specified (e.g., "Commit", "Edit", "Cancel"). No abbreviations, no paraphrasing, no creative alternatives.
-5. **`description` values are EXACT** — use the exact text specified. No rewording.
-6. **ALL options are REQUIRED** — include every option listed in the phase. NEVER omit "Cancel".
-7. **Same `preview` on all options** — the user chooses an action, not content. All options show identical preview text.
-8. **SUBSTITUTE every placeholder in `preview`** — templates below use `<commit message>` as a placeholder. Before invoking AskUserQuestion, replace `<commit message>` with the full commit message string (title + body, literal `\n` escape sequences for line breaks). NEVER pass the literal string `<commit message>`, nor the shorthand `"..."`, `"<same>"`, or any placeholder. Every option's `preview` must contain the fully resolved commit message string.
+- the [Phase 3](#phase-3-choose-commit-strategy) commit-strategy prompt — a plain choice, no `preview`;
+- the [validation failure dialog](#validation-failure-dialog) — reached only when three attempts fail to compose a valid message, and the one place a commit message is ever shown for review.
 
-### WRONG — content in question field
+[Phase 1](#phase-1-check-for-changes) may also ask which files to stage when the working tree has unstaged changes. That is a file-selection question rather than content presented for review, so this contract does not govern it.
 
-```
-AskUserQuestion({
-  question: "feat(auth): add jwt refresh endpoint\n\n- Added /auth/refresh endpoint\n- Added 7-day expiry\n\nProceed?",
-  header: "Commit",
-  options: [
-    { label: "Yes", description: "Commit" },
-    { label: "Edit", description: "Change message" }
-  ]
-})
-```
+A generated commit message is never presented for approval on the success path; [Commit Message Validation](#commit-message-validation) is what gates it.
 
-### WRONG — content in label
+1. **`question` is FIXED TEXT** — use the EXACT string specified. NEVER add commit messages, file names, diffs, metadata, or any other content to the question field.
+2. **`header` is FIXED TEXT** — use the EXACT string specified.
+3. **`label` values are EXACT** — use the exact text specified (e.g., "Reword", "Cancel"). No abbreviations, no paraphrasing, no creative alternatives.
+4. **`description` values are EXACT** — use the exact text specified. No rewording.
+5. **ALL options are REQUIRED** — include every option listed. NEVER omit "Cancel".
+6. **`preview` belongs to the failure dialog only** — the failing commit message goes ONLY in `preview`, and NEVER in `question`, `label`, or `description`. All of that dialog's options carry identical preview text, since the user is choosing an action, not content. The strategy prompt takes no `preview`.
+7. **SUBSTITUTE every placeholder in `preview`** — the template uses `<commit message>` as a placeholder. Before invoking AskUserQuestion, replace it with the full failing message (title + body, literal `\n` escape sequences for line breaks). NEVER pass the literal string `<commit message>`, nor the shorthand `"..."`, `"<same>"`, or any placeholder.
+
+### WRONG — message in the question field, no preview, missing Cancel
 
 ```
 AskUserQuestion({
-  question: "Review the commit message and choose an action.",
-  header: "Commit",
+  question: "feat(auth): add JWT refresh endpoint\n\nsubject-case failed. Reword it?",
+  header: "Fix message",
   options: [
-    { label: "feat(auth): add jwt refresh endpoint", description: "Proceed with this commit" },
-    { label: "Edit message", description: "Modify" }
-  ]
-})
-```
-
-### WRONG — no preview, missing Cancel, content in description
-
-```
-AskUserQuestion({
-  question: "Review the commit message and choose an action.",
-  header: "Commit",
-  options: [
-    { label: "Commit", description: "feat(auth): add jwt refresh endpoint - Added /auth/refresh" },
-    { label: "Edit", description: "Modify the commit message" }
+    { label: "Yes", description: "Type a new one" }
   ]
 })
 ```
@@ -98,12 +77,11 @@ AskUserQuestion({
 
 ```
 AskUserQuestion({
-  question: "Review the commit message and choose an action.",
-  header: "Commit",
+  question: "The generated commit message still fails validation. Choose an action.",
+  header: "Invalid message",
   options: [
-    { label: "Commit", description: "Proceed with this commit message", preview: "feat(auth): add jwt refresh endpoint\n\n- Added /auth/refresh endpoint\n- Added 7-day expiry" },
-    { label: "Edit", description: "Modify the commit message", preview: "feat(auth): add jwt refresh endpoint\n\n- Added /auth/refresh endpoint\n- Added 7-day expiry" },
-    { label: "Cancel", description: "Abort commit creation", preview: "feat(auth): add jwt refresh endpoint\n\n- Added /auth/refresh endpoint\n- Added 7-day expiry" }
+    { label: "Reword", description: "Provide a corrected commit message", preview: "feat(auth): add JWT refresh endpoint\n\n- Added /auth/refresh endpoint\n\nFails: subject-case — the subject must be all lowercase" },
+    { label: "Cancel", description: "Abort commit creation", preview: "feat(auth): add JWT refresh endpoint\n\n- Added /auth/refresh endpoint\n\nFails: subject-case — the subject must be all lowercase" }
   ]
 })
 ```
@@ -167,32 +145,9 @@ Use the agent's analysis to decide the commit flow:
    - The specific technical change (what was added, removed, or replaced)
    - The concrete modifications made (what files, functions, values, or behaviors changed)
 3. Generate commit message following the format below — the title must name the specific thing that changed, and the body must list the concrete modifications
-4. **WHAT-not-WHY validation**: Check the generated title against the WHY signal words and vague signal words listed in the WHAT-not-WHY Rule section below. If the title contains any of those words followed by abstract goals (not technical specifics), or contains the words "review", "feedback", "comments", or "suggestions", regenerate the title using only concrete technical details from the diff. Repeat up to 3 times. If the title still fails, present it to the user with a note that it may need manual rewording.
-5. Validate the composed candidate message with [Commit Message Validation](#commit-message-validation) — the full inline floor (length, `subject-case`, and the other checkable commitlint rules) plus commitlint when installed. On any violation, regenerate and re-validate (≤3 attempts); do not present or commit a message that still fails.
-
-**Autopilot bypass:** If `autopilotMode` is true, skip steps 6–9 below. Run `git commit -m "<message>"` directly with the generated message and continue to [Phase 5](#phase-5-offer-pr-update).
-
-6. Present using **AskUserQuestion tool** with preview:
-
-   **Preview content rules:**
-   - The `preview` MUST contain ONLY the commit message (title + body). DO NOT include file lists, diff content, or any other metadata in the preview
-
-   **Tool call structure: See AskUserQuestion Contract above. All rules are mandatory.**
-
-   Tool parameters:
-   - `question`: "Review the commit message and choose an action."
-   - `header`: "Commit"
-   - `options`: [
-     { label: "Commit", description: "Proceed with this commit message", preview: "<commit message>" },
-     { label: "Edit", description: "Modify the commit message", preview: "<commit message>" },
-     { label: "Cancel", description: "Abort commit creation", preview: "<commit message>" }
-     ]
-   - `multiSelect`: false
-
-7. If "Edit" selected, ask for changes and regenerate, then re-run [Commit Message Validation](#commit-message-validation) on the edited message and re-present — a hand-typed subject is validated too, never committed unchecked
-8. If "Cancel" selected, abort with "Commit cancelled."
-9. Only proceed with `git commit` after "Commit" selected
-10. When executing `git commit`, run `git commit -m "<message>"`
+4. **WHAT-not-WHY validation**: Check the generated title against the WHY signal words and vague signal words listed in the WHAT-not-WHY Rule section below. If the title contains any of those words followed by abstract goals (not technical specifics), or contains the words "review", "feedback", "comments", or "suggestions", regenerate the title using only concrete technical details from the diff. Repeat up to 3 times. If the title still fails, hand it to the [validation failure dialog](#validation-failure-dialog) with the failing check named — do not commit it.
+5. Validate the composed candidate message with [Commit Message Validation](#commit-message-validation) — the full inline floor (length, `subject-case`, and the other checkable commitlint rules) plus commitlint when installed. On any violation, regenerate and re-validate (≤3 attempts); do not commit a message that still fails.
+6. Run `git commit -m "<message>"`. There is no confirmation step: the message is derived from a diff the user just produced, and steps 4–5 are the gate that stands in for reading it. Continue to [Phase 5](#phase-5-update-pr).
 
 ### Grouped Commit Flow
 
@@ -220,53 +175,16 @@ For each category that has files:
 2. `git add <category files>`
 3. `git diff --staged` — read the diff and identify what specifically changed (files, functions, values, behaviors)
 4. Generate commit message for this category
-5. Validate this category's composed candidate message with [Commit Message Validation](#commit-message-validation) — the full inline floor plus commitlint when installed. On any violation, regenerate and re-validate (≤3 attempts) before moving to the next category; a message that still fails must not be presented or committed.
+5. Validate this category's composed candidate message with [Commit Message Validation](#commit-message-validation) — the full inline floor plus commitlint when installed. On any violation, regenerate and re-validate (≤3 attempts) before moving to the next category; a message that still fails must not be committed.
 
 After analyzing all categories, `git reset HEAD` to unstage everything.
 
-#### Step 2: Present all commits in one dialog
+#### Step 2: Execute commits
 
-**Autopilot bypass:** If `autopilotMode` is true, skip this step entirely. Skip to Step 3 and execute each commit directly with its generated message.
+Every message was validated in Step 1, so there is nothing left to confirm. Execute all commits sequentially in category order:
 
-Use a **single AskUserQuestion** with multiple questions (one per commit), each with preview.
-
-**Tool call structure: See AskUserQuestion Contract above. All rules are mandatory.**
-
-Tool parameters:
-
-- `questions`: [
-  {
-  question: "Commit 1/N: <category>\nReview the commit message and choose an action.",
-  header: "Commit 1/N",
-  options: [
-  { label: "Commit", description: "Proceed with this commit message", preview: "<commit message>" },
-  { label: "Edit", description: "Modify the commit message", preview: "<commit message>" },
-  { label: "Cancel", description: "Abort all commits", preview: "<commit message>" }
-  ],
-  multiSelect: false
-  },
-  {
-  question: "Commit 2/N: <category>\nReview the commit message and choose an action.",
-  header: "Commit 2/N",
-  options: [...same structure with preview...],
-  multiSelect: false
-  },
-  ...one question per category
-  ]
-
-All options in each question use the same `preview` content (commit message only for that category). DO NOT include file lists in the preview.
-
-If "Cancel" is selected for any commit, abort the entire grouped commit operation with "Commits cancelled." — do not execute any of the commits.
-
-If there are **5 categories** (exceeds the 4-question limit): present the first 4 in one dialog, then present the 5th in a follow-up single-question dialog.
-
-#### Step 3: Process responses and execute commits
-
-1. For each commit where "Edit" was selected: ask a follow-up single AskUserQuestion for that commit's new message (question with the original message, header "Edit N/M", same options), then re-run [Commit Message Validation](#commit-message-validation) on the edited message before re-presenting. Repeat until "Commit" is selected. If "Cancel" is selected, abort all commits with "Commits cancelled." A hand-typed message must pass validation before it reaches the commit loop in step 2.
-
-2. Execute all commits sequentially in category order:
-   - `git add <category files>`
-   - `git commit -m "<message>"`
+- `git add <category files>`
+- `git commit -m "<message>"`
 
 After all commits:
 
@@ -378,32 +296,41 @@ Treat any reported problem as a violation. Gating on the binary's existence avoi
 
 **Success = the whole inline floor passes** (plus commitlint when it ran), not just one rule. NEVER `git commit` a message that still fails. After 3 failed attempts:
 
-- Interactive mode — present the message and the failing rule(s) and ask the user to reword.
+- Interactive mode — open the [validation failure dialog](#validation-failure-dialog) below.
 - Autopilot mode — abort loudly with the failing rule(s); leave the index/staged state untouched and create no partial commit.
 
-## Phase 5: Offer PR Update
+#### Validation failure dialog
 
-**Autopilot bypass:** If `autopilotMode` is true, skip this entire phase — the calling skill (`/autopilot:run`) creates or updates the PR itself in its next step.
+The single interactive escape hatch in this skill, shared by the [Phase 4](#phase-4-execute-commits) WHAT-not-WHY check and the 3-attempt validation failure above. Because the success path no longer shows the user a message, this dialog is the only place one is ever presented — so use it verbatim rather than improvising a prompt, and obey the [AskUserQuestion Contract](#askuserquestion-contract-mandatory).
+
+**Interactive mode only.** When `autopilotMode` is true, neither caller opens it: abort loudly with the failing rule(s), leave the index untouched, and create no partial commit.
+
+Substitute `<commit message>` with the failing message followed by a blank line and a `Fails: <rule> — <what is wrong>` line, identically on both options.
+
+Tool parameters:
+
+- `question`: "The generated commit message still fails validation. Choose an action."
+- `header`: "Invalid message"
+- `options`: [
+  { label: "Reword", description: "Provide a corrected commit message", preview: "<commit message>" },
+  { label: "Cancel", description: "Abort commit creation", preview: "<commit message>" }
+  ]
+- `multiSelect`: false
+
+If "Reword" is selected, take the user's message and re-run the whole of [Commit Message Validation](#commit-message-validation) on it — a hand-typed subject is validated too, never committed unchecked — reopening this dialog while it fails. If "Cancel" is selected, abort with "Commit cancelled." and create no commit; in the grouped flow, abort every remaining commit with "Commits cancelled."
+
+## Phase 5: Update PR
+
+**Caller bypass:** Skip this entire phase when either holds — another skill owns the PR step and running it here would update the PR twice:
+
+- `autopilotMode` is true — `/autopilot:run` creates or updates the PR itself in its next step.
+- This skill was invoked from `Skill(autopilot:commits-restructure)` — that skill runs its own PR update after its force push, which is the correct moment. Updating here would push a description built from commits the remote has not received yet.
 
 After all commits are created successfully:
 
 1. Check if a PR exists for the current branch: `gh pr view --json number,url 2>/dev/null`
 2. If the command fails (no PR), skip silently — do not show any message
-3. If a PR exists, ask using **AskUserQuestion tool**:
-
-   **Formatting Note:** Do not use markdown formatting (bold, italic, headers) in the `question` parameter — it renders as raw text. Use plain text with line breaks and simple labels instead.
-
-   Tool parameters:
-   - `question`: "A pull request exists for this branch: #<N>. Would you like to update it to reflect the new commits?"
-   - `header`: "Update PR"
-   - `options`: [
-     { label: "Update PR", description: "Refresh PR title and description from all commits" },
-     { label: "Skip", description: "Keep the PR as-is" }
-     ]
-   - `multiSelect`: false
-
-   - If "Update PR" selected: invoke `Skill(autopilot:pr-update)`
-   - If "Skip" selected: finish normally
+3. If a PR exists, invoke `Skill(autopilot:pr-update)` directly. Do not ask first: the PR already exists and the commits are already made, so refreshing its title and description to match them is bookkeeping, not a decision.
 
 ## Examples
 
@@ -428,7 +355,7 @@ fix(api): return 404 instead of 500 for missing user lookup
 docs: add environment variables reference to readme
 ```
 
-### Grouped Commits (Quiz Mode)
+### Grouped Commits
 
 ```
 Analyzing staged changes...
@@ -441,46 +368,9 @@ Detected 3 categories:
 How would you like to commit these changes?
 ```
 
-User selects "Separate commits" via AskUserQuestion tool.
+User selects "Separate commits" via AskUserQuestion tool — the one prompt in this flow, because the analyzer recommends a strategy but does not decide it.
 
-All commits are analyzed upfront, then presented in a single dialog with previews:
-
-AskUserQuestion with:
-
-- `questions`: [
-  {
-  question: "Commit 1/3: impl\nReview the commit message and choose an action.",
-  header: "Commit 1/3",
-  options: [
-  { label: "Commit", description: "Proceed with this commit message", preview: "feat(auth): implement jwt validation\n\n- Added token validation logic\n- Added refresh token support" },
-  { label: "Edit", description: "Modify the commit message", preview: "feat(auth): implement jwt validation\n\n- Added token validation logic\n- Added refresh token support" },
-  { label: "Cancel", description: "Abort all commits", preview: "feat(auth): implement jwt validation\n\n- Added token validation logic\n- Added refresh token support" }
-  ],
-  multiSelect: false
-  },
-  {
-  question: "Commit 2/3: test\nReview the commit message and choose an action.",
-  header: "Commit 2/3",
-  options: [
-  { label: "Commit", description: "Proceed with this commit message", preview: "test(auth): add jwt validation tests\n\n- Added token expiry edge case tests\n- Added refresh flow integration test" },
-  { label: "Edit", description: "Modify the commit message", preview: "test(auth): add jwt validation tests\n\n- Added token expiry edge case tests\n- Added refresh flow integration test" },
-  { label: "Cancel", description: "Abort all commits", preview: "test(auth): add jwt validation tests\n\n- Added token expiry edge case tests\n- Added refresh flow integration test" }
-  ],
-  multiSelect: false
-  },
-  {
-  question: "Commit 3/3: docs\nReview the commit message and choose an action.",
-  header: "Commit 3/3",
-  options: [
-  { label: "Commit", description: "Proceed with this commit message", preview: "docs: update authentication documentation" },
-  { label: "Edit", description: "Modify the commit message", preview: "docs: update authentication documentation" },
-  { label: "Cancel", description: "Abort all commits", preview: "docs: update authentication documentation" }
-  ],
-  multiSelect: false
-  }
-  ]
-
-User selects "Commit" for all three.
+Every category's message is then generated and validated upfront, and the commits are created in category order with no further prompting:
 
 ```
 ✓ Created commit: feat(auth): implement jwt validation
@@ -490,18 +380,6 @@ User selects "Commit" for all three.
 All 3 commits created successfully.
 ```
 
-If user selects "Edit" for commit 2/3, a follow-up dialog appears only for that commit:
-
-AskUserQuestion with:
-
-- `question`: "Review the updated commit message and choose an action."
-- `header`: "Edit 2/3"
-- `options`: [
-  { label: "Commit", description: "Proceed with this commit message", preview: "test(auth): add jwt validation tests\n\n- Added token expiry edge case tests\n- Added refresh flow integration test" },
-  { label: "Edit", description: "Modify the commit message", preview: "test(auth): add jwt validation tests\n\n- Added token expiry edge case tests\n- Added refresh flow integration test" },
-  { label: "Cancel", description: "Abort all commits", preview: "test(auth): add jwt validation tests\n\n- Added token expiry edge case tests\n- Added refresh flow integration test" }
-  ]
-
 ### Single Category (No Grouping Offered)
 
 ```
@@ -510,44 +388,39 @@ Analyzing staged changes...
 All changes are in 1 category (impl).
 ```
 
-AskUserQuestion with:
-
-- `question`: "Review the commit message and choose an action."
-- `header`: "Commit"
-- `options`: [
-  { label: "Commit", description: "Proceed with this commit message", preview: "feat(auth): implement jwt validation\n\n- Added token validation logic\n- Added refresh token support" },
-  { label: "Edit", description: "Modify the commit message", preview: "feat(auth): implement jwt validation\n\n- Added token validation logic\n- Added refresh token support" },
-  { label: "Cancel", description: "Abort commit creation", preview: "feat(auth): implement jwt validation\n\n- Added token validation logic\n- Added refresh token support" }
-  ]
-
-User selects "Commit".
+No strategy prompt and no message confirmation — the message is generated, validated, and committed:
 
 ```
 ✓ Created commit: feat(auth): implement jwt validation
 ```
 
-### With PR Update Prompt
+### With an existing PR
 
-After committing on a branch with an existing PR:
+After committing on a branch that already has a PR, [Phase 5](#phase-5-update-pr) refreshes it without asking:
 
 ```
 ✓ Created commit: feat(auth): add password reset flow
+✓ Updated PR #15: https://github.com/org/repo/pull/15
 ```
+
+On a branch with no PR, the skill finishes at the commit and says nothing about pull requests.
+
+### Validation failure
+
+When three attempts still produce an invalid message, the [validation failure dialog](#validation-failure-dialog) is the one place a message is shown for review:
 
 AskUserQuestion with:
 
-- `question`: "A pull request exists for this branch: #15. Would you like to update it to reflect the new commits?"
-- `header`: "Update PR"
+- `question`: "The generated commit message still fails validation. Choose an action."
+- `header`: "Invalid message"
 - `options`: [
-  { label: "Update PR", description: "Refresh PR title and description from all commits" },
-  { label: "Skip", description: "Keep the PR as-is" }
+  { label: "Reword", description: "Provide a corrected commit message", preview: "feat(auth): add JWT refresh endpoint\n\n- Added /auth/refresh endpoint\n\nFails: subject-case — the subject must be all lowercase" },
+  { label: "Cancel", description: "Abort commit creation", preview: "feat(auth): add JWT refresh endpoint\n\n- Added /auth/refresh endpoint\n\nFails: subject-case — the subject must be all lowercase" }
   ]
 
-User selects "Update PR". Invokes `Skill(autopilot:pr-update)`.
+User selects "Reword" and supplies `feat(auth): add jwt refresh endpoint`. It is re-validated, passes, and is committed.
 
-```
-✓ Updated PR #15: https://github.com/org/repo/pull/15
-```
+In autopilot mode the same failure aborts loudly instead, leaving the staged state untouched.
 
 <!-- ref-format:start -->
 

@@ -105,7 +105,9 @@ This handles:
 - Categorizing staged files by conventional commit type (`feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `build`, `ci`, `style`, `perf`, `revert`)
 - Offering grouped vs single commit strategy
 - Creating proper conventional commit messages
-- User confirmation for each commit
+- Validating every message against commitlint before it is committed
+
+It does NOT update the pull request: its [Phase 5](../commits:create/SKILL.md#phase-5-update-pr) defers to this skill, which updates the PR at [Phase 9](#phase-9-update-pr) once the force push has landed.
 
 **Commit message rules:** `commits:create` owns and enforces the full set — subject (text after `type(scope): `) ≤ 50 and whole header ≤ 100 (commitlint `subject-max-length` / `header-max-length`), lowercase imperative no-period title, WHAT-not-WHY subject, body required for `feat`/`fix`/`refactor`, no issue/PR numbers, no AI `Co-authored-by` trailers. See [commits:create Rules](../commits:create/SKILL.md#rules); this skill restages the changes and delegates the message creation to it.
 
@@ -119,7 +121,7 @@ After the commits:create skill completes, output summary:
 
 ## Phase 8: Force Push (conditional)
 
-**Only execute this phase if `remoteBranchExists` is true** (detected in [Phase 3](#phase-3-analyze-branch-commits)). If false, skip to [Phase 9](#phase-9-offer-pr-update).
+**Only execute this phase if `remoteBranchExists` is true** (detected in [Phase 3](#phase-3-analyze-branch-commits)). If false, skip to [Phase 9](#phase-9-update-pr).
 
 The original commits were on the remote before the soft reset. The new restructured commits have different SHAs, so a regular push will be rejected.
 
@@ -140,29 +142,17 @@ Tool parameters:
 - **If "Force push" selected:** Run `git push --force-with-lease`. If successful, store `forcePushDone = true`. If it fails, output the error and store `forcePushDone = false`.
 - **If "Skip" selected:** Store `forcePushDone = false`.
 
-## Phase 9: Offer PR Update
+## Phase 9: Update PR
 
 **Only execute this phase if `remoteBranchExists` is false OR `forcePushDone` is true.** If the remote branch exists but force push was skipped or failed, skip this phase silently.
+
+This gate is why the PR update belongs here and not inside `commits:create` — the description must be built from commits the remote has actually received. `commits:create` therefore skips its own [Phase 5](../commits:create/SKILL.md#phase-5-update-pr) when invoked from this skill.
 
 After restructuring completes successfully:
 
 1. Check if a PR exists for the current branch: `gh pr view --json number,url 2>/dev/null`
 2. If the command fails (no PR), skip silently — do not show any message
-3. If a PR exists, ask using **AskUserQuestion tool**:
-
-   **Formatting Note:** Do not use markdown formatting (bold, italic, headers) in the `question` parameter — it renders as raw text. Use plain text with line breaks and simple labels instead.
-
-   Tool parameters:
-   - `question`: "A pull request exists for this branch: #<N>. Would you like to update it to reflect the restructured commits?"
-   - `header`: "Update PR"
-   - `options`: [
-     { label: "Update PR", description: "Refresh PR title and description from all commits" },
-     { label: "Skip", description: "Keep the PR as-is" }
-     ]
-   - `multiSelect`: false
-
-   - If "Update PR" selected: invoke `Skill(autopilot:pr-update)`
-   - If "Skip" selected: finish normally
+3. If a PR exists, invoke `Skill(autopilot:pr-update)` directly. Do not ask first: the restructure the user just authorized is what changed the commits, so bringing the PR description into line with them is bookkeeping, not a decision.
 
 ## Error Handling
 

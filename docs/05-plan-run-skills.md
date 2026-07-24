@@ -190,10 +190,10 @@ Apply the aggregated findings and score to the draft, replace the `Score:` place
 
 ## Phase 5 — Embed branch creation
 
-The skill embeds the branch step into the plan file so it runs first, before any code changes — in `plan` after the user approves, in `run` straight away. The bodies live in [`references/branch-blocks.md`](../claude-plugins/autopilot/skills/plan/references/branch-blocks.md), each with a `run` variant that appends `--autopilot`:
+The skill embeds the branch step into the plan file so it runs first, before any code changes — in `plan` after the user approves, in `run` straight away. The bodies live in [`references/branch-blocks.md`](../claude-plugins/autopilot/skills/plan/references/branch-blocks.md). Whether the branch name is confirmed depends on the input type rather than the caller: a name derived from a tracked issue is created directly, so those two blocks are identical for `plan` and `run`. Only the alert and plain-description blocks — whose slug comes from free-form text — still confirm, and so carry a `run` variant that appends `--autopilot`:
 
-- **GitHub issue** → `branch-create` with the issue number → `issue-<number>-<slug>`, so the PR can `Closes #<number>`.
-- **Linear issue** → `branch-create` with `<LINEAR-ID> --start` → `<team>-<number>-<slug>`.
+- **GitHub issue** → `branch-create` with the issue number → `issue-<number>-<slug>`, so the PR can `Closes #<number>`. No confirmation.
+- **Linear issue** → `branch-create` with `<LINEAR-ID> --start` → `<team>-<number>-<slug>`. No confirmation.
 - **Code-scanning alert** → `branch-create` with `--security "<slug>"` → `security-<slug>` (no issue number, no `Closes #`).
 - **Plain description** → prompt for a branch type (Hotfix / Trivial / Maintenance), then branch with that prefix.
 - **Already on a feature branch with genuine unmerged work** → no branch block is added.
