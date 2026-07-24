@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "88d81a88e201",
+  "strategy": "manual-commit",
+  "branch": "issue-479-dedupe-instruction-blocks",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "rfc/0001-reference-formatting.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/88/d81a88e201/0/metadata.json",
+      "transcript": "/88/d81a88e201/0/full.jsonl",
+      "compact_transcript": "/88/d81a88e201/0/transcript.jsonl",
+      "content_hash": "/88/d81a88e201/0/content_hash.txt",
+      "prompt": "/88/d81a88e201/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 7686,
+    "cache_creation_tokens": 821770,
+    "cache_read_tokens": 41203100,
+    "output_tokens": 169226,
+    "api_call_count": 137
+  }
+}
