@@ -36,10 +36,11 @@ The `docs/` guides are numbered chapters in reading order — start at chapter 1
 | 10  | [The `pdf:create` skill](./docs/10-pdf-create-skill.md)                           | the portable `@react-pdf/renderer` pipeline that renders a themed PDF, decoupled from the workspace |
 | 11  | [Linear tracker support](./docs/11-linear-tracker.md)                             | how `agents.trackers` opts a project into Linear and other issue trackers behind one JSON contract  |
 | 12  | [Code review repository standards](./docs/12-code-review-repository-standards.md) | how the review enforces a consumer repo's `rfc/`, `docs/`, and `principles/` with status severity   |
+| 13  | [The `shared-rules` skill](./docs/13-shared-rules-skill.md)                       | the single home for instruction blocks several skills need, and how a consumer reads one at runtime |
 
 **Standards.**
 
-- [Reference formatting (RFC-0001)](./rfc/0001-reference-formatting.md) — the single reference-formatting + readability standard, versioned as an RFC, inlined into every skill and the release-notes prompt and kept in sync by the `referenceFormattingSync` test; as of v3 every reference (including cross-document files and sections) is a real, resolvable link, guarded by the `linkResolution` test; see [`rfc/`](./rfc/README.md) for the RFC convention
+- [Reference formatting (RFC-0001)](./rfc/0001-reference-formatting.md) — the single reference-formatting + readability standard, versioned as an RFC. As of v6 skills read it from [`shared-rules`](./docs/13-shared-rules-skill.md) rather than inlining a copy; the two runtimes that cannot read a file keep an inlined copy held byte-identical by the `sharedBlockSync` test. As of v3 every reference (including cross-document files and sections) is a real, resolvable link, guarded by the `linkResolution` test; see [`rfc/`](./rfc/README.md) for the RFC convention
 - [Stack rule sets](./rules/) — `Bun`, `Bun+React+Tailwind`, `NodeJS+React`, `NodeJS+React+Tailwind`
 
 ## GitHub Actions
