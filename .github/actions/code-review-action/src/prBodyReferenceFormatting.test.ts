@@ -1,44 +1,46 @@
 /**
  * Guards that the output-generating autopilot skills explicitly instruct the model to
- * apply the inlined reference-formatting rules (RFC-0001): pr:create and pr:update (PR
+ * apply the reference-formatting rules (RFC-0001): pr:create and pr:update (PR
  * bodies, issue #279) plus plan, gather-context, run, and issue:create
  * (plan files, Context Maps, and issue bodies, issue #334), and pr:review (review verdict bodies —
  * wefortis/fortune-os PR 93 review 4619732611 cited files and standards as backticked
- * dead text). Each already inlines the canonical block —
- * the referenceFormattingSync test guards that copy stays byte-identical — but inlining
- * alone never made the generators apply it, so generated output escaped the standard.
+ * dead text). Inlining the rules alone never made the generators apply them, so generated
+ * output escaped the standard; this asserts the apply-instruction itself survives.
  *
- * This is a presence-guard: it asserts the apply-instruction survives in the
- * instructions ABOVE the inlined block, so the wiring cannot be silently dropped. It
- * reads only the text before the `<!-- ref-format:start -->` sentinel — the inlined
- * block itself contains reference-formatting prose, so including it would let the
- * block satisfy the assertion by accident. A missing sentinel fails loudly rather
- * than degrading the slice into a near-whole-file match.
+ * Issue #479 moved the rules out of each skill into the shared-rules skill, so the
+ * instruction and the rules are now one sentence: a skill reaches the rules ONLY by being
+ * told to read them. That fuses this guard's two former halves. The old positional trick —
+ * slicing the text before `<!-- ref-format:start -->` so the inlined block could not
+ * satisfy the assertion by accident — is therefore gone, and safely: no consumer contains
+ * the block any more (sharedRulesInvocation.test.ts asserts that), so the only possible
+ * match is the directive itself. The defect this guarded, "rules present but nothing says
+ * to apply them", is now unrepresentable rather than merely tested for.
+ *
+ * Still a presence-guard: CI sees text in a file and cannot prove the model reads the
+ * block at runtime.
  */
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { describe, expect, test } from "bun:test";
 
-// Depth mirrors referenceFormattingSync.test.ts in this directory — a move of the
+// Depth mirrors sharedBlockSync.test.ts in this directory — a move of the
 // action updates both in lockstep.
 const actionDir = join(import.meta.dirname, "..");
 const repoRoot = join(actionDir, "..", "..", "..");
 const skillsDir = join(repoRoot, "claude-plugins/autopilot/skills");
+const sharedReferences = join(skillsDir, "shared-rules/references");
 
-const startSentinel = "<!-- ref-format:start -->";
 // Load-bearing phrase: the apply-instruction each skill carries in its body-
 // generation phase. Reword it only alongside this test.
-const applyInstruction = "reference-formatting rules inlined at the end";
+const applyInstruction = "reference-formatting rules in [`reference-formatting.md`]";
 
 const skills = ["pr:create", "pr:update", "plan", "gather-context", "run", "issue:create", "linear:create", "pr:review"];
 
 describe("output reference-formatting wiring", () => {
   test.each(skills)("%s instructs the body generator to apply RFC-0001", async (skill) => {
     const content = await readFile(join(skillsDir, skill, "SKILL.md"), "utf8");
-    const blockStart = content.indexOf(startSentinel);
-    expect(blockStart).toBeGreaterThan(-1);
-    expect(content.slice(0, blockStart)).toContain(applyInstruction);
+    expect(content).toContain(applyInstruction);
   });
 });
 
@@ -50,11 +52,19 @@ describe("output reference-formatting wiring", () => {
 describe("linear issue linking (issue #387)", () => {
   const prBodySkills = ["pr:create", "pr:update"];
 
-  test.each(prBodySkills)("%s prescribes the Linear issue URL on magic-word lines", async (skill) => {
-    const content = await readFile(join(skillsDir, skill, "SKILL.md"), "utf8");
+  // The magic-word grammar itself moved into the shared block (issue #479), so it is
+  // asserted once at its canonical home rather than twice in the consuming skills —
+  // asserting it per-skill would reward re-inlining the very copy #479 removed.
+  test("the shared PR-body grammar prescribes the Linear issue URL on magic-word lines", async () => {
+    const content = await readFile(join(sharedReferences, "pr-body-grammar.md"), "utf8");
     expect(content).toContain("Closes https://linear.app");
     // Negative guard: the pre-#387 prescription must not resurface.
     expect(content).not.toContain("`**Issues:**` uses `Closes ENG-123`");
+  });
+
+  test.each(prBodySkills)("%s points at the shared PR-body grammar", async (skill) => {
+    const content = await readFile(join(skillsDir, skill, "SKILL.md"), "utf8");
+    expect(content).toContain("shared-rules/references/pr-body-grammar.md");
   });
 
   test.each(prBodySkills)("%s instructs a bare-reference self-check on the drafted body", async (skill) => {
