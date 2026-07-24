@@ -142,7 +142,7 @@ Do NOT produce the structured JSON output.
 
 ### 1.4 Project Context (read before reviewing)
 
-Read the project's own conventions before judging the diff — you enforce them, so you must load them first (mirrors the [`plan` skill's Phase 1](../plan/SKILL.md#phase-1-context-gathering)):
+Read the project's own conventions before judging the diff — you enforce them, so you must load them first (mirrors the [`digest-repo-standards` agent](../../agents/digest-repo-standards.md) that the `plan` skill's context fan-out uses):
 
 - **CLAUDE.md (stack rules)** — read the repository-root `CLAUDE.md`; map each changed line to the rule it must satisfy.
 - **README + `docs/*` (project conventions)** — read the root `README.md` and the docs it links; treat `docs/` as the source of truth for project-specific conventions. When the root README carries no docs index, fall back to `docs/README.md`, then to the Glob `docs/*.md` file names.

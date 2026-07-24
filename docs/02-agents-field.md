@@ -79,21 +79,23 @@ The matrix below lists every skill that reads `agents`, the key(s) it reads, and
 
 | Skill            | Reads                                                  | Behavior                                                                                                                                       | Source                                                                                          |
 | ---------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `/plan`          | `agents.rules`                                         | Delegates to `Skill(autopilot:plan-bun)` or `Skill(autopilot:plan-nodejs-react)`                                                               | `claude-plugins/autopilot/skills/plan/SKILL.md` (Phase 1: Detect Stack and Delegate)            |
-| `/run`           | `agents.rules`                                         | Same delegation as `/plan`, plus embedded post-implementation autopilot                                                                        | `claude-plugins/autopilot/skills/run/SKILL.md` (Phase 1: Detect Stack and Delegate)             |
+| `/plan`          | `agents.rules`                                         | Resolves the three planning deltas from the delta table                                                                                        | `claude-plugins/autopilot/skills/plan/references/stack-deltas.md`                               |
+| `/run`           | `agents.rules`                                         | Same delta resolution as `/plan`, plus embedded post-implementation autopilot                                                                  | `claude-plugins/autopilot/skills/plan/references/stack-deltas.md`                               |
 | `/pr:review`     | `agents.rules`                                         | Tags the review with the stack identifier; falls back to `unknown` if missing                                                                  | `claude-plugins/autopilot/skills/pr:review/SKILL.md` (Phase 2.1: Detect Stack)                  |
 | `/todo-cleanup`  | `agents.language` + `agents.rules` + `agents.trackers` | Picks file globs + comment syntax from `language`, verification command from `rules`; routes new-TODO issues to GitHub or a chosen Linear team | `claude-plugins/autopilot/skills/todo-cleanup/SKILL.md` (Phase 1: Read Repository Context)      |
 | `/linear:create` | `agents.trackers`                                      | Files a Linear issue on the configured `team`; prompts to choose when 2+ `linear` trackers exist                                               | `claude-plugins/autopilot/skills/linear:create/SKILL.md` (Phase 0: Resolve Team and Hint)       |
 | `/issue:run`     | `agents.trackers`                                      | Resolves the provider and Linear team; prompts to choose the team when 2+ `linear` trackers exist                                              | `claude-plugins/autopilot/skills/issue:run/SKILL.md` (Phase 0: Resolve Repository and Provider) |
 
-### Stack → planning skill (used by `/plan` and `/run`)
+### Stack → planning deltas (used by `/plan` and `/run`)
 
-| `rules` value           | Planning skill                       |
-| ----------------------- | ------------------------------------ |
-| `Bun`                   | `Skill(autopilot:plan-bun)`          |
-| `Bun+React+Tailwind`    | `Skill(autopilot:plan-bun)`          |
-| `NodeJS+React`          | `Skill(autopilot:plan-nodejs-react)` |
-| `NodeJS+React+Tailwind` | `Skill(autopilot:plan-nodejs-react)` |
+Planning is stack-agnostic except for three values — example libraries for documentation lookup, the expert-panel roster, and verify-line examples. Both skills resolve them from one delta table; there is no per-stack planning skill to delegate to.
+
+| `rules` value           | Delta set      |
+| ----------------------- | -------------- |
+| `Bun`                   | `Bun`          |
+| `Bun+React+Tailwind`    | `Bun`          |
+| `NodeJS+React`          | `NodeJS+React` |
+| `NodeJS+React+Tailwind` | `NodeJS+React` |
 
 ### Stack → verification command (used by `/todo-cleanup`)
 
@@ -139,7 +141,7 @@ Fallbacks are intentionally non-destructive — no skill writes to `package.json
 }
 ```
 
-`/plan` → `Skill(autopilot:plan-bun)`; `/todo-cleanup` scans `**/*.{ts,tsx,js,jsx}` and verifies via `bun run typecheck && bun run lint`.
+`/plan` → the `Bun` planning deltas; `/todo-cleanup` scans `**/*.{ts,tsx,js,jsx}` and verifies via `bun run typecheck && bun run lint`.
 
 ### Node.js + React + Tailwind frontend
 
@@ -154,7 +156,7 @@ Fallbacks are intentionally non-destructive — no skill writes to `package.json
 }
 ```
 
-`/plan` → `Skill(autopilot:plan-nodejs-react)`; `/todo-cleanup` verifies via `npm run typecheck && npm run lint`.
+`/plan` → the `NodeJS+React` planning deltas; `/todo-cleanup` verifies via `npm run typecheck && npm run lint`.
 
 ### Go service
 
@@ -176,10 +178,9 @@ To add a new stack:
 1. Add a rule file under `rules/<Name>.md`.
 2. Add the value to the `rules` table in this document.
 3. Update the stack-mapping tables inside the consumer skills:
-   - `claude-plugins/autopilot/skills/plan/SKILL.md`
-   - `claude-plugins/autopilot/skills/run/SKILL.md`
+   - `claude-plugins/autopilot/skills/plan/references/stack-deltas.md` (routing table plus the three deltas; serves both `/plan` and `/run`)
    - `claude-plugins/autopilot/skills/pr:review/SKILL.md`
    - `claude-plugins/autopilot/skills/todo-cleanup/SKILL.md`
-4. If the stack needs its own planning phases, add a new `plan-<stack>` skill mirroring `plan-bun` / `plan-nodejs-react` and route to it from `/plan` and `/run`.
+4. Add the stack's three planning deltas — example libraries, expert table, verify examples — as a new section in `stack-deltas.md`. A stack does not get its own planning skill: the pipeline is stack-agnostic, and the deltas are the only real differences.
 
 To add a new language: extend the language-to-pattern table in `claude-plugins/autopilot/skills/todo-cleanup/SKILL.md` and mirror the change here.
