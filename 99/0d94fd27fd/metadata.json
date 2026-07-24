@@ -1,0 +1,41 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "990d94fd27fd",
+  "strategy": "manual-commit",
+  "branch": "issue-479-dedupe-instruction-blocks",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".github/actions/code-review-action/src/prBodyReferenceFormatting.test.ts",
+    ".github/actions/code-review-action/src/sharedBlockSync.test.ts",
+    ".github/actions/code-review-action/src/sharedRulesInvocation.test.ts",
+    "claude-plugins/autopilot/skills/gather-context/SKILL.md",
+    "claude-plugins/autopilot/skills/issue:create/SKILL.md",
+    "claude-plugins/autopilot/skills/linear:create/SKILL.md",
+    "claude-plugins/autopilot/skills/plan/references/stack-deltas.md",
+    "claude-plugins/autopilot/skills/shared-rules/SKILL.md",
+    "claude-plugins/autopilot/skills/shared-rules/references/agent-json-output.md",
+    "claude-plugins/autopilot/skills/shared-rules/references/askuserquestion-format.md",
+    "claude-plugins/autopilot/skills/shared-rules/references/linear-mcp-access.md",
+    "claude-plugins/autopilot/skills/shared-rules/references/pr-body-grammar.md",
+    "claude-plugins/autopilot/skills/shared-rules/references/pr-title-grammar.md",
+    "claude-plugins/autopilot/skills/shared-rules/references/reference-formatting.md",
+    "claude-plugins/autopilot/skills/shared-rules/references/repomix-snapshot.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/99/0d94fd27fd/0/metadata.json",
+      "transcript": "/99/0d94fd27fd/0/full.jsonl",
+      "compact_transcript": "/99/0d94fd27fd/0/transcript.jsonl",
+      "content_hash": "/99/0d94fd27fd/0/content_hash.txt",
+      "prompt": "/99/0d94fd27fd/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 7686,
+    "cache_creation_tokens": 821770,
+    "cache_read_tokens": 41203100,
+    "output_tokens": 169226,
+    "api_call_count": 137
+  }
+}

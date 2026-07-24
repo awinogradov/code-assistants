@@ -1,0 +1,23 @@
+/autopilot:plan analyze plan* and other skills, references, agents for ref formatting like https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/plan/SKILL.md#reference-formatting--readability
+Can we create skill to avoid duplication a lot of the same text evrywhere? --issue
+
+---
+
+<task-notification>
+<task-id>bag1ev9xc</task-id>
+<summary>Monitor event: "ai-review check + review verdict on PR 480"</summary>
+<event>ai-review: SUCCESS
+automerge: SKIPPED
+ALL CHECKS DONE | reviewDecision=APPROVED</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bag1ev9xc</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-lechuguilla-plateau/f8c4d956-a039-4892-9b78-88eec78e0f64/tasks/bag1ev9xc.output</output-file>
+<status>completed</status>
+<summary>Monitor "ai-review check + review verdict on PR 480" stream ended</summary>
+</task-notification>
