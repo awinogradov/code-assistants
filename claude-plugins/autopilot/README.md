@@ -60,6 +60,8 @@ code-assistants/
         ├── agents/                 # Sub-agents
         │   ├── analyze-pr-commits.md
         │   ├── analyze-staged-changes.md
+        │   ├── digest-branch-diff.md
+        │   ├── digest-repo-standards.md
         │   ├── expert-review.md
         │   ├── fetch-pr-reviews.md
         │   ├── resolve-alert-context.md
@@ -84,12 +86,11 @@ code-assistants/
             ├── commits:create/
             ├── commits:restructure/
             ├── dependabot:resolve/
+            ├── gather-context/
             ├── issue:create/
             ├── issue:run/
             ├── pdf:create/             # bundles a self-contained Node renderer/ sub-project
-            ├── plan/
-            ├── plan-bun/
-            ├── plan-nodejs-react/
+            ├── plan/                   # bundles references/ loaded on demand
             ├── pr:answer/
             ├── pr:create/
             ├── pr:monitor/
@@ -347,11 +348,13 @@ These skills set `user-invocable: false` — they run only when invoked programm
 
 Validate git working state before branching, committing, or opening a PR. Mode-aware: in `plan`/`branch` modes it fetches remote and offers to pull; in `commits`/`pr` modes it warns if you are on `main` and offers to create a branch first. Invoked automatically at the start of `/autopilot:branch-create`, `/autopilot:commits-create`, `/autopilot:pr-create`, `/autopilot:plan`, and `/autopilot:run`.
 
-### `plan-*`
+### `gather-context`
 
-Stack-specific planning skills invoked automatically by `/autopilot:plan` and `/autopilot:run` based on the repo's `package.json` `agents.rules` field.
+Acquire all planning context in one parallel fan-out and emit a Context Map. Invoked automatically by `/autopilot:plan` and `/autopilot:run` after they detect the input type.
 
-Available variants: `plan-bun` (also handles `Bun+React+Tailwind`), `plan-nodejs-react` (also handles `NodeJS+React+Tailwind`)
+The fan-out issues every context call in a single message — the repo-standards and branch-diff digest agents, issue or alert resolution, the TODO search, the codebase snapshot, stack detection, and git state — then runs one task-scoped snapshot pass and returns the Context Map. Sub-agents return bounded JSON, so the full text of a README, the selected RFCs, and an unbounded `git diff` never reaches the calling skill's context.
+
+Planning is stack-agnostic apart from three values (example libraries, expert table, verify examples), which both skills resolve from `plan/references/stack-deltas.md` keyed by `agents.rules`. There are no per-stack planning skills.
 
 ## Contributing
 
