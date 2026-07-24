@@ -100,6 +100,7 @@ code-assistants/
             ├── pr:validate/
             ├── preflight-check/
             ├── run/
+            ├── shared-rules/           # bundles references/ — the canonical shared instruction blocks
             └── todo-cleanup/
 ```
 
@@ -302,6 +303,14 @@ Delegate a code-analysis, refactoring, or automated-editing task to the Google G
 /autopilot:ask-gemini                                    # Prompt for model + approval mode, run a Gemini task
 /autopilot:ask-gemini "audit auth flow for races"        # Seed the task description
 /autopilot:ask-gemini "refactor parser" --model pro --approval-mode auto_edit
+```
+
+### `/autopilot:shared-rules`
+
+The canonical home for instruction blocks several skills need — reference formatting (RFC-0001), AskUserQuestion formatting, repomix snapshot acquisition, agent structured output, Linear MCP access, and PR title/body grammar. Each block is a file under `references/`, so a consumer reads exactly the one it needs instead of carrying a copy. Mostly read by other skills rather than invoked directly; see the host repo's [shared-rules doc](../../docs/13-shared-rules-skill.md).
+
+```bash
+/autopilot:shared-rules                                  # List the blocks and where each is read from
 ```
 
 ## Agents
