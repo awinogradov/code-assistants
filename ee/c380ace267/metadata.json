@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "eec380ace267",
+  "strategy": "manual-commit",
+  "branch": "issue-481-plan-file-prose-not-tool-calls",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "docs/05-plan-run-skills.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/ee/c380ace267/0/metadata.json",
+      "transcript": "/ee/c380ace267/0/full.jsonl",
+      "compact_transcript": "/ee/c380ace267/0/transcript.jsonl",
+      "content_hash": "/ee/c380ace267/0/content_hash.txt",
+      "prompt": "/ee/c380ace267/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 304,
+    "cache_creation_tokens": 353192,
+    "cache_read_tokens": 32589949,
+    "output_tokens": 132687,
+    "api_call_count": 134
+  }
+}
