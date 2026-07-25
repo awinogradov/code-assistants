@@ -8,10 +8,12 @@
  * excluded: the links inside them are illustrative specimens, not references.
  */
 import { existsSync, statSync } from "node:fs";
-import { readdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
 import { describe, expect, test } from "bun:test";
+
+import { walkMarkdown } from "./markdownFiles";
 
 const actionDir = join(import.meta.dirname, "..");
 const repoRoot = join(actionDir, "..", "..", "..");
@@ -23,25 +25,6 @@ const sourceDirs = [
   "rfc",
 ];
 const sourceRootFiles = ["README.md", "CONTRIBUTING.md"];
-
-async function walkMarkdown(dir: string): Promise<string[]> {
-  let entries: Awaited<ReturnType<typeof readdir>>;
-  try {
-    entries = await readdir(dir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  const out: string[] = [];
-  for (const entry of entries) {
-    // Skip bundled dependencies (e.g. the pdf:create skill's renderer/node_modules):
-    // their READMEs carry package-relative links that do not resolve in this tree.
-    if (entry.isDirectory() && entry.name === "node_modules") continue;
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...(await walkMarkdown(full)));
-    else if (entry.isFile() && entry.name.endsWith(".md")) out.push(full);
-  }
-  return out;
-}
 
 /** Drop fenced code blocks, honouring CommonMark fences of any length (3+ ` or ~). */
 function stripFences(s: string): string {
