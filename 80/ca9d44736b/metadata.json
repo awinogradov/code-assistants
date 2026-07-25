@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "80ca9d44736b",
+  "strategy": "manual-commit",
+  "branch": "issue-481-plan-file-prose-not-tool-calls",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "claude-plugins/autopilot/skills/plan/SKILL.md",
+    "claude-plugins/autopilot/skills/plan/references/branch-blocks.md",
+    "claude-plugins/autopilot/skills/plan/references/pipeline.md",
+    "claude-plugins/autopilot/skills/run/SKILL.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/80/ca9d44736b/0/metadata.json",
+      "transcript": "/80/ca9d44736b/0/full.jsonl",
+      "compact_transcript": "/80/ca9d44736b/0/transcript.jsonl",
+      "content_hash": "/80/ca9d44736b/0/content_hash.txt",
+      "prompt": "/80/ca9d44736b/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 304,
+    "cache_creation_tokens": 353192,
+    "cache_read_tokens": 32589949,
+    "output_tokens": 132687,
+    "api_call_count": 134
+  }
+}
