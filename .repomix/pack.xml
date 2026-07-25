@@ -141,8 +141,10 @@ The content is organized as follows:
         linkResolution.test.ts
         logClaudeMessage.test.ts
         logClaudeMessage.ts
+        markdownFiles.ts
         markedDetailsBlock.test.ts
         markedDetailsBlock.ts
+        planFileOutputPurity.test.ts
         prBodyReferenceFormatting.test.ts
         preflightChecks.ts
         preflightSkipComment.test.ts
@@ -7599,10 +7601,12 @@ if (import.meta.main) {
  * excluded: the links inside them are illustrative specimens, not references.
  */
 import { existsSync, statSync } from "node:fs";
-import { readdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
 import { describe, expect, test } from "bun:test";
+
+import { walkMarkdown } from "./markdownFiles";
 
 const actionDir = join(import.meta.dirname, "..");
 const repoRoot = join(actionDir, "..", "..", "..");
@@ -7614,25 +7618,6 @@ const sourceDirs = [
   "rfc",
 ];
 const sourceRootFiles = ["README.md", "CONTRIBUTING.md"];
-
-async function walkMarkdown(dir: string): Promise<string[]> {
-  let entries: Awaited<ReturnType<typeof readdir>>;
-  try {
-    entries = await readdir(dir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  const out: string[] = [];
-  for (const entry of entries) {
-    // Skip bundled dependencies (e.g. the pdf:create skill's renderer/node_modules):
-    // their READMEs carry package-relative links that do not resolve in this tree.
-    if (entry.isDirectory() && entry.name === "node_modules") continue;
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...(await walkMarkdown(full)));
-    else if (entry.isFile() && entry.name.endsWith(".md")) out.push(full);
-  }
-  return out;
-}
 
 /** Drop fenced code blocks, honouring CommonMark fences of any length (3+ ` or ~). */
 function stripFences(s: string): string {
@@ -8302,6 +8287,47 @@ export function logMessage(log: pino.Logger, message: SDKMessage): void {
 }
 </file>
 
+<file path=".github/actions/code-review-action/src/markdownFiles.ts">
+/**
+ * Markdown discovery shared by the repository guard tests.
+ *
+ * The guards (`linkResolution`, `planFileOutputPurity`) all start the same way: walk a
+ * source directory and collect every `.md` file, so their coverage comes from the
+ * filesystem rather than a hardcoded list. That discovery is the load-bearing property —
+ * it is what makes a newly added skill or reference file guarded without editing a test —
+ * so it lives in one place instead of being copied per guard.
+ *
+ * @example
+ * const files = await walkMarkdown(join(repoRoot, "claude-plugins/autopilot/skills"));
+ */
+import { readdir } from "node:fs/promises";
+import { join } from "node:path";
+
+/**
+ * Every `.md` file under `dir`, recursively.
+ *
+ * Returns `[]` for a directory that cannot be read, so a guard listing an optional source
+ * directory (`rfc/` in a repo that has none) degrades to "nothing to check" instead of
+ * throwing. Bundled dependencies are skipped: the `pdf:create` skill vendors a `renderer/`
+ * whose package READMEs carry package-relative links that do not resolve in this tree.
+ */
+export async function walkMarkdown(dir: string): Promise<string[]> {
+  // `.catch(() => null)` rather than a try/catch around an annotated binding: annotating it
+  // as `Awaited<ReturnType<typeof readdir>>` picks the Buffer overload, so every `entry.name`
+  // then types as NonSharedBuffer instead of string.
+  const entries = await readdir(dir, { withFileTypes: true }).catch(() => null);
+  if (!entries) return [];
+  const out: string[] = [];
+  for (const entry of entries) {
+    if (entry.isDirectory() && entry.name === "node_modules") continue;
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...(await walkMarkdown(full)));
+    else if (entry.isFile() && entry.name.endsWith(".md")) out.push(full);
+  }
+  return out;
+}
+</file>
+
 <file path=".github/actions/code-review-action/src/markedDetailsBlock.test.ts">
 /**
  * Tests for markedDetailsBlock.ts.
@@ -8397,6 +8423,127 @@ export function buildMarkedDetailsBlock({
     endMarker,
   ].join("\n");
 }
+</file>
+
+<file path=".github/actions/code-review-action/src/planFileOutputPurity.test.ts">
+/**
+ * Guards the audience split between the plan file and the skills that write it: a plan
+ * file is what a human approves, so the text copied into it describes outcomes in prose
+ * and never carries the tool calls that produce them. Those live in the phase that runs
+ * them — see the "Plan file is output, not instructions" rule in plan/SKILL.md.
+ *
+ * The insert bodies are exactly the fenced blocks whose first heading is `## Pre-Implementation`
+ * or `## Post-Implementation`: branch-blocks.md keys one per input type, pipeline.md's draft
+ * template carries the default tail, and run/SKILL.md substitutes its automated variant. This
+ * finds them by walking the tree rather than naming those three files, the same load-bearing
+ * property linkResolution.test.ts and sharedRulesInvocation.test.ts rely on — a fourth insert
+ * body added anywhere under skills/ is covered without editing this test.
+ *
+ * What this CANNOT prove: that an emitted plan file is clean. CI sees the template, not the
+ * artifact; a drafter can still hand-write a tool call into a plan. Runtime evidence comes from
+ * inspecting a plan file written by a real run, recorded on the PR.
+ */
+import { readFile } from "node:fs/promises";
+import { join, relative } from "node:path";
+
+import { describe, expect, test } from "bun:test";
+
+import { walkMarkdown } from "./markdownFiles";
+
+const actionDir = join(import.meta.dirname, "..");
+const repoRoot = join(actionDir, "..", "..", "..");
+const skillsDir = join(repoRoot, "claude-plugins/autopilot/skills");
+
+/**
+ * Agent-facing constructs that must never reach a plan file. Each is matched as a literal
+ * substring, so a partial leftover fails too — a body that keeps only the `options` array
+ * still trips `Tool parameters`.
+ */
+const forbidden = [
+  { token: "Skill(", why: "a skill dispatch belongs to the phase that runs it" },
+  { token: "Tool parameters", why: "an AskUserQuestion parameter block is not prose" },
+  { token: "AskUserQuestion", why: "naming the tool describes the mechanism, not the outcome" },
+  { token: "<!--", why: "an HTML-comment directive addresses the agent, not the reader" },
+];
+
+const insertBodyHeadings = ["## Pre-Implementation", "## Post-Implementation"];
+
+interface InsertBody {
+  /** Repo-relative file the body lives in. */
+  file: string;
+  /** 1-indexed line the opening fence sits on, so a failure points at the source. */
+  line: number;
+  heading: string;
+  content: string;
+}
+
+/**
+ * Fenced blocks carrying an insert-body heading anywhere inside them. It has to be anywhere
+ * rather than on the first heading line: branch-blocks.md fences a lone section, while
+ * pipeline.md fences the whole plan-file template, where `## Post-Implementation` sits below
+ * `## Summary`. Either way the entire fence is text destined for a plan file, so the whole
+ * block is checked. Honours CommonMark fences of any length so a longer outer fence does not
+ * terminate early.
+ */
+function insertBodies(file: string, source: string): InsertBody[] {
+  const out: InsertBody[] = [];
+  const lines = source.split("\n");
+  let open: { len: number; char: string; start: number } | null = null;
+  let body: string[] = [];
+
+  for (const [index, line] of lines.entries()) {
+    const fence = /^(`{3,}|~{3,})/.exec(line.trimStart());
+    if (!open) {
+      // Ternary rather than a nested `if`: block nesting is capped at 2 (CLAUDE.md).
+      open = fence ? { len: fence[1].length, char: fence[1][0], start: index } : null;
+      continue;
+    }
+    const closes =
+      fence && fence[1][0] === open.char && fence[1].length >= open.len;
+    if (!closes) {
+      body.push(line);
+      continue;
+    }
+    const heading = body
+      .map((l) => l.trim())
+      .find((l) => insertBodyHeadings.some((h) => l.startsWith(h)));
+    if (heading) {
+      out.push({ file, line: open.start + 1, heading, content: body.join("\n") });
+    }
+    open = null;
+    body = [];
+  }
+  return out;
+}
+
+const files = await walkMarkdown(skillsDir);
+const bodies = (
+  await Promise.all(
+    files.map(async (file) =>
+      insertBodies(relative(repoRoot, file), await readFile(file, "utf8")),
+    ),
+  )
+).flat();
+
+describe("plan file output purity", () => {
+  test("insert bodies are discovered, not hardcoded", () => {
+    // branch-blocks.md keys four by input type; pipeline.md and run/SKILL.md add one each.
+    expect(bodies.length).toBeGreaterThanOrEqual(6);
+    expect(new Set(bodies.map((b) => b.file)).size).toBeGreaterThanOrEqual(3);
+  });
+
+  test.each(bodies.map((b) => [`${b.file}:${b.line} ${b.heading}`, b] as const))(
+    "%s carries no agent-facing tool call",
+    (label, b) => {
+      for (const { token, why } of forbidden) {
+        // Assert on a labelled string so a failure names the body, the token, and why.
+        expect(`${label} has "${token}": ${b.content.includes(token)} — ${why}`).toBe(
+          `${label} has "${token}": false — ${why}`,
+        );
+      }
+    },
+  );
+});
 </file>
 
 <file path=".github/actions/code-review-action/src/prBodyReferenceFormatting.test.ts">
@@ -45986,9 +46133,13 @@ Before writing any output that mentions a file, standard, section, commit, or is
 
 Reference for [`plan/SKILL.md`](../SKILL.md) and [`run/SKILL.md`](../../run/SKILL.md).
 
-The plan file's `## Pre-Implementation` section is what creates the branch after approval. Pick the body by input type. Whether the user is asked to confirm the name depends on that input type, not on the caller: an issue-derived name is created directly, while a special-prefix name — whose prefix and slug come from a free-form description — is confirmed. Only the blocks that still carry a confirmation have a `run` variant, which passes `--autopilot` to suppress it (invoking `/autopilot:run` is itself the authorization).
+The plan file's `## Pre-Implementation` section is the branch step, run first after approval. Pick the body by input type. Whether the user is asked to confirm the name depends on that input type, not on the caller: an issue-derived name is created directly, while a special-prefix name — whose prefix and slug come from a free-form description — is confirmed. Only the input types that still carry a confirmation have a `run` variant, which passes `--autopilot` to suppress it (invoking `/autopilot:run` is itself the authorization).
 
-Each fenced block below is the literal section body to insert into the plan file.
+Each input type below carries two parts. The **fenced block** is the literal section body to insert into the plan file: prose stating which branch appears and why it matters, because the plan file is what the reader approves (see the **Plan file is output, not instructions** rule in [`plan/SKILL.md`](../SKILL.md#plan-file-is-output-not-instructions)). The **Mechanics** paragraph beside it is the invocation the caller runs after approval — it never reaches the plan file. Read it when executing the block; do not copy it in.
+
+Because the flags now live in Mechanics rather than in the inserted text, all four bodies are identical for `plan` and `run`. A `run` variant is a different argument at execution time, not a different section body.
+
+Prompts composed from a Mechanics paragraph follow [`askuserquestion-format.md`](../../shared-rules/references/askuserquestion-format.md) — read it before composing the `question` parameter.
 
 ## When to emit it
 
@@ -46011,10 +46162,12 @@ Bare number, `#`-prefixed number, or GitHub issue URL.
 ```
 ## Pre-Implementation
 
-Invoke `Skill(autopilot:branch-create)` with the resolved issue number (e.g., `42` for `#42`). The branch-create skill fetches the issue, generates an `issue-<number>-<slug>` branch name, and creates the branch directly — the name is derived from an issue the user already chose, so it is not confirmed. Do NOT present a Hotfix/Trivial/Maintenance prefix prompt — issue inputs always use the `issue-<number>-<slug>` convention so the PR can link back via `Closes #<number>`.
+Work happens on a new `issue-<number>-<slug>` branch created from an up-to-date `main`, so the pull request can close issue #<number> on merge.
 ```
 
-**No run variant** — `plan` and `run` emit the same body. Conflict resolution still surfaces if the branch already exists.
+**Mechanics:** invoke `Skill(autopilot:branch-create)` with the resolved issue number (e.g. `42` for `#42`). It fetches the issue, derives the `issue-<number>-<slug>` name, and creates the branch directly — the name comes from an issue the user already chose, so it is not confirmed. Do not present a Hotfix/Trivial/Maintenance prefix prompt; issue inputs always use this convention.
+
+**No run variant** — the same arguments for both callers. Conflict resolution still surfaces if the branch already exists.
 
 ## Linear issue
 
@@ -46023,29 +46176,37 @@ A Linear id such as `ENG-123`, or a Linear issue URL.
 ```
 ## Pre-Implementation
 
-Invoke `Skill(autopilot:branch-create)` with arguments `<LINEAR-ID> --start` (e.g., `ENG-123 --start`). The branch-create skill fetches the ticket, generates a `<team>-<number>-<slug>` branch name, moves the ticket to "In Progress" via `--start` (best-effort — it never blocks branch creation), and creates the branch directly — the name is derived from a ticket the user already chose, so it is not confirmed. Do NOT present a Hotfix/Trivial/Maintenance prefix prompt — Linear inputs always use the `<team>-<number>-<slug>` convention so the PR can link back via `Closes <LINEAR-ID>`.
+Work happens on a new `<team>-<number>-<slug>` branch created from an up-to-date `main`, so the pull request can close the ticket on merge. The ticket also moves to "In Progress" as work begins.
 ```
 
-**No run variant** — `plan` and `run` emit the same body. `--start` is in both, mirroring how GitHub issues are auto-assigned the moment work begins.
+**Mechanics:** invoke `Skill(autopilot:branch-create)` with `<LINEAR-ID> --start` (e.g. `ENG-123 --start`). It fetches the ticket, derives the `<team>-<number>-<slug>` name, moves the ticket to "In Progress" via `--start` (best-effort — it never blocks branch creation), and creates the branch directly, since the name comes from a ticket the user already chose. Do not present a Hotfix/Trivial/Maintenance prefix prompt.
+
+**No run variant** — the same arguments for both callers. `--start` is in both, mirroring how GitHub issues are auto-assigned the moment work begins.
 
 ## Code-scanning alert
 
 ```
 ## Pre-Implementation
 
-Invoke `Skill(autopilot:branch-create)` with `--security "<slug>"`, where `<slug>` paraphrases the resolved alert's rule/file (e.g., `tainted-format-string`). The branch-create skill creates a `security-<slug>` branch (the alert is NOT a GitHub issue, so the `issue-<number>-<slug>` form does not apply and no `Closes #` is emitted). The branch name MUST be approved by the user via AskUserQuestion before creation — do not create the branch directly with git commands.
+Work happens on a new `security-<slug>` branch created from an up-to-date `main`, where `<slug>` paraphrases the alert's rule and file. The branch name is confirmed before it is created. An alert is not a GitHub issue, so the pull request records the alert reference and emits no `Closes` line — the alert closes on the next scan instead.
 ```
 
-**run variant:** pass `--security "<slug>" --autopilot`. The PR records the alert reference instead of a `Closes #` line.
+**Mechanics:** invoke `Skill(autopilot:branch-create)` with `--security "<slug>"` (e.g. `tainted-format-string`). The slug comes from free-form text, so the name MUST be approved by the user via AskUserQuestion before creation — never create the branch directly with git commands.
+
+**run variant:** pass `--security "<slug>" --autopilot` to suppress the confirmation; invoking `/autopilot:run` is itself the authorization.
 
 ## Plain description
 
 ```
 ## Pre-Implementation
 
-Choose a branch type for this change using AskUserQuestion:
+Work happens on a new branch created from an up-to-date `main`. Its type is chosen when implementation starts — hotfix for an emergency production fix, trivial for typos, docs, or formatting, maintenance for dependencies, CI, or configs — and the resulting name is confirmed before the branch is created.
+```
+
+**Mechanics:** ask for the branch type via AskUserQuestion, then invoke `Skill(autopilot:branch-create)` with `--<chosen-prefix> "<description>"`, where `<description>` is a short summary derived from the user's description. Both the type pick and the name confirmation are required — never skip them or create the branch directly with git commands.
 
 Tool parameters:
+
 - `question`: "Choose a branch type for this change."
 - `header`: "Branch type"
 - `options`: [
@@ -46055,10 +46216,7 @@ Tool parameters:
   ]
 - `multiSelect`: false
 
-Then invoke `Skill(autopilot:branch-create)` with `--<chosen-prefix> "<description>"`, where `<description>` is a short summary derived from the user description. The branch name MUST be approved by the user via AskUserQuestion before creation — do not skip approval or create the branch directly with git commands.
-```
-
-**run variant:** append `--autopilot` to the branch-create arguments. The branch-type pick is the one prompt `run` keeps — a special-prefix type cannot be inferred from a free-form description.
+**run variant:** append `--autopilot` to the branch-create arguments, which suppresses the name confirmation. The branch-type pick is the one prompt `run` keeps — a special-prefix type cannot be inferred from a free-form description.
 </file>
 
 <file path="claude-plugins/autopilot/skills/plan/references/input-detection.md">
@@ -46153,7 +46311,7 @@ Work these dimensions against the Context Map as you draft. They are analysis, n
 | **Types**        | What interfaces/schemas exist? What needs Zod validation? |
 | **Edge Cases**   | What could fail? Null states? Race conditions?            |
 
-The template begins with `# <Title>` — see the **Plan File Header** rule in the calling skill for title derivation and section ordering.
+The template begins with `# <Title>` — see the **Plan File Header** rule in the calling skill for title derivation and section ordering. For a change with structure worth showing, generate the diagrams per the calling skill's **Visualize with ASCII Schemas** rule and embed each one inline in the section it explains, beside the relevant step, file entry, or data-flow line.
 
 ```
 # <Title>
@@ -46162,8 +46320,6 @@ The template begins with `# <Title>` — see the **Plan File Header** rule in th
 [1-2 sentences: what and why]
 Steelmanned intent: [verbatim from the Steelmanned Intent block]
 Score: [filled by the review step — leave as a placeholder in the draft]
-
-<!-- For architectural/visual/UI/flow changes, embed each ASCII diagram from Skill(autopilot:ascii-schemas) inline in the section it explains — beside the relevant implementation step, file entry, or data-flow line. Do not add a standalone diagrams section; omit diagrams entirely for pure logic/refactor changes. -->
 
 ## Implementation Steps
 
@@ -46175,30 +46331,13 @@ Every step MUST include a `verify:` line — an observable check (test name, com
 
 ## Post-Implementation
 
-After all implementation steps and verification are complete:
+Once every step above is done and verified:
 
-1. **Update documentation (MANDATORY)** — update any `README.md`, `docs/*`, and `rfc/*` affected by these changes so the documented source of truth stays current. If a change edits the content of an Accepted RFC, bump its `version` frontmatter and add a Changelog entry (mirrors the review's CHECK-RFC-003). When an update needs a diagram, generate it via `Skill(autopilot:ascii-schemas)` and embed the output verbatim — do not hand-draw.
-2. Present next actions using AskUserQuestion.
-
-**If the implementation included user-facing changes** (feat: or fix: commits created during this session), use `--release-notes` in the "Create PR" option. Otherwise, use the plain option.
-
-Tool parameters:
-- `question`: "All changes implemented and verified. What's next?"
-- `header`: "Next"
-- `options`: [
-  { label: "Create commit", description: "Run /autopilot:commits-create to commit changes" },
-  { label: "Create PR", description: "Run /autopilot:pr-create --release-notes to open a PR with release notes" },
-  { label: "Done", description: "No further action needed" }
-  ]
-- `multiSelect`: false
-
-After the user selects their option:
-- "Create commit": invoke `Skill(autopilot:commits-create)`
-- "Create PR": invoke `Skill(autopilot:pr-create)` with the flags shown in the option description
-- "Done": no further action needed
+1. Update any `README.md`, `docs/*`, and `rfc/*` this change affects, so the documented source of truth stays current. Editing the content of an Accepted RFC also means bumping its `version` frontmatter and adding a Changelog entry.
+2. Then decide what to do with the work: commit it, open a pull request, or stop here.
 ```
 
-`run` replaces this `## Post-Implementation` block with its own automated chain — see [`run/SKILL.md`](../../run/SKILL.md).
+The template is prose because the plan file is what the reader approves — see the **Plan file is output, not instructions** rule in the calling skill. Both callers replace step 2 with their own machinery: `plan` asks in its post-implementation handoff phase, `run` runs the automated chain in [`run/SKILL.md`](../../run/SKILL.md) instead of asking.
 
 Set task 3 to `completed`.
 
@@ -46365,6 +46504,8 @@ allowed-tools:
   - Skill(autopilot:issue-create)
   - Skill(autopilot:linear-create)
   - Skill(autopilot:ascii-schemas)
+  - Skill(autopilot:commits-create)
+  - Skill(autopilot:pr-create)
 ---
 
 Perform deep analysis of the codebase, recent changes, and the requested task. Create a validated, expert-reviewed implementation plan.
@@ -46484,6 +46625,12 @@ Every plan file MUST begin with a single `# <Title>` line on line 1, followed by
 
 When a `## Pre-Implementation` block is emitted it sits between the title and `## Summary`; otherwise `## Summary` follows the title directly.
 
+### Plan file is output, not instructions
+
+The plan file is what the reader approves, so every section describes an outcome in prose: which branch gets created, what each step changes, what happens once the steps land. It carries no `AskUserQuestion` parameter block, no `Skill(...)` dispatch line, and no HTML-comment directive aimed at the agent.
+
+The tool calls that realize those outcomes belong to the phase that runs them — [Phase 5](#phase-5-embed-branch-creation-and-request-approval) for the branch, [Phase 6](#phase-6-post-implementation-handoff) for the handoff — and to the reference files those phases read. Stating them once there, rather than in both places, is what keeps a renamed flag from going stale in a copy nobody re-reads.
+
 ### CLAUDE.md Compliance
 
 Map each planned change to the project rules in CLAUDE.md.
@@ -46510,14 +46657,43 @@ ExitPlanMode
 
 `ExitPlanMode` reads the plan back from the plan-mode file and asks the user to approve it. On approval the session leaves plan mode and implementation begins with `## Pre-Implementation`, then `## Implementation Steps`.
 
+That `## Pre-Implementation` body states the branch as an outcome, not as a command. Run it from the **Mechanics** paragraph beside the matching block in [branch-blocks.md](references/branch-blocks.md) — that paragraph carries the `branch-create` invocation and its arguments. Never improvise the branch with raw `git` because the plan file no longer spells the call out.
+
 This step is `/autopilot:plan` only — see [`run/SKILL.md`](../run/SKILL.md).
+
+## Phase 6: Post-implementation handoff
+
+After every implementation step and its `verify:` line has passed, ask what to do next. This gate is `/autopilot:plan` only: `run` replaces it with the automated chain in [`run/SKILL.md`](../run/SKILL.md), which is why it lives here in the orchestrator rather than in the shared pipeline `run` also executes.
+
+**If the session produced user-facing changes** (`feat:` or `fix:` commits), use the `--release-notes` variant of the "Create PR" option below; otherwise use the plain one.
+
+Tool parameters:
+
+- `question`: "All changes implemented and verified. What's next?"
+- `header`: "Next"
+- `options`: [
+  { label: "Create commit", description: "Run /autopilot:commits-create to commit changes" },
+  { label: "Create PR", description: "Run /autopilot:pr-create --release-notes to open a PR with release notes" },
+  { label: "Done", description: "No further action needed" }
+  ]
+- `multiSelect`: false
+
+With no user-facing changes, the "Create PR" description reads `"Run /autopilot:pr-create to open a pull request"` instead.
+
+Then act on the selection:
+
+- "Create commit" — invoke `Skill(autopilot:commits-create)`
+- "Create PR" — invoke `Skill(autopilot:pr-create)` with the flags shown in the chosen option's description
+- "Done" — stop here
+
+Read [`askuserquestion-format.md`](../shared-rules/references/askuserquestion-format.md) and apply it before composing the `question` parameter.
 
 ## Additional Resources
 
 - [`references/input-detection.md`](references/input-detection.md) — create-issue flags, detection table, tracker gating, alert divergence
 - [`references/pipeline.md`](references/pipeline.md) — draft template, expert review and scoring, finalize
 - [`references/stack-deltas.md`](references/stack-deltas.md) — per-stack example libraries, expert tables, verify examples
-- [`references/branch-blocks.md`](references/branch-blocks.md) — the `## Pre-Implementation` bodies
+- [`references/branch-blocks.md`](references/branch-blocks.md) — the `## Pre-Implementation` bodies and the mechanics that execute them
 
 When you write the plan file, apply the reference-formatting rules in [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (RFC-0001, read it first) to every reference it contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
 
@@ -49766,22 +49942,30 @@ Pick the body by input type from [branch-blocks.md](../plan/references/branch-bl
 
 ### Post-Implementation (REPLACES the pipeline's default)
 
-**REPLACE** the `## Post-Implementation` section the pipeline template produced with this autopilot chain:
+**REPLACE** the `## Post-Implementation` section the pipeline template produced with this body, which tells the reader the tail is automated:
 
 ```
 ## Post-Implementation (Autopilot)
 
-After all implementation steps and verification are complete, execute the following automatically. Do NOT present a "What's next?" AskUserQuestion — proceed through all steps without pausing.
+Once every step above is done and verified, the rest runs automatically, with no approval prompt:
 
-### Step 1: Auto-Commit
+1. Update any `README.md`, `docs/*`, and `rfc/*` this change affects. Editing the content of an Accepted RFC also means bumping its `version` frontmatter and adding a Changelog entry.
+2. Commit the change and push the branch.
+3. Open a pull request, or update the existing one.
+4. Monitor the pull request until the review approves it or it merges, addressing review feedback as it arrives.
+```
 
-Set task 6 ("Commit changes") to `in_progress`. Invoke `Skill(autopilot:commits-create)` with `--autopilot`. The flag suppresses the commit-strategy prompt and the skill's own PR update (this chain creates or updates the PR itself in Step 3), and turns a validation failure into a loud abort instead of a prompt. Follow the skill's full workflow — do NOT run `git commit` directly.
+The steps below are how that body is carried out. They are instructions for you, not text for the plan file — the plan file is what the reader sees, so it stays prose (see the **Plan file is output, not instructions** rule in [`plan/SKILL.md`](../plan/SKILL.md#plan-file-is-output-not-instructions)). Execute them in [Phase 5](#phase-5-implement-and-proceed) without pausing, and never present a "What's next?" AskUserQuestion.
+
+#### Step 1: Auto-Commit
+
+Set task 6 ("Commit changes") to `in_progress`. Invoke `Skill(autopilot:commits-create)` with `--autopilot`. The flag suppresses the commit-strategy prompt and the skill's own PR update (this chain creates or updates the PR itself in Step 2), and turns a validation failure into a loud abort instead of a prompt. Follow the skill's full workflow — do NOT run `git commit` directly.
 
 If the commit fails due to a pre-commit hook, check `git status` for modified files (the hook may have auto-formatted), re-stage with `git add -u`, and retry once. If it still fails, report the error and stop.
 
 After committing, push: `git push -u origin <branch>`. Set task 6 to `completed`.
 
-### Step 2: Auto-Create PR
+#### Step 2: Auto-Create PR
 
 Set task 7 ("Create PR") to `in_progress`.
 
@@ -49805,16 +49989,17 @@ Output the PR URL. Set task 7 to `completed`.
 
    If any check fails: output "PR format violation detected — skill may have been bypassed. Running pr:update to fix...", invoke `Skill(autopilot:pr-update)`, and re-validate once. If it still fails, output "PR format could not be auto-fixed. Manual review required." and continue.
 
-### Step 3: Monitor PR
+#### Step 3: Monitor PR
 
 Set task 8 ("Monitor PR") to `in_progress`. Invoke `Skill(autopilot:pr-monitor)` in foreground mode (do NOT use the Agent tool with run_in_background). It polls for review status, invokes pr:resolve interactively if changes are requested, and waits for approval or merge.
 
 **Autopilot override for pr:resolve:** when pr:monitor invokes pr:resolve and it presents the review-action gate via AskUserQuestion, auto-select "Address all". Replies post without prompting.
 
-### Completion
+#### Completion
 
 Set task 8 to `completed`. Output:
 
+```
 Autopilot complete.
 PR: <pr-url>
 Status: <approved/merged>
@@ -49824,9 +50009,9 @@ Status: <approved/merged>
 
 Once the plan file carries `## Pre-Implementation` and `## Post-Implementation (Autopilot)`, proceed straight through with no approval gate:
 
-1. Run the `## Pre-Implementation` branch creation.
+1. Create the branch per the **Mechanics** paragraph beside the matching block in [branch-blocks.md](../plan/references/branch-blocks.md), using the run variant where one is noted. The plan file's `## Pre-Implementation` states the outcome; that paragraph carries the invocation.
 2. Implement every step in the plan, verifying each as you go.
-3. Execute the autopilot chain — commit → push → PR → monitor — without prompting.
+3. Execute the autopilot chain — commit → push → PR → monitor — per [Phase 4](#phase-4-embed-branch-creation-and-the-autopilot-chain)'s Step 1 through Completion, without prompting.
 
 The only user prompts in the entire run are the branch-type pick for plain-description inputs and review-feedback handling during PR monitoring. There is no plan-approval step.
 
@@ -53056,11 +53241,17 @@ Defined once in [`references/pipeline.md`](../claude-plugins/autopilot/skills/pl
 
 ### Draft plan
 
-Assemble a complete draft **before** review and scoring, so both operate on a concrete artifact rather than an imagined one. The draft follows a fixed template: `## Summary` (with steelmanned intent and a `Score:` placeholder), `## Implementation Steps` (each with an observable `verify:` line patterned on the stack's verify examples), `## Files`, and `## Post-Implementation`.
+Assemble a complete draft **before** review and scoring, so both operate on a concrete artifact rather than an imagined one. The draft follows a fixed template: `## Summary` (with steelmanned intent and a `Score:` placeholder), `## Implementation Steps` (each with an observable `verify:` line patterned on the stack's verify examples), `## Files`, and `## Post-Implementation` — the last of these stating in prose that documentation is updated and the work is committed or opened as a PR.
 
 Drafting works five analysis dimensions against the Context Map — **Architecture**, **Patterns**, **Data Flow**, **Types**, and **Edge Cases**. This was previously a separate "Deep Analysis" phase that produced no artifact and needed its own paragraph warning it not to re-crawl the tree; folding it into drafting removes both the phase boundary and the temptation.
 
 For structural or visual changes, ASCII diagrams are embedded inline in the section each explains rather than collected in a standalone section.
+
+### The plan file is output, not instructions
+
+Everything written into the plan file describes an outcome. No section carries an `AskUserQuestion` parameter block, a `Skill(...)` dispatch line, or an HTML-comment directive — those are agent-facing, and the plan file is what a human reads to decide whether to proceed.
+
+The mechanics sit in the phase that runs them: [Phase 5](#phase-5--embed-branch-creation) for the branch, [Phase 6](#phase-6--post-implementation-handoff) for `plan`'s handoff, and [Phase 4](#how-run-differs-automated-post-implementation) of `run` for the automated chain. Each behaviour is stated once. Before this split the branch and post-implementation mechanics existed twice — in the skill files and in a copy pasted into every plan file — so a renamed flag went stale in whichever copy nobody re-read, and the approval gate was padded with parameter arrays that said nothing about the change. [`planFileOutputPurity.test.ts`](../.github/actions/code-review-action/src/planFileOutputPurity.test.ts) enforces it: it walks the skill markdown, finds every fenced block destined for a plan file, and fails on any of those constructs.
 
 ### Review and score
 
@@ -53078,13 +53269,21 @@ Apply the aggregated findings and score to the draft, replace the `Score:` place
 
 ## Phase 5 — Embed branch creation
 
-The skill embeds the branch step into the plan file so it runs first, before any code changes — in `plan` after the user approves, in `run` straight away. The bodies live in [`references/branch-blocks.md`](../claude-plugins/autopilot/skills/plan/references/branch-blocks.md). Whether the branch name is confirmed depends on the input type rather than the caller: a name derived from a tracked issue is created directly, so those two blocks are identical for `plan` and `run`. Only the alert and plain-description blocks — whose slug comes from free-form text — still confirm, and so carry a `run` variant that appends `--autopilot`:
+The skill embeds the branch step into the plan file so it runs first, before any code changes — in `plan` after the user approves, in `run` straight away. [`references/branch-blocks.md`](../claude-plugins/autopilot/skills/plan/references/branch-blocks.md) keys two things by input type: the prose body inserted into the plan file, and the **Mechanics** paragraph beside it holding the `branch-create` invocation the caller runs. Because the flags live in Mechanics rather than in the inserted text, all four bodies are identical for `plan` and `run` — a `run` variant is now a different argument at execution time, not a different section body.
+
+Whether the branch name is confirmed still depends on the input type rather than the caller: a name derived from a tracked issue is created directly, while the alert and plain-description slugs come from free-form text and are confirmed, so those two carry a `run` variant appending `--autopilot`.
 
 - **GitHub issue** → `branch-create` with the issue number → `issue-<number>-<slug>`, so the PR can `Closes #<number>`. No confirmation.
 - **Linear issue** → `branch-create` with `<LINEAR-ID> --start` → `<team>-<number>-<slug>`. No confirmation.
 - **Code-scanning alert** → `branch-create` with `--security "<slug>"` → `security-<slug>` (no issue number, no `Closes #`).
 - **Plain description** → prompt for a branch type (Hotfix / Trivial / Maintenance), then branch with that prefix.
 - **Already on a feature branch with genuine unmerged work** → no branch block is added.
+
+## Phase 6 — Post-implementation handoff
+
+`plan` only. Once every step and its `verify:` line has passed, the skill asks what to do next — commit, open a pull request (with `--release-notes` when the session produced `feat:` or `fix:` commits), or stop — and dispatches to `commits-create` or `pr-create` accordingly.
+
+The gate lives in the orchestrator rather than the shared pipeline, for the same reason the two plan-mode calls do: `run` reuses only the pipeline, so a gate placed there would be inherited. `run` replaces this phase with its automated chain instead.
 
 ## Sub-agents and their JSON contracts
 
@@ -53121,7 +53320,7 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
 
 ## How run differs: automated post-implementation
 
-`run` shares Phases 0–3 and the pipeline with `plan`, but never stops for plan approval — invoking `/autopilot:run` is itself the authorization, so there is **no plan-approval gate**; run implements the moment the plan file is written. It then **replaces** the plan's "what's next?" prompt with an automated chain that proceeds without pausing.
+`run` shares Phases 0–3 and the pipeline with `plan`, but never stops for plan approval — invoking `/autopilot:run` is itself the authorization, so there is **no plan-approval gate**; run implements the moment the plan file is written. It then **replaces** the plan's `## Post-Implementation` section with a body saying the tail is automated, and drives the chain below from its own Phase 4 — the steps, flags, and recovery rules stay in the skill, not in the plan file.
 
 ```text
  ┌────────────┐   ┌──────────────┐   ┌──────────────┐   ┌───────────────┐
@@ -53151,7 +53350,7 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
 | `claude-plugins/autopilot/skills/plan/references/input-detection.md` | Detection table, tracker gating, create-issue flags          |
 | `claude-plugins/autopilot/skills/plan/references/pipeline.md`        | Draft template, review and scoring, finalize                 |
 | `claude-plugins/autopilot/skills/plan/references/stack-deltas.md`    | Per-stack example libraries, expert tables, verify examples  |
-| `claude-plugins/autopilot/skills/plan/references/branch-blocks.md`   | The `## Pre-Implementation` bodies                           |
+| `claude-plugins/autopilot/skills/plan/references/branch-blocks.md`   | `## Pre-Implementation` bodies and their mechanics           |
 | `claude-plugins/autopilot/skills/gather-context/SKILL.md`            | The one context fan-out and the Context Map contract         |
 | `claude-plugins/autopilot/skills/run/SKILL.md`                       | `plan` plus the automated post-implementation chain          |
 | `claude-plugins/autopilot/agents/digest-repo-standards.md`           | README / `docs/` / `rfc/` / `principles/` digest (JSON)      |
