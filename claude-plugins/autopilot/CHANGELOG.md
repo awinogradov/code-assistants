@@ -2,6 +2,89 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.13.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.12.0...autopilot@v1.13.0) (2026-07-25)
+
+## Release Notes
+
+Autopilot v1.13.0 ships a restructured planning pipeline that collects all context in a single parallel pass, cutting the plan skill from ~7,000 words to ~1,400 and eliminating several confirmation prompts throughout the workflow.
+
+## ✨ What's New
+
+### Parallel Context Gathering for Planning
+
+The planning flow previously collected context in sequential stages and asked for clarifications before it had read any code. Now a new [`gather-context`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/gather-context/SKILL.md) skill fires every context call in a single parallel fan-out — digest agents, issue resolution, TODO search, snapshot, stack detection, and git state all run at once. The human gate fires once the code is actually understood, not before.
+
+Two new agents support this: [`digest-repo-standards`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/digest-repo-standards.md) and [`digest-branch-diff`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/digest-branch-diff.md) return bounded JSON summaries so that README, RFC, and raw diff text never flood the calling skill's context window. As a side effect, the branch-diff digest now correctly identifies a rebase-merged branch as inactive (previously it read as ongoing work).
+
+The [`plan` skill](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/plan/SKILL.md) body drops from ~6,900 words to ~1,400; detail lives in reference files loaded on demand. The two stack-detection skills are replaced by a single delta table, which also closes the gap where `/autopilot:run` failed to detect Bun+React+Tailwind stacks.
+
+Expert review and validation scoring are now a single step with per-dimension scores and one capped revision pass; reviewers receive a Context Map excerpt for grounding.
+
+<details><summary>Related issues</summary>
+
+- [#475: Restructure the plan pipeline for context ordering, parallelism, and tokens](https://github.com/awinogradov/code-assistants/issues/475)
+</details>
+
+### Fewer Confirmation Prompts Across the Workflow
+
+Several points where autopilot paused to ask "does this look right?" have been eliminated for cases where the answer is derivable:
+
+- **Branch names** generated from a GitHub or Linear issue are created without asking you to confirm the name. Branches with special prefixes (`hotfix`, `trivial`, `maintenance`, `proposal`, `security`) still prompt.
+- **Commit messages** are no longer held for your approval. The gate is now commitlint validation — you are only asked to intervene when a message can't be made valid automatically.
+- **Pull request creation** via `/autopilot:pr-create` opens the PR immediately without asking you to confirm the generated title and body. Release notes are added automatically for meaningful changes rather than offered as a prompt option. The `--autopilot` flag on `pr:create` now only governs how an invalid branch name is handled.
+- After new commits land, an open pull request is refreshed automatically instead of offering to do it.
+
+<details><summary>Related issues</summary>
+
+- [#477: Stop confirming branch names and commit messages that are derivable](https://github.com/awinogradov/code-assistants/issues/477)
+- [#483: Stop confirming the generated pull request before creating it](https://github.com/awinogradov/code-assistants/issues/483)
+</details>
+
+### Cleaner Generated Plan Files
+
+Plan files written by autopilot now describe what will happen in plain prose instead of embedding `AskUserQuestion` parameters and `Skill(...)` call syntax. The branch setup and autopilot mechanics are handled by the skills themselves, so the plan file is readable by a human without knowing the internal tool API. A new post-implementation handoff phase was also added to the plan skill to close the loop after work completes.
+
+<details><summary>Related issues</summary>
+
+- [#481: Keep tool-call boilerplate out of the generated plan file](https://github.com/awinogradov/code-assistants/issues/481)
+</details>
+
+### Shared Instruction Blocks Across Skills
+
+Duplicated instruction blocks that had drifted across multiple autopilot skills (including three slightly different wordings of the same `AskUserQuestion` formatting note) are now sourced from a single `shared-rules` skill. This makes future updates to shared guidance a one-place change rather than a find-and-replace across agents.
+
+<details><summary>Related issues</summary>
+
+- [#479: Extract duplicated instruction blocks from autopilot skills into shared skills](https://github.com/awinogradov/code-assistants/issues/479)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #477 | [#484](https://github.com/awinogradov/code-assistants/pull/484) | @awinogradov |
+| #483 | [#484](https://github.com/awinogradov/code-assistants/pull/484) | @awinogradov |
+| #481 | [#482](https://github.com/awinogradov/code-assistants/pull/482) | @awinogradov |
+| #479 | [#480](https://github.com/awinogradov/code-assistants/pull/480) | @awinogradov |
+| #475 | [#476](https://github.com/awinogradov/code-assistants/pull/476) | @awinogradov |
+
+### Features
+
+* **autopilot:** add gather-context skill and agents ([288099a](https://github.com/awinogradov/code-assistants/commit/288099a2c82d87b1bcebc2eb21d63e74c5e21702))
+* **autopilot:** drop derivable branch and commit prompts ([79413e1](https://github.com/awinogradov/code-assistants/commit/79413e18dd5c609654d5732e3321082cbf8e45e8))
+* **plan:** state plan-file sections as prose, not tool calls ([3291274](https://github.com/awinogradov/code-assistants/commit/329127429d0358ca2bcd560bb841072fd142fe65))
+* **pr-create:** create the pr without confirmation ([052588e](https://github.com/awinogradov/code-assistants/commit/052588ed951122a859d7a194756f100dec7f9633))
+
+### Documentation
+
+* add shared-rules chapter and update readme index ([b9bb3bd](https://github.com/awinogradov/code-assistants/commit/b9bb3bd049eb4aea7136f38a06bde2499d9403fa))
+* list gather-context and digest agents in readme ([2f1a483](https://github.com/awinogradov/code-assistants/commit/2f1a483191f6ee576f70ec7a230037c7cf906ad8))
+
+### Refactoring
+
+* **autopilot:** gather planning context in one fan-out ([a9d78cc](https://github.com/awinogradov/code-assistants/commit/a9d78cc4de0fa98b8d20931851dfa23b038f7a8c))
+* **autopilot:** read shared blocks from one skill ([ef961da](https://github.com/awinogradov/code-assistants/commit/ef961daec8afd78a439d7436f371e37651a3bacb))
 ## [1.12.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.11.0...autopilot@v1.12.0) (2026-07-22)
 
 ## Release Notes
