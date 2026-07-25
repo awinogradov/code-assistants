@@ -168,11 +168,17 @@ Defined once in [`references/pipeline.md`](../claude-plugins/autopilot/skills/pl
 
 ### Draft plan
 
-Assemble a complete draft **before** review and scoring, so both operate on a concrete artifact rather than an imagined one. The draft follows a fixed template: `## Summary` (with steelmanned intent and a `Score:` placeholder), `## Implementation Steps` (each with an observable `verify:` line patterned on the stack's verify examples), `## Files`, and `## Post-Implementation`.
+Assemble a complete draft **before** review and scoring, so both operate on a concrete artifact rather than an imagined one. The draft follows a fixed template: `## Summary` (with steelmanned intent and a `Score:` placeholder), `## Implementation Steps` (each with an observable `verify:` line patterned on the stack's verify examples), `## Files`, and `## Post-Implementation` — the last of these stating in prose that documentation is updated and the work is committed or opened as a PR.
 
 Drafting works five analysis dimensions against the Context Map — **Architecture**, **Patterns**, **Data Flow**, **Types**, and **Edge Cases**. This was previously a separate "Deep Analysis" phase that produced no artifact and needed its own paragraph warning it not to re-crawl the tree; folding it into drafting removes both the phase boundary and the temptation.
 
 For structural or visual changes, ASCII diagrams are embedded inline in the section each explains rather than collected in a standalone section.
+
+### The plan file is output, not instructions
+
+Everything written into the plan file describes an outcome. No section carries an `AskUserQuestion` parameter block, a `Skill(...)` dispatch line, or an HTML-comment directive — those are agent-facing, and the plan file is what a human reads to decide whether to proceed.
+
+The mechanics sit in the phase that runs them: [Phase 5](#phase-5--embed-branch-creation) for the branch, [Phase 6](#phase-6--post-implementation-handoff) for `plan`'s handoff, and [Phase 4](#how-run-differs-automated-post-implementation) of `run` for the automated chain. Each behaviour is stated once. Before this split the branch and post-implementation mechanics existed twice — in the skill files and in a copy pasted into every plan file — so a renamed flag went stale in whichever copy nobody re-read, and the approval gate was padded with parameter arrays that said nothing about the change. [`planFileOutputPurity.test.ts`](../.github/actions/code-review-action/src/planFileOutputPurity.test.ts) enforces it: it walks the skill markdown, finds every fenced block destined for a plan file, and fails on any of those constructs.
 
 ### Review and score
 
@@ -190,13 +196,21 @@ Apply the aggregated findings and score to the draft, replace the `Score:` place
 
 ## Phase 5 — Embed branch creation
 
-The skill embeds the branch step into the plan file so it runs first, before any code changes — in `plan` after the user approves, in `run` straight away. The bodies live in [`references/branch-blocks.md`](../claude-plugins/autopilot/skills/plan/references/branch-blocks.md). Whether the branch name is confirmed depends on the input type rather than the caller: a name derived from a tracked issue is created directly, so those two blocks are identical for `plan` and `run`. Only the alert and plain-description blocks — whose slug comes from free-form text — still confirm, and so carry a `run` variant that appends `--autopilot`:
+The skill embeds the branch step into the plan file so it runs first, before any code changes — in `plan` after the user approves, in `run` straight away. [`references/branch-blocks.md`](../claude-plugins/autopilot/skills/plan/references/branch-blocks.md) keys two things by input type: the prose body inserted into the plan file, and the **Mechanics** paragraph beside it holding the `branch-create` invocation the caller runs. Because the flags live in Mechanics rather than in the inserted text, all four bodies are identical for `plan` and `run` — a `run` variant is now a different argument at execution time, not a different section body.
+
+Whether the branch name is confirmed still depends on the input type rather than the caller: a name derived from a tracked issue is created directly, while the alert and plain-description slugs come from free-form text and are confirmed, so those two carry a `run` variant appending `--autopilot`.
 
 - **GitHub issue** → `branch-create` with the issue number → `issue-<number>-<slug>`, so the PR can `Closes #<number>`. No confirmation.
 - **Linear issue** → `branch-create` with `<LINEAR-ID> --start` → `<team>-<number>-<slug>`. No confirmation.
 - **Code-scanning alert** → `branch-create` with `--security "<slug>"` → `security-<slug>` (no issue number, no `Closes #`).
 - **Plain description** → prompt for a branch type (Hotfix / Trivial / Maintenance), then branch with that prefix.
 - **Already on a feature branch with genuine unmerged work** → no branch block is added.
+
+## Phase 6 — Post-implementation handoff
+
+`plan` only. Once every step and its `verify:` line has passed, the skill asks what to do next — commit, open a pull request (with `--release-notes` when the session produced `feat:` or `fix:` commits), or stop — and dispatches to `commits-create` or `pr-create` accordingly.
+
+The gate lives in the orchestrator rather than the shared pipeline, for the same reason the two plan-mode calls do: `run` reuses only the pipeline, so a gate placed there would be inherited. `run` replaces this phase with its automated chain instead.
 
 ## Sub-agents and their JSON contracts
 
@@ -233,7 +247,7 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
 
 ## How run differs: automated post-implementation
 
-`run` shares Phases 0–3 and the pipeline with `plan`, but never stops for plan approval — invoking `/autopilot:run` is itself the authorization, so there is **no plan-approval gate**; run implements the moment the plan file is written. It then **replaces** the plan's "what's next?" prompt with an automated chain that proceeds without pausing.
+`run` shares Phases 0–3 and the pipeline with `plan`, but never stops for plan approval — invoking `/autopilot:run` is itself the authorization, so there is **no plan-approval gate**; run implements the moment the plan file is written. It then **replaces** the plan's `## Post-Implementation` section with a body saying the tail is automated, and drives the chain below from its own Phase 4 — the steps, flags, and recovery rules stay in the skill, not in the plan file.
 
 ```text
  ┌────────────┐   ┌──────────────┐   ┌──────────────┐   ┌───────────────┐
@@ -263,7 +277,7 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
 | `claude-plugins/autopilot/skills/plan/references/input-detection.md` | Detection table, tracker gating, create-issue flags          |
 | `claude-plugins/autopilot/skills/plan/references/pipeline.md`        | Draft template, review and scoring, finalize                 |
 | `claude-plugins/autopilot/skills/plan/references/stack-deltas.md`    | Per-stack example libraries, expert tables, verify examples  |
-| `claude-plugins/autopilot/skills/plan/references/branch-blocks.md`   | The `## Pre-Implementation` bodies                           |
+| `claude-plugins/autopilot/skills/plan/references/branch-blocks.md`   | `## Pre-Implementation` bodies and their mechanics           |
 | `claude-plugins/autopilot/skills/gather-context/SKILL.md`            | The one context fan-out and the Context Map contract         |
 | `claude-plugins/autopilot/skills/run/SKILL.md`                       | `plan` plus the automated post-implementation chain          |
 | `claude-plugins/autopilot/agents/digest-repo-standards.md`           | README / `docs/` / `rfc/` / `principles/` digest (JSON)      |
