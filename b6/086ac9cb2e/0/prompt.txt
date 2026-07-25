@@ -1,0 +1,11 @@
+/autopilot:plan do we really need tools calling in the result plan and templates https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/plan/references/pipeline.md#review-and-score-task-4 
+I think it must be in skills instructions but not in result for user
+
+---
+
+/autopilot:plan do we really need tools calling in the result plan and templates https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/plan/references/pipeline.md#review-and-score-task-4 
+I think it must be in skills instructions but not in result for user --issue
+
+---
+
+/autopilot:pr-monitor

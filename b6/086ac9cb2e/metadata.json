@@ -1,0 +1,29 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "b6086ac9cb2e",
+  "strategy": "manual-commit",
+  "branch": "issue-481-plan-file-prose-not-tool-calls",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".github/actions/code-review-action/src/linkResolution.test.ts",
+    ".github/actions/code-review-action/src/markdownFiles.ts",
+    ".github/actions/code-review-action/src/planFileOutputPurity.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/b6/086ac9cb2e/0/metadata.json",
+      "transcript": "/b6/086ac9cb2e/0/full.jsonl",
+      "compact_transcript": "/b6/086ac9cb2e/0/transcript.jsonl",
+      "content_hash": "/b6/086ac9cb2e/0/content_hash.txt",
+      "prompt": "/b6/086ac9cb2e/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 304,
+    "cache_creation_tokens": 353192,
+    "cache_read_tokens": 32589949,
+    "output_tokens": 132687,
+    "api_call_count": 134
+  }
+}
