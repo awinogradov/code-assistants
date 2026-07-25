@@ -46930,85 +46930,28 @@ Arguments: `$ARGUMENTS`
 Expected flags (all optional, any order):
 
 - `--draft` — create as a draft PR
-- `--release-notes` — include a release notes section in the body (auto-enabled on breaking changes)
+- `--release-notes` — force a release notes section into the body; [Phase 4](#phase-4-generate-pr-description) already adds one for breaking or meaningful changes
 - `--closes #N,#M` — additional issue numbers to close on merge (comma-separated, GitHub issue numbers)
 - `--related #X,#Y` — related issues to link without closing (comma-separated, GitHub issue numbers)
-- `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips the [Phase 5](#phase-5-verify-with-user) confirmation prompt and creates the PR directly with the generated title and body. When meaningful changes are detected ([Phase 2](#phase-2-gather-context)), release notes are auto-added.
+- `--autopilot` — non-interactive mode used by `/autopilot:run`. The PR is created from the generated title and body without confirmation for every caller, so the flag changes only the [Phase 1](#phase-1-validate-current-state) invalid-branch path: instead of asking how to proceed, it aborts loudly.
 
 ## Input resolution
 
 Arguments are optional. Resolve each field in this order:
 
 - **`--draft`** — `$ARGUMENTS` → default `false`. Do NOT prompt.
-- **`--release-notes`** — `$ARGUMENTS` → auto-enable when [Phase 2](#phase-2-gather-context) detects breaking changes → default `false`. Do NOT prompt (user gets an "Add release notes" option in [Phase 5](#phase-5-verify-with-user) preview).
+- **`--release-notes`** — `$ARGUMENTS` → otherwise decided by the [Phase 4](#phase-4-generate-pr-description) release-notes rule from the [Phase 2](#phase-2-gather-context) significance. Never prompt.
 - **`--closes`** — `$ARGUMENTS` → branch-name-derived issue number is already added automatically in [Phase 4](#phase-4-generate-pr-description). No prompt; treat absence as intentional.
 - **`--related`** — `$ARGUMENTS` → no inference. No prompt; treat absence as intentional.
-- **`--autopilot`** — `$ARGUMENTS` only. Never inferred. Default: `false` (interactive mode).
+- **`--autopilot`** — `$ARGUMENTS` only. Never inferred. Default: `false`, which differs only in how an invalid branch name is handled.
 - **Branch + base + issue number** — from `git branch --show-current` and the branch-name pattern `^issue-([0-9]+)-`. Special prefix branches (`hotfix-`, `trivial-`, `maintenance-`, `proposal-`) have no issue number. No prompt.
 - **Repository conventions** — read `CONTRIBUTING.md` directly from the repository root.
 
 ## Completion Requirement
 
-This workflow is not complete until [Phase 6](#phase-6-create-pull-request) executes `gh pr create` and outputs the PR URL. Generating a title, generating a description, or running validation does not constitute completion. Execute all six phases in sequence.
+This workflow is not complete until [Phase 5](#phase-5-create-pull-request) executes `gh pr create` and outputs the PR URL. Generating a title, generating a description, or running validation does not constitute completion. Execute all five phases in sequence.
 
 Do not call any skill not listed in `allowed-tools` above. The title and description rules in Phases 3-4 are the validation — there is no separate validation step.
-
-## AskUserQuestion Contract (MANDATORY)
-
-<!-- Canonical AskUserQuestion contract. The same 8-rule block in pr:update, commits:create, and issue:create mirrors this one — keep them in sync. -->
-
-**Autopilot bypass:** When `autopilotMode` is true (from [Phase 1](#phase-1-validate-current-state)), this contract is moot — the [Phase 5](#phase-5-verify-with-user) confirmation prompt is skipped. Generate the title and body, then proceed directly to [Phase 6](#phase-6-create-pull-request).
-
-Every AskUserQuestion call that presents content for review (PR previews in [Phase 5](#phase-5-verify-with-user)) MUST follow these exact rules. Simple choice dialogs ([Phase 1](#phase-1-validate-current-state) uncommitted changes) are exempt from the preview requirement.
-
-1. **`question` is FIXED TEXT** — use the EXACT string specified in each phase. NEVER add PR titles, bodies, metadata, file lists, diffs, or any other content to the question field.
-2. **`header` is FIXED TEXT** — use the EXACT string specified in each phase.
-3. **`preview` is MANDATORY** — every option MUST include a `preview` field. The PR content (title + body with separators) goes ONLY in `preview`. NEVER put content in `question`, `label`, or `description`.
-4. **`label` values are EXACT** — use the exact text specified (e.g., "Create PR", "Edit content", "Cancel"). No abbreviations, no paraphrasing, no creative alternatives.
-5. **`description` values are EXACT** — use the exact text specified. No rewording.
-6. **ALL options are REQUIRED** — include every option listed in the phase. NEVER omit "Cancel".
-7. **Same `preview` on all options** — the user chooses an action, not content. All options show identical preview text.
-8. **NO shorthand in `preview`** — never pass `"..."`, `"<same content>"`, `"<full PR content>"`, or any other placeholder string as a preview value. Copy the full preview string literally into every option. Shorthand is illustrative only; it must never appear in an actual AskUserQuestion tool call.
-
-### WRONG — PR content in question field
-
-```
-AskUserQuestion({
-  question: "Title: Add CI check monitoring\nBase: main\nBranch: issue-284-pr-monitor\n1 commit, 3 files changed\n\nBody:\nThe pr:monitor skill now monitors CI checks.\n\n- Added CI check detection\n- Added automated fix workflow\n\nRelease notes:\n- Added CI check monitoring\n\nCloses #284",
-  header: "Create PR",
-  options: [
-    { label: "Create PR", description: "Create this pull request" },
-    { label: "Edit", description: "Let me adjust the PR content" }
-  ]
-})
-```
-
-### WRONG — abbreviated labels, no preview, missing Cancel
-
-```
-AskUserQuestion({
-  question: "Review the pull request details and choose an action.",
-  header: "Create PR",
-  options: [
-    { label: "Create", description: "Add CI check monitoring - Added CI check detection..." },
-    { label: "Edit", description: "Modify the PR" }
-  ]
-})
-```
-
-### CORRECT
-
-```
-AskUserQuestion({
-  question: "Review the pull request details and choose an action.",
-  header: "Create PR",
-  options: [
-    { label: "Create PR", description: "Create pull request ready for review", preview: "Add CI check monitoring\n\nThe pr:monitor skill now monitors CI checks.\n\n- Added CI check detection\n- Added automated fix workflow\n\n---\n\n**Release notes:**\n\n- Added CI check monitoring\n\n---\n\n**Issues:**\n\nCloses #284" },
-    { label: "Edit content", description: "Modify title or description", preview: "Add CI check monitoring\n\nThe pr:monitor skill now monitors CI checks.\n\n- Added CI check detection\n- Added automated fix workflow\n\n---\n\n**Release notes:**\n\n- Added CI check monitoring\n\n---\n\n**Issues:**\n\nCloses #284" },
-    { label: "Cancel", description: "Abort PR creation", preview: "Add CI check monitoring\n\nThe pr:monitor skill now monitors CI checks.\n\n- Added CI check detection\n- Added automated fix workflow\n\n---\n\n**Release notes:**\n\n- Added CI check monitoring\n\n---\n\n**Issues:**\n\nCloses #284" }
-  ]
-})
-```
 
 ## Phase 0: Preflight Check
 
@@ -47028,7 +46971,20 @@ Uncommitted-change handling is done in [Phase 0](#phase-0-preflight-check) by `p
    - **GitHub** — matches `^issue-([0-9]+)-`: extract the number (e.g., `123`); `provider = github`; link as `Closes #123`.
    - **Special prefix** — starts with `hotfix-`/`trivial-`/`maintenance-`/`proposal-`/`security-`: uppercase it for the PR title prefix (e.g., `HOTFIX:`). For a `security-` branch, emit NO `Closes #` — record the code-scanning alert reference instead (see [Phase 4](#phase-4-generate-pr-description)).
    - **Linear** — matches `^([a-z][a-z0-9]*)-([0-9]+)-`: uppercase team + number to the Linear id (e.g., `eng-123-…` → `ENG-123`); `provider = linear`; the title gets the `ENG-123:` prefix and `**Issues:**` carries the magic word with the plain Linear issue URL — `Closes <linear-issue-url>` from the [Phase 2](#phase-2-gather-context) issue context (bare-id fallback, see [Phase 4](#phase-4-generate-pr-description)).
-4. If branch name is invalid, warn user and ask how to proceed
+4. If the branch name matches none of the conventions above, ask how to proceed. This is the only dialog the skill owns — a plain two-option choice, presenting nothing for review.
+
+   **Interactive mode only.** When `autopilotMode` is true, do not open it: abort loudly, naming the branch and the convention it violates, and create no PR.
+
+   Tool parameters:
+   - `question`: "The branch name does not follow the repository convention. Choose an action."
+   - `header`: "Invalid branch"
+   - `options`: [
+     { label: "Create PR anyway", description: "Open the pull request from this branch with no issue link" },
+     { label: "Cancel", description: "Stop so I can rename the branch first" }
+     ]
+   - `multiSelect`: false
+
+   **Formatting Note:** Read [`askuserquestion-format.md`](../shared-rules/references/askuserquestion-format.md) and apply it before composing the `question` parameter.
 
 ## Phase 2: Gather Context
 
@@ -47043,73 +46999,23 @@ Use the Agent tool with:
 
 After the agent completes, store the structured results (commit log, diff summary, issue context, breaking/meaningful flags).
 
-If the agent reports breaking changes, treat `--release-notes` as mandatory — add it automatically regardless of whether the flag was passed. Inform the user: "Breaking changes detected — release notes will be included automatically."
+If the agent reports breaking changes, tell the user: "Breaking changes detected — release notes will be included automatically." The [Phase 4](#phase-4-generate-pr-description) release-notes rule is what acts on the flags.
 
 ## Phase 3: Generate PR Title
 
 Read [`pr-title-grammar.md`](../shared-rules/references/pr-title-grammar.md) and generate a title that conforms to it. Beyond the grammar, the title must describe business value or user impact, be understandable by someone on their first day, and avoid implementation details and unexplained jargon.
 
-**Title self-check (MANDATORY):** re-verify the drafted title against the [Phase 1](#phase-1-validate-current-state) provider immediately before [Phase 6](#phase-6-create-pull-request) — when composing the [Phase 5](#phase-5-verify-with-user) preview on the interactive path, and in the autopilot bypass. If `provider = linear`, the title MUST start with the branch's `<team>-<number>` uppercased plus `: ` (branch `frtns-28-pr-gate` → title starts with `FRTNS-28: `); if the prefix is missing or names a different id, fix the title now. If `provider = github` or a special prefix, the title MUST NOT start with a `TEAM-N:` ticket prefix. A rule stated only here demonstrably gets dropped when the title is composed from commit context — this check is the gate, exactly like the reference-formatting self-check in [Phase 4](#phase-4-generate-pr-description) is for the body.
+**Title self-check (MANDATORY):** re-verify the drafted title against the [Phase 1](#phase-1-validate-current-state) provider immediately before [Phase 5](#phase-5-create-pull-request). If `provider = linear`, the title MUST start with the branch's `<team>-<number>` uppercased plus `: ` (branch `frtns-28-pr-gate` → title starts with `FRTNS-28: `); if the prefix is missing or names a different id, fix the title now. If `provider = github` or a special prefix, the title MUST NOT start with a `TEAM-N:` ticket prefix. A rule stated only here demonstrably gets dropped when the title is composed from commit context — this check is the gate, exactly like the reference-formatting self-check in [Phase 4](#phase-4-generate-pr-description) is for the body.
 
 ## Phase 4: Generate PR Description
 
 Read [`pr-body-grammar.md`](../shared-rules/references/pr-body-grammar.md) and compose the body to it — section set, ordering, `---` separators, release-notes heading, and the `**Issues:**` magic-word rules.
 
+**Release notes:** include the `**Release notes:**` section — between the description and `**Issues:**`, with `---` separators — whenever `--release-notes` was passed, [Phase 2](#phase-2-gather-context) reported breaking changes, or [`analyze-pr-commits`](../../agents/analyze-pr-commits.md#phase-3-analyze-change-significance) reported meaningful significance. This widens the old behaviour rather than preserving it: a meaningful but non-breaking change used to get the section only if the user asked for it at the confirmation prompt, and now always gets it. Dropping an unwanted section is a `pr:update` away and rewrites nothing, which is why there is no opt-out flag to decide.
+
 **Reference formatting (MANDATORY):** the generated body — both the description and the release-notes section — MUST follow the reference-formatting rules in [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) — read it first. The rule that keeps regressing: render every mention of a standard consistently as a link to its versioned RFC by stable ID (e.g., `[RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md)`), never a mix of bare text and links in the same body. Before finalizing, self-check the drafted body: a bare 7–40-char hex token or a bare tracker id (`[A-Z][A-Z0-9]*-[0-9]+`) outside the `**Issues:**` section is a violation — link it per the block.
 
-## Phase 5: Verify with User
-
-**Autopilot bypass:** If `autopilotMode` is true, skip the AskUserQuestion confirmation below. Before proceeding to [Phase 6](#phase-6-create-pull-request):
-
-- If meaningful changes are detected (per the [analyze-pr-commits](../../agents/analyze-pr-commits.md#phase-3-analyze-change-significance) significance from [Phase 2](#phase-2-gather-context)) AND neither `--release-notes` nor breaking changes triggered the release notes section, auto-generate the `**Release notes:**` section using the rules in [Phase 4](#phase-4-generate-pr-description) and insert it between the description and the `**Issues:**` section (with `---` separators).
-- Run the [Phase 3](#phase-3-generate-pr-title) Title self-check on the final title; fix the title if it fails.
-- Then proceed directly to [Phase 6](#phase-6-create-pull-request) with the resulting title and body.
-
-Present PR details using **AskUserQuestion tool** with preview.
-
-1. Compose the full PR content (title + description with separators) as a single string, after running the [Phase 3](#phase-3-generate-pr-title) Title self-check on the title.
-
-2. Confirm using AskUserQuestion tool:
-
-   **Tool call structure: See AskUserQuestion Contract above. All rules are mandatory.**
-
-   Tool parameters:
-   - `question`: "Review the pull request details and choose an action."
-   - `header`: "Create PR"
-   - `options`:
-
-     **If `--release-notes` was NOT used AND no breaking changes AND meaningful changes detected (per the [analyze-pr-commits](../../agents/analyze-pr-commits.md#phase-3-analyze-change-significance) significance from [Phase 2](#phase-2-gather-context)):**
-     [
-     { label: "Create PR", description: "Create pull request ready for review", preview: "<full PR content>" },
-     { label: "Add release notes", description: "Generate a release notes section for the changelog", preview: "<full PR content>" },
-     { label: "Edit content", description: "Modify title or description", preview: "<full PR content>" },
-     { label: "Cancel", description: "Abort PR creation", preview: "<full PR content>" }
-     ]
-
-     **Otherwise (flag used, breaking changes auto-added, or no meaningful changes):**
-     [
-     { label: "Create PR", description: "Create pull request ready for review", preview: "<full PR content>" },
-     { label: "Edit content", description: "Modify title or description", preview: "<full PR content>" },
-     { label: "Cancel", description: "Abort PR creation", preview: "<full PR content>" }
-     ]
-
-   - `multiSelect`: false
-
-   All options use the same `preview` content (full PR title + body) since the user is choosing an action, not content. The preview enables a side-by-side layout in the UI.
-
-3. If user selects "Add release notes":
-   - Generate the **Release notes:** section (same rules as [Phase 4](#phase-4-generate-pr-description))
-   - Insert it into the PR body between the description and issue links sections (with `---` separators)
-   - Re-present the full PR content using AskUserQuestion with preview (without the "Add release notes" option)
-
-4. If user selects "Edit content": ask what to change, regenerate, re-present
-
-5. If user selects "Cancel": abort with "PR creation cancelled."
-
-6. Only proceed after user selects "Create PR"
-7. Once "Create PR" is selected, immediately continue to [Phase 6](#phase-6-create-pull-request) below to execute `gh pr create`. Do not stop here.
-
-## Phase 6: Create Pull Request
+## Phase 5: Create Pull Request
 
 This phase is mandatory. Do not end the workflow before executing these steps.
 
@@ -47123,26 +47029,34 @@ This phase is mandatory. Do not end the workflow before executing these steps.
 
 ## Examples
 
+No confirmation dialog — the PR is created directly from the generated title and body. Each example below shows the command, the branch it runs on, and the section of the resulting PR that distinguishes it.
+
 ### Basic PR (closes branch issue only)
 
-**Command:** `/create-pr`
+**Command:** `/autopilot:pr-create` · **Branch:** `issue-749-editor-theme-selection`
 
-**Branch:** `issue-749-editor-theme-selection`
+Meaningful changes detected (`feat:` commits), so release notes are added automatically.
 
-AskUserQuestion with:
+```
+Allow editor theme selection per workspace
 
-- `question`: "Review the pull request details and choose an action."
-- `header`: "Create PR"
-- `options`: [
-  { label: "Create PR", description: "Create pull request ready for review", preview: "Allow editor theme selection per workspace\n\nUsers can now pick an editor theme per workspace. This makes long review sessions easier on the eyes and matches the rest of their IDE.\n\n- Added editor_theme per-workspace setting\n- Falls back to the system theme if no preference is set\n\n---\n\n**Issues:**\n\nCloses #749" },
-  { label: "Add release notes", description: "Generate a release notes section for the changelog", preview: "Allow editor theme selection per workspace\n\nUsers can now pick an editor theme per workspace. This makes long review sessions easier on the eyes and matches the rest of their IDE.\n\n- Added editor_theme per-workspace setting\n- Falls back to the system theme if no preference is set\n\n---\n\n**Issues:**\n\nCloses #749" },
-  { label: "Edit content", description: "Modify title or description", preview: "Allow editor theme selection per workspace\n\nUsers can now pick an editor theme per workspace. This makes long review sessions easier on the eyes and matches the rest of their IDE.\n\n- Added editor_theme per-workspace setting\n- Falls back to the system theme if no preference is set\n\n---\n\n**Issues:**\n\nCloses #749" },
-  { label: "Cancel", description: "Abort PR creation", preview: "Allow editor theme selection per workspace\n\nUsers can now pick an editor theme per workspace. This makes long review sessions easier on the eyes and matches the rest of their IDE.\n\n- Added editor_theme per-workspace setting\n- Falls back to the system theme if no preference is set\n\n---\n\n**Issues:**\n\nCloses #749" }
-  ]
+Users can now pick an editor theme per workspace. This makes long review sessions easier on the eyes and matches the rest of their IDE.
 
-Meaningful changes detected (feat: commits). "Add release notes" option shown.
+- Added editor_theme per-workspace setting
+- Falls back to the system theme if no preference is set
 
-User selects "Create PR".
+---
+
+**Release notes:**
+
+- Added per-workspace editor theme selection
+
+---
+
+**Issues:**
+
+Closes #749
+```
 
 ```
 ✓ Created PR: https://github.com/org/repo/pull/123
@@ -47152,21 +47066,15 @@ User selects "Create PR".
 
 ### PR with additional issues to close
 
-**Command:** `/create-pr --closes #750,#751`
+**Command:** `/autopilot:pr-create --closes #750,#751` · **Branch:** `issue-749-editor-theme-selection`
 
-**Branch:** `issue-749-editor-theme-selection`
+```
+**Issues:**
 
-AskUserQuestion with:
-
-- `question`: "Review the pull request details and choose an action."
-- `header`: "Create PR"
-- `options`: [
-  { label: "Create PR", description: "Create pull request ready for review", preview: "Allow editor theme selection per workspace\n\nUsers can now pick an editor theme per workspace.\n\n- Added editor_theme per-workspace setting\n- Fixed related caching issues\n\n---\n\n**Issues:**\n\nCloses #749\nCloses #750\nCloses #751" },
-  { label: "Edit content", description: "Modify title or description", preview: "Allow editor theme selection per workspace\n\nUsers can now pick an editor theme per workspace.\n\n- Added editor_theme per-workspace setting\n- Fixed related caching issues\n\n---\n\n**Issues:**\n\nCloses #749\nCloses #750\nCloses #751" },
-  { label: "Cancel", description: "Abort PR creation", preview: "Allow editor theme selection per workspace\n\nUsers can now pick an editor theme per workspace.\n\n- Added editor_theme per-workspace setting\n- Fixed related caching issues\n\n---\n\n**Issues:**\n\nCloses #749\nCloses #750\nCloses #751" }
-  ]
-
-User selects "Create PR".
+Closes #749
+Closes #750
+Closes #751
+```
 
 ```
 ✓ Created PR: https://github.com/org/repo/pull/124
@@ -47176,21 +47084,14 @@ User selects "Create PR".
 
 ### PR with related issues
 
-**Command:** `/create-pr --related #600`
+**Command:** `/autopilot:pr-create --related #600` · **Branch:** `issue-605-annotation-streaming`
 
-**Branch:** `issue-605-annotation-streaming`
+```
+**Issues:**
 
-AskUserQuestion with:
-
-- `question`: "Review the pull request details and choose an action."
-- `header`: "Create PR"
-- `options`: [
-  { label: "Create PR", description: "Create pull request ready for review", preview: "Refactor annotation codec for streaming support\n\nPart of the wire-format migration. Annotation codec is now streaming-capable.\n\n- No functional changes\n- All existing tests pass\n\n---\n\n**Issues:**\n\nCloses #605\nRelated to #600" },
-  { label: "Edit content", description: "Modify title or description", preview: "Refactor annotation codec for streaming support\n\nPart of the wire-format migration. Annotation codec is now streaming-capable.\n\n- No functional changes\n- All existing tests pass\n\n---\n\n**Issues:**\n\nCloses #605\nRelated to #600" },
-  { label: "Cancel", description: "Abort PR creation", preview: "Refactor annotation codec for streaming support\n\nPart of the wire-format migration. Annotation codec is now streaming-capable.\n\n- No functional changes\n- All existing tests pass\n\n---\n\n**Issues:**\n\nCloses #605\nRelated to #600" }
-  ]
-
-User selects "Create PR".
+Closes #605
+Related to #600
+```
 
 ```
 ✓ Created PR: https://github.com/org/repo/pull/125
@@ -47200,21 +47101,16 @@ User selects "Create PR".
 
 ### Draft PR with multiple issue links
 
-**Command:** `/create-pr --draft --closes #21 --related #20`
+**Command:** `/autopilot:pr-create --draft --closes #21 --related #20` · **Branch:** `issue-21-annotation-playback-events`
 
-**Branch:** `issue-21-annotation-playback-events`
+`--draft` is decided up front, on the command line — there is no prompt at which to change your mind.
 
-AskUserQuestion with:
+```
+**Issues:**
 
-- `question`: "Review the pull request details and choose an action."
-- `header`: "Create PR"
-- `options`: [
-  { label: "Create PR", description: "Create pull request ready for review", preview: "Add annotation events for playback duration reporting\n\nThe viewer needs to report how much of a plan was actually read before the user resolved it. This data is required for accurate review analytics.\n\n- AnnotationOpenedEvent\n- AnnotationResolvedEvent\n\n---\n\n**Issues:**\n\nCloses #21\nRelated to #20" },
-  { label: "Edit content", description: "Modify title or description", preview: "Add annotation events for playback duration reporting\n\nThe viewer needs to report how much of a plan was actually read before the user resolved it. This data is required for accurate review analytics.\n\n- AnnotationOpenedEvent\n- AnnotationResolvedEvent\n\n---\n\n**Issues:**\n\nCloses #21\nRelated to #20" },
-  { label: "Cancel", description: "Abort PR creation", preview: "Add annotation events for playback duration reporting\n\nThe viewer needs to report how much of a plan was actually read before the user resolved it. This data is required for accurate review analytics.\n\n- AnnotationOpenedEvent\n- AnnotationResolvedEvent\n\n---\n\n**Issues:**\n\nCloses #21\nRelated to #20" }
-  ]
-
-User selects "Create PR".
+Closes #21
+Related to #20
+```
 
 ```
 ✓ Created draft PR: https://github.com/org/repo/pull/126
@@ -47224,21 +47120,17 @@ User selects "Create PR".
 
 ### Special prefix PR (HOTFIX)
 
-**Command:** `/create-pr`
+**Command:** `/autopilot:pr-create` · **Branch:** `hotfix-memory-leak-editor`
 
-**Branch:** `hotfix-memory-leak-editor`
+A special-prefix branch carries no issue number, so the body has no `**Issues:**` section.
 
-AskUserQuestion with:
+```
+HOTFIX: Fix memory leak in editor
 
-- `question`: "Review the pull request details and choose an action."
-- `header`: "Create PR"
-- `options`: [
-  { label: "Create PR", description: "Create pull request ready for review", preview: "HOTFIX: Fix memory leak in editor\n\nFixed a memory leak in the editor caused by unreleased document buffers.\n\n- Properly dispose document buffers after editor close" },
-  { label: "Edit content", description: "Modify title or description", preview: "HOTFIX: Fix memory leak in editor\n\nFixed a memory leak in the editor caused by unreleased document buffers.\n\n- Properly dispose document buffers after editor close" },
-  { label: "Cancel", description: "Abort PR creation", preview: "HOTFIX: Fix memory leak in editor\n\nFixed a memory leak in the editor caused by unreleased document buffers.\n\n- Properly dispose document buffers after editor close" }
-  ]
+Fixed a memory leak in the editor caused by unreleased document buffers.
 
-User selects "Create PR".
+- Properly dispose document buffers after editor close
+```
 
 ```
 ✓ Created PR: https://github.com/org/repo/pull/127
@@ -47248,21 +47140,16 @@ User selects "Create PR".
 
 ### Special prefix PR (PROPOSAL)
 
-**Command:** `/create-pr`
+**Command:** `/autopilot:pr-create` · **Branch:** `proposal-add-vim-keybindings`
 
-**Branch:** `proposal-add-vim-keybindings`
+```
+PROPOSAL: Add Vim keybindings
 
-AskUserQuestion with:
+Proposes Vim-style modal keybindings as an opt-in editor mode. Discussion on this PR will decide if we adopt it.
 
-- `question`: "Review the pull request details and choose an action."
-- `header`: "Create PR"
-- `options`: [
-  { label: "Create PR", description: "Create pull request ready for review", preview: "PROPOSAL: Add Vim keybindings\n\nProposes Vim-style modal keybindings as an opt-in editor mode. Discussion on this PR will decide if we adopt it.\n\n- Sketch of normal/insert/visual mode bindings\n- Opt-in via editor.mode setting" },
-  { label: "Edit content", description: "Modify title or description", preview: "PROPOSAL: Add Vim keybindings\n\nProposes Vim-style modal keybindings as an opt-in editor mode. Discussion on this PR will decide if we adopt it.\n\n- Sketch of normal/insert/visual mode bindings\n- Opt-in via editor.mode setting" },
-  { label: "Cancel", description: "Abort PR creation", preview: "PROPOSAL: Add Vim keybindings\n\nProposes Vim-style modal keybindings as an opt-in editor mode. Discussion on this PR will decide if we adopt it.\n\n- Sketch of normal/insert/visual mode bindings\n- Opt-in via editor.mode setting" }
-  ]
-
-User selects "Create PR".
+- Sketch of normal/insert/visual mode bindings
+- Opt-in via editor.mode setting
+```
 
 ```
 ✓ Created PR: https://github.com/org/repo/pull/131
@@ -47270,23 +47157,18 @@ User selects "Create PR".
 
 ---
 
-### PR with release notes
+### PR with forced release notes
 
-**Command:** `/create-pr --release-notes`
+**Command:** `/autopilot:pr-create --release-notes` · **Branch:** `issue-749-editor-theme-selection`
 
-**Branch:** `issue-749-editor-theme-selection`
+The flag forces the section even when the significance check would not have.
 
-AskUserQuestion with:
+```
+**Release notes:**
 
-- `question`: "Review the pull request details and choose an action."
-- `header`: "Create PR"
-- `options`: [
-  { label: "Create PR", description: "Create pull request ready for review", preview: "Allow editor theme selection per workspace\n\nUsers can now pick an editor theme per workspace. This makes long review sessions easier on the eyes and matches the rest of their IDE.\n\n- Added editor_theme per-workspace setting\n- Falls back to the system theme if no preference is set\n\n---\n\n**Release notes:**\n\n- Added per-workspace editor theme selection\n- Default theme fallback when no workspace preference is set\n\n---\n\n**Issues:**\n\nCloses #749" },
-  { label: "Edit content", description: "Modify title or description", preview: "Allow editor theme selection per workspace\n\nUsers can now pick an editor theme per workspace. This makes long review sessions easier on the eyes and matches the rest of their IDE.\n\n- Added editor_theme per-workspace setting\n- Falls back to the system theme if no preference is set\n\n---\n\n**Release notes:**\n\n- Added per-workspace editor theme selection\n- Default theme fallback when no workspace preference is set\n\n---\n\n**Issues:**\n\nCloses #749" },
-  { label: "Cancel", description: "Abort PR creation", preview: "Allow editor theme selection per workspace\n\nUsers can now pick an editor theme per workspace. This makes long review sessions easier on the eyes and matches the rest of their IDE.\n\n- Added editor_theme per-workspace setting\n- Falls back to the system theme if no preference is set\n\n---\n\n**Release notes:**\n\n- Added per-workspace editor theme selection\n- Default theme fallback when no workspace preference is set\n\n---\n\n**Issues:**\n\nCloses #749" }
-  ]
-
-User selects "Create PR".
+- Added per-workspace editor theme selection
+- Default theme fallback when no workspace preference is set
+```
 
 ```
 ✓ Created PR: https://github.com/org/repo/pull/128
@@ -47294,25 +47176,17 @@ User selects "Create PR".
 
 ---
 
-### PR with breaking changes (release notes auto-added)
+### PR with breaking changes
 
-**Command:** `/create-pr`
+**Command:** `/autopilot:pr-create` · **Branch:** `issue-400-remove-legacy-plan-import`
 
-**Branch:** `issue-400-remove-legacy-plan-import`
+Breaking changes detected (`feat!:` commit), so release notes are mandatory regardless of the flag.
 
-Breaking changes detected (`feat!:` commit). Release notes added automatically.
+```
+**Release notes:**
 
-AskUserQuestion with:
-
-- `question`: "Review the pull request details and choose an action."
-- `header`: "Create PR"
-- `options`: [
-  { label: "Create PR", description: "Create pull request ready for review", preview: "Remove legacy plan-import endpoints\n\nRemoved deprecated v1 plan-import endpoints. All consumers must migrate to v2.\n\n- Removed /api/v1/plans/* routes\n- Updated API documentation\n\n---\n\n**Release notes:**\n\n- BREAKING: Removed legacy plan-import v1 endpoints — migrate to /api/v2\n\n---\n\n**Issues:**\n\nCloses #400" },
-  { label: "Edit content", description: "Modify title or description", preview: "Remove legacy plan-import endpoints\n\nRemoved deprecated v1 plan-import endpoints. All consumers must migrate to v2.\n\n- Removed /api/v1/plans/* routes\n- Updated API documentation\n\n---\n\n**Release notes:**\n\n- BREAKING: Removed legacy plan-import v1 endpoints — migrate to /api/v2\n\n---\n\n**Issues:**\n\nCloses #400" },
-  { label: "Cancel", description: "Abort PR creation", preview: "Remove legacy plan-import endpoints\n\nRemoved deprecated v1 plan-import endpoints. All consumers must migrate to v2.\n\n- Removed /api/v1/plans/* routes\n- Updated API documentation\n\n---\n\n**Release notes:**\n\n- BREAKING: Removed legacy plan-import v1 endpoints — migrate to /api/v2\n\n---\n\n**Issues:**\n\nCloses #400" }
-  ]
-
-User selects "Create PR".
+- BREAKING: Removed legacy plan-import v1 endpoints — migrate to /api/v2
+```
 
 ```
 ✓ Created PR: https://github.com/org/repo/pull/129
@@ -47320,32 +47194,23 @@ User selects "Create PR".
 
 ---
 
-### PR with auto-suggested release notes
+### PR with automatic release notes
 
-**Command:** `/create-pr`
+**Command:** `/autopilot:pr-create` · **Branch:** `issue-801-add-billing-export`
 
-**Branch:** `issue-801-add-billing-export`
+Meaningful changes detected (`feat:` commits). The section is added without asking — it is behaviour now, not an offer.
 
-Meaningful changes detected (`feat:` commits). "Add release notes" option shown.
+```
+**Release notes:**
 
-AskUserQuestion with:
-
-- `question`: "Review the pull request details and choose an action."
-- `header`: "Create PR"
-- `options`: [
-  { label: "Create PR", description: "Create pull request ready for review", preview: "Add monthly billing export\n\nAdded ability to export monthly billing data as CSV.\n\n- New /api/v2/billing/export endpoint\n- Supports date range filtering\n\n---\n\n**Issues:**\n\nCloses #801" },
-  { label: "Add release notes", description: "Generate a release notes section for the changelog", preview: "Add monthly billing export\n\nAdded ability to export monthly billing data as CSV.\n\n- New /api/v2/billing/export endpoint\n- Supports date range filtering\n\n---\n\n**Issues:**\n\nCloses #801" },
-  { label: "Edit content", description: "Modify title or description", preview: "Add monthly billing export\n\nAdded ability to export monthly billing data as CSV.\n\n- New /api/v2/billing/export endpoint\n- Supports date range filtering\n\n---\n\n**Issues:**\n\nCloses #801" },
-  { label: "Cancel", description: "Abort PR creation", preview: "Add monthly billing export\n\nAdded ability to export monthly billing data as CSV.\n\n- New /api/v2/billing/export endpoint\n- Supports date range filtering\n\n---\n\n**Issues:**\n\nCloses #801" }
-  ]
-
-User selects "Add release notes". Notes generated and inserted. Re-presented with preview for confirmation.
-
-User selects "Create PR".
+- Added monthly billing export as CSV
+```
 
 ```
 ✓ Created PR: https://github.com/org/repo/pull/130
 ```
+
+---
 
 **Reference self-check (MANDATORY):** after composing the output, re-read it against [`reference-formatting.md`](../shared-rules/references/reference-formatting.md). A bare commit SHA, a bare tracker id outside a magic-word line, or an unlinked mention of a file that exists in the repo is a violation — fix it before emitting.
 </file>
