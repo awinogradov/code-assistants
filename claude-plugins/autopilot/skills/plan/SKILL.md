@@ -25,6 +25,8 @@ allowed-tools:
   - Skill(autopilot:issue-create)
   - Skill(autopilot:linear-create)
   - Skill(autopilot:ascii-schemas)
+  - Skill(autopilot:commits-create)
+  - Skill(autopilot:pr-create)
 ---
 
 Perform deep analysis of the codebase, recent changes, and the requested task. Create a validated, expert-reviewed implementation plan.
@@ -144,6 +146,12 @@ Every plan file MUST begin with a single `# <Title>` line on line 1, followed by
 
 When a `## Pre-Implementation` block is emitted it sits between the title and `## Summary`; otherwise `## Summary` follows the title directly.
 
+### Plan file is output, not instructions
+
+The plan file is what the reader approves, so every section describes an outcome in prose: which branch gets created, what each step changes, what happens once the steps land. It carries no `AskUserQuestion` parameter block, no `Skill(...)` dispatch line, and no HTML-comment directive aimed at the agent.
+
+The tool calls that realize those outcomes belong to the phase that runs them — [Phase 5](#phase-5-embed-branch-creation-and-request-approval) for the branch, [Phase 6](#phase-6-post-implementation-handoff) for the handoff — and to the reference files those phases read. Stating them once there, rather than in both places, is what keeps a renamed flag from going stale in a copy nobody re-reads.
+
 ### CLAUDE.md Compliance
 
 Map each planned change to the project rules in CLAUDE.md.
@@ -170,14 +178,43 @@ ExitPlanMode
 
 `ExitPlanMode` reads the plan back from the plan-mode file and asks the user to approve it. On approval the session leaves plan mode and implementation begins with `## Pre-Implementation`, then `## Implementation Steps`.
 
+That `## Pre-Implementation` body states the branch as an outcome, not as a command. Run it from the **Mechanics** paragraph beside the matching block in [branch-blocks.md](references/branch-blocks.md) — that paragraph carries the `branch-create` invocation and its arguments. Never improvise the branch with raw `git` because the plan file no longer spells the call out.
+
 This step is `/autopilot:plan` only — see [`run/SKILL.md`](../run/SKILL.md).
+
+## Phase 6: Post-implementation handoff
+
+After every implementation step and its `verify:` line has passed, ask what to do next. This gate is `/autopilot:plan` only: `run` replaces it with the automated chain in [`run/SKILL.md`](../run/SKILL.md), which is why it lives here in the orchestrator rather than in the shared pipeline `run` also executes.
+
+**If the session produced user-facing changes** (`feat:` or `fix:` commits), use the `--release-notes` variant of the "Create PR" option below; otherwise use the plain one.
+
+Tool parameters:
+
+- `question`: "All changes implemented and verified. What's next?"
+- `header`: "Next"
+- `options`: [
+  { label: "Create commit", description: "Run /autopilot:commits-create to commit changes" },
+  { label: "Create PR", description: "Run /autopilot:pr-create --release-notes to open a PR with release notes" },
+  { label: "Done", description: "No further action needed" }
+  ]
+- `multiSelect`: false
+
+With no user-facing changes, the "Create PR" description reads `"Run /autopilot:pr-create to open a pull request"` instead.
+
+Then act on the selection:
+
+- "Create commit" — invoke `Skill(autopilot:commits-create)`
+- "Create PR" — invoke `Skill(autopilot:pr-create)` with the flags shown in the chosen option's description
+- "Done" — stop here
+
+Read [`askuserquestion-format.md`](../shared-rules/references/askuserquestion-format.md) and apply it before composing the `question` parameter.
 
 ## Additional Resources
 
 - [`references/input-detection.md`](references/input-detection.md) — create-issue flags, detection table, tracker gating, alert divergence
 - [`references/pipeline.md`](references/pipeline.md) — draft template, expert review and scoring, finalize
 - [`references/stack-deltas.md`](references/stack-deltas.md) — per-stack example libraries, expert tables, verify examples
-- [`references/branch-blocks.md`](references/branch-blocks.md) — the `## Pre-Implementation` bodies
+- [`references/branch-blocks.md`](references/branch-blocks.md) — the `## Pre-Implementation` bodies and the mechanics that execute them
 
 When you write the plan file, apply the reference-formatting rules in [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (RFC-0001, read it first) to every reference it contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
 

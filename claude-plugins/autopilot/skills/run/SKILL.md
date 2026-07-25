@@ -113,22 +113,30 @@ Pick the body by input type from [branch-blocks.md](../plan/references/branch-bl
 
 ### Post-Implementation (REPLACES the pipeline's default)
 
-**REPLACE** the `## Post-Implementation` section the pipeline template produced with this autopilot chain:
+**REPLACE** the `## Post-Implementation` section the pipeline template produced with this body, which tells the reader the tail is automated:
 
 ```
 ## Post-Implementation (Autopilot)
 
-After all implementation steps and verification are complete, execute the following automatically. Do NOT present a "What's next?" AskUserQuestion — proceed through all steps without pausing.
+Once every step above is done and verified, the rest runs automatically, with no approval prompt:
 
-### Step 1: Auto-Commit
+1. Update any `README.md`, `docs/*`, and `rfc/*` this change affects. Editing the content of an Accepted RFC also means bumping its `version` frontmatter and adding a Changelog entry.
+2. Commit the change and push the branch.
+3. Open a pull request, or update the existing one.
+4. Monitor the pull request until the review approves it or it merges, addressing review feedback as it arrives.
+```
 
-Set task 6 ("Commit changes") to `in_progress`. Invoke `Skill(autopilot:commits-create)` with `--autopilot`. The flag suppresses the commit-strategy prompt and the skill's own PR update (this chain creates or updates the PR itself in Step 3), and turns a validation failure into a loud abort instead of a prompt. Follow the skill's full workflow — do NOT run `git commit` directly.
+The steps below are how that body is carried out. They are instructions for you, not text for the plan file — the plan file is what the reader sees, so it stays prose (see the **Plan file is output, not instructions** rule in [`plan/SKILL.md`](../plan/SKILL.md#plan-file-is-output-not-instructions)). Execute them in [Phase 5](#phase-5-implement-and-proceed) without pausing, and never present a "What's next?" AskUserQuestion.
+
+#### Step 1: Auto-Commit
+
+Set task 6 ("Commit changes") to `in_progress`. Invoke `Skill(autopilot:commits-create)` with `--autopilot`. The flag suppresses the commit-strategy prompt and the skill's own PR update (this chain creates or updates the PR itself in Step 2), and turns a validation failure into a loud abort instead of a prompt. Follow the skill's full workflow — do NOT run `git commit` directly.
 
 If the commit fails due to a pre-commit hook, check `git status` for modified files (the hook may have auto-formatted), re-stage with `git add -u`, and retry once. If it still fails, report the error and stop.
 
 After committing, push: `git push -u origin <branch>`. Set task 6 to `completed`.
 
-### Step 2: Auto-Create PR
+#### Step 2: Auto-Create PR
 
 Set task 7 ("Create PR") to `in_progress`.
 
@@ -152,16 +160,17 @@ Output the PR URL. Set task 7 to `completed`.
 
    If any check fails: output "PR format violation detected — skill may have been bypassed. Running pr:update to fix...", invoke `Skill(autopilot:pr-update)`, and re-validate once. If it still fails, output "PR format could not be auto-fixed. Manual review required." and continue.
 
-### Step 3: Monitor PR
+#### Step 3: Monitor PR
 
 Set task 8 ("Monitor PR") to `in_progress`. Invoke `Skill(autopilot:pr-monitor)` in foreground mode (do NOT use the Agent tool with run_in_background). It polls for review status, invokes pr:resolve interactively if changes are requested, and waits for approval or merge.
 
 **Autopilot override for pr:resolve:** when pr:monitor invokes pr:resolve and it presents the review-action gate via AskUserQuestion, auto-select "Address all". Replies post without prompting.
 
-### Completion
+#### Completion
 
 Set task 8 to `completed`. Output:
 
+```
 Autopilot complete.
 PR: <pr-url>
 Status: <approved/merged>
@@ -171,9 +180,9 @@ Status: <approved/merged>
 
 Once the plan file carries `## Pre-Implementation` and `## Post-Implementation (Autopilot)`, proceed straight through with no approval gate:
 
-1. Run the `## Pre-Implementation` branch creation.
+1. Create the branch per the **Mechanics** paragraph beside the matching block in [branch-blocks.md](../plan/references/branch-blocks.md), using the run variant where one is noted. The plan file's `## Pre-Implementation` states the outcome; that paragraph carries the invocation.
 2. Implement every step in the plan, verifying each as you go.
-3. Execute the autopilot chain — commit → push → PR → monitor — without prompting.
+3. Execute the autopilot chain — commit → push → PR → monitor — per [Phase 4](#phase-4-embed-branch-creation-and-the-autopilot-chain)'s Step 1 through Completion, without prompting.
 
 The only user prompts in the entire run are the branch-type pick for plain-description inputs and review-feedback handling during PR monitoring. There is no plan-approval step.
 
