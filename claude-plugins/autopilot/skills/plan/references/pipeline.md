@@ -22,7 +22,7 @@ Work these dimensions against the Context Map as you draft. They are analysis, n
 | **Types**        | What interfaces/schemas exist? What needs Zod validation? |
 | **Edge Cases**   | What could fail? Null states? Race conditions?            |
 
-The template begins with `# <Title>` — see the **Plan File Header** rule in the calling skill for title derivation and section ordering.
+The template begins with `# <Title>` — see the **Plan File Header** rule in the calling skill for title derivation and section ordering. For a change with structure worth showing, generate the diagrams per the calling skill's **Visualize with ASCII Schemas** rule and embed each one inline in the section it explains, beside the relevant step, file entry, or data-flow line.
 
 ```
 # <Title>
@@ -31,8 +31,6 @@ The template begins with `# <Title>` — see the **Plan File Header** rule in th
 [1-2 sentences: what and why]
 Steelmanned intent: [verbatim from the Steelmanned Intent block]
 Score: [filled by the review step — leave as a placeholder in the draft]
-
-<!-- For architectural/visual/UI/flow changes, embed each ASCII diagram from Skill(autopilot:ascii-schemas) inline in the section it explains — beside the relevant implementation step, file entry, or data-flow line. Do not add a standalone diagrams section; omit diagrams entirely for pure logic/refactor changes. -->
 
 ## Implementation Steps
 
@@ -44,30 +42,13 @@ Every step MUST include a `verify:` line — an observable check (test name, com
 
 ## Post-Implementation
 
-After all implementation steps and verification are complete:
+Once every step above is done and verified:
 
-1. **Update documentation (MANDATORY)** — update any `README.md`, `docs/*`, and `rfc/*` affected by these changes so the documented source of truth stays current. If a change edits the content of an Accepted RFC, bump its `version` frontmatter and add a Changelog entry (mirrors the review's CHECK-RFC-003). When an update needs a diagram, generate it via `Skill(autopilot:ascii-schemas)` and embed the output verbatim — do not hand-draw.
-2. Present next actions using AskUserQuestion.
-
-**If the implementation included user-facing changes** (feat: or fix: commits created during this session), use `--release-notes` in the "Create PR" option. Otherwise, use the plain option.
-
-Tool parameters:
-- `question`: "All changes implemented and verified. What's next?"
-- `header`: "Next"
-- `options`: [
-  { label: "Create commit", description: "Run /autopilot:commits-create to commit changes" },
-  { label: "Create PR", description: "Run /autopilot:pr-create --release-notes to open a PR with release notes" },
-  { label: "Done", description: "No further action needed" }
-  ]
-- `multiSelect`: false
-
-After the user selects their option:
-- "Create commit": invoke `Skill(autopilot:commits-create)`
-- "Create PR": invoke `Skill(autopilot:pr-create)` with the flags shown in the option description
-- "Done": no further action needed
+1. Update any `README.md`, `docs/*`, and `rfc/*` this change affects, so the documented source of truth stays current. Editing the content of an Accepted RFC also means bumping its `version` frontmatter and adding a Changelog entry.
+2. Then decide what to do with the work: commit it, open a pull request, or stop here.
 ```
 
-`run` replaces this `## Post-Implementation` block with its own automated chain — see [`run/SKILL.md`](../../run/SKILL.md).
+The template is prose because the plan file is what the reader approves — see the **Plan file is output, not instructions** rule in the calling skill. Both callers replace step 2 with their own machinery: `plan` asks in its post-implementation handoff phase, `run` runs the automated chain in [`run/SKILL.md`](../../run/SKILL.md) instead of asking.
 
 Set task 3 to `completed`.
 
