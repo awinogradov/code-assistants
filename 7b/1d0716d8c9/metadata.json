@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "7b1d0716d8c9",
+  "strategy": "manual-commit",
+  "branch": "issue-487-explore-context-brief",
+  "checkpoints_count": 4,
+  "files_touched": [
+    "README.md",
+    "claude-plugins/autopilot/README.md",
+    "docs/05-plan-run-skills.md",
+    "docs/14-explore-skill.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/7b/1d0716d8c9/0/metadata.json",
+      "transcript": "/7b/1d0716d8c9/0/full.jsonl",
+      "compact_transcript": "/7b/1d0716d8c9/0/transcript.jsonl",
+      "content_hash": "/7b/1d0716d8c9/0/content_hash.txt",
+      "prompt": "/7b/1d0716d8c9/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 832,
+    "cache_creation_tokens": 375255,
+    "cache_read_tokens": 34300929,
+    "output_tokens": 145303,
+    "api_call_count": 131
+  }
+}

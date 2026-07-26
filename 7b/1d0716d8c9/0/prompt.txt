@@ -1,0 +1,33 @@
+/autopilot:plan analyze current skills, especially plan skill. Plan and run work with target to gather context of the repo and around. Sometimes I dont have exact target — refactoring flow for example. I want to have a skill which fill the context first, then i will instruct what to do one by one. Usually this is the surgual fixes. Think deep about it. Ask me questions to understand the flow better.
+
+---
+
+/autopilot:pr-monitor
+
+---
+
+<task-notification>
+<task-id>b7b5mdna3</task-id>
+<summary>Monitor event: "PR 488 review + CI status"</summary>
+<event>PR488 state=OPEN review=REVIEW_REQUIRED pending=2 failing=[]</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>b7b5mdna3</task-id>
+<summary>Monitor event: "PR 488 review + CI status"</summary>
+<event>PR488 state=OPEN review=REVIEW_REQUIRED pending=1 failing=[]</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>b7b5mdna3</task-id>
+<summary>Monitor event: "PR 488 review + CI status"</summary>
+<event>PR488 state=OPEN review=CHANGES_REQUESTED pending=1 failing=[]
+TERMINAL: changes requested on PR 488</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
