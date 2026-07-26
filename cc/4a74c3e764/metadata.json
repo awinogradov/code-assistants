@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "cc4a74c3e764",
+  "strategy": "manual-commit",
+  "branch": "issue-487-explore-context-brief",
+  "checkpoints_count": 4,
+  "files_touched": [
+    "docs/14-explore-skill.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/cc/4a74c3e764/0/metadata.json",
+      "transcript": "/cc/4a74c3e764/0/full.jsonl",
+      "compact_transcript": "/cc/4a74c3e764/0/transcript.jsonl",
+      "content_hash": "/cc/4a74c3e764/0/content_hash.txt",
+      "prompt": "/cc/4a74c3e764/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 891,
+    "cache_creation_tokens": 416636,
+    "cache_read_tokens": 47585048,
+    "output_tokens": 165791,
+    "api_call_count": 163
+  }
+}
