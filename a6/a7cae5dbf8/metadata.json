@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "a6a7cae5dbf8",
+  "strategy": "manual-commit",
+  "branch": "issue-487-explore-context-brief",
+  "checkpoints_count": 4,
+  "files_touched": [
+    ".gitignore",
+    ".prettierignore",
+    "claude-plugins/autopilot/skills/explore/SKILL.md",
+    "claude-plugins/autopilot/skills/gather-context/SKILL.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/a6/a7cae5dbf8/0/metadata.json",
+      "transcript": "/a6/a7cae5dbf8/0/full.jsonl",
+      "compact_transcript": "/a6/a7cae5dbf8/0/transcript.jsonl",
+      "content_hash": "/a6/a7cae5dbf8/0/content_hash.txt",
+      "prompt": "/a6/a7cae5dbf8/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 832,
+    "cache_creation_tokens": 375255,
+    "cache_read_tokens": 34300929,
+    "output_tokens": 145303,
+    "api_call_count": 131
+  }
+}
