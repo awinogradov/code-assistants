@@ -27,6 +27,7 @@ The invoking skill provides in the prompt:
 - **Repository** (e.g., `awinogradov/code-assistants`) and **repository root** (absolute path).
 - **Linear team** — for `linear-issue` only, the matched tracker's team.
 - **Task summary** — the raw task text, used to rank standards and scope the codebase pass.
+- **Scope** — `task` (the default) or `broad`, selecting how [Phase 2](#phase-2-scope-the-codebase-pass) reads the snapshot. Optional: `plan` and `run` omit it and get `task`.
 
 ## Phase 1: Fan out
 
@@ -55,6 +56,8 @@ Issue **every** call below in a **single message** so they run concurrently. Do 
 Only now is the task's subject matter known, so this pass runs after the fan-out returns.
 
 Search the snapshot with `mcp__repomix__grep_repomix_output` for the implementations, patterns, and tests the change touches, reading specific ranges via `mcp__repomix__read_repomix_output`. The snapshot reflects the base at its last refresh, so reach for live Grep/Glob/Read **only** for working-tree code the snapshot cannot show — `digest-branch-diff` already reports what is in flight. Do not crawl the tree for anything the snapshot answers.
+
+**At `broad` scope there is no change to narrow to**, so read the snapshot breadth-first instead: the principal modules and their boundaries, the entry points, and the conventions that govern them. Fill `Relevant files` and `Patterns to mirror` at that altitude — the modules a newcomer must know and the conventions they must copy, rather than the handful a specific edit would touch. Every other section keeps its meaning, and the emitted section list is identical either way, so a caller that omits `Scope` sees exactly today's behavior.
 
 ## Phase 3: Emit the Context Map
 

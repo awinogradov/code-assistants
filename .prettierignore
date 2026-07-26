@@ -12,3 +12,7 @@ coverage/
 # Bundled, self-contained Node sub-project for the pdf:create skill — decoupled
 # from the Bun workspace and the root Prettier (.{md,json}) glob on purpose.
 claude-plugins/autopilot/skills/pdf:create/renderer/
+
+# Local context brief written by the explore skill — machine-generated and
+# git-ignored, so the root Prettier (.{md,json}) glob must not check it.
+.claude/context/
