@@ -121,6 +121,8 @@ The snapshot prefers the committed `.repomix/pack.xml` via `attach_packed_output
 
 A resolver returning `unresolved` with a non-null `resolveError` is fatal: the skill surfaces the error and stops rather than proceeding against a misfetched target. A _digest_ failure is not fatal — it is recorded and planning continues, because a plan without a standards digest is degraded, not wrong.
 
+The fan-out takes an optional `Scope` input — `task` or `broad`. Both skills here omit it and get `task`, the change-scoped pass described above; `broad` reads the snapshot breadth-first instead and is used only by [the `explore` skill](./14-explore-skill.md), a third on-ramp for work that starts from an area rather than a target. The emitted Context Map has the same sections either way.
+
 ## Phase 2 — Intent, assumptions, and the human gate
 
 After the Context Map, deliberately. The skill emits a one-line **steelmanned intent** (the request restated in its strongest form — the stable target for expert reviewers, copied verbatim into the plan's `## Summary`), then **Assumptions** and **Open Questions**. Any load-bearing open question is raised via `AskUserQuestion` before drafting.
@@ -278,7 +280,7 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
 | `claude-plugins/autopilot/skills/plan/references/pipeline.md`        | Draft template, review and scoring, finalize                 |
 | `claude-plugins/autopilot/skills/plan/references/stack-deltas.md`    | Per-stack example libraries, expert tables, verify examples  |
 | `claude-plugins/autopilot/skills/plan/references/branch-blocks.md`   | `## Pre-Implementation` bodies and their mechanics           |
-| `claude-plugins/autopilot/skills/gather-context/SKILL.md`            | The one context fan-out and the Context Map contract         |
+| `claude-plugins/autopilot/skills/gather-context/SKILL.md`            | The one context fan-out, its `Scope` input, and the map      |
 | `claude-plugins/autopilot/skills/run/SKILL.md`                       | `plan` plus the automated post-implementation chain          |
 | `claude-plugins/autopilot/agents/digest-repo-standards.md`           | README / `docs/` / `rfc/` / `principles/` digest (JSON)      |
 | `claude-plugins/autopilot/agents/digest-branch-diff.md`              | Branch commits, diff, and stale-merge detection (JSON)       |
