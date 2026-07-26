@@ -3,6 +3,11 @@ node_modules/
 dist/
 coverage/
 
+# Local context brief written by the explore skill — machine-generated, and
+# specific to one worktree's branch and working state. Narrow on purpose:
+# .claude/settings.json and .claude/agents/ are tracked.
+.claude/context/
+
 # Editor / OS
 .DS_Store
 .idea/
