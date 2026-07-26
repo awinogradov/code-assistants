@@ -1,0 +1,29 @@
+<task-notification>
+<task-id>bd132izcn</task-id>
+<summary>Monitor event: "PR 488 re-review after force-push"</summary>
+<event>PR488 state=OPEN verdict=CHANGES_REQUESTED ai-review=IN_PROGRESS/ new_reviews=2(COMMENTED) failing=[]</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>b9nl3odiz</task-id>
+<summary>Monitor event: "PR 488 bot re-review verdict"</summary>
+<event>PR488 state=OPEN ai-review=IN_PROGRESS/ bot_reviews_since_verdict=0(@) failing=[]</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>b9nl3odiz</task-id>
+<summary>Monitor event: "PR 488 bot re-review verdict"</summary>
+<event>PR488 state=OPEN ai-review=IN_PROGRESS/ bot_reviews_since_verdict=2(APPROVED@6804a2b) failing=[]
+TERMINAL: new symbiot-bot review = APPROVED on 6804a2b</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+/autopilot:pr-monitor
