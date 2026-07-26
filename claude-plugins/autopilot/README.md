@@ -86,6 +86,7 @@ code-assistants/
             ├── commits:create/
             ├── commits:restructure/
             ├── dependabot:resolve/
+            ├── explore/
             ├── gather-context/
             ├── issue:create/
             ├── issue:run/
@@ -110,7 +111,7 @@ All user-invocable entries are skills. Skills natively accept `$ARGUMENTS` and s
 
 ### Codebase context snapshot
 
-The skills that need whole-codebase context — `/autopilot:plan`, `/autopilot:run`, `/autopilot:issue-create`, `/autopilot:pr-review`, `/autopilot:pr-answer`, `/autopilot:pr-resolve` — read the committed `.repomix/pack.xml` snapshot first (via `attach_packed_output`) and fall back to a live `pack_codebase` when it is absent. The snapshot is refreshed by CI on every merge to `main`; see the consumer host repo's [Committed Repomix pack](../../docs/09-repomix-pack.md) doc for details.
+The skills that need whole-codebase context — `/autopilot:plan`, `/autopilot:run`, `/autopilot:explore`, `/autopilot:issue-create`, `/autopilot:pr-review`, `/autopilot:pr-answer`, `/autopilot:pr-resolve` — read the committed `.repomix/pack.xml` snapshot first (via `attach_packed_output`) and fall back to a live `pack_codebase` when it is absent. The snapshot is refreshed by CI on every merge to `main`; see the consumer host repo's [Committed Repomix pack](../../docs/09-repomix-pack.md) doc for details.
 
 ### `/autopilot:branch-create`
 
@@ -210,6 +211,18 @@ Plan, implement, commit, create PR, and monitor until approved. Same as `/autopi
 /autopilot:run "add user authentication"                                # From description
 /autopilot:run #42 I think we should start with the auth module         # Issue + additional context
 ```
+
+### `/autopilot:explore`
+
+Map the repository broadly, write a durable context brief to `.claude/context/brief.md`, then take surgical fixes one at a time. Uses the [codebase context snapshot](#codebase-context-snapshot). See [the explore skill](../../docs/14-explore-skill.md) for the full flow.
+
+Reach for it when you have an _area_ rather than a target and the changes that follow are small and located. Unlike `/autopilot:plan` and `/autopilot:run` it never branches, never opens a PR, and never asks for approval — invoking it commits you to nothing.
+
+```bash
+/autopilot:explore                                                      # Takes no arguments; the map is broad by design
+```
+
+Re-invoking it refreshes the brief, replaying the full fan-out only when something other than derived files moved upstream. Deleting the brief is the supported reset.
 
 ### `/autopilot:todo-cleanup`
 
@@ -359,9 +372,11 @@ Validate git working state before branching, committing, or opening a PR. Mode-a
 
 ### `gather-context`
 
-Acquire all planning context in one parallel fan-out and emit a Context Map. Invoked automatically by `/autopilot:plan` and `/autopilot:run` after they detect the input type.
+Acquire all planning context in one parallel fan-out and emit a Context Map. Invoked automatically by `/autopilot:plan` and `/autopilot:run` after they detect the input type, and by `/autopilot:explore`.
 
-The fan-out issues every context call in a single message — the repo-standards and branch-diff digest agents, issue or alert resolution, the TODO search, the codebase snapshot, stack detection, and git state — then runs one task-scoped snapshot pass and returns the Context Map. Sub-agents return bounded JSON, so the full text of a README, the selected RFCs, and an unbounded `git diff` never reaches the calling skill's context.
+The fan-out issues every context call in a single message — the repo-standards and branch-diff digest agents, issue or alert resolution, the TODO search, the codebase snapshot, stack detection, and git state — then runs one snapshot pass and returns the Context Map. Sub-agents return bounded JSON, so the full text of a README, the selected RFCs, and an unbounded `git diff` never reaches the calling skill's context.
+
+An optional `Scope` input selects how that pass reads the snapshot: `task` (the default, used by `plan` and `run`) narrows to what the change touches, while `broad` maps the repository breadth-first for `/autopilot:explore`. The emitted Context Map has the same sections either way.
 
 Planning is stack-agnostic apart from three values (example libraries, expert table, verify examples), which both skills resolve from `plan/references/stack-deltas.md` keyed by `agents.rules`. There are no per-stack planning skills.
 

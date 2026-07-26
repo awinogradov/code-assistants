@@ -37,6 +37,7 @@ The `docs/` guides are numbered chapters in reading order — start at chapter 1
 | 11  | [Linear tracker support](./docs/11-linear-tracker.md)                             | how `agents.trackers` opts a project into Linear and other issue trackers behind one JSON contract  |
 | 12  | [Code review repository standards](./docs/12-code-review-repository-standards.md) | how the review enforces a consumer repo's `rfc/`, `docs/`, and `principles/` with status severity   |
 | 13  | [The `shared-rules` skill](./docs/13-shared-rules-skill.md)                       | the single home for instruction blocks several skills need, and how a consumer reads one at runtime |
+| 14  | [The `explore` skill](./docs/14-explore-skill.md)                                 | the third on-ramp: prime a durable context brief, then take surgical fixes one at a time            |
 
 **Standards.**
 
