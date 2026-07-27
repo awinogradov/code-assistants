@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [2.1.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v2.0.0...code-review-action@v2.1.0) (2026-07-27)
+
+## Release Notes
+
+The action now ships a dedicated strict entry point for sessions that have already completed an explore pass, avoiding redundant repository scanning when context is already known.
+
+## ✨ What's New
+
+### Strict Entry Point for Pre-Primed Sessions
+
+When a review session has already run `/autopilot:explore` and produced a validated context brief, the action can now pick up exactly where explore left off — without re-scanning the repository from scratch. The new `/autopilot:run-primed` skill reads the existing brief directly and skips the repository-standards digest that explore already resolved, making the transition from explore to review faster and more deterministic.
+
+A matching `primed` scope has been added to the context fan-out to support this: when the action detects a primed session, it routes through the leaner path automatically. `/autopilot:run` behaviour is completely unchanged, so existing review workflows are unaffected.
+
+<details><summary>Related issues</summary>
+
+- [#490: Add a strict run path for pre-primed explore sessions](https://github.com/awinogradov/code-assistants/issues/490)
+- [#491: Add a strict run path for sessions already primed by explore](https://github.com/awinogradov/code-assistants/pull/491)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #490 | [#491](https://github.com/awinogradov/code-assistants/pull/491) | @awinogradov |
+
+### Features
+
+* **run-primed:** add strict primed-run entry point ([002c8b7](https://github.com/awinogradov/code-assistants/commit/002c8b725293b6bfe8630ebcbaf452912f49325e))
 ## [2.0.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.7.2...code-review-action@v2.0.0) (2026-07-25)
 
 ## Release Notes
