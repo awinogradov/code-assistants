@@ -12,6 +12,8 @@ Set task 3 ("Draft plan") to `in_progress`.
 
 Assemble a complete draft before review and scoring, so both operate on a concrete artifact instead of an imagined one. Leave `Score:` as a placeholder — the review step fills it.
 
+Draft the smallest reliable solution that satisfies the steelmanned intent: reuse what the Context Map already shows over adding, and prefer the option with the fewest moving parts that still holds. Every step must trace to that intent — no unrequested abstraction, no configurability nobody asked for, no error handling for states that cannot occur, and no opportunistic refactor of adjacent code. Where a simpler option was rejected because it would not hold, say so in a clause rather than leaving the larger design unexplained. Minimality is a drafting constraint, not only a scoring one: the review step spends a single capped revision pass, which cannot reliably strip scope a draft has already committed to.
+
 Work these dimensions against the Context Map as you draft. They are analysis, not a second crawl:
 
 | Dimension        | Key Questions                                             |
@@ -34,7 +36,7 @@ Score: [filled by the review step — leave as a placeholder in the draft]
 
 ## Implementation Steps
 
-Every step MUST include a `verify:` line — an observable check (test name, command, or behavior). Follow your stack's verify examples as the pattern.
+One numbered step per action, written as an imperative naming the file it touches and what changes there. Every step MUST include a `verify:` line — an observable check (test name, command, or behavior). Follow your stack's verify examples as the pattern. Reasoning belongs in `## Summary`; a step that explains itself instead of stating an action is prose, not a step. Use no checkboxes — the plan file is read, not ticked off.
 
 ## Files
 - `path/to/file.ts:NN` - [what changes]

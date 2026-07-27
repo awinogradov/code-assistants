@@ -45,9 +45,9 @@ When `package.json` is missing, has no `agents` field, or carries an unrecognize
 
 **Verify examples** for the draft template's Implementation Steps:
 
-1. [ ] [Action] in `path/to/file.ts`
+1. [Action] in `path/to/file.ts`
    - verify: `bun test path/to/file.test.ts` passes
-2. [ ] [Action] in `path/to/file.ts`
+2. [Action] in `path/to/file.ts`
    - verify: CLI prints the new flag in `--help` output
 
 ## NodeJS+React
@@ -71,7 +71,7 @@ When `package.json` is missing, has no `agents` field, or carries an unrecognize
 
 **Verify examples** for the draft template's Implementation Steps:
 
-1. [ ] [Action] in `path/to/file.ts`
+1. [Action] in `path/to/file.ts`
    - verify: `vitest run path/to/file.test.ts` passes
-2. [ ] [Action] in `path/to/file.ts`
+2. [Action] in `path/to/file.ts`
    - verify: rendered component shows the new label in the page
