@@ -172,6 +172,10 @@ Defined once in [`references/pipeline.md`](../claude-plugins/autopilot/skills/pl
 
 Assemble a complete draft **before** review and scoring, so both operate on a concrete artifact rather than an imagined one. The draft follows a fixed template: `## Summary` (with steelmanned intent and a `Score:` placeholder), `## Implementation Steps` (each with an observable `verify:` line patterned on the stack's verify examples), `## Files`, and `## Post-Implementation` — the last of these stating in prose that documentation is updated and the work is committed or opened as a PR.
 
+Two constraints bound what that draft may contain. The first is minimality: the draft proposes the smallest reliable solution that satisfies the steelmanned intent, reusing what the Context Map already shows, and every step must trace to that intent — no unrequested abstraction, no configurability nobody asked for, no error handling for impossible states, no opportunistic refactor of adjacent code. The second is shape: a step is one imperative action naming the file it touches and its `verify:` line, with reasoning left to `## Summary` and no checkboxes, since the plan file is read rather than ticked off.
+
+Both apply at drafting rather than at scoring, even though the rubric already carries a Simplicity dimension. Scoring gets a single capped revision pass, and one pass cannot reliably strip scope a draft has already committed to — by then the over-built design is the thing being corrected rather than the thing being avoided. Constraining the draft also gives expert reviewers a tighter artifact to score.
+
 Drafting works five analysis dimensions against the Context Map — **Architecture**, **Patterns**, **Data Flow**, **Types**, and **Edge Cases**. This was previously a separate "Deep Analysis" phase that produced no artifact and needed its own paragraph warning it not to re-crawl the tree; folding it into drafting removes both the phase boundary and the temptation.
 
 For structural or visual changes, ASCII diagrams are embedded inline in the section each explains rather than collected in a standalone section.
