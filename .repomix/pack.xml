@@ -151,6 +151,7 @@ The content is organized as follows:
         preflightSkipComment.test.ts
         preflightSkipComment.ts
         prepareReviewTip.ts
+        primedBriefContract.test.ts
         promptInputs.test.ts
         reactToComment.ts
         replyReferenceFormatting.test.ts
@@ -558,6 +559,8 @@ claude-plugins/
         SKILL.md
       run/
         SKILL.md
+      run-primed/
+        SKILL.md
       shared-rules/
         references/
           agent-json-output.md
@@ -591,6 +594,7 @@ docs/
   12-code-review-repository-standards.md
   13-shared-rules-skill.md
   14-explore-skill.md
+  15-run-primed-skill.md
 packages/
   actions-core/
     src/
@@ -9360,6 +9364,136 @@ try {
   console.log(`::warning title=Prepare review tip failed::${message}`);
   await emitNoTip();
 }
+</file>
+
+<file path=".github/actions/code-review-action/src/primedBriefContract.test.ts">
+/**
+ * Guards the contract between `explore`, which writes the durable context brief, and
+ * `run-primed`, which consumes it instead of re-mapping the repository.
+ *
+ * Three properties are load-bearing, and each fails silently without a guard:
+ *
+ * 1. `run-primed` enumerates every validation verdict with an actionable message. A
+ *    verdict quietly dropped turns a strict gate into a permissive one.
+ * 2. `run-primed` never dispatches `run`. The whole point is that an unusable brief is
+ *    visible; an automatic downgrade spends a second full context pass looking like success.
+ * 3. The brief section names `run-primed` reads match the ones `explore` writes. This is the
+ *    real rot: the two files have no import between them, so renaming a section in the
+ *    producer breaks the consumer with nothing failing in between.
+ *
+ * The section names are extracted from `explore`'s own template rather than hardcoded, so
+ * the guard tracks the producer instead of a copy of it.
+ *
+ * What this CANNOT prove: that the gate runs, or that the model honours it. CI sees text in
+ * a file, nothing more — the same limit `sharedRulesInvocation.test.ts` states for its own
+ * presence checks. Worse here, no workflow executes this test at all (nothing under
+ * `.github/workflows/` runs `bun test`), so it gates locally and in review, not in CI.
+ * Runtime evidence comes from the dry-run recorded on the PR.
+ */
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
+import { describe, expect, test } from "bun:test";
+
+const actionDir = join(import.meta.dirname, "..");
+const repoRoot = join(actionDir, "..", "..", "..");
+const skillsDir = join(repoRoot, "claude-plugins/autopilot/skills");
+
+const readSkill = (name: string): Promise<string> =>
+  readFile(join(skillsDir, name, "SKILL.md"), "utf8");
+
+const [runPrimed, run, explore, gatherContext] = await Promise.all([
+  readSkill("run-primed"),
+  readSkill("run"),
+  readSkill("explore"),
+  readSkill("gather-context"),
+]);
+
+/** Every verdict the validation table must name, rejecting ones first. */
+const rejectingVerdicts = ["missing", "malformed", "revision-mismatch", "stale"];
+const allVerdicts = [...rejectingVerdicts, "valid"];
+
+/**
+ * `## <name>` rows of the brief template in `explore`, split by its own stable/volatile
+ * marker. Reading the producer's template is what makes a renamed section fail here rather
+ * than at runtime in a forked session.
+ */
+function briefSections(source: string, kind: "stable" | "volatile"): string[] {
+  const rows = source.matchAll(/^##\s+(.+?)\s+<-\s+(stable|volatile)$/gm);
+  return [...rows].filter((row) => row[2] === kind).map((row) => row[1].trim());
+}
+
+/**
+ * `## Snapshot` is stable, yet `run-primed` must not consume it: the repomix `outputId` the
+ * brief records is session-scoped and dead in a forked session, so the pack is re-attached.
+ * Named here rather than filtered implicitly, so dropping a second section stays reviewable.
+ */
+const notConsumed = new Set(["Snapshot"]);
+
+const stableSections = briefSections(explore, "stable");
+const consumedSections = stableSections.filter((name) => !notConsumed.has(name));
+
+/** The `Source | Section` table rows in `run-primed`, keyed by the source cell. */
+function sectionTableRow(source: string, key: string): string {
+  const row = source
+    .split("\n")
+    .map((line) => line.split("|").map((cell) => cell.trim()))
+    .find((cells) => cells.length > 2 && cells[1] === key);
+  return row ? row[2] : "";
+}
+
+describe("primed brief contract", () => {
+  test("the brief template still exposes a stable/volatile split", () => {
+    expect(stableSections).toContain("Snapshot");
+    expect(stableSections.length).toBeGreaterThan(1);
+    expect(briefSections(explore, "volatile").length).toBeGreaterThan(0);
+  });
+
+  test.each(allVerdicts)("run-primed names the %s verdict", (verdict) => {
+    expect(runPrimed).toContain(`**${verdict}**`);
+  });
+
+  test.each(rejectingVerdicts)("the %s verdict carries an actionable message", (verdict) => {
+    const message = runPrimed
+      .split("\n")
+      .find((line) => line.startsWith(`- ${verdict} —`));
+    expect(`${verdict}: ${message ?? "<no message line>"}`).toContain("/autopilot:run");
+  });
+
+  test("run-primed cannot silently downgrade to run", () => {
+    expect(runPrimed).not.toContain("Skill(autopilot:run)");
+  });
+
+  test.each([
+    [".claude/context/", "the brief is untracked, so the orchestrator must place it"],
+    ["shallow clone", "the revision tests need full history"],
+    ["transcript", "a transcript alone is insufficient"],
+  ])("run-primed states the %s precondition", (needle) => {
+    expect(runPrimed).toContain(needle);
+  });
+
+  test.each(consumedSections)("run-primed consumes `## %s` from the brief", (name) => {
+    expect(sectionTableRow(runPrimed, "Brief")).toContain(`\`## ${name}\``);
+  });
+
+  test.each([...notConsumed])("`## %s` is stable but explicitly not consumed", (name) => {
+    expect(sectionTableRow(runPrimed, "Brief, **unused**")).toContain(`\`## ${name}\``);
+    expect(sectionTableRow(runPrimed, "Brief")).not.toContain(`\`## ${name}\``);
+  });
+
+  test("gather-context documents all three Scope values", () => {
+    const scope = gatherContext.split("\n").find((line) => line.startsWith("- **Scope**"));
+    for (const value of ["`task`", "`broad`", "`primed`"]) {
+      expect(`Scope bullet: ${scope ?? "<absent>"}`).toContain(value);
+    }
+  });
+
+  test("ordinary run is unchanged — it still gathers context and knows no brief", () => {
+    expect(run).toContain("Skill(autopilot:gather-context)");
+    expect(run).not.toContain("brief.md");
+    expect(run).not.toContain("Scope: primed");
+  });
+});
 </file>
 
 <file path=".github/actions/code-review-action/src/promptInputs.test.ts">
@@ -42592,7 +42726,7 @@ The invoking skill provides in the prompt:
 - **Repository** (e.g., `awinogradov/code-assistants`) and **repository root** (absolute path).
 - **Linear team** — for `linear-issue` only, the matched tracker's team.
 - **Task summary** — the raw task text, used to rank standards and scope the codebase pass.
-- **Scope** — `task` (the default) or `broad`, selecting how [Phase 2](#phase-2-scope-the-codebase-pass) reads the snapshot. Optional: `plan` and `run` omit it and get `task`.
+- **Scope** — `task` (the default), `broad`, or `primed`, selecting how [Phase 2](#phase-2-scope-the-codebase-pass) reads the snapshot. Optional: `plan` and `run` omit it and get `task`. `primed` additionally gates off one [Phase 1](#phase-1-fan-out) agent, so this input is a fan-out selector and not only a read strategy — see [`run-primed`](../run-primed/SKILL.md), the only caller that passes it.
 
 ## Phase 1: Fan out
 
@@ -42602,7 +42736,7 @@ Issue **every** call below in a **single message** so they run concurrently. Do 
 
 | Agent                                                            | When                       | Prompt                                                                                |
 | ---------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------- |
-| [`digest-repo-standards`](../../agents/digest-repo-standards.md) | Always                     | `Repository root: [path]. Task summary: [summary].`                                   |
+| [`digest-repo-standards`](../../agents/digest-repo-standards.md) | Except `Scope: primed`     | `Repository root: [path]. Task summary: [summary].`                                   |
 | [`digest-branch-diff`](../../agents/digest-branch-diff.md)       | Always                     | `Repository root: [path]. Base ref: origin/main.`                                     |
 | [`resolve-issue-context`](../../agents/resolve-issue-context.md) | Issue inputs               | Per that agent's Input section; pass `Auto-assign current user: true` for GitHub only |
 | [`resolve-alert-context`](../../agents/resolve-alert-context.md) | `code-scanning-alert` only | `Fetch alert context. Alert number: [n]. Repository: [owner/repo].`                   |
@@ -42614,6 +42748,8 @@ Issue **every** call below in a **single message** so they run concurrently. Do 
 - **Stack** — Read `package.json` and extract `agents.rules`.
 - **Git state** — `git branch --show-current`, `git rev-parse --git-dir`, and `git rev-parse --git-common-dir` (the last two differ inside a worktree).
 
+`digest-repo-standards` is the one agent `Scope: primed` skips: that caller holds a validated brief whose conventions came from this same digest on this same revision, so re-running it is duplicate cost rather than fresh information. `digest-branch-diff` still runs at every scope — `isStaleMerged` and `baseAhead` describe the checkout in front of you, which a brief written elsewhere cannot know.
+
 **Failure handling.** A resolver that returns `unresolved` with a non-null `resolveError` is fatal — surface the error and stop, so nothing proceeds against a misfetched target. A _digest_ failure is not fatal: record `digestError` in the map and continue, because a plan without a standards digest is degraded, not wrong.
 
 ## Phase 2: Scope the codebase pass
@@ -42622,7 +42758,11 @@ Only now is the task's subject matter known, so this pass runs after the fan-out
 
 Search the snapshot with `mcp__repomix__grep_repomix_output` for the implementations, patterns, and tests the change touches, reading specific ranges via `mcp__repomix__read_repomix_output`. The snapshot reflects the base at its last refresh, so reach for live Grep/Glob/Read **only** for working-tree code the snapshot cannot show — `digest-branch-diff` already reports what is in flight. Do not crawl the tree for anything the snapshot answers.
 
-**At `broad` scope there is no change to narrow to**, so read the snapshot breadth-first instead: the principal modules and their boundaries, the entry points, and the conventions that govern them. Fill `Relevant files` and `Patterns to mirror` at that altitude — the modules a newcomer must know and the conventions they must copy, rather than the handful a specific edit would touch. Every other section keeps its meaning, and the emitted section list is identical either way, so a caller that omits `Scope` sees exactly today's behavior.
+**At `broad` scope there is no change to narrow to**, so read the snapshot breadth-first instead: the principal modules and their boundaries, the entry points, and the conventions that govern them. Fill `Relevant files` and `Patterns to mirror` at that altitude — the modules a newcomer must know and the conventions they must copy, rather than the handful a specific edit would touch.
+
+**At `primed` scope the caller already holds the repository picture**, so read the snapshot only for the task-specific gaps that picture does not cover — the implementations and tests this particular change touches and the brief does not name. Do not re-derive architecture, key types, or test conventions; the caller merges those from its brief.
+
+Every other section keeps its meaning, and the emitted section list is identical at all three scopes, so a caller that omits `Scope` sees exactly today's behavior.
 
 ## Phase 3: Emit the Context Map
 
@@ -42647,7 +42787,7 @@ Emit these sections in this order. This is the caller's entire view of the repos
 Two fields carry decisions the caller would otherwise recompute badly:
 
 - **`isStaleMerged`** — a branch whose commits already landed upstream under rewritten SHAs still shows a non-empty `git log origin/main..HEAD`. A caller testing only for emptiness reads a finished branch as active work. Trust this field over a commit count.
-- **Applicable standards** — this doubles as the plan's audit log of what it planned against, including what the selection cap dropped.
+- **Applicable standards** — this doubles as the plan's audit log of what it planned against, including what the selection cap dropped. At `Scope: primed` the digest did not run, so write it as supplied by the caller's validated brief and name that brief — never leave it reading `none`, which would claim no standard applied rather than that one was sourced elsewhere.
 
 When you write the Context Map, apply the reference-formatting rules in [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (RFC-0001, read it first) to every reference it contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
 
@@ -50410,6 +50550,176 @@ When you write the plan file, apply the reference-formatting rules in [`referenc
 **Reference self-check (MANDATORY):** after composing the output, re-read it against [`reference-formatting.md`](../shared-rules/references/reference-formatting.md). A bare commit SHA, a bare tracker id outside a magic-word line, or an unlinked mention of a file that exists in the repo is a violation — fix it before emitting.
 </file>
 
+<file path="claude-plugins/autopilot/skills/run-primed/SKILL.md">
+---
+name: run-primed
+description: Run a tracked issue end to end in a session already primed by /autopilot:explore, consuming the SHA-validated context brief instead of the broad codebase pass. Requires .claude/context/brief.md and fails loudly when it is missing, malformed, stale, or from another revision — it never downgrades to /autopilot:run.
+argument-hint: "<task, GitHub/Linear issue (123, #123, ENG-123, or URL), or code-scanning alert (alert#N or URL)>"
+allowed-tools:
+  - TaskCreate
+  - TaskUpdate
+  - Read
+  - Grep
+  - Glob
+  - Agent
+  - Edit
+  - Write
+  - Bash(git *)
+  - Bash(gh *)
+  - Bash(sleep *)
+  - MCP(context7:*)
+  - MCP(Ref:*)
+  - MCP(exa:*)
+  - MCP(perplexity:*)
+  - MCP(repomix:*)
+  - AskUserQuestion
+  - Skill(autopilot:gather-context)
+  - Skill(autopilot:preflight-check)
+  - Skill(autopilot:branch-create)
+  - Skill(autopilot:pr-monitor)
+  - Skill(autopilot:pr-update)
+  - Skill(autopilot:commits-create)
+  - Skill(autopilot:pr-create)
+---
+
+Run a tracked issue end to end in a session an [`explore`](../explore/SKILL.md) pass has already primed, reading the repository from the durable context brief instead of mapping it a second time.
+
+**Difference from [`/autopilot:run`](../run/SKILL.md):** `run` treats a fresh Context Map as its entire view of the repository, which is correct for an interactive session and stays that way. This skill is the strict alternative for an orchestrator that primed a session against an exact revision and forked it into a clean checkout of that same revision. It is a **separate contract, not a heuristic** — it never inspects conversation history to decide whether context was already gathered, because a file on disk carrying a base SHA can be checked and a prompt claiming "context was already gathered" cannot.
+
+Everything after [Phase 3](#phase-3-merge-the-working-context) is `run`, unchanged and referenced rather than restated. Like `run`, invoking this skill authorizes the whole flow: there is no plan-approval gate.
+
+## Input
+
+Arguments: `$ARGUMENTS`
+
+Identical to [`run`](../run/SKILL.md#input) — a task description, a GitHub or Linear issue, or a code-scanning alert. `--issue` / `--linear-issue` remain plan-exclusive.
+
+## Input resolution
+
+Identical to the `plan` skill — see [its Input resolution section](../plan/SKILL.md#input-resolution).
+
+## Preconditions
+
+Both are silent failures if left unstated, so state them to the user when either bites.
+
+**The brief is untracked.** `.claude/context/` is listed in `.gitignore`, so git never carries `brief.md` into a fresh clone or a forked checkout. Placing it there is the **orchestrator's** responsibility, alongside restoring the session transcript. This skill owns validation and consumption of that artifact and deliberately knows nothing about how it was persisted. A forked transcript on its own is **not** sufficient: without the validated brief there is no checkable evidence of what was mapped, and the run stops.
+
+**Full history is required.** Resolving and comparing the recorded revision uses `git cat-file -e` and `git merge-base`, both of which need the objects present. In a shallow clone an older base is unresolvable and `stale` collapses into `revision-mismatch`, so the orchestrator must clone with full history — the same reason [`validate-actions`](../../../../.github/actions/validate-actions/action.yml) pins `fetch-depth: 0`.
+
+## Task Progress Protocol
+
+Create all 8 tasks with TaskCreate, in order, before any work, exactly as [`run`](../run/SKILL.md#task-progress-protocol) defines them. Set each to `in_progress` at the start of its phase and `completed` at the end. Brief validation happens inside task 2 ("Gather context"), because it is the gate on that task's input rather than a step of its own.
+
+## Task
+
+$ARGUMENTS
+
+## Phase 0: Resolve input
+
+Create the 8 tasks, then set task 1 to `in_progress`.
+
+Detect the input type and id per [input-detection.md](../plan/references/input-detection.md) — the detection table and its tracker gating. Skip that file's create-issue flags section; it is plan-only. Detection is pure string matching and performs **no I/O**.
+
+Set task 1 to `completed`.
+
+## Phase 1: Validate the brief
+
+Set task 2 to `in_progress`. This phase is the entire reason this skill exists as a separate door, so it runs before anything is fetched and it stops the run rather than degrading.
+
+Resolve the repository root with `git rev-parse --show-toplevel`; the brief lives at `<root>/.claude/context/brief.md`, one per worktree.
+
+Then resolve exactly one verdict:
+
+| Verdict               | Test                                                                                           |
+| --------------------- | ---------------------------------------------------------------------------------------------- |
+| **missing**           | the brief does not exist at that path                                                          |
+| **malformed**         | no `Base:` line, or any of the nine fixed `##` sections absent                                 |
+| **revision-mismatch** | the recorded base does not resolve, or is not an ancestor-or-equal of `HEAD`                   |
+| **stale**             | the recorded base resolves and is contained in `HEAD`, but is not the checkout's `origin/main` |
+| **valid**             | the recorded base equals `git rev-parse origin/main` **and** is an ancestor-or-equal of `HEAD` |
+
+Resolve the verdict in this exact order, stopping at the first one that fires:
+
+1. **missing** — Read `<root>/.claude/context/brief.md` with the **`Read` tool**. If it is not there, the verdict is `missing`.
+2. **malformed** — from that same read, take the `Base:` line and the `##` headings. If there is no `Base:` line, or any of the nine fixed sections listed in [Phase 3](#phase-3-merge-the-working-context) is absent, the verdict is `malformed`. Name the specific omission in the message.
+3. **revision-mismatch** — `git cat-file -e "<base>^{commit}"` exits non-zero (the recorded revision does not resolve here).
+4. **revision-mismatch** — `git merge-base --is-ancestor "<base>" HEAD` exits non-zero (this checkout does not contain it).
+5. **stale** — `git rev-parse origin/main` prints something other than `<base>`.
+
+Anything that survives all five is **valid**.
+
+**Steps 1 and 2 are file checks, and they must precede every `git` command.** Reach `git cat-file` with an empty base — a brief with no `Base:` line — and it exits non-zero, reporting `revision-mismatch` for what is actually a `malformed` brief. The section-presence check has no git equivalent at all: a brief whose base matches `origin/main` but whose `## Key types` is missing would otherwise pass as `valid`, which is precisely the case this gate exists to catch.
+
+Parse both values with the `Read` tool rather than shelling out to `sed`, `grep`, or `head`, and compare the step-5 SHA against `<base>` yourself rather than with `test`. `git` and `gh` are the only commands on this skill's tool allowlist, so a text-extraction or comparison pipeline is blocked before it runs — and the gate would then fail for the wrong reason, reporting a broken skill instead of a bad brief.
+
+**Compare against `origin/main`, never `HEAD`.** [`explore`](../explore/SKILL.md#phase-4-write-the-brief) writes `Base: <origin/main SHA>` and its own [classification](../explore/SKILL.md#phase-0-classify-the-run) re-reads it against `origin/main`. Validating against `HEAD` would reject every brief written in a session whose branch had moved ahead — which is the ordinary explore session, since producing commits is the point of one — leaving the producer and the consumer in open disagreement about what "current" means. The ancestor test is the other half: it confirms the working tree actually contains the recorded revision. `git merge-base --is-ancestor` is also what keeps "an older revision of this history" distinguishable from "a different history entirely", which is why `stale` and `revision-mismatch` are separate verdicts rather than one.
+
+**Do not `git fetch`.** The checkout's `origin/main` ref is the base the orchestrator produced; re-fetching would let an unrelated upstream merge fail a correctly primed run. Requiring the recorded base to equal `origin/main` also makes the later branch-from-an-up-to-date-`main` step a no-op in the happy path, so the tree the plan is drafted against is the tree it is implemented against.
+
+On any verdict other than **valid**, stop with the matching message and do not fall back:
+
+- missing — `No context brief at .claude/context/brief.md. This skill requires a session primed by /autopilot:explore, and the orchestrator must place the brief in this checkout. Use /autopilot:run instead.`
+- malformed — `Context brief is malformed: <what was absent>. Re-run /autopilot:explore, or use /autopilot:run instead.`
+- revision-mismatch — `Context brief records base <base>, which this checkout does not contain. The brief belongs to another revision. Use /autopilot:run instead.`
+- stale — `Context brief records base <base>, but this checkout's origin/main is <head-base>. The brief is stale. Re-run /autopilot:explore, or use /autopilot:run instead.`
+
+Each message names `/autopilot:run` as the caller's explicit fallback. **Never invoke it automatically** — a silent downgrade spends a second full context pass while looking like a success, which is precisely the outcome this skill exists to make visible.
+
+## Phase 2: Gather what the brief cannot carry
+
+Invoke:
+
+```
+Skill(autopilot:gather-context)
+```
+
+Pass the detected input type, issue id, repository, repository root, Linear team (when applicable), the raw task text as the task summary, and **`Scope: primed`**.
+
+That scope resolves only what a brief cannot bake in advance: issue or alert details, the TODO search, the branch diff, git state, and a re-attached codebase snapshot. It gates off [`digest-repo-standards`](../../agents/digest-repo-standards.md), whose output the brief already carries from the same revision. See [the Scope input](../gather-context/SKILL.md#input).
+
+Set task 2 to `completed`.
+
+## Phase 3: Merge the working context
+
+The brief supplies the repository half, the Context Map the volatile half. The split is fixed here rather than improvised per run:
+
+| Source            | Section                                                                                                     |
+| ----------------- | ----------------------------------------------------------------------------------------------------------- |
+| Brief             | `## Architecture map`, `## Data flow`, `## Conventions and standards`, `## Key types`, `## Test and verify` |
+| Brief, **unused** | `## Snapshot`, `## In-flight changes`, `## Local session state`, `## Git state`                             |
+| Context Map       | Issue / alert, Related TODOs, In-flight changes, Git state, Snapshot                                        |
+
+The brief's three volatile sections are ignored because they were computed in the explore session, in a different checkout — the Context Map's equivalents describe _this_ one. `## Snapshot` is stable yet also unused: the repomix `outputId` it records is session-scoped and dead in a forked session, so the map's freshly attached pack is the one to read.
+
+Carry the brief's `## Conventions and standards` into the plan's applicable-standards record. That section doubles as the audit log of what the plan was drafted against, so it must never read `none` on this path merely because the digest agent was skipped.
+
+## Phase 4: Preflight verdict
+
+Identical to [`run`](../run/SKILL.md#phase-2-preflight-verdict): read branch, worktree, `isStaleMerged`, and `baseAhead` from the Context Map, compare the issue id against the current branch name, and invoke `Skill(autopilot:preflight-check)` only for a state the map does not cover. If it outputs "Planning cancelled", stop immediately.
+
+This skill never enters plan mode — do NOT call `EnterPlanMode` or `ExitPlanMode`.
+
+## Common Instructions
+
+The [Common Instructions in `plan/SKILL.md`](../plan/SKILL.md#common-instructions) apply unchanged — documentation lookup scaled to the task, repository standards, the plan file header rule, CLAUDE.md compliance, and ASCII schemas. Read them against the merged context from [Phase 3](#phase-3-merge-the-working-context), not against a fresh crawl of the tree.
+
+## Phase 5: Draft, review, and finalize
+
+Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft (task 3), review and score (task 4), finalize (task 5) — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md).
+
+## Phase 6: Branch, implement, and run the autopilot chain
+
+Identical to `run`. Embed the branch block and the automated tail per [its Phase 4](../run/SKILL.md#phase-4-embed-branch-creation-and-the-autopilot-chain), then proceed without an approval gate per [its Phase 5](../run/SKILL.md#phase-5-implement-and-proceed) — branch, implement every step, then commit, push, open or update the pull request, and monitor it.
+
+Those phases are referenced, never copied. Two long prompts restating the same chain would drift the first time one side changed, and `run` already sets this precedent by referencing `plan` for input resolution and Common Instructions.
+
+## Reference formatting
+
+Before writing any output that mentions a file, standard, section, commit, or issue, read [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (RFC-0001) and apply it verbatim — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
+
+**Reference self-check (MANDATORY):** after composing the output, re-read it against [`reference-formatting.md`](../shared-rules/references/reference-formatting.md). A bare commit SHA, a bare tracker id outside a magic-word line, or an unlinked mention of a file that exists in the repo is a violation — fix it before emitting.
+</file>
+
 <file path="claude-plugins/autopilot/skills/shared-rules/references/agent-json-output.md">
 <!-- agent-json:start -->
 
@@ -52493,6 +52803,7 @@ code-assistants/
             ├── pr:validate/
             ├── preflight-check/
             ├── run/
+            ├── run-primed/
             ├── shared-rules/           # bundles references/ — the canonical shared instruction blocks
             └── todo-cleanup/
 ```
@@ -52503,7 +52814,7 @@ All user-invocable entries are skills. Skills natively accept `$ARGUMENTS` and s
 
 ### Codebase context snapshot
 
-The skills that need whole-codebase context — `/autopilot:plan`, `/autopilot:run`, `/autopilot:explore`, `/autopilot:issue-create`, `/autopilot:pr-review`, `/autopilot:pr-answer`, `/autopilot:pr-resolve` — read the committed `.repomix/pack.xml` snapshot first (via `attach_packed_output`) and fall back to a live `pack_codebase` when it is absent. The snapshot is refreshed by CI on every merge to `main`; see the consumer host repo's [Committed Repomix pack](../../docs/09-repomix-pack.md) doc for details.
+The skills that need whole-codebase context — `/autopilot:plan`, `/autopilot:run`, `/autopilot:run-primed`, `/autopilot:explore`, `/autopilot:issue-create`, `/autopilot:pr-review`, `/autopilot:pr-answer`, `/autopilot:pr-resolve` — read the committed `.repomix/pack.xml` snapshot first (via `attach_packed_output`) and fall back to a live `pack_codebase` when it is absent. `/autopilot:run-primed` re-attaches the pack rather than reusing the `outputId` recorded in its context brief, because that id is session-scoped and dead in a forked session. The snapshot is refreshed by CI on every merge to `main`; see the consumer host repo's [Committed Repomix pack](../../docs/09-repomix-pack.md) doc for details.
 
 ### `/autopilot:branch-create`
 
@@ -52602,6 +52913,17 @@ Plan, implement, commit, create PR, and monitor until approved. Same as `/autopi
 /autopilot:run https://github.com/org/repo/issues/789                   # From GitHub URL
 /autopilot:run "add user authentication"                                # From description
 /autopilot:run #42 I think we should start with the auth module         # Issue + additional context
+```
+
+### `/autopilot:run-primed`
+
+Same as `/autopilot:run`, but reads the repository from a validated `.claude/context/brief.md` instead of re-running the codebase fan-out. See [the run-primed skill](../../docs/15-run-primed-skill.md) for the full contract.
+
+**Precondition:** the session must already have been primed by `/autopilot:explore`, and the orchestrator must have placed that brief in this checkout — `.claude/context/` is git-ignored, so a clone never carries it. A restored transcript on its own is not enough. When the brief is missing, malformed, stale, or from another revision, the skill stops with an actionable error and names `/autopilot:run` as the fallback; it never downgrades on its own.
+
+```bash
+/autopilot:run-primed #42                                               # From GitHub issue
+/autopilot:run-primed https://github.com/org/repo/issues/789            # From GitHub URL
 ```
 
 ### `/autopilot:explore`
@@ -52768,7 +53090,7 @@ Acquire all planning context in one parallel fan-out and emit a Context Map. Inv
 
 The fan-out issues every context call in a single message — the repo-standards and branch-diff digest agents, issue or alert resolution, the TODO search, the codebase snapshot, stack detection, and git state — then runs one snapshot pass and returns the Context Map. Sub-agents return bounded JSON, so the full text of a README, the selected RFCs, and an unbounded `git diff` never reaches the calling skill's context.
 
-An optional `Scope` input selects how that pass reads the snapshot: `task` (the default, used by `plan` and `run`) narrows to what the change touches, while `broad` maps the repository breadth-first for `/autopilot:explore`. The emitted Context Map has the same sections either way.
+An optional `Scope` input selects how that pass reads the snapshot: `task` (the default, used by `plan` and `run`) narrows to what the change touches, `broad` maps the repository breadth-first for `/autopilot:explore`, and `primed` reads only the gaps a validated brief leaves for `/autopilot:run-primed`. The emitted Context Map has the same sections at every scope. `primed` is the one value that also gates off a fan-out agent — the repo-standards digest, whose output the brief already carries.
 
 Planning is stack-agnostic apart from three values (example libraries, expert table, verify examples), which both skills resolve from `plan/references/stack-deltas.md` keyed by `agents.rules`. There are no per-stack planning skills.
 
@@ -53869,6 +54191,8 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
 - **Monitor** — `Skill(autopilot:pr-monitor)` polls CI and review status; on changes-requested it runs `pr-resolve` (auto "Address all") and loops until approval.
 - Direct `gh pr create` / `git commit` are forbidden in autopilot mode — everything routes through the sub-skills so format stays correct.
 
+There is one variant of this flow: [`/autopilot:run-primed`](./15-run-primed-skill.md) keeps every phase above and replaces only the context gather, reading a SHA-validated [explore brief](./14-explore-skill.md) instead of re-mapping the repository. Ordinary `run` is unchanged by it.
+
 ## Where to look in the code
 
 | File                                                                 | Role                                                         |
@@ -53880,6 +54204,7 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
 | `claude-plugins/autopilot/skills/plan/references/branch-blocks.md`   | `## Pre-Implementation` bodies and their mechanics           |
 | `claude-plugins/autopilot/skills/gather-context/SKILL.md`            | The one context fan-out, its `Scope` input, and the map      |
 | `claude-plugins/autopilot/skills/run/SKILL.md`                       | `plan` plus the automated post-implementation chain          |
+| `claude-plugins/autopilot/skills/run-primed/SKILL.md`                | `run` with the fan-out replaced by a validated context brief |
 | `claude-plugins/autopilot/agents/digest-repo-standards.md`           | README / `docs/` / `rfc/` / `principles/` digest (JSON)      |
 | `claude-plugins/autopilot/agents/digest-branch-diff.md`              | Branch commits, diff, and stale-merge detection (JSON)       |
 | `claude-plugins/autopilot/agents/expert-review.md`                   | Domain-expert plan reviewer with per-dimension scores (JSON) |
@@ -54917,8 +55242,9 @@ The only change on that shared path is one optional input:
 | ---------------- | ------------------------------------------------------------------------ |
 | `task` (default) | the implementations, patterns, and tests the change touches              |
 | `broad`          | principal modules and boundaries, entry points, the conventions in force |
+| `primed`         | only the task-specific gaps a validated brief does not already cover     |
 
-The Context Map's section shape is identical either way. `plan` and `run` omit `Scope` and get `task`, so the addition is additive and default-preserving — the blast radius is confined to callers that pass `broad`.
+The Context Map's section shape is identical at every scope. `plan` and `run` omit `Scope` and get `task`, so each addition is additive and default-preserving — the blast radius is confined to callers that pass a non-default value. `primed` was added later for [`run-primed`](./15-run-primed-skill.md) and goes one step further than `broad`: it also gates off the standards digest, making `Scope` a fan-out selector rather than only a read strategy.
 
 `explore` also passes input type `plain-description`, which gates off `resolve-issue-context` and `search-codebase-todos`. No sub-agent runs whose output the brief would discard.
 
@@ -54975,7 +55301,8 @@ The diff is remote-to-remote, so locally-uncommitted work never forces a full pr
 ## Brief lifecycle
 
 - **Who reads it** — both the agent and the human. It is written as prose with diagrams, not as a machine format.
-- **Who does not** — `plan`, `run`, and `commits-create` do not consume it. It is not an input to any other skill; nothing silently depends on it being current.
+- **Who does not** — `plan`, `run`, and `commits-create` do not consume it, and never will; that is what keeps them deterministic.
+- **Who does** — [`run-primed`](./15-run-primed-skill.md), and only when the brief provably matches the checkout. It hard-depends on currency: the five consumed stable sections (`## Architecture map`, `## Data flow`, `## Conventions and standards`, `## Key types`, `## Test and verify`) are a contract for that skill, and a mismatched `Base:` stops the run rather than degrading it. Nothing depends on the brief _silently_ — the dependency is explicit, checked, and loud. The three volatile sections stay advisory, and `## Snapshot` is not consumed at all, since a recorded `outputId` is dead in another session.
 - **Hand-editing** — safe, and it survives every delta refresh. A full prime overwrites the stable sections, so notes worth keeping belong somewhere else.
 - **Staleness beyond the refresh rule** — the rule watches `origin/main` only, so long-lived local work that never lands upstream will not trigger a full prime. That is safe because the three volatile sections are recomputed from `git` in Phase 3 on both paths, never read from the Context Map; the stable sections describe the upstream base, which such work has not moved.
 - **Reset** — delete the file. The next invocation is a full prime.
@@ -54996,6 +55323,161 @@ Suppressing that machinery is half the value. A fix that costs one edit should n
 | `claude-plugins/autopilot/skills/gather-context/SKILL.md` | The fan-out it reuses, and the `Scope` input             |
 | `claude-plugins/autopilot/skills/ascii-schemas/SKILL.md`  | Generates the module and data-flow diagrams              |
 | `.gitignore` / `.prettierignore`                          | Keep `.claude/context/` out of commits and format checks |
+</file>
+
+<file path="docs/15-run-primed-skill.md">
+# The `run-primed` skill
+
+> Chapter 15 of the [repository docs](../README.md#repository-docs).
+
+How `/autopilot:run-primed` lets an already-primed session deliver a tracked issue without mapping the repository a second time — and why it refuses, loudly, rather than guessing.
+
+> Source of truth: `claude-plugins/autopilot/skills/run-primed/SKILL.md` (the skill), `…/skills/explore/SKILL.md` (the brief it consumes), and `…/skills/gather-context/SKILL.md` (the `Scope: primed` value this chapter adds).
+
+## The pattern this exists for
+
+[`explore`](./14-explore-skill.md) can prime a session against an exact revision and persist what it learned to `.claude/context/brief.md`. That makes a four-step orchestration possible:
+
+1. Run `/autopilot:explore` once on an immutable revision.
+2. Persist the resulting session transcript and the context brief.
+3. Fork that session into a clean checkout of the same revision.
+4. Ask it to implement a tracked issue end to end.
+
+Step 4 had only one door: [`/autopilot:run`](./05-plan-run-skills.md), whose Phase 1 unconditionally re-runs the whole [`gather-context`](../claude-plugins/autopilot/skills/gather-context/SKILL.md) fan-out. That is the correct contract for an interactive run — the Context Map is deliberately its entire view of the repository — but it means the forked session pays for the map twice. The transcript is visible to the model and is not an authoritative input, so nothing changes.
+
+## Why a separate skill, not a flag on `run`
+
+The alternative was a heuristic inside `run`: notice that the session looks primed, skip the fan-out. That is the wrong shape, for reasons that all reduce to one.
+
+**An artifact can be checked; a claim cannot.** A file carrying a base SHA either matches the checkout or it does not. A prompt asserting "context was already gathered" is unfalsifiable, and trusting it is how a run silently drafts against a repository it never read. Everything else follows:
+
+- Interactive `/autopilot:run` stays deterministic, with no new branch in its logic.
+- A headless orchestrator opts into the optimization explicitly, rather than hoping to trip a heuristic.
+- Incompatible context is **visible** instead of quietly costing a second full pass.
+- The optimization composes with session forking without the skill knowing anything about how the transcript or brief was stored.
+
+## When to use which
+
+| Skill                   | You have                           | You get                                                   |
+| ----------------------- | ---------------------------------- | --------------------------------------------------------- |
+| `/autopilot:explore`    | an area, no target                 | a durable brief, then edit-and-verify on your instruction |
+| `/autopilot:plan`       | a target you want reviewed         | a scored plan file, an approval gate, then implementation |
+| `/autopilot:run`        | a target you want carried          | the same plan, implemented and driven to a merged PR      |
+| `/autopilot:run-primed` | a target **and** a validated brief | the same as `run`, without re-mapping the repository      |
+
+`run-primed` is `run` with one phase replaced. Everything from the draft onward — pipeline, expert review, branch, commit, PR, monitor — is the same machinery, referenced rather than restated.
+
+## At a glance
+
+```text
+                ┌───────────────────────┐
+                │ /autopilot:run-primed │
+                └───────────┬───────────┘
+                            │ ①
+                            ▼
+                ┌───────────────────────┐
+                │  Phase 1              │
+                │  Validate the brief   │
+                └───────────┬───────────┘
+                            │
+                  ┌─────────┴─────────┐
+                  │ ②                 │ ③
+                  ▼                   ▼
+        ┏━━━━━━━━━━━━━━━━━━━┓ ┌───────────────────┐
+        ┃  Stop             ┃ │  Phase 2          │
+        ┃  missing          ┃ │  gather-context   │
+        ┃  malformed        ┃ │  Scope: primed    │
+        ┃  stale            ┃ └─────────┬─────────┘
+        ┃  revision-mismatch┃           │ ④
+        ┗━━━━━━━━━━━━━━━━━━━┛           ▼
+                              ┌───────────────────┐
+                              │  Phase 3          │
+                              │  Merge context    │
+                              └─────────┬─────────┘
+                                        │ ⑤
+                                        ▼
+                              ┌───────────────────┐
+                              │  Phases 4–6       │
+                              │  = run, unchanged │
+                              └───────────────────┘
+```
+
+**Flow Legend:**
+
+- ① Same argument forms as `run`: a GitHub or Linear issue, a code-scanning alert, or a description.
+- ② Four rejections, each naming `/autopilot:run` as the caller's explicit fallback. The skill never invokes it automatically.
+- ③ The brief validated against the checkout's own base.
+- ④ Only what a brief cannot bake in advance: issue or alert details, TODO search, branch diff, git state, and a re-attached snapshot.
+- ⑤ Draft, expert review, scoring, branch, implement, commit, PR, monitor — no plan-approval gate, exactly as `run`.
+
+## The validation contract
+
+Five verdicts, resolved in order and with no network fetch — two file checks first, then three `git` checks. The order is load-bearing: an absent `Base:` line reaching `git cat-file` exits non-zero and would report `revision-mismatch` for what is really a `malformed` brief, and the section-presence check has no `git` equivalent at all.
+
+| Verdict               | Test                                                                                           |
+| --------------------- | ---------------------------------------------------------------------------------------------- |
+| **missing**           | the brief does not exist                                                                       |
+| **malformed**         | no `Base:` line, or any of the nine fixed `##` sections absent                                 |
+| **revision-mismatch** | the recorded base does not resolve, or is not an ancestor-or-equal of `HEAD`                   |
+| **stale**             | the recorded base resolves and is contained in `HEAD`, but is not the checkout's `origin/main` |
+| **valid**             | the recorded base equals `origin/main` **and** is an ancestor-or-equal of `HEAD`               |
+
+**The comparison target is `origin/main`, and that is load-bearing.** `explore` writes `Base: <origin/main SHA>` and its own staleness check re-reads it against `origin/main`. Validating against `HEAD` instead would reject every brief written in a session whose branch had moved ahead — which is the ordinary explore session, since producing commits is the point of one. Producer and consumer would then disagree, in the same repository, about what "current" means, and the feature would read as permanently broken.
+
+The ancestor test is the second half: it confirms the working tree actually contains the recorded revision. `git merge-base --is-ancestor` is also what keeps "an older revision of this history" separable from "a different history entirely", which is why `stale` and `revision-mismatch` are two verdicts and not one.
+
+There is deliberately **no `git fetch`**. The checkout's `origin/main` is the base the orchestrator produced; re-fetching would let an unrelated upstream merge fail a correctly primed run. Requiring equality also makes the later branch-from-an-up-to-date-`main` step a no-op in the happy path, so the tree the plan was drafted against is the tree it is implemented against.
+
+## What the caller owns
+
+The skill validates and consumes the primed state. It does **not** know how that state was produced or stored, and two obligations therefore sit with the orchestrator:
+
+- **Transport the brief.** `.claude/context/` is in [`.gitignore`](../.gitignore), so git will never carry `brief.md` into a fresh clone or a forked checkout. The orchestrator must place it there. **A restored transcript alone is not sufficient** — without the brief artifact there is nothing checkable, and the run stops at the `missing` verdict. This is the whole reason the contract is an artifact rather than a conversation.
+- **Clone with full history.** Resolving and comparing the recorded revision uses `git cat-file -e` and `git merge-base`, which need the objects present. In a shallow clone an older base is unresolvable and `stale` collapses into `revision-mismatch`.
+
+## Where context comes from
+
+The brief supplies the repository half, the Context Map the volatile half:
+
+| Source            | Sections                                                                                                    |
+| ----------------- | ----------------------------------------------------------------------------------------------------------- |
+| Brief             | `## Architecture map`, `## Data flow`, `## Conventions and standards`, `## Key types`, `## Test and verify` |
+| Brief, **unused** | `## Snapshot`, `## In-flight changes`, `## Local session state`, `## Git state`                             |
+| Context Map       | Issue / alert, Related TODOs, In-flight changes, Git state, Snapshot                                        |
+
+The brief's three volatile sections are ignored because they describe the explore session's checkout, not this one. `## Snapshot` is stable and still unused: the repomix `outputId` it records is session-scoped and dead in a forked session, so the map's freshly attached pack is what gets read.
+
+`## Conventions and standards` is carried into the plan's applicable-standards record. That record doubles as the audit log of what the plan was drafted against, so it must never read `none` merely because the standards digest was skipped.
+
+## The `Scope: primed` value
+
+`gather-context` gains a third scope rather than a second fan-out:
+
+| `Scope`          | Codebase pass                                                            | Standards digest |
+| ---------------- | ------------------------------------------------------------------------ | ---------------- |
+| `task` (default) | the implementations, patterns, and tests the change touches              | runs             |
+| `broad`          | principal modules and boundaries, entry points, the conventions in force | runs             |
+| `primed`         | only the task-specific gaps the brief does not cover                     | skipped          |
+
+`primed` is the first scope that gates a Phase 1 agent, so the input is now a fan-out selector and not only a read strategy. `digest-repo-standards` is the one agent it skips, because a validated brief already carries that digest's output from the same revision. [`digest-branch-diff`](../claude-plugins/autopilot/agents/digest-branch-diff.md) still runs at every scope — `isStaleMerged` and `baseAhead` describe the checkout in front of you, which a brief written elsewhere cannot know.
+
+The emitted Context Map has the same sections at all three scopes, so `plan` and `run`, which omit `Scope`, are unaffected.
+
+## How this is guarded
+
+`explore` and `run-primed` are prompt files with no import between them, so a renamed brief section would break the consumer with nothing failing in between. `primedBriefContract.test.ts` closes that gap by extracting the section names from `explore`'s own template and asserting `run-primed` reads exactly the consumed subset — a rename in the producer fails the guard. It also asserts every verdict carries an actionable message, that `run-primed` never dispatches `run`, and that ordinary `run` still gathers context and mentions no brief.
+
+**What no test can show:** that the gate runs, or that the model honours it. CI sees text in a file. Worse, nothing under `.github/workflows/` runs `bun test`, so this guard gates locally and in review rather than in CI. Runtime evidence comes from a dry run recorded on the pull request.
+
+## Where to look in the code
+
+| File                                                                 | Role                                                         |
+| -------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `claude-plugins/autopilot/skills/run-primed/SKILL.md`                | The skill: validate, gather narrowly, delegate the tail      |
+| `claude-plugins/autopilot/skills/explore/SKILL.md`                   | Writes the brief and owns its `Base:` line and sections      |
+| `claude-plugins/autopilot/skills/run/SKILL.md`                       | The phases `run-primed` references for everything downstream |
+| `claude-plugins/autopilot/skills/gather-context/SKILL.md`            | The fan-out and its `Scope` input                            |
+| `.github/actions/code-review-action/src/primedBriefContract.test.ts` | The producer/consumer guard                                  |
 </file>
 
 <file path="packages/actions-core/src/anthropicAuth.test.ts">
@@ -59740,6 +60222,7 @@ The `docs/` guides are numbered chapters in reading order — start at chapter 1
 | 12  | [Code review repository standards](./docs/12-code-review-repository-standards.md) | how the review enforces a consumer repo's `rfc/`, `docs/`, and `principles/` with status severity   |
 | 13  | [The `shared-rules` skill](./docs/13-shared-rules-skill.md)                       | the single home for instruction blocks several skills need, and how a consumer reads one at runtime |
 | 14  | [The `explore` skill](./docs/14-explore-skill.md)                                 | the third on-ramp: prime a durable context brief, then take surgical fixes one at a time            |
+| 15  | [The `run-primed` skill](./docs/15-run-primed-skill.md)                           | the strict run path for a primed session: validate the brief against the checkout, or stop loudly   |
 
 **Standards.**
 
