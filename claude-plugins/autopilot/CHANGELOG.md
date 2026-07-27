@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.15.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.14.0...autopilot@v1.15.0) (2026-07-27)
+
+## Release Notes
+
+A new strict run path lets you skip redundant repository scanning when a session has already been primed by `/autopilot:explore`.
+
+## ✨ What's New
+
+### Strict Entry Point for Pre-Primed Sessions
+
+When you've already run `/autopilot:explore` to build a context brief about a repository, the new `/autopilot:run-primed` command lets you launch directly into execution using that validated context — no re-scanning required. Previously, every run would repeat the full repository-standards digest even when that work had already been done. Now, the `primed` scope in the context fan-out skips the digest step, since the brief already covers it. `/autopilot:run` behaviour is completely unchanged for teams that aren't using explore-first workflows.
+
+<details><summary>Related issues</summary>
+
+- [#490: Add a strict run path for pre-primed explore sessions](https://github.com/awinogradov/code-assistants/issues/490)
+- [#491: Add a strict run path for sessions already primed by explore](https://github.com/awinogradov/code-assistants/pull/491)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #490 | [#491](https://github.com/awinogradov/code-assistants/pull/491) | @awinogradov |
+
+### Features
+
+* **run-primed:** add strict primed-run entry point ([002c8b7](https://github.com/awinogradov/code-assistants/commit/002c8b725293b6bfe8630ebcbaf452912f49325e))
 ## [1.14.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.13.0...autopilot@v1.14.0) (2026-07-26)
 
 ## Release Notes
