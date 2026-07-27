@@ -126,6 +126,7 @@ The content is organized as follows:
         1.7.1.md
         1.7.2.md
         2.0.0.md
+        2.1.0.md
       src/
         github/
           githubReview.test.ts
@@ -5525,6 +5526,39 @@ longer re-triggers on a PR edit or ready_for_review, and fork PRs are not review
 ### Tests
 
 * **plan:** guard plan-file bodies against tool calls ([90436b3](https://github.com/awinogradov/code-assistants/commit/90436b3d300139917f39ac219c8442be6f922155))
+</file>
+
+<file path=".github/actions/code-review-action/.release_notes/2.1.0.md">
+## [2.1.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v2.0.0...code-review-action@v2.1.0) (2026-07-27)
+
+## Release Notes
+
+The action now ships a dedicated strict entry point for sessions that have already completed an explore pass, avoiding redundant repository scanning when context is already known.
+
+## ✨ What's New
+
+### Strict Entry Point for Pre-Primed Sessions
+
+When a review session has already run `/autopilot:explore` and produced a validated context brief, the action can now pick up exactly where explore left off — without re-scanning the repository from scratch. The new `/autopilot:run-primed` skill reads the existing brief directly and skips the repository-standards digest that explore already resolved, making the transition from explore to review faster and more deterministic.
+
+A matching `primed` scope has been added to the context fan-out to support this: when the action detects a primed session, it routes through the leaner path automatically. `/autopilot:run` behaviour is completely unchanged, so existing review workflows are unaffected.
+
+<details><summary>Related issues</summary>
+
+- [#490: Add a strict run path for pre-primed explore sessions](https://github.com/awinogradov/code-assistants/issues/490)
+- [#491: Add a strict run path for sessions already primed by explore](https://github.com/awinogradov/code-assistants/pull/491)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #490 | [#491](https://github.com/awinogradov/code-assistants/pull/491) | @awinogradov |
+
+### Features
+
+* **run-primed:** add strict primed-run entry point ([002c8b7](https://github.com/awinogradov/code-assistants/commit/002c8b725293b6bfe8630ebcbaf452912f49325e))
 </file>
 
 <file path=".github/actions/code-review-action/src/github/githubReview.test.ts">
@@ -13888,6 +13922,36 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [2.1.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v2.0.0...code-review-action@v2.1.0) (2026-07-27)
+
+## Release Notes
+
+The action now ships a dedicated strict entry point for sessions that have already completed an explore pass, avoiding redundant repository scanning when context is already known.
+
+## ✨ What's New
+
+### Strict Entry Point for Pre-Primed Sessions
+
+When a review session has already run `/autopilot:explore` and produced a validated context brief, the action can now pick up exactly where explore left off — without re-scanning the repository from scratch. The new `/autopilot:run-primed` skill reads the existing brief directly and skips the repository-standards digest that explore already resolved, making the transition from explore to review faster and more deterministic.
+
+A matching `primed` scope has been added to the context fan-out to support this: when the action detects a primed session, it routes through the leaner path automatically. `/autopilot:run` behaviour is completely unchanged, so existing review workflows are unaffected.
+
+<details><summary>Related issues</summary>
+
+- [#490: Add a strict run path for pre-primed explore sessions](https://github.com/awinogradov/code-assistants/issues/490)
+- [#491: Add a strict run path for sessions already primed by explore](https://github.com/awinogradov/code-assistants/pull/491)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #490 | [#491](https://github.com/awinogradov/code-assistants/pull/491) | @awinogradov |
+
+### Features
+
+* **run-primed:** add strict primed-run entry point ([002c8b7](https://github.com/awinogradov/code-assistants/commit/002c8b725293b6bfe8630ebcbaf452912f49325e))
 ## [2.0.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v1.7.2...code-review-action@v2.0.0) (2026-07-25)
 
 ## Release Notes
@@ -15065,7 +15129,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/package.json">
 {
   "name": "@code-assistants/code-review-action",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Composite GitHub Action that runs AI code review on pull requests via Claude Code.",
   "private": true,
   "type": "module",
@@ -15101,7 +15165,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/README.md">
 # Code review action
 
-[![GitHub Release](https://img.shields.io/badge/release-v2.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v2.1.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that runs AI code review on pull requests using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Has two modes:
@@ -15285,7 +15349,7 @@ uses: awinogradov/code-assistants/.github/actions/code-review-action@v1
 </file>
 
 <file path=".github/actions/code-review-action/version">
-2.0.0
+2.1.0
 </file>
 
 <file path=".github/actions/code-review-cost-monitor/.release_notes/0.1.0.md">
