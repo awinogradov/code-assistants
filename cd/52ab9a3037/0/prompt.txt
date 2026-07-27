@@ -1,1 +1,51 @@
 /autopilot:plan #490
+
+---
+
+continue
+
+---
+
+go ahead and monitpr
+
+---
+
+<task-notification>
+<task-id>b1b8ewibe</task-id>
+<summary>Monitor event: "PR #491 checks and review decision"</summary>
+<event>check Auto label: pass
+check CodeQL: skipping
+check GitGuardian Security Checks: pass
+check Validate PR: pass
+check Validate: pass</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>b1b8ewibe</task-id>
+<summary>Monitor event: "PR #491 checks and review decision"</summary>
+<event>review OPEN/REVIEW_REQUIRED</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>b1b8ewibe</task-id>
+<summary>Monitor event: "PR #491 checks and review decision"</summary>
+<event>check Analyze (actions): pass
+check Analyze (javascript-typescript): pass
+check CodeQL: pass</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+run-primed разрешает только Bash(git *), Bash(gh *), Bash(sleep *), но валидацию brief выполняет через sed, head и test. Claude эти команды по allowlist не сможет вызвать.
+
+Надо либо:
+
+- парсить Base: через Read — лучше;
+- либо явно разрешить нужные shell-команды.
