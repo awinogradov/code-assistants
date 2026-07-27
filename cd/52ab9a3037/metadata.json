@@ -1,0 +1,34 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "cd52ab9a3037",
+  "strategy": "manual-commit",
+  "branch": "issue-490-primed-run-path",
+  "checkpoints_count": 5,
+  "files_touched": [
+    ".github/actions/code-review-action/src/primedBriefContract.test.ts",
+    "README.md",
+    "claude-plugins/autopilot/README.md",
+    "claude-plugins/autopilot/skills/gather-context/SKILL.md",
+    "claude-plugins/autopilot/skills/run-primed/SKILL.md",
+    "docs/05-plan-run-skills.md",
+    "docs/14-explore-skill.md",
+    "docs/15-run-primed-skill.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/cd/52ab9a3037/0/metadata.json",
+      "transcript": "/cd/52ab9a3037/0/full.jsonl",
+      "compact_transcript": "/cd/52ab9a3037/0/transcript.jsonl",
+      "content_hash": "/cd/52ab9a3037/0/content_hash.txt",
+      "prompt": "/cd/52ab9a3037/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 455,
+    "cache_creation_tokens": 355444,
+    "cache_read_tokens": 27685572,
+    "output_tokens": 125859,
+    "api_call_count": 108
+  }
+}
