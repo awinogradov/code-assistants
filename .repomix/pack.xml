@@ -47062,6 +47062,8 @@ Set task 3 ("Draft plan") to `in_progress`.
 
 Assemble a complete draft before review and scoring, so both operate on a concrete artifact instead of an imagined one. Leave `Score:` as a placeholder — the review step fills it.
 
+Draft the smallest reliable solution that satisfies the steelmanned intent: reuse what the Context Map already shows over adding, and prefer the option with the fewest moving parts that still holds. Every step must trace to that intent — no unrequested abstraction, no configurability nobody asked for, no error handling for states that cannot occur, and no opportunistic refactor of adjacent code. Where a simpler option was rejected because it would not hold, say so in a clause rather than leaving the larger design unexplained. Minimality is a drafting constraint, not only a scoring one: the review step spends a single capped revision pass, which cannot reliably strip scope a draft has already committed to.
+
 Work these dimensions against the Context Map as you draft. They are analysis, not a second crawl:
 
 | Dimension        | Key Questions                                             |
@@ -47084,7 +47086,7 @@ Score: [filled by the review step — leave as a placeholder in the draft]
 
 ## Implementation Steps
 
-Every step MUST include a `verify:` line — an observable check (test name, command, or behavior). Follow your stack's verify examples as the pattern.
+One numbered step per action, written as an imperative naming the file it touches and what changes there. Every step MUST include a `verify:` line — an observable check (test name, command, or behavior). Follow your stack's verify examples as the pattern. Reasoning belongs in `## Summary`; a step that explains itself instead of stating an action is prose, not a step. Use no checkboxes — the plan file is read, not ticked off.
 
 ## Files
 - `path/to/file.ts:NN` - [what changes]
@@ -47205,9 +47207,9 @@ When `package.json` is missing, has no `agents` field, or carries an unrecognize
 
 **Verify examples** for the draft template's Implementation Steps:
 
-1. [ ] [Action] in `path/to/file.ts`
+1. [Action] in `path/to/file.ts`
    - verify: `bun test path/to/file.test.ts` passes
-2. [ ] [Action] in `path/to/file.ts`
+2. [Action] in `path/to/file.ts`
    - verify: CLI prints the new flag in `--help` output
 
 ## NodeJS+React
@@ -47231,9 +47233,9 @@ When `package.json` is missing, has no `agents` field, or carries an unrecognize
 
 **Verify examples** for the draft template's Implementation Steps:
 
-1. [ ] [Action] in `path/to/file.ts`
+1. [Action] in `path/to/file.ts`
    - verify: `vitest run path/to/file.test.ts` passes
-2. [ ] [Action] in `path/to/file.ts`
+2. [Action] in `path/to/file.ts`
    - verify: rendered component shows the new label in the page
 </file>
 
@@ -54215,6 +54217,10 @@ Defined once in [`references/pipeline.md`](../claude-plugins/autopilot/skills/pl
 ### Draft plan
 
 Assemble a complete draft **before** review and scoring, so both operate on a concrete artifact rather than an imagined one. The draft follows a fixed template: `## Summary` (with steelmanned intent and a `Score:` placeholder), `## Implementation Steps` (each with an observable `verify:` line patterned on the stack's verify examples), `## Files`, and `## Post-Implementation` — the last of these stating in prose that documentation is updated and the work is committed or opened as a PR.
+
+Two constraints bound what that draft may contain. The first is minimality: the draft proposes the smallest reliable solution that satisfies the steelmanned intent, reusing what the Context Map already shows, and every step must trace to that intent — no unrequested abstraction, no configurability nobody asked for, no error handling for impossible states, no opportunistic refactor of adjacent code. The second is shape: a step is one imperative action naming the file it touches and its `verify:` line, with reasoning left to `## Summary` and no checkboxes, since the plan file is read rather than ticked off.
+
+Both apply at drafting rather than at scoring, even though the rubric already carries a Simplicity dimension. Scoring gets a single capped revision pass, and one pass cannot reliably strip scope a draft has already committed to — by then the over-built design is the thing being corrected rather than the thing being avoided. Constraining the draft also gives expert reviewers a tighter artifact to score.
 
 Drafting works five analysis dimensions against the Context Map — **Architecture**, **Patterns**, **Data Flow**, **Types**, and **Edge Cases**. This was previously a separate "Deep Analysis" phase that produced no artifact and needed its own paragraph warning it not to re-crawl the tree; folding it into drafting removes both the phase boundary and the temptation.
 
