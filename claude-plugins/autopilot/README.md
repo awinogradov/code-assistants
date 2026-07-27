@@ -101,6 +101,7 @@ code-assistants/
             ├── pr:validate/
             ├── preflight-check/
             ├── run/
+            ├── run-primed/
             ├── shared-rules/           # bundles references/ — the canonical shared instruction blocks
             └── todo-cleanup/
 ```
@@ -111,7 +112,7 @@ All user-invocable entries are skills. Skills natively accept `$ARGUMENTS` and s
 
 ### Codebase context snapshot
 
-The skills that need whole-codebase context — `/autopilot:plan`, `/autopilot:run`, `/autopilot:explore`, `/autopilot:issue-create`, `/autopilot:pr-review`, `/autopilot:pr-answer`, `/autopilot:pr-resolve` — read the committed `.repomix/pack.xml` snapshot first (via `attach_packed_output`) and fall back to a live `pack_codebase` when it is absent. The snapshot is refreshed by CI on every merge to `main`; see the consumer host repo's [Committed Repomix pack](../../docs/09-repomix-pack.md) doc for details.
+The skills that need whole-codebase context — `/autopilot:plan`, `/autopilot:run`, `/autopilot:run-primed`, `/autopilot:explore`, `/autopilot:issue-create`, `/autopilot:pr-review`, `/autopilot:pr-answer`, `/autopilot:pr-resolve` — read the committed `.repomix/pack.xml` snapshot first (via `attach_packed_output`) and fall back to a live `pack_codebase` when it is absent. `/autopilot:run-primed` re-attaches the pack rather than reusing the `outputId` recorded in its context brief, because that id is session-scoped and dead in a forked session. The snapshot is refreshed by CI on every merge to `main`; see the consumer host repo's [Committed Repomix pack](../../docs/09-repomix-pack.md) doc for details.
 
 ### `/autopilot:branch-create`
 
@@ -210,6 +211,17 @@ Plan, implement, commit, create PR, and monitor until approved. Same as `/autopi
 /autopilot:run https://github.com/org/repo/issues/789                   # From GitHub URL
 /autopilot:run "add user authentication"                                # From description
 /autopilot:run #42 I think we should start with the auth module         # Issue + additional context
+```
+
+### `/autopilot:run-primed`
+
+Same as `/autopilot:run`, but reads the repository from a validated `.claude/context/brief.md` instead of re-running the codebase fan-out. See [the run-primed skill](../../docs/15-run-primed-skill.md) for the full contract.
+
+**Precondition:** the session must already have been primed by `/autopilot:explore`, and the orchestrator must have placed that brief in this checkout — `.claude/context/` is git-ignored, so a clone never carries it. A restored transcript on its own is not enough. When the brief is missing, malformed, stale, or from another revision, the skill stops with an actionable error and names `/autopilot:run` as the fallback; it never downgrades on its own.
+
+```bash
+/autopilot:run-primed #42                                               # From GitHub issue
+/autopilot:run-primed https://github.com/org/repo/issues/789            # From GitHub URL
 ```
 
 ### `/autopilot:explore`
@@ -376,7 +388,7 @@ Acquire all planning context in one parallel fan-out and emit a Context Map. Inv
 
 The fan-out issues every context call in a single message — the repo-standards and branch-diff digest agents, issue or alert resolution, the TODO search, the codebase snapshot, stack detection, and git state — then runs one snapshot pass and returns the Context Map. Sub-agents return bounded JSON, so the full text of a README, the selected RFCs, and an unbounded `git diff` never reaches the calling skill's context.
 
-An optional `Scope` input selects how that pass reads the snapshot: `task` (the default, used by `plan` and `run`) narrows to what the change touches, while `broad` maps the repository breadth-first for `/autopilot:explore`. The emitted Context Map has the same sections either way.
+An optional `Scope` input selects how that pass reads the snapshot: `task` (the default, used by `plan` and `run`) narrows to what the change touches, `broad` maps the repository breadth-first for `/autopilot:explore`, and `primed` reads only the gaps a validated brief leaves for `/autopilot:run-primed`. The emitted Context Map has the same sections at every scope. `primed` is the one value that also gates off a fan-out agent — the repo-standards digest, whose output the brief already carries.
 
 Planning is stack-agnostic apart from three values (example libraries, expert table, verify examples), which both skills resolve from `plan/references/stack-deltas.md` keyed by `agents.rules`. There are no per-stack planning skills.
 

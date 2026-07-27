@@ -99,8 +99,9 @@ The only change on that shared path is one optional input:
 | ---------------- | ------------------------------------------------------------------------ |
 | `task` (default) | the implementations, patterns, and tests the change touches              |
 | `broad`          | principal modules and boundaries, entry points, the conventions in force |
+| `primed`         | only the task-specific gaps a validated brief does not already cover     |
 
-The Context Map's section shape is identical either way. `plan` and `run` omit `Scope` and get `task`, so the addition is additive and default-preserving — the blast radius is confined to callers that pass `broad`.
+The Context Map's section shape is identical at every scope. `plan` and `run` omit `Scope` and get `task`, so each addition is additive and default-preserving — the blast radius is confined to callers that pass a non-default value. `primed` was added later for [`run-primed`](./15-run-primed-skill.md) and goes one step further than `broad`: it also gates off the standards digest, making `Scope` a fan-out selector rather than only a read strategy.
 
 `explore` also passes input type `plain-description`, which gates off `resolve-issue-context` and `search-codebase-todos`. No sub-agent runs whose output the brief would discard.
 
@@ -157,7 +158,8 @@ The diff is remote-to-remote, so locally-uncommitted work never forces a full pr
 ## Brief lifecycle
 
 - **Who reads it** — both the agent and the human. It is written as prose with diagrams, not as a machine format.
-- **Who does not** — `plan`, `run`, and `commits-create` do not consume it. It is not an input to any other skill; nothing silently depends on it being current.
+- **Who does not** — `plan`, `run`, and `commits-create` do not consume it, and never will; that is what keeps them deterministic.
+- **Who does** — [`run-primed`](./15-run-primed-skill.md), and only when the brief provably matches the checkout. It hard-depends on currency: the five consumed stable sections (`## Architecture map`, `## Data flow`, `## Conventions and standards`, `## Key types`, `## Test and verify`) are a contract for that skill, and a mismatched `Base:` stops the run rather than degrading it. Nothing depends on the brief _silently_ — the dependency is explicit, checked, and loud. The three volatile sections stay advisory, and `## Snapshot` is not consumed at all, since a recorded `outputId` is dead in another session.
 - **Hand-editing** — safe, and it survives every delta refresh. A full prime overwrites the stable sections, so notes worth keeping belong somewhere else.
 - **Staleness beyond the refresh rule** — the rule watches `origin/main` only, so long-lived local work that never lands upstream will not trigger a full prime. That is safe because the three volatile sections are recomputed from `git` in Phase 3 on both paths, never read from the Context Map; the stable sections describe the upstream base, which such work has not moved.
 - **Reset** — delete the file. The next invocation is a full prime.
