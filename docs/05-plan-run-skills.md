@@ -271,6 +271,8 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
 - **Monitor** — `Skill(autopilot:pr-monitor)` polls CI and review status; on changes-requested it runs `pr-resolve` (auto "Address all") and loops until approval.
 - Direct `gh pr create` / `git commit` are forbidden in autopilot mode — everything routes through the sub-skills so format stays correct.
 
+There is one variant of this flow: [`/autopilot:run-primed`](./15-run-primed-skill.md) keeps every phase above and replaces only the context gather, reading a SHA-validated [explore brief](./14-explore-skill.md) instead of re-mapping the repository. Ordinary `run` is unchanged by it.
+
 ## Where to look in the code
 
 | File                                                                 | Role                                                         |
@@ -282,6 +284,7 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
 | `claude-plugins/autopilot/skills/plan/references/branch-blocks.md`   | `## Pre-Implementation` bodies and their mechanics           |
 | `claude-plugins/autopilot/skills/gather-context/SKILL.md`            | The one context fan-out, its `Scope` input, and the map      |
 | `claude-plugins/autopilot/skills/run/SKILL.md`                       | `plan` plus the automated post-implementation chain          |
+| `claude-plugins/autopilot/skills/run-primed/SKILL.md`                | `run` with the fan-out replaced by a validated context brief |
 | `claude-plugins/autopilot/agents/digest-repo-standards.md`           | README / `docs/` / `rfc/` / `principles/` digest (JSON)      |
 | `claude-plugins/autopilot/agents/digest-branch-diff.md`              | Branch commits, diff, and stale-merge detection (JSON)       |
 | `claude-plugins/autopilot/agents/expert-review.md`                   | Domain-expert plan reviewer with per-dimension scores (JSON) |

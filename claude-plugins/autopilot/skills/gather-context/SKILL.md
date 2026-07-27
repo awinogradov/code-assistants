@@ -27,7 +27,7 @@ The invoking skill provides in the prompt:
 - **Repository** (e.g., `awinogradov/code-assistants`) and **repository root** (absolute path).
 - **Linear team** — for `linear-issue` only, the matched tracker's team.
 - **Task summary** — the raw task text, used to rank standards and scope the codebase pass.
-- **Scope** — `task` (the default) or `broad`, selecting how [Phase 2](#phase-2-scope-the-codebase-pass) reads the snapshot. Optional: `plan` and `run` omit it and get `task`.
+- **Scope** — `task` (the default), `broad`, or `primed`, selecting how [Phase 2](#phase-2-scope-the-codebase-pass) reads the snapshot. Optional: `plan` and `run` omit it and get `task`. `primed` additionally gates off one [Phase 1](#phase-1-fan-out) agent, so this input is a fan-out selector and not only a read strategy — see [`run-primed`](../run-primed/SKILL.md), the only caller that passes it.
 
 ## Phase 1: Fan out
 
@@ -37,7 +37,7 @@ Issue **every** call below in a **single message** so they run concurrently. Do 
 
 | Agent                                                            | When                       | Prompt                                                                                |
 | ---------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------- |
-| [`digest-repo-standards`](../../agents/digest-repo-standards.md) | Always                     | `Repository root: [path]. Task summary: [summary].`                                   |
+| [`digest-repo-standards`](../../agents/digest-repo-standards.md) | Except `Scope: primed`     | `Repository root: [path]. Task summary: [summary].`                                   |
 | [`digest-branch-diff`](../../agents/digest-branch-diff.md)       | Always                     | `Repository root: [path]. Base ref: origin/main.`                                     |
 | [`resolve-issue-context`](../../agents/resolve-issue-context.md) | Issue inputs               | Per that agent's Input section; pass `Auto-assign current user: true` for GitHub only |
 | [`resolve-alert-context`](../../agents/resolve-alert-context.md) | `code-scanning-alert` only | `Fetch alert context. Alert number: [n]. Repository: [owner/repo].`                   |
@@ -49,6 +49,8 @@ Issue **every** call below in a **single message** so they run concurrently. Do 
 - **Stack** — Read `package.json` and extract `agents.rules`.
 - **Git state** — `git branch --show-current`, `git rev-parse --git-dir`, and `git rev-parse --git-common-dir` (the last two differ inside a worktree).
 
+`digest-repo-standards` is the one agent `Scope: primed` skips: that caller holds a validated brief whose conventions came from this same digest on this same revision, so re-running it is duplicate cost rather than fresh information. `digest-branch-diff` still runs at every scope — `isStaleMerged` and `baseAhead` describe the checkout in front of you, which a brief written elsewhere cannot know.
+
 **Failure handling.** A resolver that returns `unresolved` with a non-null `resolveError` is fatal — surface the error and stop, so nothing proceeds against a misfetched target. A _digest_ failure is not fatal: record `digestError` in the map and continue, because a plan without a standards digest is degraded, not wrong.
 
 ## Phase 2: Scope the codebase pass
@@ -57,7 +59,11 @@ Only now is the task's subject matter known, so this pass runs after the fan-out
 
 Search the snapshot with `mcp__repomix__grep_repomix_output` for the implementations, patterns, and tests the change touches, reading specific ranges via `mcp__repomix__read_repomix_output`. The snapshot reflects the base at its last refresh, so reach for live Grep/Glob/Read **only** for working-tree code the snapshot cannot show — `digest-branch-diff` already reports what is in flight. Do not crawl the tree for anything the snapshot answers.
 
-**At `broad` scope there is no change to narrow to**, so read the snapshot breadth-first instead: the principal modules and their boundaries, the entry points, and the conventions that govern them. Fill `Relevant files` and `Patterns to mirror` at that altitude — the modules a newcomer must know and the conventions they must copy, rather than the handful a specific edit would touch. Every other section keeps its meaning, and the emitted section list is identical either way, so a caller that omits `Scope` sees exactly today's behavior.
+**At `broad` scope there is no change to narrow to**, so read the snapshot breadth-first instead: the principal modules and their boundaries, the entry points, and the conventions that govern them. Fill `Relevant files` and `Patterns to mirror` at that altitude — the modules a newcomer must know and the conventions they must copy, rather than the handful a specific edit would touch.
+
+**At `primed` scope the caller already holds the repository picture**, so read the snapshot only for the task-specific gaps that picture does not cover — the implementations and tests this particular change touches and the brief does not name. Do not re-derive architecture, key types, or test conventions; the caller merges those from its brief.
+
+Every other section keeps its meaning, and the emitted section list is identical at all three scopes, so a caller that omits `Scope` sees exactly today's behavior.
 
 ## Phase 3: Emit the Context Map
 
@@ -82,7 +88,7 @@ Emit these sections in this order. This is the caller's entire view of the repos
 Two fields carry decisions the caller would otherwise recompute badly:
 
 - **`isStaleMerged`** — a branch whose commits already landed upstream under rewritten SHAs still shows a non-empty `git log origin/main..HEAD`. A caller testing only for emptiness reads a finished branch as active work. Trust this field over a commit count.
-- **Applicable standards** — this doubles as the plan's audit log of what it planned against, including what the selection cap dropped.
+- **Applicable standards** — this doubles as the plan's audit log of what it planned against, including what the selection cap dropped. At `Scope: primed` the digest did not run, so write it as supplied by the caller's validated brief and name that brief — never leave it reading `none`, which would claim no standard applied rather than that one was sourced elsewhere.
 
 When you write the Context Map, apply the reference-formatting rules in [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (RFC-0001, read it first) to every reference it contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
 
