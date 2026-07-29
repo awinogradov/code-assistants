@@ -1,0 +1,42 @@
+# Runs the workspace test suite on every pull request.
+#
+# Deliberately NOT path-filtered. Most of what these tests guard is markdown
+# rather than TypeScript — `linkResolution` walks the skills, agents, `docs/`,
+# `rfc/` and the root README, `sharedRulesInvocation` discovers skills by
+# readdir, and the producer/consumer contract tests parse SKILL.md templates.
+# A docs-only pull request is therefore the case most likely to break them, so
+# filtering on `**/*.ts` would skip exactly the runs that matter.
+#
+# This workflow is not part of any downstream sync: the suite it runs is
+# specific to this repository's Turbo workspace.
+
+name: Test
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.head_ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.x
+
+      - name: Install workspace dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run tests
+        run: bun run test
