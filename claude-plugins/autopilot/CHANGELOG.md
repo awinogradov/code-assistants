@@ -2,6 +2,58 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.17.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.16.0...autopilot@v1.17.0) (2026-07-29)
+
+## Release Notes
+
+Two new Linear-integrated skills let you store implementation plans directly on tickets and execute them later — surviving session boundaries and enabling async team review before a single line of code is written.
+
+## ✨ What's New
+
+### Store Implementation Plans on Linear Tickets
+
+`/autopilot:linear-plan` generates a scored implementation plan and writes it directly to the body of its Linear ticket. Because the plan lives on the ticket rather than only in Claude's session, it persists after the session ends, can be reviewed or edited by a teammate, and serves as the authoritative source of truth before any code is touched. This is especially useful for async workflows where a tech lead wants to approve an approach before implementation begins.
+
+<details><summary>Related issues</summary>
+
+- [#497: Add skills to store a plan on a Linear issue and execute it verbatim](https://github.com/awinogradov/code-assistants/issues/497)
+</details>
+
+### Execute Stored Plans Verbatim from Linear
+
+`/autopilot:linear-run` reads the implementation plan already stored on a Linear ticket and executes it exactly as written. If no stored plan is found, the skill refuses with a clear, actionable message rather than silently drafting a replacement — ensuring what gets built always matches what was reviewed and approved. This pairs directly with `/autopilot:linear-plan` as a two-step workflow: plan first, execute later.
+
+<details><summary>Related issues</summary>
+
+- [#497: Add skills to store a plan on a Linear issue and execute it verbatim](https://github.com/awinogradov/code-assistants/issues/497)
+</details>
+
+### Stricter Plan Quality Bar Across All Planning Skills
+
+The scoring threshold for implementation plans has been raised from 95 to 98, and the revision loop now runs up to three passes instead of one before a plan is accepted. This applies to `/autopilot:plan`, `/autopilot:run`, and `/autopilot:run-primed` in addition to the new Linear-integrated skills. In practice, plans that previously passed with minor weaknesses will now be revised further before execution proceeds.
+
+## 📚 Documentation & Settings Updates
+
+### `linear:create` Registered in the Plugin README
+
+The `/autopilot:linear-create` skill was previously missing from both the structure tree and the skill list in the plugin README. It is now correctly documented alongside the new `linear:plan` and `linear:run` entries.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #497 | [#498](https://github.com/awinogradov/code-assistants/pull/498) | @awinogradov |
+
+### Features
+
+* **linear:** add linear:plan and linear:run skills ([b9bbfe2](https://github.com/awinogradov/code-assistants/commit/b9bbfe2cce8dd372f342b21768687963bfa5e117))
+* **plan:** raise scoring gate to 98 with three-pass revision ([103a36b](https://github.com/awinogradov/code-assistants/commit/103a36bba131736f1b3294f3421a2ba25d9417eb))
+
+### Documentation
+
+* **linear:** document the linear:plan and linear:run pair ([94d91b8](https://github.com/awinogradov/code-assistants/commit/94d91b886c673d9fb5db345fd76e6dd431571471))
+* **linear:** register linear:create in the plugin readme ([c8795d2](https://github.com/awinogradov/code-assistants/commit/c8795d2eec9a4e19934feb6c283524b14d0b6ace))
 ## [1.16.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.15.0...autopilot@v1.16.0) (2026-07-27)
 
 ## Release Notes
