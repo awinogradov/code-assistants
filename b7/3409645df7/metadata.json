@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "b73409645df7",
+  "strategy": "manual-commit",
+  "branch": "issue-499-reject-ungrounded-reviews",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".github/actions/code-review-action/src/expertReviewContract.test.ts",
+    "docs/05-plan-run-skills.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/b7/3409645df7/0/metadata.json",
+      "transcript": "/b7/3409645df7/0/full.jsonl",
+      "compact_transcript": "/b7/3409645df7/0/transcript.jsonl",
+      "content_hash": "/b7/3409645df7/0/content_hash.txt",
+      "prompt": "/b7/3409645df7/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 18,
+    "cache_creation_tokens": 8148,
+    "cache_read_tokens": 6222485,
+    "output_tokens": 6910,
+    "api_call_count": 9
+  }
+}
