@@ -78,7 +78,17 @@ Use the Agent tool with:
 
 Pass the Context Map excerpt, not just the plan text. A reviewer with no view of the repository infers file contents, and an invented finding is worse than a missing one.
 
-Each returns JSON (`expertRole`, `score`, `dimensions`, `verdict`, `findings`, `revision`). Aggregate:
+Each returns JSON (`expertRole`, `score`, `dimensions`, `verdict`, `findings`, `grounding`, `revision`).
+
+**Discard an ungrounded review before aggregating.** A reviewer that asserts what a file contains without having read it produces findings that are confident and wrong, which costs more than a finding it never made — so screen each panel member first and drop, rather than average, any that fails:
+
+- Its `grounding` is absent or empty.
+- Its report is not parseable as the JSON contract at all.
+- It reported no tool use, yet its findings quote file contents, identifiers, or line numbers that neither the plan nor the Context Map excerpt contains. That combination is a contradiction: with no tools it could only have been given text, so anything beyond that text was invented.
+
+Name every discard in the run — `Discarded <role>: <reason>` — and never silently shrink the panel. A single surviving reviewer is a single opinion, so say so instead of presenting its score as a panel aggregate; when nothing survives, report that the plan is unreviewed rather than emitting a score. Re-launching a discarded role once is reasonable; doing it repeatedly is not, because the same prompt tends to fail the same way.
+
+Aggregate what survives:
 
 1. **Score** — average each reviewer's `dimensions` into the five-dimension rubric below, 20 points each, 100 total.
 
