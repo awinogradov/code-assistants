@@ -127,6 +127,7 @@ The content is organized as follows:
         1.7.2.md
         2.0.0.md
         2.1.0.md
+        2.2.0.md
       src/
         github/
           githubReview.test.ts
@@ -414,6 +415,7 @@ claude-plugins/
       1.14.0.md
       1.15.0.md
       1.16.0.md
+      1.17.0.md
       1.2.0.md
       1.3.0.md
       1.3.1.md
@@ -5568,6 +5570,55 @@ A matching `primed` scope has been added to the context fan-out to support this:
 ### Features
 
 * **run-primed:** add strict primed-run entry point ([002c8b7](https://github.com/awinogradov/code-assistants/commit/002c8b725293b6bfe8630ebcbaf452912f49325e))
+</file>
+
+<file path=".github/actions/code-review-action/.release_notes/2.2.0.md">
+## [2.2.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v2.1.0...code-review-action@v2.2.0) (2026-07-29)
+
+## Release Notes
+
+Two new Linear-integrated planning skills let teams store and execute implementation plans directly on Linear tickets, surviving beyond the session that created them.
+
+## ✨ What's New
+
+### Store Implementation Plans on Linear Tickets
+
+The new `/autopilot:linear-plan` skill writes a scored implementation plan as a structured comment on its Linear ticket, so the plan persists after the session ends. This means a teammate can review and approve the plan before any code is written — closing the gap between "AI drafted a plan" and "everyone knows what we're building."
+
+### Execute Stored Linear Plans Verbatim
+
+The new `/autopilot:linear-run` skill picks up a plan already stored on a Linear ticket and executes it exactly as written. If no stored plan is found, it refuses with a clear, actionable message rather than silently generating a new one — preventing the common situation where an AI quietly substitutes its own interpretation for the agreed plan.
+
+### Higher-Quality Plans Across All Planning Skills
+
+The plan scoring threshold has been raised from 95 to 98, and the revision process now runs up to three passes instead of one. This applies to `/autopilot:plan`, `/autopilot:run`, and `/autopilot:run-primed` as well as the new Linear skills — plans must clear a higher bar before execution proceeds.
+
+<details><summary>Related issues</summary>
+
+- [#497: Add skills to store a plan on a Linear issue and execute it verbatim](https://github.com/awinogradov/code-assistants/issues/497)
+- [#498: Store implementation plans on Linear tickets and execute them later](https://github.com/awinogradov/code-assistants/pull/498)
+</details>
+
+## 📚 Documentation & Settings Updates
+
+### Linear Plugin README Now Lists All Skills
+
+`/autopilot:linear-create` was missing from the plugin's structure tree and skill list in the README. It's now registered alongside the two new skills, so the documentation accurately reflects every available Linear skill.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #497 | [#498](https://github.com/awinogradov/code-assistants/pull/498) | @awinogradov |
+
+### Features
+
+* **linear:** add linear:plan and linear:run skills ([b9bbfe2](https://github.com/awinogradov/code-assistants/commit/b9bbfe2cce8dd372f342b21768687963bfa5e117))
+
+### Bug Fixes
+
+* **code-review:** assert non-null block in shared block test ([0806812](https://github.com/awinogradov/code-assistants/commit/08068126b9ea16d2b8536b1cd842d2f3b50371ac))
 </file>
 
 <file path=".github/actions/code-review-action/src/github/githubReview.test.ts">
@@ -14104,6 +14155,52 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [2.2.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v2.1.0...code-review-action@v2.2.0) (2026-07-29)
+
+## Release Notes
+
+Two new Linear-integrated planning skills let teams store and execute implementation plans directly on Linear tickets, surviving beyond the session that created them.
+
+## ✨ What's New
+
+### Store Implementation Plans on Linear Tickets
+
+The new `/autopilot:linear-plan` skill writes a scored implementation plan as a structured comment on its Linear ticket, so the plan persists after the session ends. This means a teammate can review and approve the plan before any code is written — closing the gap between "AI drafted a plan" and "everyone knows what we're building."
+
+### Execute Stored Linear Plans Verbatim
+
+The new `/autopilot:linear-run` skill picks up a plan already stored on a Linear ticket and executes it exactly as written. If no stored plan is found, it refuses with a clear, actionable message rather than silently generating a new one — preventing the common situation where an AI quietly substitutes its own interpretation for the agreed plan.
+
+### Higher-Quality Plans Across All Planning Skills
+
+The plan scoring threshold has been raised from 95 to 98, and the revision process now runs up to three passes instead of one. This applies to `/autopilot:plan`, `/autopilot:run`, and `/autopilot:run-primed` as well as the new Linear skills — plans must clear a higher bar before execution proceeds.
+
+<details><summary>Related issues</summary>
+
+- [#497: Add skills to store a plan on a Linear issue and execute it verbatim](https://github.com/awinogradov/code-assistants/issues/497)
+- [#498: Store implementation plans on Linear tickets and execute them later](https://github.com/awinogradov/code-assistants/pull/498)
+</details>
+
+## 📚 Documentation & Settings Updates
+
+### Linear Plugin README Now Lists All Skills
+
+`/autopilot:linear-create` was missing from the plugin's structure tree and skill list in the README. It's now registered alongside the two new skills, so the documentation accurately reflects every available Linear skill.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #497 | [#498](https://github.com/awinogradov/code-assistants/pull/498) | @awinogradov |
+
+### Features
+
+* **linear:** add linear:plan and linear:run skills ([b9bbfe2](https://github.com/awinogradov/code-assistants/commit/b9bbfe2cce8dd372f342b21768687963bfa5e117))
+
+### Bug Fixes
+
+* **code-review:** assert non-null block in shared block test ([0806812](https://github.com/awinogradov/code-assistants/commit/08068126b9ea16d2b8536b1cd842d2f3b50371ac))
 ## [2.1.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v2.0.0...code-review-action@v2.1.0) (2026-07-27)
 
 ## Release Notes
@@ -15311,7 +15408,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/package.json">
 {
   "name": "@code-assistants/code-review-action",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Composite GitHub Action that runs AI code review on pull requests via Claude Code.",
   "private": true,
   "type": "module",
@@ -15347,7 +15444,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/README.md">
 # Code review action
 
-[![GitHub Release](https://img.shields.io/badge/release-v2.1.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v2.2.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that runs AI code review on pull requests using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Has two modes:
@@ -15531,7 +15628,7 @@ uses: awinogradov/code-assistants/.github/actions/code-review-action@v1
 </file>
 
 <file path=".github/actions/code-review-action/version">
-2.1.0
+2.2.0
 </file>
 
 <file path=".github/actions/code-review-cost-monitor/.release_notes/0.1.0.md">
@@ -38386,7 +38483,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "1.16.0",
+  "version": "1.17.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -39148,6 +39245,61 @@ Plans generated by `/autopilot:plan` and `/autopilot:run` are now constrained to
 ### Features
 
 * **plan:** constrain drafts to the smallest reliable change ([4370694](https://github.com/awinogradov/code-assistants/commit/4370694092318ebf7f07355415dc5198022e1c1e))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/1.17.0.md">
+## [1.17.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.16.0...autopilot@v1.17.0) (2026-07-29)
+
+## Release Notes
+
+Two new Linear-integrated skills let you store implementation plans directly on tickets and execute them later — surviving session boundaries and enabling async team review before a single line of code is written.
+
+## ✨ What's New
+
+### Store Implementation Plans on Linear Tickets
+
+`/autopilot:linear-plan` generates a scored implementation plan and writes it directly to the body of its Linear ticket. Because the plan lives on the ticket rather than only in Claude's session, it persists after the session ends, can be reviewed or edited by a teammate, and serves as the authoritative source of truth before any code is touched. This is especially useful for async workflows where a tech lead wants to approve an approach before implementation begins.
+
+<details><summary>Related issues</summary>
+
+- [#497: Add skills to store a plan on a Linear issue and execute it verbatim](https://github.com/awinogradov/code-assistants/issues/497)
+</details>
+
+### Execute Stored Plans Verbatim from Linear
+
+`/autopilot:linear-run` reads the implementation plan already stored on a Linear ticket and executes it exactly as written. If no stored plan is found, the skill refuses with a clear, actionable message rather than silently drafting a replacement — ensuring what gets built always matches what was reviewed and approved. This pairs directly with `/autopilot:linear-plan` as a two-step workflow: plan first, execute later.
+
+<details><summary>Related issues</summary>
+
+- [#497: Add skills to store a plan on a Linear issue and execute it verbatim](https://github.com/awinogradov/code-assistants/issues/497)
+</details>
+
+### Stricter Plan Quality Bar Across All Planning Skills
+
+The scoring threshold for implementation plans has been raised from 95 to 98, and the revision loop now runs up to three passes instead of one before a plan is accepted. This applies to `/autopilot:plan`, `/autopilot:run`, and `/autopilot:run-primed` in addition to the new Linear-integrated skills. In practice, plans that previously passed with minor weaknesses will now be revised further before execution proceeds.
+
+## 📚 Documentation & Settings Updates
+
+### `linear:create` Registered in the Plugin README
+
+The `/autopilot:linear-create` skill was previously missing from both the structure tree and the skill list in the plugin README. It is now correctly documented alongside the new `linear:plan` and `linear:run` entries.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #497 | [#498](https://github.com/awinogradov/code-assistants/pull/498) | @awinogradov |
+
+### Features
+
+* **linear:** add linear:plan and linear:run skills ([b9bbfe2](https://github.com/awinogradov/code-assistants/commit/b9bbfe2cce8dd372f342b21768687963bfa5e117))
+* **plan:** raise scoring gate to 98 with three-pass revision ([103a36b](https://github.com/awinogradov/code-assistants/commit/103a36bba131736f1b3294f3421a2ba25d9417eb))
+
+### Documentation
+
+* **linear:** document the linear:plan and linear:run pair ([94d91b8](https://github.com/awinogradov/code-assistants/commit/94d91b886c673d9fb5db345fd76e6dd431571471))
+* **linear:** register linear:create in the plugin readme ([c8795d2](https://github.com/awinogradov/code-assistants/commit/c8795d2eec9a4e19934feb6c283524b14d0b6ace))
 </file>
 
 <file path="claude-plugins/autopilot/.release_notes/1.2.0.md">
@@ -52104,6 +52256,58 @@ Before writing any output that mentions a file, standard, section, commit, or is
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.17.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.16.0...autopilot@v1.17.0) (2026-07-29)
+
+## Release Notes
+
+Two new Linear-integrated skills let you store implementation plans directly on tickets and execute them later — surviving session boundaries and enabling async team review before a single line of code is written.
+
+## ✨ What's New
+
+### Store Implementation Plans on Linear Tickets
+
+`/autopilot:linear-plan` generates a scored implementation plan and writes it directly to the body of its Linear ticket. Because the plan lives on the ticket rather than only in Claude's session, it persists after the session ends, can be reviewed or edited by a teammate, and serves as the authoritative source of truth before any code is touched. This is especially useful for async workflows where a tech lead wants to approve an approach before implementation begins.
+
+<details><summary>Related issues</summary>
+
+- [#497: Add skills to store a plan on a Linear issue and execute it verbatim](https://github.com/awinogradov/code-assistants/issues/497)
+</details>
+
+### Execute Stored Plans Verbatim from Linear
+
+`/autopilot:linear-run` reads the implementation plan already stored on a Linear ticket and executes it exactly as written. If no stored plan is found, the skill refuses with a clear, actionable message rather than silently drafting a replacement — ensuring what gets built always matches what was reviewed and approved. This pairs directly with `/autopilot:linear-plan` as a two-step workflow: plan first, execute later.
+
+<details><summary>Related issues</summary>
+
+- [#497: Add skills to store a plan on a Linear issue and execute it verbatim](https://github.com/awinogradov/code-assistants/issues/497)
+</details>
+
+### Stricter Plan Quality Bar Across All Planning Skills
+
+The scoring threshold for implementation plans has been raised from 95 to 98, and the revision loop now runs up to three passes instead of one before a plan is accepted. This applies to `/autopilot:plan`, `/autopilot:run`, and `/autopilot:run-primed` in addition to the new Linear-integrated skills. In practice, plans that previously passed with minor weaknesses will now be revised further before execution proceeds.
+
+## 📚 Documentation & Settings Updates
+
+### `linear:create` Registered in the Plugin README
+
+The `/autopilot:linear-create` skill was previously missing from both the structure tree and the skill list in the plugin README. It is now correctly documented alongside the new `linear:plan` and `linear:run` entries.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #497 | [#498](https://github.com/awinogradov/code-assistants/pull/498) | @awinogradov |
+
+### Features
+
+* **linear:** add linear:plan and linear:run skills ([b9bbfe2](https://github.com/awinogradov/code-assistants/commit/b9bbfe2cce8dd372f342b21768687963bfa5e117))
+* **plan:** raise scoring gate to 98 with three-pass revision ([103a36b](https://github.com/awinogradov/code-assistants/commit/103a36bba131736f1b3294f3421a2ba25d9417eb))
+
+### Documentation
+
+* **linear:** document the linear:plan and linear:run pair ([94d91b8](https://github.com/awinogradov/code-assistants/commit/94d91b886c673d9fb5db345fd76e6dd431571471))
+* **linear:** register linear:create in the plugin readme ([c8795d2](https://github.com/awinogradov/code-assistants/commit/c8795d2eec9a4e19934feb6c283524b14d0b6ace))
 ## [1.16.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.15.0...autopilot@v1.16.0) (2026-07-27)
 
 ## Release Notes
@@ -53466,14 +53670,14 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
   "release": {
     "type": "claude-plugin"
   },
-  "version": "1.16.0"
+  "version": "1.17.0"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.16.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.17.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -53962,7 +54166,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-1.16.0
+1.17.0
 </file>
 
 <file path="docs/01-workspace-structure.md">
