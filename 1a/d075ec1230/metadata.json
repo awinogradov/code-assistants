@@ -12,6 +12,7 @@
     {
       "metadata": "/1a/d075ec1230/0/metadata.json",
       "transcript": "/1a/d075ec1230/0/full.jsonl",
+      "compact_transcript": "/1a/d075ec1230/0/transcript.jsonl",
       "content_hash": "/1a/d075ec1230/0/content_hash.txt",
       "prompt": ""
     }
