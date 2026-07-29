@@ -90,6 +90,8 @@ code-assistants/
             ├── gather-context/
             ├── issue:create/
             ├── issue:run/
+            ├── linear:plan/
+            ├── linear:run/
             ├── pdf:create/             # bundles a self-contained Node renderer/ sub-project
             ├── plan/                   # bundles references/ loaded on demand
             ├── pr:answer/
@@ -112,7 +114,7 @@ All user-invocable entries are skills. Skills natively accept `$ARGUMENTS` and s
 
 ### Codebase context snapshot
 
-The skills that need whole-codebase context — `/autopilot:plan`, `/autopilot:run`, `/autopilot:run-primed`, `/autopilot:explore`, `/autopilot:issue-create`, `/autopilot:pr-review`, `/autopilot:pr-answer`, `/autopilot:pr-resolve` — read the committed `.repomix/pack.xml` snapshot first (via `attach_packed_output`) and fall back to a live `pack_codebase` when it is absent. `/autopilot:run-primed` re-attaches the pack rather than reusing the `outputId` recorded in its context brief, because that id is session-scoped and dead in a forked session. The snapshot is refreshed by CI on every merge to `main`; see the consumer host repo's [Committed Repomix pack](../../docs/09-repomix-pack.md) doc for details.
+The skills that need whole-codebase context — `/autopilot:plan`, `/autopilot:run`, `/autopilot:run-primed`, `/autopilot:linear-plan`, `/autopilot:linear-run`, `/autopilot:explore`, `/autopilot:issue-create`, `/autopilot:pr-review`, `/autopilot:pr-answer`, `/autopilot:pr-resolve` — read the committed `.repomix/pack.xml` snapshot first (via `attach_packed_output`) and fall back to a live `pack_codebase` when it is absent. `/autopilot:run-primed` re-attaches the pack rather than reusing the `outputId` recorded in its context brief, because that id is session-scoped and dead in a forked session. The snapshot is refreshed by CI on every merge to `main`; see the consumer host repo's [Committed Repomix pack](../../docs/09-repomix-pack.md) doc for details.
 
 ### `/autopilot:branch-create`
 
@@ -235,6 +237,28 @@ Reach for it when you have an _area_ rather than a target and the changes that f
 ```
 
 Re-invoking it refreshes the brief, replaying the full fan-out only when something other than derived files moved upstream. Deleting the brief is the supported reset.
+
+### `/autopilot:linear-plan`
+
+Same as `/autopilot:plan`, but stores the finished plan in its Linear ticket's description so it outlives the session — then stops, without implementing. See [the linear:plan skill](../../docs/16-linear-plan-skill.md) for the stored format.
+
+**Precondition:** a `linear` tracker in `package.json` `agents.trackers`, a Linear issue as the argument, and a reachable Linear MCP server. All three are checked before the expensive planning pass, and each names `/autopilot:plan` as the alternative. The store is gated on the plan's score: below the shared pipeline's threshold it reports the score, emits the plan to the transcript, and writes nothing.
+
+```bash
+/autopilot:linear-plan ENG-123                                          # From Linear id
+/autopilot:linear-plan https://linear.app/acme/issue/ENG-123            # From Linear URL
+```
+
+### `/autopilot:linear-run`
+
+Same as `/autopilot:run`, but reads the plan already stored on the Linear ticket instead of drafting one, and executes those steps verbatim. See [the linear:run skill](../../docs/17-linear-run-skill.md) for the validation contract.
+
+**Precondition:** the ticket must already carry a plan stored by `/autopilot:linear-plan`. When it is missing, written in an unreadable format, malformed, or has a step with no `verify:` line, the skill stops with an actionable error and names `/autopilot:linear-plan` as the fix; it never re-plans on its own, because that would silently replace a reviewed plan with an unreviewed one.
+
+```bash
+/autopilot:linear-run ENG-123                                           # From Linear id
+/autopilot:linear-run https://linear.app/acme/issue/ENG-123             # From Linear URL
+```
 
 ### `/autopilot:todo-cleanup`
 

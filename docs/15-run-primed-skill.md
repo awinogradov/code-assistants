@@ -30,14 +30,18 @@ The alternative was a heuristic inside `run`: notice that the session looks prim
 
 ## When to use which
 
-| Skill                   | You have                           | You get                                                   |
-| ----------------------- | ---------------------------------- | --------------------------------------------------------- |
-| `/autopilot:explore`    | an area, no target                 | a durable brief, then edit-and-verify on your instruction |
-| `/autopilot:plan`       | a target you want reviewed         | a scored plan file, an approval gate, then implementation |
-| `/autopilot:run`        | a target you want carried          | the same plan, implemented and driven to a merged PR      |
-| `/autopilot:run-primed` | a target **and** a validated brief | the same as `run`, without re-mapping the repository      |
+| Skill                    | You have                               | You get                                                        |
+| ------------------------ | -------------------------------------- | -------------------------------------------------------------- |
+| `/autopilot:explore`     | an area, no target                     | a durable brief, then edit-and-verify on your instruction      |
+| `/autopilot:plan`        | a target you want reviewed             | a scored plan file, an approval gate, then implementation      |
+| `/autopilot:run`         | a target you want carried              | the same plan, implemented and driven to a merged PR           |
+| `/autopilot:run-primed`  | a target **and** a validated brief     | the same as `run`, without re-mapping the repository           |
+| `/autopilot:linear-plan` | a Linear ticket to plan against        | a scored plan stored on the ticket, reviewable before any code |
+| `/autopilot:linear-run`  | a Linear ticket carrying a stored plan | the same as `run`, executing the stored plan verbatim          |
 
-`run-primed` is `run` with one phase replaced. Everything from the draft onward — pipeline, expert review, branch, commit, PR, monitor — is the same machinery, referenced rather than restated.
+This table is the single home for the comparison; [chapter 16](./16-linear-plan-skill.md) and [chapter 17](./17-linear-run-skill.md) point here rather than keeping copies that would drift.
+
+`run-primed` is `run` with one phase replaced. Everything from the draft onward — pipeline, expert review, branch, commit, PR, monitor — is the same machinery, referenced rather than restated. The two Linear entries replace a different half: `linear:plan` stops after storing its plan, and `linear:run` picks that plan up later instead of drafting one.
 
 ## At a glance
 
