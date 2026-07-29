@@ -391,6 +391,7 @@ The content is organized as follows:
     release-create.yml
     release-publish.yml
     repomix-pack.yml
+    test.yml
     upstream.yml
     validate-actions.yml
   dependabot.yml
@@ -38317,6 +38318,51 @@ jobs:
           done
           echo "::error::Failed to push refreshed pack after 3 attempts."
           exit 1
+</file>
+
+<file path=".github/workflows/test.yml">
+# Runs the workspace test suite on every pull request.
+#
+# Deliberately NOT path-filtered. Most of what these tests guard is markdown
+# rather than TypeScript — `linkResolution` walks the skills, agents, `docs/`,
+# `rfc/` and the root README, `sharedRulesInvocation` discovers skills by
+# readdir, and the producer/consumer contract tests parse SKILL.md templates.
+# A docs-only pull request is therefore the case most likely to break them, so
+# filtering on `**/*.ts` would skip exactly the runs that matter.
+#
+# This workflow is not part of any downstream sync: the suite it runs is
+# specific to this repository's Turbo workspace.
+
+name: Test
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.head_ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.x
+
+      - name: Install workspace dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run tests
+        run: bun run test
 </file>
 
 <file path=".github/workflows/upstream.yml">
