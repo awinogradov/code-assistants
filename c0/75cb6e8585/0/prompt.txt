@@ -1,0 +1,20 @@
+refresh rebase on main
+
+---
+
+/autopilot:plan i want to create 2 new skills.
+  Context: now we have plan run skills, linear create issue also. I want:
+  1. skill to create implementation plan exactly as plan skill and save it to the linear issue. Valid score to save the plan: >=98.
+  2. skill which gets linear issue as plan skill, but read the plan from the linear issue, gather context and follow the plan w/o changes. --issue
+
+---
+
+continue
+
+---
+
+Fill issue with sub-issues to fix all this findings
+
+---
+
+/autopilot:pr-monitor
