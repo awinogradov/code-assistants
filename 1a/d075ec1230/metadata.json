@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "1ad075ec1230",
+  "strategy": "manual-commit",
+  "branch": "issue-497-linear-plan-and-run",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "claude-plugins/autopilot/README.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/1a/d075ec1230/0/metadata.json",
+      "transcript": "/1a/d075ec1230/0/full.jsonl",
+      "content_hash": "/1a/d075ec1230/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
