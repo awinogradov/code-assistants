@@ -103,7 +103,7 @@ describe("shared block canonicals", () => {
     const fromRfc = extractBlock(await readFile(rfcPath, "utf8"), "ref-format");
     expect(fromRfc).not.toBeNull();
     expect(fromRfc!.length).toBeGreaterThan(minBlockLength);
-    expect(canonical.get("reference-formatting.md")).toBe(fromRfc);
+    expect(canonical.get("reference-formatting.md")).toBe(fromRfc!);
   });
 });
 
