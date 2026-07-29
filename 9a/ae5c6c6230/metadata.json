@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "9aae5c6c6230",
+  "strategy": "manual-commit",
+  "branch": "issue-500-run-guard-tests-in-ci",
+  "checkpoints_count": 7,
+  "files_touched": [
+    ".github/workflows/test.yml"
+  ],
+  "sessions": [
+    {
+      "metadata": "/9a/ae5c6c6230/0/metadata.json",
+      "transcript": "/9a/ae5c6c6230/0/full.jsonl",
+      "compact_transcript": "/9a/ae5c6c6230/0/transcript.jsonl",
+      "content_hash": "/9a/ae5c6c6230/0/content_hash.txt",
+      "prompt": "/9a/ae5c6c6230/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 58,
+    "cache_creation_tokens": 38395,
+    "cache_read_tokens": 20013557,
+    "output_tokens": 27631,
+    "api_call_count": 31
+  }
+}
