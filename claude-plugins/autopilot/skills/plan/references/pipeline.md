@@ -12,7 +12,7 @@ Set task 3 ("Draft plan") to `in_progress`.
 
 Assemble a complete draft before review and scoring, so both operate on a concrete artifact instead of an imagined one. Leave `Score:` as a placeholder — the review step fills it.
 
-Draft the smallest reliable solution that satisfies the steelmanned intent: reuse what the Context Map already shows over adding, and prefer the option with the fewest moving parts that still holds. Every step must trace to that intent — no unrequested abstraction, no configurability nobody asked for, no error handling for states that cannot occur, and no opportunistic refactor of adjacent code. Where a simpler option was rejected because it would not hold, say so in a clause rather than leaving the larger design unexplained. Minimality is a drafting constraint, not only a scoring one: the review step spends a single capped revision pass, which cannot reliably strip scope a draft has already committed to.
+Draft the smallest reliable solution that satisfies the steelmanned intent: reuse what the Context Map already shows over adding, and prefer the option with the fewest moving parts that still holds. Every step must trace to that intent — no unrequested abstraction, no configurability nobody asked for, no error handling for states that cannot occur, and no opportunistic refactor of adjacent code. Where a simpler option was rejected because it would not hold, say so in a clause rather than leaving the larger design unexplained. Minimality is a drafting constraint, not only a scoring one: review revises the draft it is handed, and no revision budget reliably strips scope a draft has already committed to — a pass spent arguing scope back down is a pass not spent on correctness.
 
 Work these dimensions against the Context Map as you draft. They are analysis, not a second crawl:
 
@@ -67,7 +67,7 @@ Use the Agent tool with:
 - `subagent_type`: "autopilot:expert-review"
 - `prompt`: "You are a [Expert Role]. Review this implementation plan.
   Focus areas: [from your stack's expert table].
-  Scoring target: 95+.
+  Scoring target: 98+.
   Limit your report to the 3–5 strongest findings — depth over breadth.
 
   [Context Map excerpt: relevant files, patterns, key types, test conventions, applicable standards]
@@ -90,9 +90,11 @@ Each returns JSON (`expertRole`, `score`, `dimensions`, `verdict`, `findings`, `
    | **Testability**  | Clear test strategy, edge cases identified                                                                                          |
    | **Simplicity**   | Minimal code, reuses existing functions, no over-engineering, every change traces to steelmanned intent, no opportunistic refactors |
 
-2. **Revise once.** If the aggregate is below 95, apply the findings to the draft and re-score — a **single** capped pass, never a loop. Ask via `AskUserQuestion` only when a weak dimension hinges on a material ambiguity the Context Map cannot settle.
+2. **Revise, at most three passes.** While the aggregate is below 98, fill the gaps the panel named and re-run the review — capped at three passes, and stopped early the moment a pass fails to raise the aggregate, because another round against an unchanged weakness re-pays the whole evaluation for nothing. Ask via `AskUserQuestion` only when a weak dimension hinges on a material ambiguity the Context Map cannot settle.
 
-3. **Report honestly.** If the revised plan still scores below 95, record the actual score and name the weak dimension in the plan. Never inflate a score to clear the target.
+3. **Report honestly.** If the plan still scores below 98 once the budget is spent, record the actual score and name the weak dimension in the plan. Never inflate a score to clear the target.
+
+   What follows a below-threshold score depends on the caller, so it is stated here rather than assumed. `plan`, `run`, and `run-primed` proceed on the recorded score: their plan is approved or authorized in the same session that drafted it, and the human reading it is the backstop. `linear:plan` does not proceed — it emits the plan to the transcript and stores nothing, because a stored plan can be executed later by a session that never saw the score, so the score has to be the gate instead of the reader.
 
 Do not include raw expert JSON in the plan output.
 
