@@ -90,6 +90,7 @@ code-assistants/
             ├── gather-context/
             ├── issue:create/
             ├── issue:run/
+            ├── linear:create/
             ├── linear:plan/
             ├── linear:run/
             ├── pdf:create/             # bundles a self-contained Node renderer/ sub-project
@@ -237,6 +238,17 @@ Reach for it when you have an _area_ rather than a target and the changes that f
 ```
 
 Re-invoking it refreshes the brief, replaying the full fan-out only when something other than derived files moved upstream. Deleting the brief is the supported reset.
+
+### `/autopilot:linear-create`
+
+Create a Linear issue with the same five-section body as `/autopilot:issue-create` (Context / What / Why / Scope / Solution), then pick its workflow status, labels, and assignee through a short wizard. Above the five sections it keeps your original prompt verbatim in a collapsed section. See [Linear tracker support](../../docs/11-linear-tracker.md) for the tracker contract.
+
+**Precondition:** a `linear` tracker in `package.json` `agents.trackers`. Without one the skill stops and points at `/autopilot:issue-create` for a GitHub issue instead.
+
+```bash
+/autopilot:linear-create                                                # Prompt for hint, generate everything
+/autopilot:linear-create "users cannot reset password via email"        # Use hint to seed title and body
+```
 
 ### `/autopilot:linear-plan`
 
