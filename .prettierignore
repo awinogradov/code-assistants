@@ -9,6 +9,12 @@ coverage/
 # formatting; keep Prettier from reformatting it (and re-introducing drift).
 /LICENSES.md
 
+# Release-generated changelogs and release notes — release-action owns their
+# formatting and rewrites them on every release, so reformatting here only
+# re-drifts at the next one. Same reasoning as LICENSES.md above.
+CHANGELOG.md
+.release_notes/
+
 # Bundled, self-contained Node sub-project for the pdf:create skill — decoupled
 # from the Bun workspace and the root Prettier (.{md,json}) glob on purpose.
 claude-plugins/autopilot/skills/pdf:create/renderer/
