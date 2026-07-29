@@ -174,7 +174,7 @@ Assemble a complete draft **before** review and scoring, so both operate on a co
 
 Two constraints bound what that draft may contain. The first is minimality: the draft proposes the smallest reliable solution that satisfies the steelmanned intent, reusing what the Context Map already shows, and every step must trace to that intent — no unrequested abstraction, no configurability nobody asked for, no error handling for impossible states, no opportunistic refactor of adjacent code. The second is shape: a step is one imperative action naming the file it touches and its `verify:` line, with reasoning left to `## Summary` and no checkboxes, since the plan file is read rather than ticked off.
 
-Both apply at drafting rather than at scoring, even though the rubric already carries a Simplicity dimension. Scoring gets a single capped revision pass, and one pass cannot reliably strip scope a draft has already committed to — by then the over-built design is the thing being corrected rather than the thing being avoided. Constraining the draft also gives expert reviewers a tighter artifact to score.
+Both apply at drafting rather than at scoring, even though the rubric already carries a Simplicity dimension. No revision budget reliably strips scope a draft has already committed to — by then the over-built design is the thing being corrected rather than the thing being avoided, and a pass spent arguing scope back down is a pass not spent on correctness. Constraining the draft also gives expert reviewers a tighter artifact to score.
 
 Drafting works five analysis dimensions against the Context Map — **Architecture**, **Patterns**, **Data Flow**, **Types**, and **Edge Cases**. This was previously a separate "Deep Analysis" phase that produced no artifact and needed its own paragraph warning it not to re-crawl the tree; folding it into drafting removes both the phase boundary and the temptation.
 
@@ -192,7 +192,9 @@ Expert review and scoring are **one step**. Experts are selected from the stack'
 
 Each reviewer receives a **Context Map excerpt** alongside the plan text. A reviewer with no view of the repository infers file contents, and an invented finding costs more than a missing one.
 
-Each returns a schema-validated JSON verdict carrying per-dimension scores. The parent averages them into the five-dimension rubric (Alignment, Completeness, Type Safety, Testability, Simplicity; 20 points each). Below the 95 target, findings are applied and the plan re-scored in a **single capped pass** — never a loop. If it still falls short, the actual score and the weak dimension are recorded rather than inflated.
+Each returns a schema-validated JSON verdict carrying per-dimension scores. The parent averages them into the five-dimension rubric (Alignment, Completeness, Type Safety, Testability, Simplicity; 20 points each). Below the 98 target, the gaps the panel named are filled and the panel re-run — **at most three passes**, and stopped early the moment a pass fails to raise the aggregate, since another round against an unchanged weakness re-pays the whole evaluation for nothing. If it still falls short, the actual score and the weak dimension are recorded rather than inflated.
+
+What follows a below-target score depends on the caller. `plan`, `run`, and `run-primed` proceed on the recorded score, because their plan is approved or authorized in the same session that drafted it. [`linear:plan`](./16-linear-plan-skill.md) does not: it emits the plan to the transcript and stores nothing, because a stored plan can be executed later by a session that never saw the score.
 
 Scoring used to be a separate phase running a second rubric over what the experts had already scored, with an uncapped auto-iteration loop.
 
@@ -275,7 +277,7 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
 - **Monitor** — `Skill(autopilot:pr-monitor)` polls CI and review status; on changes-requested it runs `pr-resolve` (auto "Address all") and loops until approval.
 - Direct `gh pr create` / `git commit` are forbidden in autopilot mode — everything routes through the sub-skills so format stays correct.
 
-There is one variant of this flow: [`/autopilot:run-primed`](./15-run-primed-skill.md) keeps every phase above and replaces only the context gather, reading a SHA-validated [explore brief](./14-explore-skill.md) instead of re-mapping the repository. Ordinary `run` is unchanged by it.
+There are two variants of this flow, each replacing a different half of it. [`/autopilot:run-primed`](./15-run-primed-skill.md) keeps every phase above and replaces only the context gather, reading a SHA-validated [explore brief](./14-explore-skill.md) instead of re-mapping the repository. [`/autopilot:linear-run`](./17-linear-run-skill.md) keeps the phases from branch creation onward and replaces the draft-and-review half, executing a plan that [`/autopilot:linear-plan`](./16-linear-plan-skill.md) stored on a Linear issue earlier — possibly in another session, for another person to read first. Ordinary `run` is unchanged by either.
 
 ## Where to look in the code
 
