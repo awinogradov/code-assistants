@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "2579d4e3fc40",
+  "strategy": "manual-commit",
+  "branch": "issue-497-linear-plan-and-run",
+  "checkpoints_count": 3,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/25/79d4e3fc40/0/metadata.json",
+      "transcript": "/25/79d4e3fc40/0/full.jsonl",
+      "compact_transcript": "/25/79d4e3fc40/0/transcript.jsonl",
+      "content_hash": "/25/79d4e3fc40/0/content_hash.txt",
+      "prompt": "/25/79d4e3fc40/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 5266,
+    "cache_creation_tokens": 639092,
+    "cache_read_tokens": 55526532,
+    "output_tokens": 252410,
+    "api_call_count": 151
+  }
+}
