@@ -251,7 +251,9 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
 - `resolve-issue-context` → `{ source, issueId, title, status, labels[], assignee|null, url|null, description, comments[], resolveError|null }`
 - `resolve-alert-context` → `{ source, alertNumber, ruleId, severity, state, file, line, message, htmlUrl, resolveError|null }` (alert input only)
 - `search-codebase-todos` → `{ todos[{location, text}], total }`
-- `expert-review` → `{ expertRole, score, dimensions{alignment,completeness,typeSafety,testability,simplicity}, verdict, findings[3–5], revision|null }`
+- `expert-review` → `{ expertRole, score, dimensions{alignment,completeness,typeSafety,testability,simplicity}, verdict, findings[3–5], grounding[], revision|null }`
+
+`grounding` names what a reviewer actually consulted, and the pipeline screens on it: a panel member with empty grounding, an unparseable report, or file claims it had no tools to make is **discarded rather than averaged**, every discard is named, and a panel that loses everyone reports the plan as unreviewed instead of emitting a score.
 
 ## How run differs: automated post-implementation
 

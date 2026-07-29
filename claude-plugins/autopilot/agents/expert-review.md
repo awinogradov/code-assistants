@@ -76,6 +76,7 @@ Output ONLY a single JSON object matching the schema below — no preamble, no s
 | `dimensions` | object                             | `{ "alignment": int, "completeness": int, "typeSafety": int, "testability": int, "simplicity": int }`, each 0–20; all five keys always present |
 | `verdict`    | `"approved"` \| `"needs-revision"` | `"approved"` when `score` meets the target, otherwise `"needs-revision"`                                                                       |
 | `findings`   | string[]                           | 3–5 entries, strongest first; stack minor objections together rather than listing each                                                         |
+| `grounding`  | string[]                           | What you actually consulted, one entry each — see [Phase 4a](#phase-4a-declare-your-grounding). Never empty                                    |
 | `revision`   | object \| null                     | `null` when no [Phase 3](#phase-3-recommend-changes) changes were needed; otherwise advisory `{ "changed": string, "rescore": integer }`       |
 
 Example (illustrative — emit the raw object, not this fenced form):
@@ -93,8 +94,17 @@ Example (illustrative — emit the raw object, not this fenced form):
   },
   "verdict": "approved",
   "findings": ["Finding 1", "Finding 2", "Finding 3"],
+  "grounding": ["plan text", "Context Map excerpt: relevant files, test conventions"],
   "revision": null
 }
 ```
 
 Do not output intermediate reasoning, analysis steps, or commentary — only the JSON object.
+
+## Phase 4a: Declare your grounding
+
+`grounding` names the evidence behind your findings, so the parent can tell a review built on something from one built on nothing. List one entry per source you actually used — `plan text`, `Context Map excerpt: <which sections>`, or the path of a file you genuinely read. It is never empty: at minimum you were given the plan.
+
+**Do not list a file you did not open.** You declare `tools: []`, so unless your prompt hands you a file's contents you have no way to read one — and naming it anyway is the fabrication this field exists to expose. When a question turns on a file you were not given, the honest entry is the excerpt you did have, and the finding says the plan is unverifiable on that point.
+
+The parent [discards a review whose grounding does not support its findings](../skills/plan/references/pipeline.md#review-and-score-task-4) rather than averaging it into the score, so an invented source costs the whole review rather than passing unnoticed.
