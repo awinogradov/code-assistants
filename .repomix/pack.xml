@@ -128,6 +128,7 @@ The content is organized as follows:
         2.0.0.md
         2.1.0.md
         2.2.0.md
+        2.3.0.md
       src/
         github/
           githubReview.test.ts
@@ -5624,6 +5625,79 @@ The plan scoring threshold has been raised from 95 to 98, and the revision proce
 * **code-review:** assert non-null block in shared block test ([0806812](https://github.com/awinogradov/code-assistants/commit/08068126b9ea16d2b8536b1cd842d2f3b50371ac))
 </file>
 
+<file path=".github/actions/code-review-action/.release_notes/2.3.0.md">
+## [2.3.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v2.2.0...code-review-action@v2.3.0) (2026-07-30)
+
+## Release Notes
+
+Linear plan storage is now fully automated — plans are saved directly after scoring without requiring a separate approval step.
+
+## ✨ What's New
+
+### Path Drift Detection for Stored Linear Plans
+
+When a stored Linear plan references files that have since been moved or renamed, the action now reports those missing paths before any steps execute. Previously, `linear:run` would begin executing a plan step-by-step and only surface a problem when a specific step failed — obscuring the real cause. Now, every path in the plan's `### Files` list is checked against the current checkout, and any that are gone are named upfront in an advisory report. Files marked `(new)` in the plan are correctly skipped, since those are intended to be created rather than already present. A clean result (all paths resolve) is also stated explicitly so there's no ambiguity about whether the check ran.
+
+<details><summary>Related issues</summary>
+
+- [#502: Stored Linear plans are not checked for moved file paths](https://github.com/awinogradov/code-assistants/issues/502)
+</details>
+
+### Richer Plan Score Recording
+
+Plan files now record not just the final score, but how that score was reached. The stored line becomes `Score: <N>/100 · <P> pass(es) · <exit reason>`, where the exit reason is one of `target reached`, `no improvement`, or `budget spent`. This makes it possible to distinguish a plan that cleared the scoring target on the first pass from one that exhausted its revision budget and landed just short — information that was previously lost the moment a run completed.
+
+<details><summary>Related issues</summary>
+
+- [#503: Measure whether the 98 plan scoring target is reachable](https://github.com/awinogradov/code-assistants/issues/503)
+</details>
+
+## 🐛 Bug Fixes
+
+### Linear Plan Storage No Longer Requires a Separate Approval Step
+
+Plans are now stored automatically after scoring completes. The previous flow required a manual approval gate between scoring and storage, which added friction and an unnecessary intervention point. Plans now move straight from scored to stored without a separate sign-off.
+
+<details><summary>Related issues</summary>
+
+- [#512: Store Linear plans without a separate approval gate](https://github.com/awinogradov/code-assistants/issues/512)
+</details>
+
+### Expert Reviews Without Evidence Are Now Discarded
+
+The `expert-review` agent was producing confident, detailed reviews based on file contents it had never actually read — in some cases inventing identifiers, imports, and contradictory versions of the same file. Because the parent skill had no way to detect this, fabricated reviews were averaged into the panel score as if they were legitimate. The agent now declares a `grounding` array listing what it actually consulted, and the parent discards any panel member whose grounding is empty, whose report is unparseable, or that quoted file contents not present in the plan or context. A panel where no members survive is now reported as unreviewed rather than silently emitting a score from zero evidence.
+
+<details><summary>Related issues</summary>
+
+- [#499: Expert-review agent invents file contents instead of reading them](https://github.com/awinogradov/code-assistants/issues/499)
+- [#497: Add skills to store a plan on a Linear issue and execute it verbatim](https://github.com/awinogradov/code-assistants/issues/497)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #512 | [#513](https://github.com/awinogradov/code-assistants/pull/513) | @rovnyart |
+| #501 | [#511](https://github.com/awinogradov/code-assistants/pull/511) | @awinogradov |
+| #500 | [#511](https://github.com/awinogradov/code-assistants/pull/511) | @awinogradov |
+| #503 | [#510](https://github.com/awinogradov/code-assistants/pull/510) | @awinogradov |
+| #502 | [#508](https://github.com/awinogradov/code-assistants/pull/508) | @awinogradov |
+| #497 | [#507](https://github.com/awinogradov/code-assistants/pull/507) | @awinogradov |
+| #499 | [#507](https://github.com/awinogradov/code-assistants/pull/507) | @awinogradov |
+
+### Features
+
+* **linear:** report path drift on a stored plan ([5b35bde](https://github.com/awinogradov/code-assistants/commit/5b35bde5ba1142e58f453809a0a75d146d8289ed))
+* **plan:** record passes and exit reason with the score ([3661ffa](https://github.com/awinogradov/code-assistants/commit/3661ffa2eb4dedf82fc724ccd7955d8a83288612))
+
+### Bug Fixes
+
+* **linear-plan:** remove separate approval gate ([ec810db](https://github.com/awinogradov/code-assistants/commit/ec810db9f3e3aa0a5a673df10c046960d7ae8c2b))
+* **plan:** discard expert reviews with no grounding ([edc40ee](https://github.com/awinogradov/code-assistants/commit/edc40eec772799dbc2c4fcf7545d2bc9305e27ee))
+* **turbo:** take markdown as an input to the test task ([d7b5c5c](https://github.com/awinogradov/code-assistants/commit/d7b5c5cae6ffa7c7d7615663b15cabdcb489076c))
+</file>
+
 <file path=".github/actions/code-review-action/src/github/githubReview.test.ts">
 /**
  * Tests for githubReview.ts. Pure helpers (normalizeBody) plus the Octokit-backed
@@ -7974,9 +8048,9 @@ describe("expert review contract", () => {
  *    section in the producer breaks the consumer with nothing failing in between.
  * 2. `linear:run` enumerates every validation verdict with an actionable message. A
  *    verdict quietly dropped turns a strict gate into a permissive one.
- * 3. `linear:run` never dispatches `linear:plan`. An automatic re-plan discards the human
- *    review the stored plan represents and substitutes an unreviewed one, looking like
- *    success — the opposite of what a strict consumer is for.
+ * 3. `linear:run` never dispatches `linear:plan`. An automatic re-plan discards the
+ *    stored artifact and substitutes a different one, looking like success — the
+ *    opposite of what a strict consumer is for.
  * 4. The two skills agree on the stored format version. `Format:` is the only thing that
  *    keeps "written under an older template" apart from "corrupt", and a version the
  *    producer writes but the consumer does not read collapses that distinction.
@@ -8111,6 +8185,18 @@ describe("linear plan contract", () => {
 
   test("linear:plan refuses to store below the threshold without discarding the plan", () => {
     expect(linearPlan).toContain("emit the full plan text into the transcript");
+  });
+
+  test("linear:plan stores eligible plans without a separate human approval step", () => {
+    expect(linearPlan).toContain("Do not add a separate approval step");
+    expect(linearPlan).not.toContain("## Phase 4: Request approval");
+    expect(linearPlan).not.toContain("The human approves the plan before it is stored");
+  });
+
+  test("linear:run treats the stored plan as a durable artifact, not proof of approval", () => {
+    expect(linearRun).toContain("durable plan somebody already wrote");
+    expect(linearRun).not.toContain("approval already happened when the plan was stored");
+    expect(linearRun).not.toContain("plan somebody approved");
   });
 
   test.each([
@@ -14433,6 +14519,76 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [2.3.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v2.2.0...code-review-action@v2.3.0) (2026-07-30)
+
+## Release Notes
+
+Linear plan storage is now fully automated — plans are saved directly after scoring without requiring a separate approval step.
+
+## ✨ What's New
+
+### Path Drift Detection for Stored Linear Plans
+
+When a stored Linear plan references files that have since been moved or renamed, the action now reports those missing paths before any steps execute. Previously, `linear:run` would begin executing a plan step-by-step and only surface a problem when a specific step failed — obscuring the real cause. Now, every path in the plan's `### Files` list is checked against the current checkout, and any that are gone are named upfront in an advisory report. Files marked `(new)` in the plan are correctly skipped, since those are intended to be created rather than already present. A clean result (all paths resolve) is also stated explicitly so there's no ambiguity about whether the check ran.
+
+<details><summary>Related issues</summary>
+
+- [#502: Stored Linear plans are not checked for moved file paths](https://github.com/awinogradov/code-assistants/issues/502)
+</details>
+
+### Richer Plan Score Recording
+
+Plan files now record not just the final score, but how that score was reached. The stored line becomes `Score: <N>/100 · <P> pass(es) · <exit reason>`, where the exit reason is one of `target reached`, `no improvement`, or `budget spent`. This makes it possible to distinguish a plan that cleared the scoring target on the first pass from one that exhausted its revision budget and landed just short — information that was previously lost the moment a run completed.
+
+<details><summary>Related issues</summary>
+
+- [#503: Measure whether the 98 plan scoring target is reachable](https://github.com/awinogradov/code-assistants/issues/503)
+</details>
+
+## 🐛 Bug Fixes
+
+### Linear Plan Storage No Longer Requires a Separate Approval Step
+
+Plans are now stored automatically after scoring completes. The previous flow required a manual approval gate between scoring and storage, which added friction and an unnecessary intervention point. Plans now move straight from scored to stored without a separate sign-off.
+
+<details><summary>Related issues</summary>
+
+- [#512: Store Linear plans without a separate approval gate](https://github.com/awinogradov/code-assistants/issues/512)
+</details>
+
+### Expert Reviews Without Evidence Are Now Discarded
+
+The `expert-review` agent was producing confident, detailed reviews based on file contents it had never actually read — in some cases inventing identifiers, imports, and contradictory versions of the same file. Because the parent skill had no way to detect this, fabricated reviews were averaged into the panel score as if they were legitimate. The agent now declares a `grounding` array listing what it actually consulted, and the parent discards any panel member whose grounding is empty, whose report is unparseable, or that quoted file contents not present in the plan or context. A panel where no members survive is now reported as unreviewed rather than silently emitting a score from zero evidence.
+
+<details><summary>Related issues</summary>
+
+- [#499: Expert-review agent invents file contents instead of reading them](https://github.com/awinogradov/code-assistants/issues/499)
+- [#497: Add skills to store a plan on a Linear issue and execute it verbatim](https://github.com/awinogradov/code-assistants/issues/497)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #512 | [#513](https://github.com/awinogradov/code-assistants/pull/513) | @rovnyart |
+| #501 | [#511](https://github.com/awinogradov/code-assistants/pull/511) | @awinogradov |
+| #500 | [#511](https://github.com/awinogradov/code-assistants/pull/511) | @awinogradov |
+| #503 | [#510](https://github.com/awinogradov/code-assistants/pull/510) | @awinogradov |
+| #502 | [#508](https://github.com/awinogradov/code-assistants/pull/508) | @awinogradov |
+| #497 | [#507](https://github.com/awinogradov/code-assistants/pull/507) | @awinogradov |
+| #499 | [#507](https://github.com/awinogradov/code-assistants/pull/507) | @awinogradov |
+
+### Features
+
+* **linear:** report path drift on a stored plan ([5b35bde](https://github.com/awinogradov/code-assistants/commit/5b35bde5ba1142e58f453809a0a75d146d8289ed))
+* **plan:** record passes and exit reason with the score ([3661ffa](https://github.com/awinogradov/code-assistants/commit/3661ffa2eb4dedf82fc724ccd7955d8a83288612))
+
+### Bug Fixes
+
+* **linear-plan:** remove separate approval gate ([ec810db](https://github.com/awinogradov/code-assistants/commit/ec810db9f3e3aa0a5a673df10c046960d7ae8c2b))
+* **plan:** discard expert reviews with no grounding ([edc40ee](https://github.com/awinogradov/code-assistants/commit/edc40eec772799dbc2c4fcf7545d2bc9305e27ee))
+* **turbo:** take markdown as an input to the test task ([d7b5c5c](https://github.com/awinogradov/code-assistants/commit/d7b5c5cae6ffa7c7d7615663b15cabdcb489076c))
 ## [2.2.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v2.1.0...code-review-action@v2.2.0) (2026-07-29)
 
 ## Release Notes
@@ -15686,7 +15842,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/package.json">
 {
   "name": "@code-assistants/code-review-action",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Composite GitHub Action that runs AI code review on pull requests via Claude Code.",
   "private": true,
   "type": "module",
@@ -15722,7 +15878,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/README.md">
 # Code review action
 
-[![GitHub Release](https://img.shields.io/badge/release-v2.2.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v2.3.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that runs AI code review on pull requests using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Has two modes:
@@ -15906,7 +16062,7 @@ uses: awinogradov/code-assistants/.github/actions/code-review-action@v1
 </file>
 
 <file path=".github/actions/code-review-action/version">
-2.2.0
+2.3.0
 </file>
 
 <file path=".github/actions/code-review-cost-monitor/.release_notes/0.1.0.md">
@@ -44430,7 +44586,7 @@ allowed-tools:
 
 Plan a Linear issue exactly as [`plan`](../plan/SKILL.md) does, then store the finished plan in that issue's description so it survives the session that produced it.
 
-**Difference from [`/autopilot:plan`](../plan/SKILL.md):** `plan` leaves its plan in the harness plan-mode file, which dies with the session. This skill adds one thing — a durable write to the ticket — and takes one thing away: it does **not** implement. It stops after storing, and [`linear:run`](../linear:run/SKILL.md) is what executes the stored plan later, possibly in a different session or by a different person. That separation is the point: a plan a teammate can read and correct in Linear before any code exists is worth more than one that only ever existed in a transcript.
+**Difference from [`/autopilot:plan`](../plan/SKILL.md):** `plan` leaves its plan in the harness plan-mode file, which dies with the session. This skill adds one thing — a durable write to the ticket — and takes one thing away: it does **not** implement. It stops after storing, and [`linear:run`](../linear:run/SKILL.md) is what executes the stored plan later, possibly in a different session or by a different person. That separation is the point: a plan a teammate can read and correct in Linear before any code exists is worth more than one that only ever existed in a transcript. Storing the plan is automatic once the pipeline finishes; `ExitPlanMode` is only the harness transition that exposes the finished plan, not a required human approval gate.
 
 Everything from input resolution through the draft-and-review pipeline is `plan`, referenced rather than restated. Only [Phase 0's gate](#phase-0-resolve-input-and-gate) and [Phase 6's store](#phase-6-store-the-plan-on-the-issue) are new.
 
@@ -44505,7 +44661,7 @@ Pass the detected input type, the Linear issue id, repository, repository root, 
 
 Set task 2 to `completed`.
 
-## Phase 2: Intent, assumptions, and the human gate
+## Phase 2: Intent, assumptions, and the clarification gate
 
 Identical to [`plan`](../plan/SKILL.md#phase-2-intent-assumptions-and-the-human-gate) — the Steelmanned Intent, the assumptions, and the open questions, with every load-bearing question raised before drafting.
 
@@ -44529,13 +44685,13 @@ The [**Plan file is output, not instructions**](../plan/SKILL.md#plan-file-is-ou
 
 Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft (task 3), review and score (task 4), finalize (task 5) — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md). The 98 target and the three-pass revision budget are that file's defaults; this skill does not override them.
 
-## Phase 4: Request approval
+## Phase 4: Finalize plan mode
 
 ```
 ExitPlanMode
 ```
 
-The human approves the plan before it is stored. The score gates the **write**; approval gates the **plan**. Both are required, and neither substitutes for the other: a 98 nobody read is not a reviewed plan, and an approved 96 is still a plan whose weaknesses were never addressed.
+Treat `ExitPlanMode` as the harness transition out of planning. Do not add a separate approval step or pause after this call. Continue immediately to the score decision and, when eligible, store the plan on the issue.
 
 ## Phase 5: Decide whether to store
 
@@ -44645,9 +44801,9 @@ allowed-tools:
 
 Run a Linear issue end to end from the plan [`linear:plan`](../linear:plan/SKILL.md) already stored in its description, executing those steps as written instead of drafting new ones.
 
-**Difference from [`/autopilot:run`](../run/SKILL.md):** `run` drafts a plan, reviews it, and implements it in one session, which is correct when the person running it is the person who wanted it. This skill is the path for a plan somebody already wrote and somebody already reviewed — on the ticket, before this session started. It is a **separate contract, not a heuristic**: it never inspects conversation history to decide whether a plan exists, because a description carrying a parseable format marker can be checked and a prompt claiming "the plan is ready" cannot.
+**Difference from [`/autopilot:run`](../run/SKILL.md):** `run` drafts a plan, reviews it, and implements it in one session, which is correct when the person running it is the person who wanted it. This skill is the path for a durable plan somebody already wrote — on the ticket, before this session started. It is a **separate contract, not a heuristic**: it never inspects conversation history to decide whether a plan exists, because a description carrying a parseable format marker can be checked and a prompt claiming "the plan is ready" cannot.
 
-Everything after [Phase 3](#phase-3-merge-the-working-context) is `run`, unchanged and referenced rather than restated. Like `run`, invoking this skill authorizes the whole flow: there is no plan-approval gate, because the approval already happened when the plan was stored.
+Everything after [Phase 3](#phase-3-merge-the-working-context) is `run`, unchanged and referenced rather than restated. Like `run`, invoking this skill authorizes the whole flow: there is no plan-approval gate.
 
 ## Input
 
@@ -44725,7 +44881,7 @@ Resolve in this exact order, stopping at the first that fires:
 
 Anything that survives all four is **valid**.
 
-**The order is load-bearing.** Check the anchor and the format version _before_ the sections. A plan stored under an older template is missing sections this skill expects, so a subsection check reached first would report a perfectly good older plan as `malformed` — telling the user their ticket is corrupt when it is merely older, and inviting them to throw away a reviewed artifact. `Format:` exists precisely to keep those two cases apart.
+**The order is load-bearing.** Check the anchor and the format version _before_ the sections. A plan stored under an older template is missing sections this skill expects, so a subsection check reached first would report a perfectly good older plan as `malformed` — telling the user their ticket is corrupt when it is merely older, and inviting them to throw away a valid stored artifact. `Format:` exists precisely to keep those two cases apart.
 
 On any verdict other than **valid**, stop with the matching message and do not fall back:
 
@@ -44734,7 +44890,7 @@ On any verdict other than **valid**, stop with the matching message and do not f
 - malformed — `Stored plan on <LINEAR-ID> is malformed: <what was absent>. Re-run /autopilot:linear-plan <LINEAR-ID>, or use /autopilot:run instead.`
 - unverifiable — `Stored plan on <LINEAR-ID> has a step with no verify line, so it cannot be executed strictly. Re-run /autopilot:linear-plan <LINEAR-ID> to regenerate it.`
 
-Each message names the skill that would fix it. **Never invoke that skill automatically** — a silent re-plan discards the human review the stored plan represents and replaces it with an unreviewed one, while looking like success. That is precisely the outcome this skill exists to make visible.
+Each message names the skill that would fix it. **Never invoke that skill automatically** — a silent re-plan discards the durable artifact the issue carries and replaces it with a different plan while looking like success. That is precisely the outcome this skill exists to make visible.
 
 Finally, report how far the plan has aged. Both checks below are advisory and never a verdict — they inform the reader, they do not stop the run.
 
@@ -44789,7 +44945,7 @@ This skill never enters plan mode — do NOT call `EnterPlanMode` or `ExitPlanMo
 
 Work the stored `### Implementation Steps` in order, verifying each against its own `verify:` line before moving on.
 
-Verbatim means verbatim. Do not re-draft a step, re-order the list, merge steps, add a step, or run an expert review — the review already happened. Where a step cannot be carried out as written, stop and report which step and why, rather than substituting your own judgement for a plan somebody approved. A plan that no longer fits its repository is information the reader needs, not a problem to route around silently.
+Verbatim means verbatim. Do not re-draft a step, re-order the list, merge steps, add a step, or run another expert review — the scored artifact is already stored. Where a step cannot be carried out as written, stop and report which step and why, rather than silently substituting a different plan. A plan that no longer fits its repository is information the reader needs, not a problem to route around silently.
 
 The stored `### Files` list is the expected blast radius. Touching a file it does not name is worth reporting for the same reason.
 
@@ -54308,7 +54464,7 @@ Same as `/autopilot:plan`, but stores the finished plan in its Linear ticket's d
 
 Same as `/autopilot:run`, but reads the plan already stored on the Linear ticket instead of drafting one, and executes those steps verbatim. See [the linear:run skill](../../docs/17-linear-run-skill.md) for the validation contract.
 
-**Precondition:** the ticket must already carry a plan stored by `/autopilot:linear-plan`. When it is missing, written in an unreadable format, malformed, or has a step with no `verify:` line, the skill stops with an actionable error and names `/autopilot:linear-plan` as the fix; it never re-plans on its own, because that would silently replace a reviewed plan with an unreviewed one.
+**Precondition:** the ticket must already carry a plan stored by `/autopilot:linear-plan`. When it is missing, written in an unreadable format, malformed, or has a step with no `verify:` line, the skill stops with an actionable error and names `/autopilot:linear-plan` as the fix; it never re-plans on its own, because that would silently replace the durable artifact with a different plan.
 
 ```bash
 /autopilot:linear-run ENG-123                                           # From Linear id
@@ -56919,11 +57075,11 @@ In all three the plan has to live somewhere a second reader can reach, and the t
 | -------------------------- | ---------------------------------------- |
 | Input detection, gathering | `plan`, unchanged                        |
 | Draft, review, score       | `plan`, unchanged — the shared pipeline  |
-| Approval gate              | `plan`, unchanged — `ExitPlanMode`       |
+| Finalize plan mode         | `ExitPlanMode` harness transition        |
 | Store on the ticket        | **new**                                  |
 | Implement, commit, PR      | **removed** — that is `linear:run`'s job |
 
-Stopping after the store is the deliberate part. If this skill also implemented, the reader would never be needed in the same session, and the plan-on-a-ticket would be a side effect rather than the deliverable. Composed the other way round, `linear:plan` then `linear:run` gives you the full flow with a reviewable pause in the middle — which is the whole point.
+Stopping after the store is the deliberate part. If this skill also implemented, the reader would never be needed in the same session, and the plan-on-a-ticket would be a side effect rather than the deliverable. Composed the other way round, `linear:plan` then `linear:run` gives you a durable handoff between independently triggered sessions.
 
 For how this pair sits beside the other on-ramps, see the comparison in [the `run-primed` chapter](./15-run-primed-skill.md#when-to-use-which); this chapter does not restate it.
 
@@ -56963,7 +57119,7 @@ All five are written, because a human reading the ticket should see the whole pl
 
 The three metadata fields each earn their place:
 
-- **`Format: v1`** is what keeps "stored under an older template" separable from "corrupt". Without it, the first template revision would make every previously stored plan indistinguishable from a mangled description, and the reader would tell users to discard reviewed work.
+- **`Format: v1`** is what keeps "stored under an older template" separable from "corrupt". Without it, the first template revision would make every previously stored plan indistinguishable from a mangled description, and the reader would tell users to discard valid stored work.
 - **`Score:`** records what the plan actually achieved, so a later reader can weigh it.
 - **`Base:`** records the tree the plan was drafted against. It is information, not a gate — see [why drift does not block](./17-linear-run-skill.md#drift-is-reported-not-enforced).
 
@@ -57025,11 +57181,9 @@ Linear renders `+++ Section title` … `+++` as an initially-hidden section, and
 
 That normalization is exactly why the store anchors on the `## Implementation plan` heading rather than on the wrapper. A re-store locates the anchor, which survives the round-trip unchanged, so it is unaffected by the fence being rewritten underneath it — and the "never stacks a second wrapper" property holds for the same reason.
 
-## The score gates the write, not the plan
+## The score gates the write
 
-The plan still goes through `plan`'s approval gate — a human reads it before anything is stored. The score gates something different: whether the approved plan becomes the ticket's instruction set.
-
-Both are required, and neither substitutes for the other. A 98 nobody read is not a reviewed plan. An approved 96 is a plan whose weaknesses were never addressed. The shared pipeline's threshold and its three-pass revision budget are inherited from [`pipeline.md`](./05-plan-run-skills.md#review-and-score) rather than restated here, so tuning them stays a one-file change.
+The plan is stored automatically after the shared review pipeline reaches its threshold. `ExitPlanMode` is the harness transition that exposes the final plan; the skill does not add a separate human approval step. The shared pipeline's threshold and its three-pass revision budget are inherited from [`pipeline.md`](./05-plan-run-skills.md#review-and-score) rather than restated here, so tuning them stays a one-file change.
 
 **Below the threshold, the plan is reported and emitted to the transcript — not discarded.** A skill whose premise is that plans are too valuable to lose must not quietly lose one at 97. It just declines to make it something a later session will execute unattended.
 
@@ -57041,14 +57195,14 @@ Both are required, and neither substitutes for the other. A 98 nobody read is no
 
 ## Where to look in the code
 
-| File                                                                           | Role                                                         |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------ |
-| `claude-plugins/autopilot/skills/linear:plan/SKILL.md`                         | The skill: gate, pipeline by reference, anchored store       |
-| `claude-plugins/autopilot/skills/linear:run/SKILL.md`                          | The reader that consumes the stored format                   |
-| `claude-plugins/autopilot/skills/plan/SKILL.md`                                | Input resolution, Common Instructions, and the approval gate |
-| `claude-plugins/autopilot/skills/plan/references/pipeline.md`                  | The threshold and revision budget this skill inherits        |
-| `claude-plugins/autopilot/skills/shared-rules/references/linear-mcp-access.md` | How `get_issue` and `save_issue` are resolved                |
-| `.github/actions/code-review-action/src/linearPlanContract.test.ts`            | The producer/consumer guard                                  |
+| File                                                                           | Role                                                   |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------ |
+| `claude-plugins/autopilot/skills/linear:plan/SKILL.md`                         | The skill: gate, pipeline by reference, anchored store |
+| `claude-plugins/autopilot/skills/linear:run/SKILL.md`                          | The reader that consumes the stored format             |
+| `claude-plugins/autopilot/skills/plan/SKILL.md`                                | Input resolution and Common Instructions               |
+| `claude-plugins/autopilot/skills/plan/references/pipeline.md`                  | The threshold and revision budget this skill inherits  |
+| `claude-plugins/autopilot/skills/shared-rules/references/linear-mcp-access.md` | How `get_issue` and `save_issue` are resolved          |
+| `.github/actions/code-review-action/src/linearPlanContract.test.ts`            | The producer/consumer guard                            |
 </file>
 
 <file path="docs/17-linear-run-skill.md">
@@ -57062,9 +57216,9 @@ How `/autopilot:linear-run` delivers a Linear ticket from the plan already store
 
 ## The pattern this exists for
 
-[`linear:plan`](./16-linear-plan-skill.md) leaves a reviewed plan on a ticket. Something has to pick it up — in a later session, or by a different person, or by an orchestrator that never saw the planning conversation. That consumer needs exactly one property: it must do what the plan says, and say so when it cannot.
+[`linear:plan`](./16-linear-plan-skill.md) leaves a scored, durable plan on a ticket. Something has to pick it up — in a later session, or by a different person, or by an orchestrator that never saw the planning conversation. That consumer needs exactly one property: it must do what the plan says, and say so when it cannot.
 
-`run` cannot fill that role, because `run` drafts its own plan. Pointing it at a ticket with a stored plan would produce a _second_ plan, unreviewed, that happens to be about the same work. The stored plan's whole value — that a human read and corrected it — would be silently discarded.
+`run` cannot fill that role, because `run` drafts its own plan. Pointing it at a ticket with a stored plan would produce a _second_ plan that happens to be about the same work. The stored plan's whole value — a durable, scored instruction set that can be refined independently — would be silently discarded.
 
 ## Why a separate skill, not a flag on `run`
 
@@ -57115,7 +57269,7 @@ For how this pair sits beside the other on-ramps, see the comparison in [the `ru
 - ② Four rejections, each naming `/autopilot:linear-plan` as the fix. The skill never invokes it automatically.
 - ③ One issue fetch happens here, ahead of the fan-out, so a ticket with no plan fails before the expensive pass is paid for.
 - ④ The full fan-out runs — unlike `run-primed`, nothing is gated off. A stored plan is not a repository brief.
-- ⑤ Branch, implement, commit, PR, monitor — no plan-approval gate, exactly as `run`, because approval already happened when the plan was stored.
+- ⑤ Branch, implement, commit, PR, monitor — no plan-approval gate, exactly as `run`.
 
 ## The validation contract
 
@@ -57129,11 +57283,11 @@ Four verdicts reject; the fifth proceeds.
 | **unverifiable**     | a numbered step carries no `verify:` line                                   | the plan cannot be executed strictly                |
 | **valid**            | anchor, readable `Format:`, every required section, `verify:` on every step | proceed                                             |
 
-**The order is load-bearing.** Anchor and format version are checked _before_ the sections. A plan stored under an older template is, by definition, missing sections this skill expects — so a subsection check reached first would report a perfectly good older plan as `malformed`, tell the user their ticket is corrupt, and invite them to throw away reviewed work. `Format:` exists precisely to keep those two cases apart, and checking it first is what makes it useful.
+**The order is load-bearing.** Anchor and format version are checked _before_ the sections. A plan stored under an older template is, by definition, missing sections this skill expects — so a subsection check reached first would report a perfectly good older plan as `malformed`, tell the user their ticket is corrupt, and invite them to throw away valid stored work. `Format:` exists precisely to keep those two cases apart, and checking it first is what makes it useful.
 
 `unverifiable` exists because the plan's `verify:` lines are what "execute strictly" means. A step with no observable check cannot be confirmed done, so a plan missing one is not executable as written — better to say so than to guess at completion.
 
-Each message names `/autopilot:linear-plan` as the fix. **It is never invoked automatically.** An automatic re-plan would replace a human-reviewed artifact with an unreviewed one while reporting success, which is the exact failure this skill exists to make visible.
+Each message names `/autopilot:linear-plan` as the fix. **It is never invoked automatically.** An automatic re-plan would replace the stored artifact with a different plan while reporting success, which is the exact failure this skill exists to make visible.
 
 ## Drift is reported, not enforced
 
@@ -57168,9 +57322,9 @@ The two unused sections are read past deliberately. They describe a branch and a
 
 ## Executing verbatim
 
-The stored `### Implementation Steps` are worked in order, each verified against its own `verify:` line before the next begins. No re-drafting, no re-ordering, no merging, no added steps, and no expert review — the review already happened, on the ticket, possibly weeks ago.
+The stored `### Implementation Steps` are worked in order, each verified against its own `verify:` line before the next begins. No re-drafting, no re-ordering, no merging, no added steps, and no second expert review — the producer's scored pipeline already finalized the stored artifact.
 
-Where a step cannot be carried out as written, the skill stops and reports which step and why. It does not substitute its own judgement for a plan somebody approved: a plan that no longer fits its repository is information the reader needs, not an obstacle to route around. The stored `### Files` list is the expected blast radius, so touching a file it does not name is reported for the same reason.
+Where a step cannot be carried out as written, the skill stops and reports which step and why. It does not silently substitute a different plan: a plan that no longer fits its repository is information the reader needs, not an obstacle to route around. The stored `### Files` list is the expected blast radius, so touching a file it does not name is reported for the same reason.
 
 ## How this is guarded
 
