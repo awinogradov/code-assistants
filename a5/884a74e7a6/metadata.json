@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "a5884a74e7a6",
+  "strategy": "manual-commit",
+  "branch": "maintenance-turbo-test-markdown-inputs",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".github/actions/code-review-action/src/turboInputsDocSync.test.ts",
+    "docs/01-workspace-structure.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/a5/884a74e7a6/0/metadata.json",
+      "transcript": "/a5/884a74e7a6/0/full.jsonl",
+      "compact_transcript": "/a5/884a74e7a6/0/transcript.jsonl",
+      "content_hash": "/a5/884a74e7a6/0/content_hash.txt",
+      "prompt": "/a5/884a74e7a6/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 16,
+    "cache_creation_tokens": 13450,
+    "cache_read_tokens": 6631654,
+    "output_tokens": 8297,
+    "api_call_count": 8
+  }
+}
