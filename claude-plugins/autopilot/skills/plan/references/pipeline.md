@@ -114,7 +114,15 @@ Set task 4 to `completed`.
 
 Set task 5 ("Finalize plan") to `in_progress`.
 
-Apply the aggregated findings and score to the draft, then write the plan file, replacing the `Score:` placeholder with `Score: [X]/100`.
+Apply the aggregated findings and score to the draft, then write the plan file, replacing the `Score:` placeholder with a line that records how the score was reached, not just what it was:
+
+```text
+Score: <N>/100 · <P> pass(es) · <exit reason>[ · weakest: <dimension>]
+```
+
+`<exit reason>` is one of `target reached`, `no improvement`, or `budget spent`, matching the three ways [the revision loop](#review-and-score-task-4) ends. Name the weakest dimension whenever the score is below the target; omit that clause when the target was reached.
+
+Recording the passes and the exit reason costs one line and makes every plan file a data point. The aggregate alone cannot distinguish a plan that cleared the bar immediately from one that burned the whole budget to land just short — and those two say opposite things about whether the threshold is set correctly. Without the line, answering that question later means re-running plans rather than reading the ones already written.
 
 Apply the reference-formatting rules (RFC-0001, inlined at the end of the calling skill) to every reference the plan contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
 
