@@ -8150,10 +8150,11 @@ describe("expert review contract", () => {
  * 5. Expert review is an enhancement, never a gate. The pipeline states no scoring
  *    threshold and no revision budget, and `linear:plan` stores unconditionally with
  *    no plan-mode transition — a re-introduced gate would silently start losing plans.
- * 6. Expert review is opt-in for `plan` alone. The pipeline names `plan` as the only
- *    caller that may skip the step and records an explicit skipped score; the
- *    `--experts-review` flag lives in `plan` and nowhere else, so no other caller can
- *    quietly grow the skip.
+ * 6. Expert review is opt-in for `plan` and `linear:plan` alone. The pipeline names them
+ *    as the only callers that may skip the step and records one literal skipped score
+ *    line; the `--experts-review` flag lives in those two skills and nowhere else, so
+ *    the `run` family cannot quietly grow the skip — and a skipped store must stay
+ *    visible, so `linear:plan` pins the `Score: skipped` stored-header variant.
  *
  * The section names are extracted from the producer's own text rather than hardcoded,
  * so the guard tracks the source instead of a copy of it.
@@ -8330,17 +8331,27 @@ describe("linear plan contract", () => {
     expect(drift).toContain(needle);
   });
 
-  test("the pipeline gates the review step on plan alone", () => {
-    expect(pipeline).toContain("the only caller that may skip");
-    expect(pipeline).toContain("Score: skipped");
-  });
-
-  test("plan's argument-hint carries the --experts-review flag", () => {
-    expect(plan).toMatch(/argument-hint:.*--experts-review/);
+  test("the pipeline gates the review step on plan and linear:plan alone", () => {
+    expect(pipeline).toContain("the only callers that may skip");
+    expect(pipeline).toContain(
+      "Score: skipped · expert review disabled (invoked without --experts-review)",
+    );
   });
 
   test.each([
+    ["plan", plan],
     ["linear:plan", linearPlan],
+  ])("%s's argument-hint carries the --experts-review flag", (_name, source) => {
+    expect(source).toMatch(/argument-hint:.*--experts-review/);
+  });
+
+  test("linear:plan documents the skipped stored-header variant", () => {
+    expect(linearPlan).toContain(
+      "Format: v1 · Score: skipped · Base: <origin/main SHA> · Stored by /autopilot:linear-plan",
+    );
+  });
+
+  test.each([
     ["linear:run", linearRun],
     ["run", run],
     ["run-primed", runPrimed],
@@ -45035,8 +45046,8 @@ When you generate the issue body, apply the reference-formatting rules in [`refe
 <file path="claude-plugins/autopilot/skills/linear:plan/SKILL.md">
 ---
 name: linear:plan
-description: Plan a Linear issue exactly as the plan skill does, then store the finished plan in that issue's description so it outlives the session. Storing is unconditional — the review score is recorded on the ticket as information, never used as a gate.
-argument-hint: "<Linear issue (ENG-123 or a Linear issue URL)>"
+description: Plan a Linear issue exactly as the plan skill does, expert-reviewed when --experts-review is passed, then store the finished plan in that issue's description so it outlives the session. Storing is unconditional — the recorded score or skip is information on the ticket, never used as a gate.
+argument-hint: "<Linear issue (ENG-123 or a Linear issue URL)> [--experts-review]"
 allowed-tools:
   - TaskCreate
   - TaskUpdate
@@ -45071,6 +45082,7 @@ Arguments: `$ARGUMENTS`
 Expected form:
 
 - `<Linear issue>` — a Linear identifier such as `ENG-123`, or a Linear issue URL.
+- `<Linear issue> --experts-review` — run the expert review-and-score step; without this flag that step is skipped and the skip is recorded in the stored `Score:` field.
 
 Additional free-form context may follow (e.g. `ENG-123 start with the adapter`).
 
@@ -45107,7 +45119,7 @@ $ARGUMENTS
 
 Create the 6 tasks, then set task 1 to `in_progress`.
 
-Detect the input type and id per [input-detection.md](../plan/references/input-detection.md) — the detection table and its tracker gating. Skip that file's create-issue flags section; it is plan-only. Detection is pure string matching and performs **no I/O**.
+First parse and strip `--experts-review` per the mode-flags pre-step in [input-detection.md](../plan/references/input-detection.md#mode-flags): present ⇒ the pipeline's review step runs; absent ⇒ it is skipped and the skip is recorded in the stored `Score:` field. Then detect the input type and id per [input-detection.md](../plan/references/input-detection.md) — the detection table and its tracker gating. Skip that file's create-issue flags section; it is plan-only. Detection is pure string matching and performs **no I/O**.
 
 Then resolve all three gate conditions **before** [Phase 1](#phase-1-gather-context). They run up front because the alternative is paying a full context fan-out and an expert review before discovering the plan has nowhere to go:
 
@@ -45147,7 +45159,7 @@ The [**Plan file is output, not instructions**](../plan/SKILL.md#plan-file-is-ou
 
 ## Phase 3: Draft, review, and finalize
 
-Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft (task 3), review and score (task 4), finalize (task 5) — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md). This skill runs the review unconditionally — the stored ticket should carry the panel's assessment — and the recorded score gates nothing: whatever the number says, continue straight to the store. Do not add a separate approval step, a plan-mode transition, or a score check between finalize and the write.
+Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft (task 3), review and score (task 4), finalize (task 5) — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md). Carry the `--experts-review` resolution from [Phase 0](#phase-0-resolve-input-and-gate) into the pipeline: the review step runs only when the flag was passed. Whatever the recorded outcome — a score or a skip — it gates nothing: continue straight to the store. Do not add a separate approval step, a plan-mode transition, or a score check between finalize and the write.
 
 ## Phase 4: Store the plan on the issue
 
@@ -45173,7 +45185,7 @@ Section names are the plan file's own, demoted from `##` to `###`, so mapping a 
 
 All five sections are written, because a human reading the ticket should see the whole plan. The two marked caller-owned are written but **not** for [`linear:run`](../linear:run/SKILL.md) to consume: branch creation and the post-implementation chain belong to the skill doing the running, which supplies its own. Marking them is what lets a guard prove the reader ignores them.
 
-`Format: v1` is the field that lets a later template revision be told apart from a corrupt description. `Base:` records the tree the plan was drafted against; it is information for a later reader, not a gate.
+`Format: v1` is the field that lets a later template revision be told apart from a corrupt description. `Base:` records the tree the plan was drafted against; it is information for a later reader, not a gate. When the review step was skipped, the `Score:` field reads the literal `skipped` — `Format: v1 · Score: skipped · Base: <origin/main SHA> · Stored by /autopilot:linear-plan` — so the ticket's reader knows the plan is unreviewed; like the score, it informs and never gates.
 
 ### The write
 
@@ -45205,6 +45217,8 @@ Set task 6 to `completed` and output:
 Next step:
 - Run /autopilot:linear-run <LINEAR-ID> to execute it
 ```
+
+When the review step was skipped, the `Score:` segment reads `skipped` here exactly as in the stored header.
 
 ## Reference formatting
 
@@ -45399,7 +45413,7 @@ Set task 4 to `in_progress`. Merge the stored plan with the Context Map using th
 
 The two unused sections are read past deliberately. They describe a branch and a post-implementation chain, and this skill supplies both from `run` — the branch because it must be created in _this_ checkout, and the chain because `run` owns it. Consuming a stored copy would mean executing a branch step written for a tree that no longer exists. Set task 4 to `completed`.
 
-Set task 5 to `in_progress`. Confirm the `valid` verdict and drift report from Phase 1. Do not run another expert review: the stored artifact already carries its producer's review and recorded score. Set task 5 to `completed`.
+Set task 5 to `in_progress`. Confirm the `valid` verdict and drift report from Phase 1. Do not run an expert review of your own: the stored artifact records its producer's review outcome — a score or an explicit skip — and this skill executes the plan, it does not re-assess it. Set task 5 to `completed`.
 
 Set task 6 to `in_progress`. Freeze the required stored sections as the execution plan without rewriting them or writing a harness replacement. Set task 6 to `completed`.
 
@@ -48735,11 +48749,11 @@ Reference for [`plan/SKILL.md`](../SKILL.md) and [`run/SKILL.md`](../../run/SKIL
 
 Detection is pure string matching — it performs **no I/O**. That is why the issue id is known before anything is fetched, and why [`gather-context`](../../gather-context/SKILL.md) can launch every context call in one fan-out.
 
-## Mode flags (`plan` only)
+## Mode flags
 
 Parse and strip `--experts-review` from the arguments before anything else, including the create-issue pre-step below. Its presence enables the expert review step for this invocation; when it is absent, [the pipeline](pipeline.md#review-and-score-task-4) skips that step. The flag is a mode toggle, not input: once stripped it never reaches the detection table, and it files nothing.
 
-`run` never parses this flag — its review is always-on by design; see the conditionality rule in [pipeline.md](pipeline.md#review-and-score-task-4).
+`plan` and [`linear:plan`](../../linear:plan/SKILL.md) are the only skills that parse this flag. The `run` family — `run`, `run-primed`, and `linear:run` — never does: its review is always-on by design; see the conditionality rule in [pipeline.md](pipeline.md#review-and-score-task-4).
 
 ## Create-issue flags (`plan` only)
 
@@ -48866,7 +48880,7 @@ Expert review and scoring are **one step**. Reviewers already return per-dimensi
 
 **Expert review is an enhancement, never a gate.** It improves the plan and records the panel's assessment for the plan's readers; no caller blocks, loops, or refuses to proceed on the score.
 
-**`plan` is the only caller that may skip this step.** It runs the review only when the user passed `--experts-review` (stripped by the mode-flags pre-step in [input-detection.md](input-detection.md#mode-flags-plan-only)), because its approval gate puts a human in front of the finished plan either way. Every other caller runs the step unconditionally — `linear:plan` so the stored ticket carries the panel's assessment for the teammate who reads it, and `run`, `run-primed`, and `linear:run`'s fresh-plan path because no human re-reads their plans — so for any caller other than `plan` the skip path is unreachable, and a skipped score never reaches a stored artifact. When `plan` skips: set task 4 to `completed` noting the skip, and finalize with the skipped `Score:` line from [Finalize](#finalize-task-5).
+**`plan` and `linear:plan` are the only callers that may skip this step.** Each runs the review only when the user passed `--experts-review` (stripped by the mode-flags pre-step in [input-detection.md](input-detection.md#mode-flags)) — `plan` because its approval gate puts a human in front of the finished plan either way, and `linear:plan` because the teammate reading the stored ticket is that human, and the recorded skip tells them the plan is unreviewed. The `run` family — `run`, `run-primed`, and `linear:run`'s fresh-plan path — runs the step unconditionally, because no human re-reads its plans, so for those callers the skip path is unreachable. When the review step was skipped: set task 4 to `completed` noting the skip, and finalize with the skipped `Score:` line from [Finalize](#finalize-task-5).
 
 Select experts from your stack's expert table — always the Pre-mortem Analyst, then 2-3 more by task scope. Launch them **in parallel** (single message, multiple Agent tool calls):
 
@@ -48925,13 +48939,13 @@ Apply the aggregated findings and score to the draft, then write the plan file, 
 Score: <N>/100 · weakest: <dimension>
 ```
 
-When `plan` skipped the review step, there are no findings to apply; replace the placeholder with the skipped variant instead:
+When the review step was skipped, there are no findings to apply; replace the placeholder with the skipped variant instead:
 
 ```text
-Score: skipped · expert review disabled (plan invoked without --experts-review)
+Score: skipped · expert review disabled (invoked without --experts-review)
 ```
 
-The line names its producer deliberately: only `plan` can skip, so this exact line appearing in any other caller's output is evidence of drift, not a valid state.
+The line is deliberately a single literal: only `plan` and `linear:plan` can skip, so this exact line appearing in `run`, `run-primed`, or `linear:run` output is evidence of drift, not a valid state.
 
 Naming the weakest dimension costs half a line and tells a later reader where the plan is soft — the aggregate alone says how good the panel thought the plan was, not what to double-check when executing it.
 
@@ -49073,7 +49087,7 @@ Additional free-form context may follow any form (e.g., `#42 I think we should s
 
 - **Task description / issue identifier** — parsed from `$ARGUMENTS`. If empty, prompt once via `AskUserQuestion`: "What should we plan?" with a free-form slot. Do not abort silently.
 - **`--issue` / `--linear-issue`** — handled by the create-issue pre-step in [input-detection.md](references/input-detection.md) before detection. Neither flag ⇒ today's behavior.
-- **`--experts-review`** — parsed and stripped first by the mode-flags pre-step in [input-detection.md](references/input-detection.md#mode-flags-plan-only). Present ⇒ the pipeline's review step runs; absent ⇒ it is skipped and the skip is recorded in the plan's `Score:` line.
+- **`--experts-review`** — parsed and stripped first by the mode-flags pre-step in [input-detection.md](references/input-detection.md#mode-flags). Present ⇒ the pipeline's review step runs; absent ⇒ it is skipped and the skip is recorded in the plan's `Score:` line.
 - **Current branch / worktree / issue-ID mismatch** — from the Context Map's git state ([Phase 3](#phase-3-preflight-verdict)). No prompts beyond preflight's own.
 - **Repository root** — `git rev-parse --show-toplevel`. No prompt.
 
@@ -55129,7 +55143,7 @@ Create a Linear issue with the same five-section body as `/autopilot:issue-creat
 
 Same as `/autopilot:plan`, but stores the finished plan in its Linear ticket's description so it outlives the session — then stops, without implementing. See [the linear:plan skill](../../docs/16-linear-plan-skill.md) for the stored format.
 
-**Precondition:** a `linear` tracker in `package.json` `agents.trackers`, a Linear issue as the argument, and a reachable Linear MCP server. All three are checked before the expensive planning pass, and each names `/autopilot:plan` as the alternative. The store is gated on the plan's score: below the shared pipeline's threshold it reports the score, emits the plan to the transcript, and writes nothing.
+**Precondition:** a `linear` tracker in `package.json` `agents.trackers`, a Linear issue as the argument, and a reachable Linear MCP server. All three are checked before the expensive planning pass, and each names `/autopilot:plan` as the alternative. Storing is unconditional — expert review runs only when `--experts-review` is passed (as in `/autopilot:plan`), and the stored header records the score, or `Score: skipped` without the flag, as information for the ticket's reader, never as a gate.
 
 ```bash
 /autopilot:linear-plan ENG-123                                          # From Linear id
@@ -56327,7 +56341,7 @@ The mechanics sit in the phase that runs them: [Phase 5](#phase-5--embed-branch-
 
 Expert review and scoring are **one step**. Experts are selected from the stack's expert table — always the Pre-mortem Analyst, plus 2–3 more by task scope — and launched as parallel `expert-review` sub-agents.
 
-The step is opt-in for `plan` alone: it runs only when the user passed `--experts-review`, because `plan`'s approval gate puts a human in front of the finished plan either way. Without the flag the plan file records `Score: skipped · expert review disabled (plan invoked without --experts-review)` — a line that names its producer, so its appearance in any other caller's output is drift, not a valid state. Every other caller runs the review unconditionally, which is why a skipped score never reaches a stored artifact.
+The step is opt-in for `plan` and [`linear:plan`](./16-linear-plan-skill.md): each runs it only when the user passed `--experts-review` — `plan` because its approval gate puts a human in front of the finished plan either way, `linear:plan` because the teammate reading the stored ticket is that human. Without the flag the plan file records `Score: skipped · expert review disabled (invoked without --experts-review)` — a single literal, so its appearance in `run`, `run-primed`, or `linear:run` output is drift, not a valid state. The `run` family runs the review unconditionally because no human re-reads its plans; a skipped score can reach a stored ticket, where it tells the reader the plan is unreviewed.
 
 Each reviewer receives a **Context Map excerpt** alongside the plan text. A reviewer with no view of the repository infers file contents, and an invented finding costs more than a missing one.
 
@@ -57729,7 +57743,7 @@ The emitted Context Map has the same sections at all three scopes, so `plan` and
 
 > Chapter 16 of the [repository docs](../README.md#repository-docs).
 
-How `/autopilot:linear-plan` turns a plan from a session artifact into something durable on its Linear ticket — reviewed by the expert panel for the teammate who reads it, and stored unconditionally.
+How `/autopilot:linear-plan` turns a plan from a session artifact into something durable on its Linear ticket — expert-reviewed when `--experts-review` is passed, and stored unconditionally.
 
 > Source of truth: `claude-plugins/autopilot/skills/linear:plan/SKILL.md` (the skill), `…/skills/plan/references/pipeline.md` (the shared review pipeline it executes), and `…/skills/linear:create/SKILL.md` (the description this one rewrites).
 
@@ -57858,7 +57872,7 @@ That normalization is exactly why the store anchors on the `## Implementation pl
 
 ## Storing is unconditional
 
-The plan is stored automatically the moment the shared review pipeline finishes — no plan-mode transition, no separate human approval step, and no score check between finalize and the write. The review score is recorded on the ticket as information for the teammate who reads it, never used as a gate. Unlike [`plan`](./05-plan-run-skills.md#review-and-score), which may skip expert review via its opt-in `--experts-review` flag, this skill accepts no such flag: it always reviews, so the stored ticket always carries the panel's assessment.
+The plan is stored automatically the moment the shared review pipeline finishes — no plan-mode transition, no separate human approval step, and no score check between finalize and the write. The review score is recorded on the ticket as information for the teammate who reads it, never used as a gate. Like [`plan`](./05-plan-run-skills.md#review-and-score), this skill takes the opt-in `--experts-review` flag: with it the stored ticket carries the panel's assessment; without it the stored header records the literal `Score: skipped`, so the reader can see the plan is unreviewed before deciding to run it.
 
 ## How this is guarded
 
@@ -57994,7 +58008,7 @@ Stored `### Pre-Implementation` and `### Post-Implementation` sections are read 
 
 ## Executing the selected plan
 
-In stored-plan mode, the `### Implementation Steps` are worked in order, each verified against its own `verify:` line before the next begins. No re-drafting, no re-ordering, no merging, no added steps, and no second expert review — the producer's scored pipeline already finalized the stored artifact.
+In stored-plan mode, the `### Implementation Steps` are worked in order, each verified against its own `verify:` line before the next begins. No re-drafting, no re-ordering, no merging, no added steps, and no second expert review — the producer's pipeline already finalized the stored artifact, recording either its panel's score or an explicit skip.
 
 Where a step cannot be carried out as written, the skill stops and reports which step and why. It does not silently substitute a different plan: a plan that no longer fits its repository is information the reader needs, not an obstacle to route around. The stored `### Files` list is the expected blast radius, so touching a file it does not name is reported for the same reason.
 
