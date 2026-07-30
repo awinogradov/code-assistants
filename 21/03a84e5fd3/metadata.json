@@ -1,0 +1,29 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "2103a84e5fd3",
+  "strategy": "manual-commit",
+  "branch": "issue-503-record-scoring-data",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".github/actions/code-review-action/src/expertReviewContract.test.ts",
+    "claude-plugins/autopilot/skills/plan/references/pipeline.md",
+    "docs/05-plan-run-skills.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/21/03a84e5fd3/0/metadata.json",
+      "transcript": "/21/03a84e5fd3/0/full.jsonl",
+      "compact_transcript": "/21/03a84e5fd3/0/transcript.jsonl",
+      "content_hash": "/21/03a84e5fd3/0/content_hash.txt",
+      "prompt": "/21/03a84e5fd3/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 22,
+    "cache_creation_tokens": 8449,
+    "cache_read_tokens": 8737691,
+    "output_tokens": 7146,
+    "api_call_count": 11
+  }
+}

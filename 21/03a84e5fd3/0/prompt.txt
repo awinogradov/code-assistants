@@ -1,0 +1,7 @@
+<task-notification>
+<task-id>btqc0skt4</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-chamisa-badger/a0f2285c-709e-4de2-9866-569a01e1e104/tasks/btqc0skt4.output</output-file>
+<status>completed</status>
+<summary>Background command "Wait for PR 509 re-verdict" completed (exit code 0)</summary>
+</task-notification>
