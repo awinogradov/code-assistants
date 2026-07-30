@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "8da0aa9f6cae",
+  "strategy": "manual-commit",
+  "branch": "issue-503-record-scoring-data",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".github/actions/code-review-action/src/expertReviewContract.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/8d/a0aa9f6cae/0/metadata.json",
+      "transcript": "/8d/a0aa9f6cae/0/full.jsonl",
+      "compact_transcript": "/8d/a0aa9f6cae/0/transcript.jsonl",
+      "content_hash": "/8d/a0aa9f6cae/0/content_hash.txt",
+      "prompt": "/8d/a0aa9f6cae/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 10,
+    "cache_creation_tokens": 3679,
+    "cache_read_tokens": 4025317,
+    "output_tokens": 3530,
+    "api_call_count": 5
+  }
+}
