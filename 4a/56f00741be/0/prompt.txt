@@ -1,0 +1,152 @@
+rebase on the fresh main
+
+---
+
+in plan skills we experts review step. Must be optional via flag --experts-review, disabled by default
+
+---
+
+<task-notification>
+<task-id>a8ddc32911ccbc167</task-id>
+<tool-use-id>toolu_01YG3hggtfHUKRyvyn5s4uKG</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-organ-pipe-switchback/49399c68-5272-44a9-bfc9-eb183eddca82/tasks/a8ddc32911ccbc167.output</output-file>
+<status>completed</status>
+<summary>Agent "Expert review: Boring Tech Writer" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>Read(file_path: "/Users/tony_vi/.warp/worktrees/code-assistants/organ-pipe-switchback/claude-plugins/autopilot/skills/plan/SKILL.md")
+
+Read(file_path: "/Users/tony_vi/.warp/worktrees/code-assistants/organ-pipe-switchback/docs/05-plan-run-skills.md")
+
+Read(file_path: "/Users/tony_vi/.warp/worktrees/code-assistants/organ-pipe-switchback/claude-plugins/autopilot/skills/plan/references/input-detection.md")
+
+Read(file_path: "/Users/tony_vi/.warp/worktrees/code-assistants/organ-pipe-switchback/README.md")</result>
+<usage><subagent_tokens>21533</subagent_tokens><tool_uses>0</tool_uses><duration_ms>7828</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a63055348daac70bd</task-id>
+<tool-use-id>toolu_01QxpzXgBWDzAo8XyzbJyPuB</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-organ-pipe-switchback/49399c68-5272-44a9-bfc9-eb183eddca82/tasks/a63055348daac70bd.output</output-file>
+<status>completed</status>
+<summary>Agent "Expert review: Pre-mortem Analyst" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>{
+  "expertRole": "Pre-mortem Analyst",
+  "score": 93,
+  "dimensions": {
+    "alignment": 19,
+    "completeness": 16,
+    "typeSafety": 19,
+    "testability": 18,
+    "simplicity": 19
+  },
+  "verdict": "needs-revision",
+  "findings": [
+    "Failure narrative #1 — shared-prose gate drifts: pipeline.md is executed by five model-driven callers, and introducing a skip branch into the one shared file creates the mode where a run-family invocation pattern-matches the skip path despite no flag being passed (prompt-following by model-driven callers is not deterministic). Step 4's guard only asserts TEXT ('names plan as the only caller that may skip'), which cannot catch behavioral drift. Early warning: a 'Score: skipped' line appearing in a run/run-primed/linear plan record. Mitigation: make the skipped line embed the invoking caller and add one hardening clause in the conditionality paragraph directing non-plan callers that the skip branch is unreachable for them.",
+    "Failure narrative #2 — skipped plans resurface downstream: plan files stored with 'Score: skipped' can plausibly be fed later to run-primed, which the Context Map lists as a pipeline caller with no plan-approval gate; the plan never defines whether the primed path re-reviews, warns, or silently accepts a skipped score, and the Context Map does not settle run-primed's handling of stored scores (unverifiable — flagged rather than assumed). Six months out, unreviewed plans approved once by a human get executed while everyone assumes 'the run family keeps always-on review.' Mitigation: one sentence in pipeline.md (and docs/05) defining how the primed path treats the skipped state.",
+    "Failure narrative #3 (hypothesis — not verifiable from the prompt): if locally installed plugin copies of plan/SKILL.md and input-detection.md can lag the repository source, pre-update sessions would not run the new 'Mode flags (plan only)' pre-step, and '--experts-review' would fall through to the detection table as task text. Early warning: plan files or issues whose task text literally contains '--experts-review'. Mitigation: call out the rollout window in the PR body and make the detection pre-step tolerant of unknown leading flags rather than assuming the strip always ran.",
+    "Failure narrative #4 — guard-test literal pinning cuts both ways: per the Context Map, linearPlanContract.test.ts already parses exact literals ('Scoring target: 98+', 'is below', 'still scores below'), and step 4 adds more pinned prose plus the skipped-line literal containing '·'. Six months of wording edits or a prettier re-flow (.md files are format-enforced) break the tests noisily — or the tests keep passing while executed behavior drifts, giving false confidence. Step 3's 'byte-identical' constraint on existing threshold/discard/exit lines is good awareness; extend it by pinning stable tokens (e.g. 'Score: skipped') rather than full sentences, and keep step 4's removal-fails-the-test check as the strongest signal in the plan.",
+    "Failure narrative #5 — default-off quality erosion (monitoring, not reversal; the Context Map records the user's decision as settled): with invoke-is-approval callers elsewhere and a default-off flag here, opt-in rates will trend to zero and the human ExitPlanMode gate becomes a rubber stamp. Early warnings: skipped share near 100% of plan files, rising review findings on plan-derived PRs. Mitigation: none needed in this change beyond the explicit skipped Score line — which the plan already provides as the audit trail; just don't later remove it."
+  ],
+  "grounding": [
+    "Full plan text provided in the prompt",
+    "Context Map excerpt provided in the prompt (pipeline/caller structure, gating semantics, guard-test contracts, docs locations, user decision, prettier enforcement)",
+    "No tools used; no repository files read"
+  ],
+  "revision": {
+    "changed": "Add (a) caller-stamped skipped line plus a non-plan-unreachable clause in the pipeline conditionality paragraph, (b) one sentence defining run-primed's handling of a stored 'Score: skipped' plan, (c) a PR-body note on plugin-rollout skew with unknown-flag tolerance in the detection pre-step, and (d) token-level rather than sentence-level pins in the new step-4 assertions.",
+    "rescore": 98
+  }
+}</result>
+<usage><subagent_tokens>24819</subagent_tokens><tool_uses>0</tool_uses><duration_ms>19204</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a3e995826b6ef1d73</task-id>
+<tool-use-id>toolu_01La1bf2NaQ3wTiQucqquPYo</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-organ-pipe-switchback/49399c68-5272-44a9-bfc9-eb183eddca82/tasks/a3e995826b6ef1d73.output</output-file>
+<status>completed</status>
+<summary>Agent "Expert review: Principal Bun/NodeJS Engineer" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>{
+  "expertRole": "Principal Bun/NodeJS Engineer",
+  "score": 90,
+  "dimensions": {
+    "alignment": 18,
+    "completeness": 16,
+    "typeSafety": 18,
+    "testability": 16,
+    "simplicity": 19
+  },
+  "verdict": "needs-revision",
+  "findings": [
+    "Step 3 breaks its own verify as ordered: linearPlanContract.test.ts already contains a reserved negative test (describe 'linearPlanContract: skip state (future)', lines 137-143) asserting expect(pipeline).not.toContain('--experts-review') with an '@see .../issues/512' line. Adding the flag to pipeline.md in step 3 fails that test, but the plan only touches the test file in step 4 and never mentions flipping/removing the reserved block or handling its @see line per CLAUDE.md 11.2. Merge the test flip into step 3 or reorder step 4 first.",
+    "False-pass risk in step 4's new assertions: they are described semantically ('pipeline names plan as the only caller that may skip') without pinned literals; toContain('plan') on pipeline.md trivially passes since 'plan' appears throughout and is a substring of 'linear:plan'. The plan must pin exact strings — the gating paragraph's plan-only sentence and the full literal 'Score: skipped · expert review disabled (no --experts-review)'. The negative assertions (four sibling SKILL.md files not.toContain('--experts-review')) are the only robust part as specified; note plan/SKILL.md itself will legitimately contain the flag, so that file must be excluded from the negative set.",
+    "Existing first-match assertion becomes a silent false-pass surface: 'plan surfaces the recorded score at the approval gate' uses .split('\\n').find(line =&gt; line.includes('Score:')) with only toBeDefined(). Once step 2/3 introduces the 'Score: skipped ...' variant, any Score: line satisfies it, so the scored format at plan's gate can regress unnoticed. Strengthen the assertion to check the found line's content (or assert both variants explicitly).",
+    "Two unguarded/fragile verifies (minor, stacked): step 1's verify ('the stripped flag cannot match any detection-table row') is prose, not machine-checkable — no test reads input-detection.md, so the mode-flags pre-step can drift with no guard; and the Report honestly extraction uses lazy /Report honestly[\\s\\S]*?\\n\\n/ (stops at first blank line), so placing the new conditionality paragraph adjacent to that section risks truncating the extracted paragraph the five-caller assertion runs against — the plan should state where the paragraph lands relative to it."
+  ],
+  "grounding": [
+    "Read: /Users/tony_vi/.warp/worktrees/code-assistants/organ-pipe-switchback/.github/actions/code-review-action/src/linearPlanContract.test.ts (169 lines, actual content)",
+    "Read: /Users/tony_vi/.warp/worktrees/code-assistants/organ-pipe-switchback/.github/actions/code-review-action/src/expertReviewContract.test.ts (80 lines, actual content)",
+    "Plan text and Context Map excerpt as provided in the prompt",
+    "Not consulted: pipeline.md, plan/SKILL.md, input-detection.md, docs/05, docs/16 — findings about their contents are limited to what the plan and the read tests state"
+  ],
+  "revision": {
+    "changed": "Fold the reserved skip-state test flip (remove the not.toContain('--experts-review') block and its @see line, replace with the positive skip-contract tests) into step 3 so its verify holds; in step 4, pin exact literals — the gating paragraph's plan-only sentence and 'Score: skipped · expert review disabled (no --experts-review)' — and exclude plan/SKILL.md from the negative flag set; strengthen the existing first-match 'Score:' gate assertion to check line content; specify the conditionality paragraph's placement relative to the Report honestly section and add a minimal guard assertion for input-detection.md's mode-flags pre-step.",
+    "rescore": 97
+  }
+}</result>
+<usage><subagent_tokens>21719</subagent_tokens><tool_uses>0</tool_uses><duration_ms>97616</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a63055348daac70bd</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-organ-pipe-switchback/49399c68-5272-44a9-bfc9-eb183eddca82/tasks/a63055348daac70bd.output</output-file>
+<status>completed</status>
+<summary>Agent "Expert review: Pre-mortem Analyst" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>{
+  "expertRole": "Pre-mortem Analyst",
+  "score": 98,
+  "dimensions": {
+    "alignment": 19,
+    "completeness": 19,
+    "typeSafety": 19,
+    "testability": 19,
+    "simplicity": 20
+  },
+  "verdict": "approved",
+  "findings": [
+    "Narrative #1 is now well-mitigated: the hardening sentence ('skip path unreachable for every caller other than plan') plus the caller-stamped skipped line makes drift self-evidencing — 'Score: skipped … (plan invoked without --experts-review)' appearing in any run-family or linear output is an unambiguous early-warning signal, not an ambiguous artifact. Residual risk is inherent to prose-executed gates and cannot be reduced further without runtime enforcement this repo doesn't have; accepted.",
+    "Narrative #2's premise is corrected per the coordinator: run-primed drafts its own plan from a context brief and plan-mode files die with the session, so no stored artifact can carry a skipped score — and the revised step 3 states this non-propagation explicitly rather than leaving it implicit, which is exactly the right defense even under my (now-withdrawn) premise. I cannot independently verify the run-primed behavior claim, but the explicit clause makes the plan safe under either reading.",
+    "Narrative #3 is adequately handled: the Post-Implementation PR-description requirement documents the rollout window (cached plugins keep mandatory review; a passed flag degrades to cosmetic task text that self-heals on update). Declining unknown-flag tolerance is the correct simplicity call — the failure mode is benign, transient, and now documented where the humans who'd hit it will read it.",
+    "Narrative #4 resolved: token-level pins ('the only caller that may skip', 'Score: skipped', '--experts-review' in the argument-hint, and the four-caller not-contains set with plan deliberately excluded) survive wording edits and prettier re-flow, and the retained removal-fails-the-test verify keeps the guard falsifiable rather than decorative.",
+    "Narrative #5 stands as monitoring-only by design: the caller-stamped skipped line is the durable audit trail for measuring skipped share over time; no plan change needed, just don't remove that line in future edits (the new token pin now protects it)."
+  ],
+  "grounding": [
+    "Coordinator's revision message describing the applied changes to steps 3, 4, and Post-Implementation step 2",
+    "Original full plan text and Context Map excerpt from the initial prompt",
+    "My two prior verdicts in this session",
+    "No tools used; no repository files read; run-primed behavior claim in the coordinator message accepted as directive context, flagged as not independently verified"
+  ],
+  "revision": null
+}</result>
+<usage><subagent_tokens>27282</subagent_tokens><tool_uses>0</tool_uses><duration_ms>20310</duration_ms></usage>
+</task-notification>
+
+---
+
+check linear plan skill, it mustnt has exit plan mode or any guard to write a plan to linear. when experts flags exits its not guard it is plan enhancement only, remove turns count guard also (everywhere in plans skills)
+
+---
+
+go ahead with pr and monitor
+release notes 
+this is breaking changes
