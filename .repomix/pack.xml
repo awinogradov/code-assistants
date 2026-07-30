@@ -422,6 +422,7 @@ claude-plugins/
       1.16.0.md
       1.17.0.md
       1.18.0.md
+      1.19.0.md
       1.2.0.md
       1.3.0.md
       1.3.1.md
@@ -39053,7 +39054,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "1.18.0",
+  "version": "1.19.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -39965,6 +39966,37 @@ A second finding of operational importance: Linear rewrites fence syntax on save
 ### Documentation
 
 * **linear:** record how linear renders nested fences ([dc9d467](https://github.com/awinogradov/code-assistants/commit/dc9d46751f8c2be0dcead80a457608236007c26b))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/1.19.0.md">
+## [1.19.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.18.0...autopilot@v1.19.0) (2026-07-30)
+
+## Release Notes
+
+The `linear-run` command can now execute any Linear issue directly, even when no implementation plan has been saved for it.
+
+## ✨ What's New
+
+### Run Any Linear Issue Without a Pre-Saved Plan
+
+Previously, `linear-run` would only work with Linear issues that already had a stored implementation plan attached. Now, it can pick up and execute any Linear issue autonomously — even those that haven't gone through a prior planning step. This means fewer blockers when kicking off work on freshly created or unplanned issues, and a smoother handoff from ticket creation to autonomous execution.
+
+<details><summary>Related issues</summary>
+
+- [#516: Allow linear-run to execute any Linear issue](https://github.com/awinogradov/code-assistants/issues/516)
+- [#517: Allow linear-run to execute any Linear issue](https://github.com/awinogradov/code-assistants/pull/517)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #516 | [#517](https://github.com/awinogradov/code-assistants/pull/517) | @rovnyart |
+
+### Features
+
+* **linear-run:** support issues without stored plans ([a090923](https://github.com/awinogradov/code-assistants/commit/a0909235d67bc840f1bf04a6a6336cd3d9bcd918))
 </file>
 
 <file path="claude-plugins/autopilot/.release_notes/1.2.0.md">
@@ -52993,6 +53025,34 @@ Before writing any output that mentions a file, standard, section, commit, or is
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.19.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.18.0...autopilot@v1.19.0) (2026-07-30)
+
+## Release Notes
+
+The `linear-run` command can now execute any Linear issue directly, even when no implementation plan has been saved for it.
+
+## ✨ What's New
+
+### Run Any Linear Issue Without a Pre-Saved Plan
+
+Previously, `linear-run` would only work with Linear issues that already had a stored implementation plan attached. Now, it can pick up and execute any Linear issue autonomously — even those that haven't gone through a prior planning step. This means fewer blockers when kicking off work on freshly created or unplanned issues, and a smoother handoff from ticket creation to autonomous execution.
+
+<details><summary>Related issues</summary>
+
+- [#516: Allow linear-run to execute any Linear issue](https://github.com/awinogradov/code-assistants/issues/516)
+- [#517: Allow linear-run to execute any Linear issue](https://github.com/awinogradov/code-assistants/pull/517)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #516 | [#517](https://github.com/awinogradov/code-assistants/pull/517) | @rovnyart |
+
+### Features
+
+* **linear-run:** support issues without stored plans ([a090923](https://github.com/awinogradov/code-assistants/commit/a0909235d67bc840f1bf04a6a6336cd3d9bcd918))
 ## [1.18.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.17.0...autopilot@v1.18.0) (2026-07-30)
 
 ## Release Notes
@@ -54499,14 +54559,14 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
   "release": {
     "type": "claude-plugin"
   },
-  "version": "1.18.0"
+  "version": "1.19.0"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.18.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.19.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -54995,7 +55055,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-1.18.0
+1.19.0
 </file>
 
 <file path="docs/01-workspace-structure.md">
