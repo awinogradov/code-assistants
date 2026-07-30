@@ -129,6 +129,7 @@ The content is organized as follows:
         2.1.0.md
         2.2.0.md
         2.3.0.md
+        2.4.0.md
       src/
         github/
           githubReview.test.ts
@@ -5699,6 +5700,39 @@ The `expert-review` agent was producing confident, detailed reviews based on fil
 * **turbo:** take markdown as an input to the test task ([d7b5c5c](https://github.com/awinogradov/code-assistants/commit/d7b5c5cae6ffa7c7d7615663b15cabdcb489076c))
 </file>
 
+<file path=".github/actions/code-review-action/.release_notes/2.4.0.md">
+## [2.4.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v2.3.0...code-review-action@v2.4.0) (2026-07-30)
+
+## Release Notes
+
+The `linear-run` skill can now execute any Linear issue autonomously, even when no stored implementation plan exists.
+
+## ✨ What's New
+
+### Execute Any Linear Issue Without a Stored Plan
+
+Previously, the `linear-run` skill required a pre-stored implementation plan to be attached to a Linear issue before it could run autonomously. Issues that hadn't gone through the planning stage would simply be skipped or fail. Now, `linear-run` handles these plan-less issues gracefully — it proceeds with execution using the issue description and context alone, so you're no longer blocked from running automation on issues that were created directly without a planning step.
+
+This is particularly useful for straightforward issues or urgent tasks where the team wants to trigger autonomous execution immediately without first generating and storing a plan.
+
+<details><summary>Related issues</summary>
+
+- [#516: Allow linear-run to execute any Linear issue](https://github.com/awinogradov/code-assistants/issues/516)
+- [#517: Allow linear-run to execute any Linear issue](https://github.com/awinogradov/code-assistants/pull/517)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #516 | [#517](https://github.com/awinogradov/code-assistants/pull/517) | @rovnyart |
+
+### Features
+
+* **linear-run:** support issues without stored plans ([a090923](https://github.com/awinogradov/code-assistants/commit/a0909235d67bc840f1bf04a6a6336cd3d9bcd918))
+</file>
+
 <file path=".github/actions/code-review-action/src/github/githubReview.test.ts">
 /**
  * Tests for githubReview.ts. Pure helpers (normalizeBody) plus the Octokit-backed
@@ -8040,18 +8074,18 @@ describe("expert review contract", () => {
 <file path=".github/actions/code-review-action/src/linearPlanContract.test.ts">
 /**
  * Guards the contract between `linear:plan`, which stores an implementation plan in a
- * Linear issue's description, and `linear:run`, which executes that stored plan verbatim.
+ * Linear issue's description, and `linear:run`, which executes a valid stored plan
+ * verbatim or falls back to a run-local fresh plan when the artifact is unusable.
  *
  * Five properties are load-bearing, and each fails silently without a guard:
  *
  * 1. The stored-plan section names `linear:run` reads match the ones `linear:plan` writes.
  *    This is the real rot: the two files have no import between them, so renaming a
  *    section in the producer breaks the consumer with nothing failing in between.
- * 2. `linear:run` enumerates every validation verdict with an actionable message. A
- *    verdict quietly dropped turns a strict gate into a permissive one.
- * 3. `linear:run` never dispatches `linear:plan`. An automatic re-plan discards the
- *    stored artifact and substitutes a different one, looking like success — the
- *    opposite of what a strict consumer is for.
+ * 2. `linear:run` enumerates every validation verdict and maps it to an execution mode.
+ *    A verdict quietly dropped can turn an unusable artifact into executable instructions.
+ * 3. `linear:run` never dispatches `linear:plan` or rewrites the ticket. Its fresh-plan
+ *    path must remain a run-local fallback rather than silently replacing the artifact.
  * 4. The two skills agree on the stored format version. `Format:` is the only thing that
  *    keeps "written under an older template" apart from "corrupt", and a version the
  *    producer writes but the consumer does not read collapses that distinction.
@@ -8089,9 +8123,9 @@ const [linearPlan, linearRun, plan, run, runPrimed, pipeline] = await Promise.al
   readFile(join(skillsDir, "plan/references/pipeline.md"), "utf8"),
 ]);
 
-/** Every verdict `linear:run`'s validation table must name, rejecting ones first. */
-const rejectingVerdicts = ["missing", "version-mismatch", "malformed", "unverifiable"];
-const allVerdicts = [...rejectingVerdicts, "valid"];
+/** Every verdict `linear:run`'s validation table must name, fallback ones first. */
+const fallbackVerdicts = ["missing", "version-mismatch", "malformed", "unverifiable"];
+const allVerdicts = [...fallbackVerdicts, "valid"];
 
 /**
  * `### <name>` rows of the stored-plan template in `linear:plan`, split by its own
@@ -8131,20 +8165,46 @@ describe("linear plan contract", () => {
     expect(linearRun).toContain(`**${verdict}**`);
   });
 
-  test.each(rejectingVerdicts)("the %s verdict carries an actionable message", (verdict) => {
+  test.each(fallbackVerdicts)("the %s verdict selects a fresh plan", (verdict) => {
     const message = linearRun.split("\n").find((line) => line.startsWith(`- ${verdict} —`));
-    expect(`${verdict}: ${message ?? "<no message line>"}`).toContain("/autopilot:linear-plan");
+    expect(`${verdict}: ${message ?? "<no message line>"}`).toContain(
+      "drafting a fresh implementation plan",
+    );
   });
 
-  test("linear:run cannot silently re-plan", () => {
+  test("the verdict table maps valid to stored-plan and every other verdict to fresh-plan", () => {
+    const validRow = linearRun
+      .split("\n")
+      .find((line) => line.includes("| **valid**") && line.includes("`stored-plan`"));
+    const fallbackRow = linearRun
+      .split("\n")
+      .find(
+        (line) =>
+          line.includes("`fresh-plan`") &&
+          fallbackVerdicts.every((verdict) => line.includes(`**${verdict}**`)),
+      );
+    expect(validRow).toContain("`stored-plan`");
+    expect(fallbackRow).toContain("`fresh-plan`");
+  });
+
+  test("linear:run never invokes the producer or overwrites the stored artifact", () => {
     expect(linearRun).not.toContain("Skill(autopilot:linear-plan)");
+    expect(linearRun).toContain("never writes or repairs a stored plan");
+    expect(linearRun).toContain("Do not store it on the Linear issue");
   });
 
   test.each([
-    ["stored", "This skill reads; it never writes a plan"],
+    ["admission", "Only the Linear issue is required"],
     ["snapshot", "The plan is a snapshot, not a live view"],
-  ])("linear:run states the %s precondition", (_label, needle) => {
+  ])("linear:run states the %s contract", (_label, needle) => {
     expect(linearRun).toContain(needle);
+  });
+
+  test("linear:run uses the shared planning pipeline for its fresh-plan path", () => {
+    expect(linearRun).toContain("[pipeline.md](../plan/references/pipeline.md)");
+    expect(linearRun).toContain('task 4 ("Establish plan")');
+    expect(linearRun).toContain('task 5 ("Validate plan")');
+    expect(linearRun).toContain('task 6 ("Finalize plan")');
   });
 
   test.each(requiredSections)("linear:run consumes `### %s` from the stored plan", (name) => {
@@ -8179,7 +8239,7 @@ describe("linear plan contract", () => {
 
   test("the pipeline reconciles below-threshold behaviour per caller", () => {
     const [, belowThreshold = ""] = pipeline.split("Report honestly");
-    for (const caller of ["`plan`", "`run`", "`run-primed`", "`linear:plan`"]) {
+    for (const caller of ["`plan`", "`run`", "`run-primed`", "`linear:run`", "`linear:plan`"]) {
       expect(belowThreshold).toContain(caller);
     }
   });
@@ -8195,7 +8255,7 @@ describe("linear plan contract", () => {
   });
 
   test("linear:run treats the stored plan as a durable artifact, not proof of approval", () => {
-    expect(linearRun).toContain("durable plan somebody already wrote");
+    expect(linearRun).toContain("checkable durable artifact");
     expect(linearRun).not.toContain("approval already happened when the plan was stored");
     expect(linearRun).not.toContain("plan somebody approved");
   });
@@ -8210,8 +8270,8 @@ describe("linear plan contract", () => {
   test("both drift reports stay advisory rather than becoming verdicts", () => {
     const [, drift = ""] = linearRun.split("report how far the plan has aged");
     expect(drift).toContain("advisory and never a verdict");
-    // A drift report must not be smuggled in as a sixth rejecting verdict.
-    for (const verdict of rejectingVerdicts) {
+    // A drift report must not be smuggled in as a sixth plan-source verdict.
+    for (const verdict of fallbackVerdicts) {
       expect(`drift section names ${verdict}: ${drift.includes(`**${verdict}**`)}`).toBe(
         `drift section names ${verdict}: false`,
       );
@@ -14520,6 +14580,36 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [2.4.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v2.3.0...code-review-action@v2.4.0) (2026-07-30)
+
+## Release Notes
+
+The `linear-run` skill can now execute any Linear issue autonomously, even when no stored implementation plan exists.
+
+## ✨ What's New
+
+### Execute Any Linear Issue Without a Stored Plan
+
+Previously, the `linear-run` skill required a pre-stored implementation plan to be attached to a Linear issue before it could run autonomously. Issues that hadn't gone through the planning stage would simply be skipped or fail. Now, `linear-run` handles these plan-less issues gracefully — it proceeds with execution using the issue description and context alone, so you're no longer blocked from running automation on issues that were created directly without a planning step.
+
+This is particularly useful for straightforward issues or urgent tasks where the team wants to trigger autonomous execution immediately without first generating and storing a plan.
+
+<details><summary>Related issues</summary>
+
+- [#516: Allow linear-run to execute any Linear issue](https://github.com/awinogradov/code-assistants/issues/516)
+- [#517: Allow linear-run to execute any Linear issue](https://github.com/awinogradov/code-assistants/pull/517)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #516 | [#517](https://github.com/awinogradov/code-assistants/pull/517) | @rovnyart |
+
+### Features
+
+* **linear-run:** support issues without stored plans ([a090923](https://github.com/awinogradov/code-assistants/commit/a0909235d67bc840f1bf04a6a6336cd3d9bcd918))
 ## [2.3.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v2.2.0...code-review-action@v2.3.0) (2026-07-30)
 
 ## Release Notes
@@ -15843,7 +15933,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/package.json">
 {
   "name": "@code-assistants/code-review-action",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "Composite GitHub Action that runs AI code review on pull requests via Claude Code.",
   "private": true,
   "type": "module",
@@ -15879,7 +15969,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/README.md">
 # Code review action
 
-[![GitHub Release](https://img.shields.io/badge/release-v2.3.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v2.4.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that runs AI code review on pull requests using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Has two modes:
@@ -16063,7 +16153,7 @@ uses: awinogradov/code-assistants/.github/actions/code-review-action@v1
 </file>
 
 <file path=".github/actions/code-review-action/version">
-2.3.0
+2.4.0
 </file>
 
 <file path=".github/actions/code-review-cost-monitor/.release_notes/0.1.0.md">
@@ -44864,7 +44954,7 @@ Before writing any output that mentions a file, standard, section, commit, or is
 <file path="claude-plugins/autopilot/skills/linear:run/SKILL.md">
 ---
 name: linear:run
-description: Run a Linear issue end to end from the plan already stored in its description, executing those steps verbatim instead of drafting new ones. Requires a stored plan and fails loudly when it is missing, malformed, or written in a format this skill does not read — it never re-plans.
+description: Run any Linear issue end to end. Executes a valid stored plan verbatim when one exists; otherwise drafts, reviews, and implements a fresh plan without a human approval gate.
 argument-hint: "<Linear issue (ENG-123 or a Linear issue URL)>"
 allowed-tools:
   - TaskCreate
@@ -44895,11 +44985,11 @@ allowed-tools:
   - Skill(autopilot:pr-create)
 ---
 
-Run a Linear issue end to end from the plan [`linear:plan`](../linear:plan/SKILL.md) already stored in its description, executing those steps as written instead of drafting new ones.
+Run any Linear issue end to end. Prefer the durable plan [`linear:plan`](../linear:plan/SKILL.md) stored in its description when that artifact validates; otherwise draft, review, and implement a fresh plan from the issue context.
 
-**Difference from [`/autopilot:run`](../run/SKILL.md):** `run` drafts a plan, reviews it, and implements it in one session, which is correct when the person running it is the person who wanted it. This skill is the path for a durable plan somebody already wrote — on the ticket, before this session started. It is a **separate contract, not a heuristic**: it never inspects conversation history to decide whether a plan exists, because a description carrying a parseable format marker can be checked and a prompt claiming "the plan is ready" cannot.
+**Difference from [`/autopilot:run`](../run/SKILL.md):** `run` always drafts a plan. This skill first inspects the Linear issue for a checkable durable artifact. A valid stored plan is executed verbatim; missing or unusable stored-plan data selects the same autonomous planning pipeline as `run`. The choice is deterministic from the issue description, never inferred from conversation history or from a claim that another agent ran.
 
-Everything after [Phase 3](#phase-3-merge-the-working-context) is `run`, unchanged and referenced rather than restated. Like `run`, invoking this skill authorizes the whole flow: there is no plan-approval gate.
+Both paths converge on `run`'s implementation and delivery chain. Invoking this skill authorizes the whole flow: there is no plan-approval gate.
 
 ## Input
 
@@ -44911,30 +45001,29 @@ Expected form:
 
 ## Input resolution
 
-Identical to the `plan` skill — see [its Input resolution section](../plan/SKILL.md#input-resolution) — narrowed to Linear issues, since a stored plan lives on a Linear issue and nowhere else.
+Identical to the `plan` skill — see [its Input resolution section](../plan/SKILL.md#input-resolution) — narrowed to Linear issues, because this skill always reads the Linear issue before choosing its plan source.
 
 ## Preconditions
 
-Both are silent failures if left unstated, so state them to the user when either bites.
-
-**The plan must already be stored.** This skill reads; it never writes a plan. If nobody has run [`linear:plan`](../linear:plan/SKILL.md) on the ticket, there is nothing here to execute, and the run stops. A ticket description written by hand is not a stored plan either — the format marker is what makes it executable.
+**Only the Linear issue is required.** A stored plan is an optimization and an execution contract when valid, not an admission gate. This skill never invokes `linear:plan` and never writes or repairs a stored plan. Its fresh plan lives in the normal harness plan file owned by `run`.
 
 **The plan is a snapshot, not a live view.** It was drafted against the tree recorded in its `Base:` field, which may no longer be current. This skill reports that drift and proceeds, because refusing would contradict the one thing it promises: to follow the stored plan without changes. Judging whether drift matters is the reader's call, and the report is what makes the call possible.
 
 ## Task Progress Protocol
 
-Create all 6 tasks with TaskCreate, in order, before any work. Set each to `in_progress` at the start of its phase and `completed` at the end. Loading the plan is its own task rather than a step inside the context gather, because it is a gate that can stop the run on its own.
+Create all 9 tasks with TaskCreate, in order, before any work. Set each to `in_progress` at the start of its phase and `completed` at the end. The three plan tasks are real work on the fresh-plan path. On the stored-plan path they record selecting, validating, and freezing the existing artifact without revising it.
 
-| #   | Subject          | ActiveForm          |
-| --- | ---------------- | ------------------- |
-| 1   | Resolve input    | Resolving input     |
-| 2   | Load stored plan | Loading stored plan |
-| 3   | Gather context   | Gathering context   |
-| 4   | Commit changes   | Committing changes  |
-| 5   | Create PR        | Creating PR         |
-| 6   | Monitor PR       | Monitoring PR       |
-
-There is no draft, review, or finalize task. That is the whole difference: the artifact those three tasks would produce already exists.
+| #   | Subject             | ActiveForm             |
+| --- | ------------------- | ---------------------- |
+| 1   | Resolve input       | Resolving input        |
+| 2   | Inspect stored plan | Inspecting stored plan |
+| 3   | Gather context      | Gathering context      |
+| 4   | Establish plan      | Establishing plan      |
+| 5   | Validate plan       | Validating plan        |
+| 6   | Finalize plan       | Finalizing plan        |
+| 7   | Commit changes      | Committing changes     |
+| 8   | Create PR           | Creating PR            |
+| 9   | Monitor PR          | Monitoring PR          |
 
 ## Task
 
@@ -44942,7 +45031,7 @@ $ARGUMENTS
 
 ## Phase 0: Resolve input
 
-Create the 6 tasks, then set task 1 to `in_progress`.
+Create the 9 tasks, then set task 1 to `in_progress`.
 
 Detect the input type and id per [input-detection.md](../plan/references/input-detection.md) — the detection table and its tracker gating. Skip that file's create-issue flags section; it is plan-only. Detection is pure string matching and performs **no I/O**.
 
@@ -44952,11 +45041,11 @@ Set task 1 to `completed`.
 
 **Linear MCP access:** Read [`linear-mcp-access.md`](../shared-rules/references/linear-mcp-access.md) and apply its tool-resolution rule, using the bare tool name `get_issue`.
 
-## Phase 1: Load and validate the stored plan
+## Phase 1: Inspect the stored plan
 
-Set task 2 to `in_progress`. This phase is the entire reason this skill exists as a separate door, so it runs before any context is gathered and it stops the run rather than degrading.
+Set task 2 to `in_progress`. This phase runs before context gathering so the rest of the workflow knows which plan source it will use.
 
-Fetch the issue with `get_issue` and read its `description`. This is one fetch more than the [Phase 2](#phase-2-gather-what-the-plan-cannot-carry) fan-out would make on its own, and it is deliberate: a ticket with no stored plan should fail before a full context fan-out is paid for, not after.
+Fetch the issue with `get_issue` and read its `description`. This is one fetch more than the [Phase 2](#phase-2-gather-context) fan-out would make on its own, and it is deliberate: the plan source must be chosen from a checkable artifact before implementation starts.
 
 Then resolve exactly one verdict:
 
@@ -44979,16 +45068,23 @@ Anything that survives all four is **valid**.
 
 **The order is load-bearing.** Check the anchor and the format version _before_ the sections. A plan stored under an older template is missing sections this skill expects, so a subsection check reached first would report a perfectly good older plan as `malformed` — telling the user their ticket is corrupt when it is merely older, and inviting them to throw away a valid stored artifact. `Format:` exists precisely to keep those two cases apart.
 
-On any verdict other than **valid**, stop with the matching message and do not fall back:
+Map the verdict to one of two modes:
 
-- missing — `No stored plan on <LINEAR-ID>. Run /autopilot:linear-plan <LINEAR-ID> to create and store one, or use /autopilot:run to plan and implement in one session.`
-- version-mismatch — `Stored plan on <LINEAR-ID> uses format <found>, which this skill does not read. Re-run /autopilot:linear-plan <LINEAR-ID> to store it in the current format.`
-- malformed — `Stored plan on <LINEAR-ID> is malformed: <what was absent>. Re-run /autopilot:linear-plan <LINEAR-ID>, or use /autopilot:run instead.`
-- unverifiable — `Stored plan on <LINEAR-ID> has a step with no verify line, so it cannot be executed strictly. Re-run /autopilot:linear-plan <LINEAR-ID> to regenerate it.`
+| Verdict                                                            | Mode          | Action                                                                 |
+| ------------------------------------------------------------------ | ------------- | ---------------------------------------------------------------------- |
+| **valid**                                                          | `stored-plan` | Preserve and execute the required stored sections verbatim             |
+| **missing**, **version-mismatch**, **malformed**, **unverifiable** | `fresh-plan`  | Draft a new plan through the shared pipeline, then implement that plan |
 
-Each message names the skill that would fix it. **Never invoke that skill automatically** — a silent re-plan discards the durable artifact the issue carries and replaces it with a different plan while looking like success. That is precisely the outcome this skill exists to make visible.
+For a `fresh-plan` verdict, report the reason in one line before continuing:
 
-Finally, report how far the plan has aged. Both checks below are advisory and never a verdict — they inform the reader, they do not stop the run.
+- missing — `No executable stored plan found on <LINEAR-ID>; drafting a fresh implementation plan from the issue.`
+- version-mismatch — `Stored plan on <LINEAR-ID> uses unsupported format <found>; drafting a fresh implementation plan without modifying the stored artifact.`
+- malformed — `Stored plan on <LINEAR-ID> is malformed: <what was absent>; drafting a fresh implementation plan without executing the malformed artifact.`
+- unverifiable — `Stored plan on <LINEAR-ID> has a step with no verify line; drafting a fresh implementation plan instead of executing it strictly.`
+
+These are diagnostics, not rejection messages. Do not stop, invoke `linear:plan`, or write a replacement plan to the Linear issue. Invalid stored text remains issue context, but it is never treated as executable instructions. The fresh plan belongs to this run's harness plan file.
+
+For `stored-plan` mode only, report how far the plan has aged. Both checks below are advisory and never a verdict — they inform the reader, they do not stop the run.
 
 **Revision drift.** Compare the plan's `Base:` against `git rev-parse origin/main`. When they differ, report `Stored plan was drafted against <base>; origin/main is now <current>`.
 
@@ -45005,7 +45101,7 @@ A `Base:` SHA says the tree moved; it does not say whether it moved underneath _
 
 Set task 2 to `completed`.
 
-## Phase 2: Gather what the plan cannot carry
+## Phase 2: Gather context
 
 Set task 3 to `in_progress`. Invoke:
 
@@ -45015,13 +45111,23 @@ Skill(autopilot:gather-context)
 
 Pass the detected input type, the Linear issue id, repository, repository root, the matched tracker's Linear team, and the raw task text as the task summary. Omit `Scope` — the default `task` scope is right here.
 
-A stored plan is not a repository brief: it records what to do, not what the repository looks like. So unlike [`run-primed`](../run-primed/SKILL.md), nothing in the fan-out is gated off — the standards digest, the branch diff, the TODO search, and a freshly attached snapshot all still run. A recorded `outputId` would be useless anyway, since it is session-scoped and dead in any later session.
+Nothing in the fan-out is gated off. A stored plan records what to do, not what the repository looks like; a fresh plan needs the full Context Map as its drafting input. In both modes the standards digest, branch diff, TODO search, and a freshly attached snapshot still run. A recorded `outputId` would be useless anyway, since it is session-scoped and dead in any later session.
 
 Set task 3 to `completed`.
 
-## Phase 3: Merge the working context
+## Phase 3: Preflight verdict
 
-The stored plan supplies the work; the Context Map supplies the repository. The split is fixed here rather than improvised per run:
+Identical to [`run`](../run/SKILL.md#phase-2-preflight-verdict): read branch, worktree, `isStaleMerged`, and `baseAhead` from the Context Map, compare the issue id against the current branch name, and invoke `Skill(autopilot:preflight-check)` only for a state the map does not cover. If it outputs "Planning cancelled", stop immediately.
+
+This skill never enters plan mode — do NOT call `EnterPlanMode` or `ExitPlanMode`.
+
+## Phase 4: Establish the execution plan
+
+Complete tasks 4–6 in order according to the mode selected in [Phase 1](#phase-1-inspect-the-stored-plan).
+
+### Stored-plan mode
+
+Set task 4 to `in_progress`. Merge the stored plan with the Context Map using this fixed split:
 
 | Source                  | Section                                                      |
 | ----------------------- | ------------------------------------------------------------ |
@@ -45029,35 +45135,48 @@ The stored plan supplies the work; the Context Map supplies the repository. The 
 | Stored plan, **unused** | `### Pre-Implementation`, `### Post-Implementation`          |
 | Context Map             | Issue, Related TODOs, In-flight changes, Git state, Snapshot |
 
-The two unused sections are read past deliberately. They describe a branch and a post-implementation chain, and this skill supplies both from `run` — the branch because it must be created in _this_ checkout, and the chain because `run` owns it. Consuming a stored copy would mean executing a branch step written for a tree that no longer exists.
+The two unused sections are read past deliberately. They describe a branch and a post-implementation chain, and this skill supplies both from `run` — the branch because it must be created in _this_ checkout, and the chain because `run` owns it. Consuming a stored copy would mean executing a branch step written for a tree that no longer exists. Set task 4 to `completed`.
 
-## Phase 4: Preflight verdict
+Set task 5 to `in_progress`. Confirm the `valid` verdict and drift report from Phase 1. Do not run another expert review: the stored artifact already passed its producer's scoring pipeline. Set task 5 to `completed`.
 
-Identical to [`run`](../run/SKILL.md#phase-2-preflight-verdict): read branch, worktree, `isStaleMerged`, and `baseAhead` from the Context Map, compare the issue id against the current branch name, and invoke `Skill(autopilot:preflight-check)` only for a state the map does not cover. If it outputs "Planning cancelled", stop immediately.
+Set task 6 to `in_progress`. Freeze the required stored sections as the execution plan without rewriting them or writing a harness replacement. Set task 6 to `completed`.
 
-This skill never enters plan mode — do NOT call `EnterPlanMode` or `ExitPlanMode`.
+### Fresh-plan mode
 
-## Phase 5: Execute the stored steps verbatim
+Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft, review and score, finalize — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md). Use the Common Instructions and plan-file header rule from [`run`](../run/SKILL.md#common-instructions).
 
-Work the stored `### Implementation Steps` in order, verifying each against its own `verify:` line before moving on.
+The pipeline names `run`'s tasks 3–5. Map them to this skill's plan tasks:
 
-Verbatim means verbatim. Do not re-draft a step, re-order the list, merge steps, add a step, or run another expert review — the scored artifact is already stored. Where a step cannot be carried out as written, stop and report which step and why, rather than silently substituting a different plan. A plan that no longer fits its repository is information the reader needs, not a problem to route around silently.
+| Pipeline says               | Use here                  |
+| --------------------------- | ------------------------- |
+| task 3 ("Draft plan")       | task 4 ("Establish plan") |
+| task 4 ("Review and score") | task 5 ("Validate plan")  |
+| task 5 ("Finalize plan")    | task 6 ("Finalize plan")  |
 
-The stored `### Files` list is the expected blast radius. Touching a file it does not name is worth reporting for the same reason.
+The resulting harness plan is the execution plan for this run only. Do not store it on the Linear issue.
 
-## Phase 6: Branch, implement, and run the autopilot chain
+## Phase 5: Set the execution contract
 
-Identical to `run`. Embed the branch block per [its Phase 4](../run/SKILL.md#phase-4-embed-branch-creation-and-the-autopilot-chain) using the Linear body from [branch-blocks.md](../plan/references/branch-blocks.md), then proceed without an approval gate per [its Phase 5](../run/SKILL.md#phase-5-implement-and-proceed) — branch, implement every step, then commit, push, open or update the pull request, and monitor it.
+In `stored-plan` mode, the stored `### Implementation Steps` must be worked in order, verifying each against its own `verify:` line before moving on. Verbatim means verbatim: do not re-draft, reorder, merge, or add steps. Where a step cannot be carried out as written, stop and report which step and why. Treat the stored `### Files` list as the expected blast radius and report any required expansion.
 
-**Substitute the task numbers.** Those phases hardcode `run`'s numbering, and this skill creates six tasks rather than eight because it has no draft, review, or finalize task to number. Where the referenced steps name a task, use this skill's equivalent instead:
+In `fresh-plan` mode, the finalized harness plan is the execution contract exactly as it is for [`run`](../run/SKILL.md#phase-5-implement-and-proceed). This mode is autonomous and adds no approval prompt.
 
-| `run`'s steps say         | Use here                  |
+## Phase 6: Branch and run the autopilot chain
+
+Follow [`run`'s Phase 4](../run/SKILL.md#phase-4-embed-branch-creation-and-the-autopilot-chain) and [Phase 5](../run/SKILL.md#phase-5-implement-and-proceed) without an approval gate.
+
+- In `fresh-plan` mode, embed the Linear branch block and autopilot post-implementation block in the harness plan exactly as `run` does.
+- In `stored-plan` mode, do not modify the Linear description or synthesize a replacement plan file. Invoke `Skill(autopilot:branch-create)` with the Linear issue using the body from [branch-blocks.md](../plan/references/branch-blocks.md), then implement the frozen stored steps.
+
+After implementation, both modes use the same commit, push, pull-request, and monitoring chain.
+
+**Substitute the delivery task numbers:**
+
+| `run` says                | Use here                  |
 | ------------------------- | ------------------------- |
-| task 6 ("Commit changes") | task 4 ("Commit changes") |
-| task 7 ("Create PR")      | task 5 ("Create PR")      |
-| task 8 ("Monitor PR")     | task 6 ("Monitor PR")     |
-
-Taking those numbers literally would mark "Monitor PR" as in progress while committing, then fail on tasks 7 and 8 that were never created. Everything else in those phases applies verbatim.
+| task 6 ("Commit changes") | task 7 ("Commit changes") |
+| task 7 ("Create PR")      | task 8 ("Create PR")      |
+| task 8 ("Monitor PR")     | task 9 ("Monitor PR")     |
 
 Those phases are otherwise referenced, never copied. Two long prompts restating the same chain would drift the first time one side changed, and `run` already sets this precedent by referencing `plan` for input resolution and Common Instructions.
 
@@ -48521,7 +48640,7 @@ Aggregate what survives:
 
 3. **Report honestly.** If the plan still scores below 98 once the budget is spent, record the actual score and name the weak dimension in the plan. Never inflate a score to clear the target.
 
-   What follows a below-threshold score depends on the caller, so it is stated here rather than assumed. `plan`, `run`, and `run-primed` proceed on the recorded score: their plan is approved or authorized in the same session that drafted it, and the human reading it is the backstop. `linear:plan` does not proceed — it emits the plan to the transcript and stores nothing, because a stored plan can be executed later by a session that never saw the score, so the score has to be the gate instead of the reader.
+   What follows a below-threshold score depends on the caller, so it is stated here rather than assumed. `plan`, `run`, `run-primed`, and the fresh-plan path in `linear:run` proceed on the recorded score: their plan is approved or authorized in the same session that drafted it, and the human reading it is the backstop. `linear:plan` does not proceed — it emits the plan to the transcript and stores nothing, because a stored plan can be executed later by a session that never saw the score, so the score has to be the gate instead of the reader.
 
 Do not include raw expert JSON in the plan output.
 
@@ -54650,9 +54769,9 @@ Same as `/autopilot:plan`, but stores the finished plan in its Linear ticket's d
 
 ### `/autopilot:linear-run`
 
-Same as `/autopilot:run`, but reads the plan already stored on the Linear ticket instead of drafting one, and executes those steps verbatim. See [the linear:run skill](../../docs/17-linear-run-skill.md) for the validation contract.
+Same as `/autopilot:run`, but first checks the Linear ticket for a durable plan. A valid stored plan is executed verbatim; when no executable stored plan is available, the skill drafts and reviews a fresh plan before continuing autonomously. See [the linear:run skill](../../docs/17-linear-run-skill.md) for the two-mode contract.
 
-**Precondition:** the ticket must already carry a plan stored by `/autopilot:linear-plan`. When it is missing, written in an unreadable format, malformed, or has a step with no `verify:` line, the skill stops with an actionable error and names `/autopilot:linear-plan` as the fix; it never re-plans on its own, because that would silently replace the durable artifact with a different plan.
+**Precondition:** only a Linear ticket is required. Missing, unreadable, malformed, or unverifiable stored-plan data selects the fresh-plan path instead of rejecting the issue. The fallback never invokes `/autopilot:linear-plan` or rewrites the ticket description.
 
 ```bash
 /autopilot:linear-run ENG-123                                           # From Linear id
@@ -57281,7 +57400,7 @@ Three conditions stop the run, and all three are checked **before** the context 
 | The input is not a Linear issue          | a description, GitHub issue, or alert has no ticket either     |
 | No Linear MCP tool resolves              | the write path is unavailable, so the plan could not be stored |
 
-Ordering matters for cost, not correctness. A three-pass expert review at a 98 threshold is the most expensive thing autopilot does; discovering afterwards that the plan has nowhere to go wastes all of it. Each message names `/autopilot:plan` as the alternative and the skill never falls through to it automatically — the same refusal discipline [`linear:run`](./17-linear-run-skill.md) applies on the read side.
+Ordering matters for cost, not correctness. A three-pass expert review at a 98 threshold is the most expensive thing autopilot does; discovering afterwards that the plan has nowhere to go wastes all of it. Each message names `/autopilot:plan` as the alternative and the producer never falls through to it automatically. [`linear:run`](./17-linear-run-skill.md) has a different responsibility on the read side: an unusable stored artifact selects its fresh-plan path instead of blocking issue execution.
 
 No preflight check runs, and none is needed: this skill creates no branch and no commit, so there is no git state to protect. What the tree looked like is recorded in the stored plan instead.
 
@@ -57377,7 +57496,7 @@ The plan is stored automatically after the shared review pipeline reaches its th
 
 ## How this is guarded
 
-`linear:plan` and `linear:run` are prompt files with no import between them, so a renamed stored section would break the reader with nothing failing in between. `linearPlanContract.test.ts` closes that gap the way [`primedBriefContract.test.ts`](./15-run-primed-skill.md#how-this-is-guarded) does for the explore pair: it extracts the section names and their markers from this skill's own template and asserts the reader consumes exactly the required subset and none of the caller-owned ones. It also pins the format version across both sides, asserts the reader names every verdict with an actionable message, asserts the reader carries no dispatch that would let it silently re-plan, and reads the scoring threshold out of `pipeline.md` to assert one stated threshold governs every caller.
+`linear:plan` and `linear:run` are prompt files with no import between them, so a renamed stored section would break the reader with nothing failing in between. `linearPlanContract.test.ts` closes that gap the way [`primedBriefContract.test.ts`](./15-run-primed-skill.md#how-this-is-guarded) does for the explore pair: it extracts the section names and their markers from this skill's own template and asserts the reader consumes exactly the required subset and none of the caller-owned ones. It also pins the format version across both sides, asserts the reader maps every verdict to stored-plan or fresh-plan behavior, asserts the fallback never dispatches the producer or overwrites Linear, and reads the scoring threshold out of `pipeline.md` to assert one stated threshold governs every caller.
 
 **What no test can show:** that Linear renders the stored description the way this chapter says. That is settled by a dry run on a real ticket, recorded on the pull request, because no `linear` tracker is configured in this repository and neither skill can execute here. Nothing under `.github/workflows/` runs `bun test` either, so the guard gates locally and in review rather than in CI.
 
@@ -57398,21 +57517,21 @@ The plan is stored automatically after the shared review pipeline reaches its th
 
 > Chapter 17 of the [repository docs](../README.md#repository-docs).
 
-How `/autopilot:linear-run` delivers a Linear ticket from the plan already stored on it — executing those steps as written, and refusing loudly rather than quietly writing a new plan.
+How `/autopilot:linear-run` delivers any Linear ticket: executing a valid stored plan verbatim when one exists, or drafting a fresh plan autonomously when it does not.
 
 > Source of truth: `claude-plugins/autopilot/skills/linear:run/SKILL.md` (the skill), `…/skills/linear:plan/SKILL.md` (the plan it consumes), and `…/skills/run/SKILL.md` (the phases it delegates to).
 
 ## The pattern this exists for
 
-[`linear:plan`](./16-linear-plan-skill.md) leaves a scored, durable plan on a ticket. Something has to pick it up — in a later session, or by a different person, or by an orchestrator that never saw the planning conversation. That consumer needs exactly one property: it must do what the plan says, and say so when it cannot.
+[`linear:plan`](./16-linear-plan-skill.md) leaves a scored, durable plan on a ticket. When that artifact exists and validates, `linear:run` preserves the handoff by executing it exactly. But delegation is broader than that handoff: a Linear ticket may reach the implementation agent directly, without a planning session ever having run.
 
-`run` cannot fill that role, because `run` drafts its own plan. Pointing it at a ticket with a stored plan would produce a _second_ plan that happens to be about the same work. The stored plan's whole value — a durable, scored instruction set that can be refined independently — would be silently discarded.
+The skill therefore has two deterministic modes. A valid stored artifact selects strict execution. Missing, older, malformed, or unverifiable stored-plan data selects a fresh autonomous planning pipeline. Plan provenance changes how the ticket is executed, never whether the ticket is accepted.
 
 ## Why a separate skill, not a flag on `run`
 
-The same reason [`run-primed`](./15-run-primed-skill.md#why-a-separate-skill-not-a-flag-on-run) is separate, applied to a different artifact.
+The Linear-specific entry point owns a decision that ordinary `run` does not need: whether a checkable durable plan is present.
 
-**An artifact can be checked; a claim cannot.** A description carrying a parseable `## Implementation plan` anchor and a `Format:` version either validates or it does not. A prompt asserting "the plan is ready" is unfalsifiable, and trusting it is how a run executes steps nobody wrote. Keeping the strict path behind its own door means interactive `run` stays deterministic, and an unusable stored plan is visible rather than papered over with a fresh draft.
+**An artifact can be checked; a claim cannot.** A description carrying a parseable `## Implementation plan` anchor and a readable `Format:` version either validates or it does not. The strict path is selected only by that evidence. The fallback is equally explicit: it reports why the artifact cannot be executed, treats the ticket as task context, and drafts a fresh harness plan without invoking `linear:plan` or rewriting the description.
 
 For how this pair sits beside the other on-ramps, see the comparison in [the `run-primed` chapter](./15-run-primed-skill.md#when-to-use-which); this chapter does not restate it.
 
@@ -57425,61 +57544,61 @@ For how this pair sits beside the other on-ramps, see the comparison in [the `ru
                           │ ①
                           ▼
               ┌────────────────────────┐
-              │  Phase 1               │
-              │  Load + validate plan  │
+              │ Inspect stored plan    │
               └───────────┬────────────┘
                           │
                 ┌─────────┴─────────┐
                 │ ②                 │ ③
                 ▼                   ▼
-      ┏━━━━━━━━━━━━━━━━━━┓ ┌───────────────────┐
-      ┃  Stop            ┃ │  Phase 2          │
-      ┃  missing         ┃ │  gather-context   │
-      ┃  version-mismatch┃ │  full fan-out     │
-      ┃  malformed       ┃ └─────────┬─────────┘
-      ┃  unverifiable    ┃           │ ④
-      ┗━━━━━━━━━━━━━━━━━━┛           ▼
-                            ┌───────────────────┐
-                            │  Phase 3          │
-                            │  Merge context    │
-                            └─────────┬─────────┘
-                                      │ ⑤
-                                      ▼
-                            ┌───────────────────┐
-                            │  Phases 4–6       │
-                            │  = run, unchanged │
-                            └───────────────────┘
+      ┌───────────────────┐ ┌───────────────────┐
+      │ Valid artifact    │ │ Missing/unusable  │
+      │ preserve verbatim │ │ fresh plan mode   │
+      └─────────┬─────────┘ └─────────┬─────────┘
+                │                     │
+                │ ④                   │ ⑤
+                ▼                     ▼
+      ┌───────────────────┐ ┌───────────────────┐
+      │ Merge with fresh  │ │ Draft + review +  │
+      │ repository context│ │ finalize from issue│
+      └─────────┬─────────┘ └─────────┬─────────┘
+                └──────────┬──────────┘
+                           │ ⑥
+                           ▼
+               ┌────────────────────────┐
+               │ Implement + PR + watch │
+               └────────────────────────┘
 ```
 
 **Flow Legend:**
 
-- ① A Linear issue only. A description, GitHub issue, or alert has no stored plan, so those route to `run`.
-- ② Four rejections, each naming `/autopilot:linear-plan` as the fix. The skill never invokes it automatically.
-- ③ One issue fetch happens here, ahead of the fan-out, so a ticket with no plan fails before the expensive pass is paid for.
-- ④ The full fan-out runs — unlike `run-primed`, nothing is gated off. A stored plan is not a repository brief.
-- ⑤ Branch, implement, commit, PR, monitor — no plan-approval gate, exactly as `run`.
+- ① A Linear issue is the only admission requirement.
+- ② A current, complete, verifiable stored plan selects strict execution.
+- ③ Every other verdict selects fresh planning and emits a diagnostic rather than a rejection.
+- ④ The valid artifact supplies the work; a fresh Context Map supplies repository state.
+- ⑤ The shared draft, expert-review, and finalize pipeline produces a run-local plan without changing Linear.
+- ⑥ Both modes use the same branch, implementation, commit, pull-request, and monitoring chain with no approval gate.
 
 ## The validation contract
 
-Four verdicts reject; the fifth proceeds.
+The same five verdicts remain, but they select a mode rather than deciding admission.
 
-| Verdict              | Test                                                                        | What it means                                       |
-| -------------------- | --------------------------------------------------------------------------- | --------------------------------------------------- |
-| **missing**          | no `## Implementation plan` line in the description                         | nobody has stored a plan on this ticket             |
-| **version-mismatch** | `Format:` absent, or a version this skill does not read                     | the plan is real but written under another template |
-| **malformed**        | a required `###` section is absent                                          | the plan is corrupt or was hand-edited badly        |
-| **unverifiable**     | a numbered step carries no `verify:` line                                   | the plan cannot be executed strictly                |
-| **valid**            | anchor, readable `Format:`, every required section, `verify:` on every step | proceed                                             |
+| Verdict              | Test                                                                        | Mode        |
+| -------------------- | --------------------------------------------------------------------------- | ----------- |
+| **missing**          | no `## Implementation plan` line in the description                         | fresh plan  |
+| **version-mismatch** | `Format:` absent, or a version this skill does not read                     | fresh plan  |
+| **malformed**        | a required `###` section is absent                                          | fresh plan  |
+| **unverifiable**     | a numbered step carries no `verify:` line                                   | fresh plan  |
+| **valid**            | anchor, readable `Format:`, every required section, `verify:` on every step | stored plan |
 
 **The order is load-bearing.** Anchor and format version are checked _before_ the sections. A plan stored under an older template is, by definition, missing sections this skill expects — so a subsection check reached first would report a perfectly good older plan as `malformed`, tell the user their ticket is corrupt, and invite them to throw away valid stored work. `Format:` exists precisely to keep those two cases apart, and checking it first is what makes it useful.
 
-`unverifiable` exists because the plan's `verify:` lines are what "execute strictly" means. A step with no observable check cannot be confirmed done, so a plan missing one is not executable as written — better to say so than to guess at completion.
+`unverifiable` exists because the plan's `verify:` lines are what "execute strictly" means. A step with no observable check cannot be confirmed done, so the artifact is not safe for the verbatim path.
 
-Each message names `/autopilot:linear-plan` as the fix. **It is never invoked automatically.** An automatic re-plan would replace the stored artifact with a different plan while reporting success, which is the exact failure this skill exists to make visible.
+Every fresh-plan verdict is reported before the run continues. **The skill never invokes `linear:plan` and never overwrites the issue description.** The new plan is a run-local harness artifact, so an unusable stored plan stays visible while no longer blocking implementation.
 
 ## Drift is reported, not enforced
 
-The stored plan records the tree it was drafted against in `Base:`. This skill compares that against the checkout's `origin/main`, reports any difference, and **proceeds**.
+In stored-plan mode, the artifact records the tree it was drafted against in `Base:`. This skill compares that against the checkout's `origin/main`, reports any difference, and **proceeds**. Fresh-plan mode drafts against current context and needs no stored-artifact drift report.
 
 That is a deliberate asymmetry with [`run-primed`](./15-run-primed-skill.md#the-validation-contract), which treats a stale base as a rejecting verdict. The two artifacts fail differently. A context brief describes what the repository _is_, so a stale one is actively misleading — it would have the consumer reason about code that changed. A stored plan describes what to _do_; drift makes it possibly-outdated, not wrong. And this skill's one promise is to follow the plan without changes, so a blocking staleness check would contradict the contract it is built on. Judging whether the drift matters is the reader's call, and the report is what makes that call possible.
 
@@ -57496,27 +57615,28 @@ This repository has already moved paths in ways that would matter: documentation
 
 ## Where context comes from
 
-The stored plan supplies the work; the Context Map supplies the repository:
+Both modes use a fresh Context Map. Their plan source differs:
 
-| Source                  | Sections                                                     |
-| ----------------------- | ------------------------------------------------------------ |
-| Stored plan             | `### Summary`, `### Implementation Steps`, `### Files`       |
-| Stored plan, **unused** | `### Pre-Implementation`, `### Post-Implementation`          |
-| Context Map             | Issue, Related TODOs, In-flight changes, Git state, Snapshot |
+| Mode        | Plan source                                                        | Repository source |
+| ----------- | ------------------------------------------------------------------ | ----------------- |
+| Stored plan | `### Summary`, `### Implementation Steps`, and `### Files`         | Context Map       |
+| Fresh plan  | Shared draft, review, and finalize pipeline using the Linear issue | Context Map       |
 
-The two unused sections are read past deliberately. They describe a branch and a post-implementation chain, and this skill supplies both from `run` — the branch because it has to be created in _this_ checkout, and the chain because `run` owns it. Replaying a stored branch step would mean acting on a tree that may no longer exist.
+Stored `### Pre-Implementation` and `### Post-Implementation` sections are read past deliberately. They describe a branch and a post-implementation chain, and this skill supplies both from `run` — the branch because it has to be created in _this_ checkout, and the chain because `run` owns it. Replaying a stored branch step would mean acting on a tree that may no longer exist.
 
 **Nothing in the fan-out is gated off**, which is the other place this pair diverges from the explore pair. `run-primed` skips the standards digest because a validated brief already carries it. A stored plan carries no such thing: it records decisions, not architecture. So the standards digest, branch diff, TODO search, and a freshly attached snapshot all still run. A recorded snapshot id would be useless anyway — it is session-scoped and dead in any later session.
 
-## Executing verbatim
+## Executing the selected plan
 
-The stored `### Implementation Steps` are worked in order, each verified against its own `verify:` line before the next begins. No re-drafting, no re-ordering, no merging, no added steps, and no second expert review — the producer's scored pipeline already finalized the stored artifact.
+In stored-plan mode, the `### Implementation Steps` are worked in order, each verified against its own `verify:` line before the next begins. No re-drafting, no re-ordering, no merging, no added steps, and no second expert review — the producer's scored pipeline already finalized the stored artifact.
 
 Where a step cannot be carried out as written, the skill stops and reports which step and why. It does not silently substitute a different plan: a plan that no longer fits its repository is information the reader needs, not an obstacle to route around. The stored `### Files` list is the expected blast radius, so touching a file it does not name is reported for the same reason.
 
+In fresh-plan mode, the shared planning pipeline produces and scores a harness plan before implementation. That pipeline is the same one `run` uses, including its revision budget and honest below-threshold behavior. It adds no approval pause and never writes the fresh plan back to the Linear issue.
+
 ## How this is guarded
 
-`linearPlanContract.test.ts` relates this skill to its producer — see [the guard section in chapter 16](./16-linear-plan-skill.md#how-this-is-guarded) for what it asserts. The parts that constrain this side: every verdict must be named and every rejecting one must carry a message pointing at `/autopilot:linear-plan`, the consumed sections must match the producer's required set exactly, the caller-owned sections must _not_ be consumed, and the file must contain no dispatch that would let it re-plan.
+`linearPlanContract.test.ts` relates this skill to its producer — see [the guard section in chapter 16](./16-linear-plan-skill.md#how-this-is-guarded) for what it asserts. The parts that constrain this side: every verdict must be named and mapped to a mode, fresh-plan verdicts must continue without invoking `linear:plan` or writing Linear, the consumed stored sections must match the producer's required set exactly, and caller-owned sections must remain unused.
 
 **What no test can show:** that the gate runs, or that the model honours it. CI sees text in a file. Nothing under `.github/workflows/` runs `bun test`, so the guard gates locally and in review; and because this repository configures no `linear` tracker, neither skill can execute here at all. Runtime evidence comes from a dry run recorded on the pull request.
 
@@ -57524,7 +57644,7 @@ Where a step cannot be carried out as written, the skill stops and reports which
 
 | File                                                                | Role                                                       |
 | ------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `claude-plugins/autopilot/skills/linear:run/SKILL.md`               | The skill: validate, gather, execute verbatim, delegate    |
+| `claude-plugins/autopilot/skills/linear:run/SKILL.md`               | The skill: inspect, select plan source, and deliver        |
 | `claude-plugins/autopilot/skills/linear:plan/SKILL.md`              | Writes the stored plan and owns its format                 |
 | `claude-plugins/autopilot/skills/run/SKILL.md`                      | The phases this skill references for everything downstream |
 | `claude-plugins/autopilot/skills/gather-context/SKILL.md`           | The fan-out, run in full here                              |
