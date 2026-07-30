@@ -1,17 +1,17 @@
 /**
  * Guards the contract between `linear:plan`, which stores an implementation plan in a
- * Linear issue's description, and `linear:run`, which executes that stored plan verbatim.
+ * Linear issue's description, and `linear:run`, which executes a valid stored plan
+ * verbatim or falls back to a run-local fresh plan when the artifact is unusable.
  *
  * Five properties are load-bearing, and each fails silently without a guard:
  *
  * 1. The stored-plan section names `linear:run` reads match the ones `linear:plan` writes.
  *    This is the real rot: the two files have no import between them, so renaming a
  *    section in the producer breaks the consumer with nothing failing in between.
- * 2. `linear:run` enumerates every validation verdict with an actionable message. A
- *    verdict quietly dropped turns a strict gate into a permissive one.
- * 3. `linear:run` never dispatches `linear:plan`. An automatic re-plan discards the
- *    stored artifact and substitutes a different one, looking like success — the
- *    opposite of what a strict consumer is for.
+ * 2. `linear:run` enumerates every validation verdict and maps it to an execution mode.
+ *    A verdict quietly dropped can turn an unusable artifact into executable instructions.
+ * 3. `linear:run` never dispatches `linear:plan` or rewrites the ticket. Its fresh-plan
+ *    path must remain a run-local fallback rather than silently replacing the artifact.
  * 4. The two skills agree on the stored format version. `Format:` is the only thing that
  *    keeps "written under an older template" apart from "corrupt", and a version the
  *    producer writes but the consumer does not read collapses that distinction.
@@ -49,9 +49,9 @@ const [linearPlan, linearRun, plan, run, runPrimed, pipeline] = await Promise.al
   readFile(join(skillsDir, "plan/references/pipeline.md"), "utf8"),
 ]);
 
-/** Every verdict `linear:run`'s validation table must name, rejecting ones first. */
-const rejectingVerdicts = ["missing", "version-mismatch", "malformed", "unverifiable"];
-const allVerdicts = [...rejectingVerdicts, "valid"];
+/** Every verdict `linear:run`'s validation table must name, fallback ones first. */
+const fallbackVerdicts = ["missing", "version-mismatch", "malformed", "unverifiable"];
+const allVerdicts = [...fallbackVerdicts, "valid"];
 
 /**
  * `### <name>` rows of the stored-plan template in `linear:plan`, split by its own
@@ -91,20 +91,46 @@ describe("linear plan contract", () => {
     expect(linearRun).toContain(`**${verdict}**`);
   });
 
-  test.each(rejectingVerdicts)("the %s verdict carries an actionable message", (verdict) => {
+  test.each(fallbackVerdicts)("the %s verdict selects a fresh plan", (verdict) => {
     const message = linearRun.split("\n").find((line) => line.startsWith(`- ${verdict} —`));
-    expect(`${verdict}: ${message ?? "<no message line>"}`).toContain("/autopilot:linear-plan");
+    expect(`${verdict}: ${message ?? "<no message line>"}`).toContain(
+      "drafting a fresh implementation plan",
+    );
   });
 
-  test("linear:run cannot silently re-plan", () => {
+  test("the verdict table maps valid to stored-plan and every other verdict to fresh-plan", () => {
+    const validRow = linearRun
+      .split("\n")
+      .find((line) => line.includes("| **valid**") && line.includes("`stored-plan`"));
+    const fallbackRow = linearRun
+      .split("\n")
+      .find(
+        (line) =>
+          line.includes("`fresh-plan`") &&
+          fallbackVerdicts.every((verdict) => line.includes(`**${verdict}**`)),
+      );
+    expect(validRow).toContain("`stored-plan`");
+    expect(fallbackRow).toContain("`fresh-plan`");
+  });
+
+  test("linear:run never invokes the producer or overwrites the stored artifact", () => {
     expect(linearRun).not.toContain("Skill(autopilot:linear-plan)");
+    expect(linearRun).toContain("never writes or repairs a stored plan");
+    expect(linearRun).toContain("Do not store it on the Linear issue");
   });
 
   test.each([
-    ["stored", "This skill reads; it never writes a plan"],
+    ["admission", "Only the Linear issue is required"],
     ["snapshot", "The plan is a snapshot, not a live view"],
-  ])("linear:run states the %s precondition", (_label, needle) => {
+  ])("linear:run states the %s contract", (_label, needle) => {
     expect(linearRun).toContain(needle);
+  });
+
+  test("linear:run uses the shared planning pipeline for its fresh-plan path", () => {
+    expect(linearRun).toContain("[pipeline.md](../plan/references/pipeline.md)");
+    expect(linearRun).toContain('task 4 ("Establish plan")');
+    expect(linearRun).toContain('task 5 ("Validate plan")');
+    expect(linearRun).toContain('task 6 ("Finalize plan")');
   });
 
   test.each(requiredSections)("linear:run consumes `### %s` from the stored plan", (name) => {
@@ -139,7 +165,7 @@ describe("linear plan contract", () => {
 
   test("the pipeline reconciles below-threshold behaviour per caller", () => {
     const [, belowThreshold = ""] = pipeline.split("Report honestly");
-    for (const caller of ["`plan`", "`run`", "`run-primed`", "`linear:plan`"]) {
+    for (const caller of ["`plan`", "`run`", "`run-primed`", "`linear:run`", "`linear:plan`"]) {
       expect(belowThreshold).toContain(caller);
     }
   });
@@ -155,7 +181,7 @@ describe("linear plan contract", () => {
   });
 
   test("linear:run treats the stored plan as a durable artifact, not proof of approval", () => {
-    expect(linearRun).toContain("durable plan somebody already wrote");
+    expect(linearRun).toContain("checkable durable artifact");
     expect(linearRun).not.toContain("approval already happened when the plan was stored");
     expect(linearRun).not.toContain("plan somebody approved");
   });
@@ -170,8 +196,8 @@ describe("linear plan contract", () => {
   test("both drift reports stay advisory rather than becoming verdicts", () => {
     const [, drift = ""] = linearRun.split("report how far the plan has aged");
     expect(drift).toContain("advisory and never a verdict");
-    // A drift report must not be smuggled in as a sixth rejecting verdict.
-    for (const verdict of rejectingVerdicts) {
+    // A drift report must not be smuggled in as a sixth plan-source verdict.
+    for (const verdict of fallbackVerdicts) {
       expect(`drift section names ${verdict}: ${drift.includes(`**${verdict}**`)}`).toBe(
         `drift section names ${verdict}: false`,
       );
