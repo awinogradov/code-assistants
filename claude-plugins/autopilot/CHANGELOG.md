@@ -2,6 +2,98 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.18.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.17.0...autopilot@v1.18.0) (2026-07-30)
+
+## Release Notes
+
+The most impactful change in this release is a new path-drift check that catches stale file references in stored Linear plans before execution begins, preventing silent mid-run failures when files have been renamed or moved.
+
+## ✨ What's New
+
+### Path Drift Detection for Stored Linear Plans
+
+When you run a stored plan via `linear:run`, the plugin now checks every file path listed in the plan's `### Files` section against the current repository checkout before any edits are made. If paths have moved or been deleted since the plan was stored, those missing paths are named explicitly upfront — not discovered mid-execution when a step fails for a confusing, unrelated reason. Files marked `(new)` in the plan (files the plan intends to create) are correctly skipped, since they're absent by design. When every path resolves cleanly, that's stated explicitly too, so silence is never mistaken for the check not running. Both reports remain advisory — the plan still executes rather than being blocked — consistent with `linear:run`'s contract of following the stored plan verbatim.
+
+<details><summary>Related issues</summary>
+
+- [#502: Stored Linear plans are not checked for moved file paths](https://github.com/awinogradov/code-assistants/issues/502)
+- [#508: Report when a stored plan names files that have moved](https://github.com/awinogradov/code-assistants/pull/508)
+</details>
+
+### Richer Plan Score Records
+
+Plan files now record more than just a final number. The stored line reads `Score: <N>/100 · <P> pass(es) · <exit reason>`, where the exit reason is one of `target reached`, `no improvement`, or `budget spent`. This makes it possible to distinguish a plan that cleared the scoring threshold on the first pass from one that exhausted the revision budget and stopped at 97 — two very different outcomes that looked identical before. The data accumulates automatically in files that get written anyway, so no replaying of past plans is needed to build a sample.
+
+<details><summary>Related issues</summary>
+
+- [#503: Measure whether the 98 plan scoring target is reachable](https://github.com/awinogradov/code-assistants/issues/503)
+- [#510: Record how a plan reached its score, not just the number](https://github.com/awinogradov/code-assistants/pull/510)
+</details>
+
+### Linear Plans Store Without a Separate Approval Step
+
+Scored plans can now be stored to a Linear issue automatically, without requiring a manual approval gate between scoring and storage. This removes friction from the plan-to-issue workflow.
+
+<details><summary>Related issues</summary>
+
+- [#512: Store Linear plans without a separate approval gate](https://github.com/awinogradov/code-assistants/issues/512)
+- [#513: Store Linear plans without a separate approval gate](https://github.com/awinogradov/code-assistants/pull/513)
+</details>
+
+## 🐛 Bug Fixes
+
+### Expert Review Agent No Longer Invents File Contents
+
+The `expert-review` agent was producing confident, detailed reviews based on file contents it had never actually read — reporting `tool_uses: 0` while quoting identifiers and imports that don't exist in the codebase. In some cases it generated two mutually contradictory versions of the same file; in others it produced no parseable verdict at all, silently shrinking the review panel to a single voice whose score was then presented as a panel aggregate.
+
+The fix operates at the pipeline level rather than relying on stronger instructions to the agent. The agent now declares a `grounding` array naming what it actually consulted. The parent pipeline screens each panel member before averaging: it discards any member with an empty `grounding`, an unparseable report, or evidence of quoting file contents that neither the plan nor the Context Map excerpt could have provided. A shrunken panel is reported as such — a single survivor is one opinion, not a consensus, and a panel where nothing survives reports the plan as unreviewed rather than emitting a score.
+
+<details><summary>Related issues</summary>
+
+- [#499: Expert-review agent invents file contents instead of reading them](https://github.com/awinogradov/code-assistants/issues/499)
+- [#497: Add skills to store a plan on a Linear issue and execute it verbatim](https://github.com/awinogradov/code-assistants/issues/497)
+- [#507: Discard expert reviews that have no evidence behind them](https://github.com/awinogradov/code-assistants/pull/507)
+</details>
+
+## 📚 Documentation & Settings Updates
+
+### Linear Nested Fence Rendering — Verified and Documented
+
+The stored-plan format wraps a ticket's prior description in a `+++ Original task +++` collapsible fence. Since a `linear:create`-authored description already opens with its own `+++ Original prompt +++` fence, this creates nested collapsibles — a case Linear's GraphQL markdown documentation doesn't explicitly address. This was verified against a real Linear ticket: nesting works, with the outer section collapsing independently and the inner section remaining independently expandable.
+
+A second finding of operational importance: Linear rewrites fence syntax on save. Text written as `+++ Title … +++` is stored and returned by the API as `>>> Title … >>>`. This means anything matching a fetched description against a literal `+++` finds nothing, even though the collapsible is present. The shipped skill is unaffected (it anchors on the `## Implementation plan` heading, which survives the round-trip), but that was coincidence as much as design. Chapters 16 and 11 now document both findings, and `linear:plan` gains an explicit warning at the write path: match the heading anchor, never the fence delimiter.
+
+<details><summary>Related issues</summary>
+
+- [#501: Verify how Linear renders nested collapsible fences](https://github.com/awinogradov/code-assistants/issues/501)
+- [#509: Record how Linear renders nested collapsible fences](https://github.com/awinogradov/code-assistants/pull/509)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #512 | [#513](https://github.com/awinogradov/code-assistants/pull/513) | @rovnyart |
+| #503 | [#510](https://github.com/awinogradov/code-assistants/pull/510) | @awinogradov |
+| #501 | [#509](https://github.com/awinogradov/code-assistants/pull/509) | @awinogradov |
+| #502 | [#508](https://github.com/awinogradov/code-assistants/pull/508) | @awinogradov |
+| #497 | [#507](https://github.com/awinogradov/code-assistants/pull/507) | @awinogradov |
+| #499 | [#507](https://github.com/awinogradov/code-assistants/pull/507) | @awinogradov |
+
+### Features
+
+* **linear:** report path drift on a stored plan ([5b35bde](https://github.com/awinogradov/code-assistants/commit/5b35bde5ba1142e58f453809a0a75d146d8289ed))
+* **plan:** record passes and exit reason with the score ([3661ffa](https://github.com/awinogradov/code-assistants/commit/3661ffa2eb4dedf82fc724ccd7955d8a83288612))
+
+### Bug Fixes
+
+* **linear-plan:** remove separate approval gate ([ec810db](https://github.com/awinogradov/code-assistants/commit/ec810db9f3e3aa0a5a673df10c046960d7ae8c2b))
+* **plan:** discard expert reviews with no grounding ([edc40ee](https://github.com/awinogradov/code-assistants/commit/edc40eec772799dbc2c4fcf7545d2bc9305e27ee))
+
+### Documentation
+
+* **linear:** record how linear renders nested fences ([dc9d467](https://github.com/awinogradov/code-assistants/commit/dc9d46751f8c2be0dcead80a457608236007c26b))
 ## [1.17.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.16.0...autopilot@v1.17.0) (2026-07-29)
 
 ## Release Notes
