@@ -1,0 +1,11 @@
+what the question?
+
+---
+
+<task-notification>
+<task-id>b7479zhow</task-id>
+<tool-use-id>toolu_01Wzr92t7srEBbdr1PYxdysm</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-chamisa-badger/a0f2285c-709e-4de2-9866-569a01e1e104/tasks/b7479zhow.output</output-file>
+<status>completed</status>
+<summary>Background command "Wait for PR 509 verdict" completed (exit code 0)</summary>
+</task-notification>
