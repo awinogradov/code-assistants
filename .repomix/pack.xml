@@ -8082,6 +8082,38 @@ describe("linear plan contract", () => {
     expect(linearPlan).toContain("emit the full plan text into the transcript");
   });
 
+  test.each([
+    ["revision", "Stored plan was drafted against"],
+    ["path", "path(s) that no longer exist"],
+  ])("linear:run reports %s drift", (_label, needle) => {
+    expect(linearRun).toContain(needle);
+  });
+
+  test("both drift reports stay advisory rather than becoming verdicts", () => {
+    const [, drift = ""] = linearRun.split("report how far the plan has aged");
+    expect(drift).toContain("advisory and never a verdict");
+    // A drift report must not be smuggled in as a sixth rejecting verdict.
+    for (const verdict of rejectingVerdicts) {
+      expect(`drift section names ${verdict}: ${drift.includes(`**${verdict}**`)}`).toBe(
+        `drift section names ${verdict}: false`,
+      );
+    }
+  });
+
+  /**
+   * Both carve-outs guard the same failure: the plan template stores an existing file as
+   * `path/to/file.ts:NN` and a planned one with a `(new)` suffix, so a literal existence
+   * test on the raw entry reports every file as missing — the cry-wolf outcome that would
+   * make the report worthless.
+   */
+  test.each([
+    ["files it intends to create", "absent by design"],
+    ["a trailing line number", "Strip a trailing"],
+  ])("the path check handles %s", (_label, needle) => {
+    const [, drift = ""] = linearRun.split("**Path drift.**");
+    expect(drift).toContain(needle);
+  });
+
   test("the unchanged callers state no threshold of their own", () => {
     for (const [name, source] of [
       ["plan", plan],
@@ -44588,7 +44620,20 @@ On any verdict other than **valid**, stop with the matching message and do not f
 
 Each message names the skill that would fix it. **Never invoke that skill automatically** — a silent re-plan discards the human review the stored plan represents and replaces it with an unreviewed one, while looking like success. That is precisely the outcome this skill exists to make visible.
 
-Finally, compare the plan's `Base:` against `git rev-parse origin/main`. When they differ, report `Stored plan was drafted against <base>; origin/main is now <current>` and continue. This is advisory and never a verdict.
+Finally, report how far the plan has aged. Both checks below are advisory and never a verdict — they inform the reader, they do not stop the run.
+
+**Revision drift.** Compare the plan's `Base:` against `git rev-parse origin/main`. When they differ, report `Stored plan was drafted against <base>; origin/main is now <current>`.
+
+**Path drift.** Check each path named in the stored `### Files` list against the checkout, and report the ones that are gone: `Stored plan names <n> path(s) that no longer exist: <paths>`. Say so explicitly when every path resolves, because silence is indistinguishable from the check not running.
+
+Two entry shapes need handling before the existence test, and getting either wrong reports every file as missing:
+
+- **Strip a trailing `:<line>`.** The plan template writes an existing file as `` `path/to/file.ts:NN` ``, which is a location rather than a path — test `path/to/file.ts`, not the whole token.
+- **Skip anything marked `(new)`.** The template uses that suffix for files the plan intends to create, so they are absent by design.
+
+Reporting either shape as drift would cry wolf on every plan, which costs more than the check is worth.
+
+A `Base:` SHA says the tree moved; it does not say whether it moved underneath _this_ plan. The `### Files` list is the plan's own statement of what it expects to touch, so checking it is what turns "possibly stale" into a specific answer — and a step that would otherwise fail mid-run, in a session with no latitude to improvise, becomes something the reader can weigh before the first edit.
 
 Set task 2 to `completed`.
 
@@ -56948,6 +56993,17 @@ Each message names `/autopilot:linear-plan` as the fix. **It is never invoked au
 The stored plan records the tree it was drafted against in `Base:`. This skill compares that against the checkout's `origin/main`, reports any difference, and **proceeds**.
 
 That is a deliberate asymmetry with [`run-primed`](./15-run-primed-skill.md#the-validation-contract), which treats a stale base as a rejecting verdict. The two artifacts fail differently. A context brief describes what the repository _is_, so a stale one is actively misleading — it would have the consumer reason about code that changed. A stored plan describes what to _do_; drift makes it possibly-outdated, not wrong. And this skill's one promise is to follow the plan without changes, so a blocking staleness check would contradict the contract it is built on. Judging whether the drift matters is the reader's call, and the report is what makes that call possible.
+
+Two reports make that call possible, because a SHA alone cannot:
+
+| Report         | Question it answers                                                      |
+| -------------- | ------------------------------------------------------------------------ |
+| Revision drift | has the tree moved since the plan was drafted?                           |
+| Path drift     | did it move underneath _this_ plan — are the files it names still there? |
+
+Revision drift tells you the repository changed; it says nothing about whether the change touched anything this plan cares about. Path drift answers that directly, by checking every path in the stored `### Files` list against the checkout. Entries the plan marked `(new)` are skipped — the plan template uses that suffix for files it intends to create, so they are absent by design.
+
+This repository has already moved paths in ways that would matter: documentation chapters are positioned by number and have been renumbered wholesale, and skill prose was relocated into `references/` subdirectories. Without the check, a plan stored before either change fails partway through execution, on a step that reads as broken rather than as outdated. With it, the reader sees the specific paths that vanished before the first edit — and when nothing has moved, the report says so, because silence would be indistinguishable from the check not running.
 
 ## Where context comes from
 
