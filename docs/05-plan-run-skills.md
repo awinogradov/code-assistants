@@ -190,19 +190,19 @@ The mechanics sit in the phase that runs them: [Phase 5](#phase-5--embed-branch-
 
 Expert review and scoring are **one step**. Experts are selected from the stack's expert table — always the Pre-mortem Analyst, plus 2–3 more by task scope — and launched as parallel `expert-review` sub-agents.
 
+The step is opt-in for `plan` alone: it runs only when the user passed `--experts-review`, because `plan`'s approval gate puts a human in front of the finished plan either way. Without the flag the plan file records `Score: skipped · expert review disabled (plan invoked without --experts-review)` — a line that names its producer, so its appearance in any other caller's output is drift, not a valid state. Every other caller runs the review unconditionally, which is why a skipped score never reaches a stored artifact.
+
 Each reviewer receives a **Context Map excerpt** alongside the plan text. A reviewer with no view of the repository infers file contents, and an invented finding costs more than a missing one.
 
-Each returns a schema-validated JSON verdict carrying per-dimension scores. The parent averages them into the five-dimension rubric (Alignment, Completeness, Type Safety, Testability, Simplicity; 20 points each). Below the 98 target, the gaps the panel named are filled and the panel re-run — **at most three passes**, and stopped early the moment a pass fails to raise the aggregate, since another round against an unchanged weakness re-pays the whole evaluation for nothing. If it still falls short, the actual score and the weak dimension are recorded rather than inflated.
+Each returns a schema-validated JSON verdict carrying per-dimension scores. The parent averages them into the five-dimension rubric (Alignment, Completeness, Type Safety, Testability, Simplicity; 20 points each), folds the panel's findings into the draft in a single pass, and records the actual aggregate and the weakest dimension rather than inflating either. The review is an enhancement, never a gate: there is no score threshold, no revision loop, and no caller that blocks or refuses to proceed on the number — [`linear:plan`](./16-linear-plan-skill.md) stores the plan whatever it says.
 
-What follows a below-target score depends on the caller. `plan`, `run`, and `run-primed` proceed on the recorded score, because their plan is approved or authorized in the same session that drafted it. [`linear:plan`](./16-linear-plan-skill.md) does not: it emits the plan to the transcript and stores nothing, because a stored plan can be executed later by a session that never saw the score.
-
-Scoring used to be a separate phase running a second rubric over what the experts had already scored, with an uncapped auto-iteration loop.
+Scoring used to be a separate phase running a second rubric over what the experts had already scored, with an uncapped auto-iteration loop; a later revision replaced that with a threshold-driven revision budget, and the threshold and budget were then removed entirely once review became an enhancement rather than a gate.
 
 ### Finalize
 
 Apply the aggregated findings and score to the draft, replace the `Score:` placeholder, and write the plan file, with every reference formatted per RFC-0001.
 
-The recorded line carries how the score was reached, not only what it was — `Score: <N>/100 · <P> pass(es) · <exit reason>`, where the exit reason is `target reached`, `no improvement`, or `budget spent`, plus the weakest dimension when the score fell short. That distinction is the point: an aggregate alone cannot separate a plan that cleared the bar on the first pass from one that spent the whole budget to land just under, and those two say opposite things about whether the threshold is set correctly. Because every plan file records it, the sample needed to answer that accrues on its own rather than requiring plans to be re-run.
+The recorded line names the weakest dimension beside the aggregate — `Score: <N>/100 · weakest: <dimension>`. The aggregate alone says how good the panel thought the plan was; the weakest dimension says what to double-check when executing it, and nothing reconstructs that later.
 
 ## Phase 5 — Embed branch creation
 

@@ -117,7 +117,7 @@ In stored-plan mode, the `### Implementation Steps` are worked in order, each ve
 
 Where a step cannot be carried out as written, the skill stops and reports which step and why. It does not silently substitute a different plan: a plan that no longer fits its repository is information the reader needs, not an obstacle to route around. The stored `### Files` list is the expected blast radius, so touching a file it does not name is reported for the same reason.
 
-In fresh-plan mode, the shared planning pipeline produces and scores a harness plan before implementation. That pipeline is the same one `run` uses, including its revision budget and honest below-threshold behavior. It adds no approval pause and never writes the fresh plan back to the Linear issue.
+In fresh-plan mode, the shared planning pipeline produces and scores a harness plan before implementation. That pipeline is the same one `run` uses — the review enhances the plan and the recorded score gates nothing. It adds no approval pause and never writes the fresh plan back to the Linear issue.
 
 ## How this is guarded
 

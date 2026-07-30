@@ -60,6 +60,10 @@ Set task 4 ("Review and score") to `in_progress`.
 
 Expert review and scoring are **one step**. Reviewers already return per-dimension scores, so a second self-graded rubric adds a loop without adding information.
 
+**Expert review is an enhancement, never a gate.** It improves the plan and records the panel's assessment for the plan's readers; no caller blocks, loops, or refuses to proceed on the score.
+
+**`plan` is the only caller that may skip this step.** It runs the review only when the user passed `--experts-review` (stripped by the mode-flags pre-step in [input-detection.md](input-detection.md#mode-flags-plan-only)), because its approval gate puts a human in front of the finished plan either way. Every other caller runs the step unconditionally — `linear:plan` so the stored ticket carries the panel's assessment for the teammate who reads it, and `run`, `run-primed`, and `linear:run`'s fresh-plan path because no human re-reads their plans — so for any caller other than `plan` the skip path is unreachable, and a skipped score never reaches a stored artifact. When `plan` skips: set task 4 to `completed` noting the skip, and finalize with the skipped `Score:` line from [Finalize](#finalize-task-5).
+
 Select experts from your stack's expert table — always the Pre-mortem Analyst, then 2-3 more by task scope. Launch them **in parallel** (single message, multiple Agent tool calls):
 
 ```
@@ -67,7 +71,6 @@ Use the Agent tool with:
 - `subagent_type`: "autopilot:expert-review"
 - `prompt`: "You are a [Expert Role]. Review this implementation plan.
   Focus areas: [from your stack's expert table].
-  Scoring target: 98+.
   Limit your report to the 3–5 strongest findings — depth over breadth.
 
   [Context Map excerpt: relevant files, patterns, key types, test conventions, applicable standards]
@@ -100,11 +103,9 @@ Aggregate what survives:
    | **Testability**  | Clear test strategy, edge cases identified                                                                                          |
    | **Simplicity**   | Minimal code, reuses existing functions, no over-engineering, every change traces to steelmanned intent, no opportunistic refactors |
 
-2. **Revise, at most three passes.** While the aggregate is below 98, fill the gaps the panel named and re-run the review — capped at three passes, and stopped early the moment a pass fails to raise the aggregate, because another round against an unchanged weakness re-pays the whole evaluation for nothing. Ask via `AskUserQuestion` only when a weak dimension hinges on a material ambiguity the Context Map cannot settle.
+2. **Apply the findings — once.** Fold the panel's findings into the draft in a single pass: no re-running the panel, no iterating on the aggregate, no threshold to clear. Ask via `AskUserQuestion` only when a finding hinges on a material ambiguity the Context Map cannot settle.
 
-3. **Report honestly.** If the plan still scores below 98 once the budget is spent, record the actual score and name the weak dimension in the plan. Never inflate a score to clear the target.
-
-   What follows a below-threshold score depends on the caller, so it is stated here rather than assumed. `plan`, `run`, `run-primed`, and the fresh-plan path in `linear:run` proceed on the recorded score: their plan is approved or authorized in the same session that drafted it, and the human reading it is the backstop. `linear:plan` does not proceed — it emits the plan to the transcript and stores nothing, because a stored plan can be executed later by a session that never saw the score, so the score has to be the gate instead of the reader.
+3. **Record honestly.** Record the actual aggregate and name the weakest dimension in the plan; never inflate the number. The score informs the reader — the human at `plan`'s approval gate, or the teammate reading the ticket `linear:plan` stores — it is not a gate for any caller, and every caller proceeds on whatever the number says.
 
 Do not include raw expert JSON in the plan output.
 
@@ -114,15 +115,21 @@ Set task 4 to `completed`.
 
 Set task 5 ("Finalize plan") to `in_progress`.
 
-Apply the aggregated findings and score to the draft, then write the plan file, replacing the `Score:` placeholder with a line that records how the score was reached, not just what it was:
+Apply the aggregated findings and score to the draft, then write the plan file, replacing the `Score:` placeholder with a line that records the panel's assessment:
 
 ```text
-Score: <N>/100 · <P> pass(es) · <exit reason>[ · weakest: <dimension>]
+Score: <N>/100 · weakest: <dimension>
 ```
 
-`<exit reason>` is one of `target reached`, `no improvement`, or `budget spent`, matching the three ways [the revision loop](#review-and-score-task-4) ends. Name the weakest dimension whenever the score is below the target; omit that clause when the target was reached.
+When `plan` skipped the review step, there are no findings to apply; replace the placeholder with the skipped variant instead:
 
-Recording the passes and the exit reason costs one line and makes every plan file a data point. The aggregate alone cannot distinguish a plan that cleared the bar immediately from one that burned the whole budget to land just short — and those two say opposite things about whether the threshold is set correctly. Without the line, answering that question later means re-running plans rather than reading the ones already written.
+```text
+Score: skipped · expert review disabled (plan invoked without --experts-review)
+```
+
+The line names its producer deliberately: only `plan` can skip, so this exact line appearing in any other caller's output is evidence of drift, not a valid state.
+
+Naming the weakest dimension costs half a line and tells a later reader where the plan is soft — the aggregate alone says how good the panel thought the plan was, not what to double-check when executing it.
 
 Apply the reference-formatting rules (RFC-0001, inlined at the end of the calling skill) to every reference the plan contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
 

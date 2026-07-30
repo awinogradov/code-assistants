@@ -183,7 +183,7 @@ Set task 4 to `in_progress`. Merge the stored plan with the Context Map using th
 
 The two unused sections are read past deliberately. They describe a branch and a post-implementation chain, and this skill supplies both from `run` — the branch because it must be created in _this_ checkout, and the chain because `run` owns it. Consuming a stored copy would mean executing a branch step written for a tree that no longer exists. Set task 4 to `completed`.
 
-Set task 5 to `in_progress`. Confirm the `valid` verdict and drift report from Phase 1. Do not run another expert review: the stored artifact already passed its producer's scoring pipeline. Set task 5 to `completed`.
+Set task 5 to `in_progress`. Confirm the `valid` verdict and drift report from Phase 1. Do not run another expert review: the stored artifact already carries its producer's review and recorded score. Set task 5 to `completed`.
 
 Set task 6 to `in_progress`. Freeze the required stored sections as the execution plan without rewriting them or writing a harness replacement. Set task 6 to `completed`.
 
