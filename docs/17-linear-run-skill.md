@@ -8,9 +8,9 @@ How `/autopilot:linear-run` delivers a Linear ticket from the plan already store
 
 ## The pattern this exists for
 
-[`linear:plan`](./16-linear-plan-skill.md) leaves a reviewed plan on a ticket. Something has to pick it up — in a later session, or by a different person, or by an orchestrator that never saw the planning conversation. That consumer needs exactly one property: it must do what the plan says, and say so when it cannot.
+[`linear:plan`](./16-linear-plan-skill.md) leaves a scored, durable plan on a ticket. Something has to pick it up — in a later session, or by a different person, or by an orchestrator that never saw the planning conversation. That consumer needs exactly one property: it must do what the plan says, and say so when it cannot.
 
-`run` cannot fill that role, because `run` drafts its own plan. Pointing it at a ticket with a stored plan would produce a _second_ plan, unreviewed, that happens to be about the same work. The stored plan's whole value — that a human read and corrected it — would be silently discarded.
+`run` cannot fill that role, because `run` drafts its own plan. Pointing it at a ticket with a stored plan would produce a _second_ plan that happens to be about the same work. The stored plan's whole value — a durable, scored instruction set that can be refined independently — would be silently discarded.
 
 ## Why a separate skill, not a flag on `run`
 
@@ -61,7 +61,7 @@ For how this pair sits beside the other on-ramps, see the comparison in [the `ru
 - ② Four rejections, each naming `/autopilot:linear-plan` as the fix. The skill never invokes it automatically.
 - ③ One issue fetch happens here, ahead of the fan-out, so a ticket with no plan fails before the expensive pass is paid for.
 - ④ The full fan-out runs — unlike `run-primed`, nothing is gated off. A stored plan is not a repository brief.
-- ⑤ Branch, implement, commit, PR, monitor — no plan-approval gate, exactly as `run`, because approval already happened when the plan was stored.
+- ⑤ Branch, implement, commit, PR, monitor — no plan-approval gate, exactly as `run`.
 
 ## The validation contract
 
@@ -75,11 +75,11 @@ Four verdicts reject; the fifth proceeds.
 | **unverifiable**     | a numbered step carries no `verify:` line                                   | the plan cannot be executed strictly                |
 | **valid**            | anchor, readable `Format:`, every required section, `verify:` on every step | proceed                                             |
 
-**The order is load-bearing.** Anchor and format version are checked _before_ the sections. A plan stored under an older template is, by definition, missing sections this skill expects — so a subsection check reached first would report a perfectly good older plan as `malformed`, tell the user their ticket is corrupt, and invite them to throw away reviewed work. `Format:` exists precisely to keep those two cases apart, and checking it first is what makes it useful.
+**The order is load-bearing.** Anchor and format version are checked _before_ the sections. A plan stored under an older template is, by definition, missing sections this skill expects — so a subsection check reached first would report a perfectly good older plan as `malformed`, tell the user their ticket is corrupt, and invite them to throw away valid stored work. `Format:` exists precisely to keep those two cases apart, and checking it first is what makes it useful.
 
 `unverifiable` exists because the plan's `verify:` lines are what "execute strictly" means. A step with no observable check cannot be confirmed done, so a plan missing one is not executable as written — better to say so than to guess at completion.
 
-Each message names `/autopilot:linear-plan` as the fix. **It is never invoked automatically.** An automatic re-plan would replace a human-reviewed artifact with an unreviewed one while reporting success, which is the exact failure this skill exists to make visible.
+Each message names `/autopilot:linear-plan` as the fix. **It is never invoked automatically.** An automatic re-plan would replace the stored artifact with a different plan while reporting success, which is the exact failure this skill exists to make visible.
 
 ## Drift is reported, not enforced
 
@@ -114,9 +114,9 @@ The two unused sections are read past deliberately. They describe a branch and a
 
 ## Executing verbatim
 
-The stored `### Implementation Steps` are worked in order, each verified against its own `verify:` line before the next begins. No re-drafting, no re-ordering, no merging, no added steps, and no expert review — the review already happened, on the ticket, possibly weeks ago.
+The stored `### Implementation Steps` are worked in order, each verified against its own `verify:` line before the next begins. No re-drafting, no re-ordering, no merging, no added steps, and no second expert review — the producer's scored pipeline already finalized the stored artifact.
 
-Where a step cannot be carried out as written, the skill stops and reports which step and why. It does not substitute its own judgement for a plan somebody approved: a plan that no longer fits its repository is information the reader needs, not an obstacle to route around. The stored `### Files` list is the expected blast radius, so touching a file it does not name is reported for the same reason.
+Where a step cannot be carried out as written, the skill stops and reports which step and why. It does not silently substitute a different plan: a plan that no longer fits its repository is information the reader needs, not an obstacle to route around. The stored `### Files` list is the expected blast radius, so touching a file it does not name is reported for the same reason.
 
 ## How this is guarded
 

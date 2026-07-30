@@ -9,9 +9,9 @@
  *    section in the producer breaks the consumer with nothing failing in between.
  * 2. `linear:run` enumerates every validation verdict with an actionable message. A
  *    verdict quietly dropped turns a strict gate into a permissive one.
- * 3. `linear:run` never dispatches `linear:plan`. An automatic re-plan discards the human
- *    review the stored plan represents and substitutes an unreviewed one, looking like
- *    success — the opposite of what a strict consumer is for.
+ * 3. `linear:run` never dispatches `linear:plan`. An automatic re-plan discards the
+ *    stored artifact and substitutes a different one, looking like success — the
+ *    opposite of what a strict consumer is for.
  * 4. The two skills agree on the stored format version. `Format:` is the only thing that
  *    keeps "written under an older template" apart from "corrupt", and a version the
  *    producer writes but the consumer does not read collapses that distinction.
@@ -146,6 +146,18 @@ describe("linear plan contract", () => {
 
   test("linear:plan refuses to store below the threshold without discarding the plan", () => {
     expect(linearPlan).toContain("emit the full plan text into the transcript");
+  });
+
+  test("linear:plan stores eligible plans without a separate human approval step", () => {
+    expect(linearPlan).toContain("Do not add a separate approval step");
+    expect(linearPlan).not.toContain("## Phase 4: Request approval");
+    expect(linearPlan).not.toContain("The human approves the plan before it is stored");
+  });
+
+  test("linear:run treats the stored plan as a durable artifact, not proof of approval", () => {
+    expect(linearRun).toContain("durable plan somebody already wrote");
+    expect(linearRun).not.toContain("approval already happened when the plan was stored");
+    expect(linearRun).not.toContain("plan somebody approved");
   });
 
   test.each([

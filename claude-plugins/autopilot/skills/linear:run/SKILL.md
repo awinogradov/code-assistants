@@ -33,9 +33,9 @@ allowed-tools:
 
 Run a Linear issue end to end from the plan [`linear:plan`](../linear:plan/SKILL.md) already stored in its description, executing those steps as written instead of drafting new ones.
 
-**Difference from [`/autopilot:run`](../run/SKILL.md):** `run` drafts a plan, reviews it, and implements it in one session, which is correct when the person running it is the person who wanted it. This skill is the path for a plan somebody already wrote and somebody already reviewed — on the ticket, before this session started. It is a **separate contract, not a heuristic**: it never inspects conversation history to decide whether a plan exists, because a description carrying a parseable format marker can be checked and a prompt claiming "the plan is ready" cannot.
+**Difference from [`/autopilot:run`](../run/SKILL.md):** `run` drafts a plan, reviews it, and implements it in one session, which is correct when the person running it is the person who wanted it. This skill is the path for a durable plan somebody already wrote — on the ticket, before this session started. It is a **separate contract, not a heuristic**: it never inspects conversation history to decide whether a plan exists, because a description carrying a parseable format marker can be checked and a prompt claiming "the plan is ready" cannot.
 
-Everything after [Phase 3](#phase-3-merge-the-working-context) is `run`, unchanged and referenced rather than restated. Like `run`, invoking this skill authorizes the whole flow: there is no plan-approval gate, because the approval already happened when the plan was stored.
+Everything after [Phase 3](#phase-3-merge-the-working-context) is `run`, unchanged and referenced rather than restated. Like `run`, invoking this skill authorizes the whole flow: there is no plan-approval gate.
 
 ## Input
 
@@ -113,7 +113,7 @@ Resolve in this exact order, stopping at the first that fires:
 
 Anything that survives all four is **valid**.
 
-**The order is load-bearing.** Check the anchor and the format version _before_ the sections. A plan stored under an older template is missing sections this skill expects, so a subsection check reached first would report a perfectly good older plan as `malformed` — telling the user their ticket is corrupt when it is merely older, and inviting them to throw away a reviewed artifact. `Format:` exists precisely to keep those two cases apart.
+**The order is load-bearing.** Check the anchor and the format version _before_ the sections. A plan stored under an older template is missing sections this skill expects, so a subsection check reached first would report a perfectly good older plan as `malformed` — telling the user their ticket is corrupt when it is merely older, and inviting them to throw away a valid stored artifact. `Format:` exists precisely to keep those two cases apart.
 
 On any verdict other than **valid**, stop with the matching message and do not fall back:
 
@@ -122,7 +122,7 @@ On any verdict other than **valid**, stop with the matching message and do not f
 - malformed — `Stored plan on <LINEAR-ID> is malformed: <what was absent>. Re-run /autopilot:linear-plan <LINEAR-ID>, or use /autopilot:run instead.`
 - unverifiable — `Stored plan on <LINEAR-ID> has a step with no verify line, so it cannot be executed strictly. Re-run /autopilot:linear-plan <LINEAR-ID> to regenerate it.`
 
-Each message names the skill that would fix it. **Never invoke that skill automatically** — a silent re-plan discards the human review the stored plan represents and replaces it with an unreviewed one, while looking like success. That is precisely the outcome this skill exists to make visible.
+Each message names the skill that would fix it. **Never invoke that skill automatically** — a silent re-plan discards the durable artifact the issue carries and replaces it with a different plan while looking like success. That is precisely the outcome this skill exists to make visible.
 
 Finally, report how far the plan has aged. Both checks below are advisory and never a verdict — they inform the reader, they do not stop the run.
 
@@ -177,7 +177,7 @@ This skill never enters plan mode — do NOT call `EnterPlanMode` or `ExitPlanMo
 
 Work the stored `### Implementation Steps` in order, verifying each against its own `verify:` line before moving on.
 
-Verbatim means verbatim. Do not re-draft a step, re-order the list, merge steps, add a step, or run an expert review — the review already happened. Where a step cannot be carried out as written, stop and report which step and why, rather than substituting your own judgement for a plan somebody approved. A plan that no longer fits its repository is information the reader needs, not a problem to route around silently.
+Verbatim means verbatim. Do not re-draft a step, re-order the list, merge steps, add a step, or run another expert review — the scored artifact is already stored. Where a step cannot be carried out as written, stop and report which step and why, rather than silently substituting a different plan. A plan that no longer fits its repository is information the reader needs, not a problem to route around silently.
 
 The stored `### Files` list is the expected blast radius. Touching a file it does not name is worth reporting for the same reason.
 

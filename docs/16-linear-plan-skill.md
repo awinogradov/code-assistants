@@ -24,11 +24,11 @@ In all three the plan has to live somewhere a second reader can reach, and the t
 | -------------------------- | ---------------------------------------- |
 | Input detection, gathering | `plan`, unchanged                        |
 | Draft, review, score       | `plan`, unchanged — the shared pipeline  |
-| Approval gate              | `plan`, unchanged — `ExitPlanMode`       |
+| Finalize plan mode         | `ExitPlanMode` harness transition        |
 | Store on the ticket        | **new**                                  |
 | Implement, commit, PR      | **removed** — that is `linear:run`'s job |
 
-Stopping after the store is the deliberate part. If this skill also implemented, the reader would never be needed in the same session, and the plan-on-a-ticket would be a side effect rather than the deliverable. Composed the other way round, `linear:plan` then `linear:run` gives you the full flow with a reviewable pause in the middle — which is the whole point.
+Stopping after the store is the deliberate part. If this skill also implemented, the reader would never be needed in the same session, and the plan-on-a-ticket would be a side effect rather than the deliverable. Composed the other way round, `linear:plan` then `linear:run` gives you a durable handoff between independently triggered sessions.
 
 For how this pair sits beside the other on-ramps, see the comparison in [the `run-primed` chapter](./15-run-primed-skill.md#when-to-use-which); this chapter does not restate it.
 
@@ -68,7 +68,7 @@ All five are written, because a human reading the ticket should see the whole pl
 
 The three metadata fields each earn their place:
 
-- **`Format: v1`** is what keeps "stored under an older template" separable from "corrupt". Without it, the first template revision would make every previously stored plan indistinguishable from a mangled description, and the reader would tell users to discard reviewed work.
+- **`Format: v1`** is what keeps "stored under an older template" separable from "corrupt". Without it, the first template revision would make every previously stored plan indistinguishable from a mangled description, and the reader would tell users to discard valid stored work.
 - **`Score:`** records what the plan actually achieved, so a later reader can weigh it.
 - **`Base:`** records the tree the plan was drafted against. It is information, not a gate — see [why drift does not block](./17-linear-run-skill.md#drift-is-reported-not-enforced).
 
@@ -130,11 +130,9 @@ Linear renders `+++ Section title` … `+++` as an initially-hidden section, and
 
 That normalization is exactly why the store anchors on the `## Implementation plan` heading rather than on the wrapper. A re-store locates the anchor, which survives the round-trip unchanged, so it is unaffected by the fence being rewritten underneath it — and the "never stacks a second wrapper" property holds for the same reason.
 
-## The score gates the write, not the plan
+## The score gates the write
 
-The plan still goes through `plan`'s approval gate — a human reads it before anything is stored. The score gates something different: whether the approved plan becomes the ticket's instruction set.
-
-Both are required, and neither substitutes for the other. A 98 nobody read is not a reviewed plan. An approved 96 is a plan whose weaknesses were never addressed. The shared pipeline's threshold and its three-pass revision budget are inherited from [`pipeline.md`](./05-plan-run-skills.md#review-and-score) rather than restated here, so tuning them stays a one-file change.
+The plan is stored automatically after the shared review pipeline reaches its threshold. `ExitPlanMode` is the harness transition that exposes the final plan; the skill does not add a separate human approval step. The shared pipeline's threshold and its three-pass revision budget are inherited from [`pipeline.md`](./05-plan-run-skills.md#review-and-score) rather than restated here, so tuning them stays a one-file change.
 
 **Below the threshold, the plan is reported and emitted to the transcript — not discarded.** A skill whose premise is that plans are too valuable to lose must not quietly lose one at 97. It just declines to make it something a later session will execute unattended.
 
@@ -146,11 +144,11 @@ Both are required, and neither substitutes for the other. A 98 nobody read is no
 
 ## Where to look in the code
 
-| File                                                                           | Role                                                         |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------ |
-| `claude-plugins/autopilot/skills/linear:plan/SKILL.md`                         | The skill: gate, pipeline by reference, anchored store       |
-| `claude-plugins/autopilot/skills/linear:run/SKILL.md`                          | The reader that consumes the stored format                   |
-| `claude-plugins/autopilot/skills/plan/SKILL.md`                                | Input resolution, Common Instructions, and the approval gate |
-| `claude-plugins/autopilot/skills/plan/references/pipeline.md`                  | The threshold and revision budget this skill inherits        |
-| `claude-plugins/autopilot/skills/shared-rules/references/linear-mcp-access.md` | How `get_issue` and `save_issue` are resolved                |
-| `.github/actions/code-review-action/src/linearPlanContract.test.ts`            | The producer/consumer guard                                  |
+| File                                                                           | Role                                                   |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------ |
+| `claude-plugins/autopilot/skills/linear:plan/SKILL.md`                         | The skill: gate, pipeline by reference, anchored store |
+| `claude-plugins/autopilot/skills/linear:run/SKILL.md`                          | The reader that consumes the stored format             |
+| `claude-plugins/autopilot/skills/plan/SKILL.md`                                | Input resolution and Common Instructions               |
+| `claude-plugins/autopilot/skills/plan/references/pipeline.md`                  | The threshold and revision budget this skill inherits  |
+| `claude-plugins/autopilot/skills/shared-rules/references/linear-mcp-access.md` | How `get_issue` and `save_issue` are resolved          |
+| `.github/actions/code-review-action/src/linearPlanContract.test.ts`            | The producer/consumer guard                            |
