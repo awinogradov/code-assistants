@@ -2,7 +2,7 @@
 
 > Chapter 16 of the [repository docs](../README.md#repository-docs).
 
-How `/autopilot:linear-plan` turns a plan from a session artifact into something durable on its Linear ticket — reviewed by the expert panel for the teammate who reads it, and stored unconditionally.
+How `/autopilot:linear-plan` turns a plan from a session artifact into something durable on its Linear ticket — expert-reviewed when `--experts-review` is passed, and stored unconditionally.
 
 > Source of truth: `claude-plugins/autopilot/skills/linear:plan/SKILL.md` (the skill), `…/skills/plan/references/pipeline.md` (the shared review pipeline it executes), and `…/skills/linear:create/SKILL.md` (the description this one rewrites).
 
@@ -131,7 +131,7 @@ That normalization is exactly why the store anchors on the `## Implementation pl
 
 ## Storing is unconditional
 
-The plan is stored automatically the moment the shared review pipeline finishes — no plan-mode transition, no separate human approval step, and no score check between finalize and the write. The review score is recorded on the ticket as information for the teammate who reads it, never used as a gate. Unlike [`plan`](./05-plan-run-skills.md#review-and-score), which may skip expert review via its opt-in `--experts-review` flag, this skill accepts no such flag: it always reviews, so the stored ticket always carries the panel's assessment.
+The plan is stored automatically the moment the shared review pipeline finishes — no plan-mode transition, no separate human approval step, and no score check between finalize and the write. The review score is recorded on the ticket as information for the teammate who reads it, never used as a gate. Like [`plan`](./05-plan-run-skills.md#review-and-score), this skill takes the opt-in `--experts-review` flag: with it the stored ticket carries the panel's assessment; without it the stored header records the literal `Score: skipped`, so the reader can see the plan is unreviewed before deciding to run it.
 
 ## How this is guarded
 

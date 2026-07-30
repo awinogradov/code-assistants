@@ -113,7 +113,7 @@ Stored `### Pre-Implementation` and `### Post-Implementation` sections are read 
 
 ## Executing the selected plan
 
-In stored-plan mode, the `### Implementation Steps` are worked in order, each verified against its own `verify:` line before the next begins. No re-drafting, no re-ordering, no merging, no added steps, and no second expert review — the producer's scored pipeline already finalized the stored artifact.
+In stored-plan mode, the `### Implementation Steps` are worked in order, each verified against its own `verify:` line before the next begins. No re-drafting, no re-ordering, no merging, no added steps, and no second expert review — the producer's pipeline already finalized the stored artifact, recording either its panel's score or an explicit skip.
 
 Where a step cannot be carried out as written, the skill stops and reports which step and why. It does not silently substitute a different plan: a plan that no longer fits its repository is information the reader needs, not an obstacle to route around. The stored `### Files` list is the expected blast radius, so touching a file it does not name is reported for the same reason.
 

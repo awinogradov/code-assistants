@@ -50,7 +50,7 @@ Additional free-form context may follow any form (e.g., `#42 I think we should s
 
 - **Task description / issue identifier** — parsed from `$ARGUMENTS`. If empty, prompt once via `AskUserQuestion`: "What should we plan?" with a free-form slot. Do not abort silently.
 - **`--issue` / `--linear-issue`** — handled by the create-issue pre-step in [input-detection.md](references/input-detection.md) before detection. Neither flag ⇒ today's behavior.
-- **`--experts-review`** — parsed and stripped first by the mode-flags pre-step in [input-detection.md](references/input-detection.md#mode-flags-plan-only). Present ⇒ the pipeline's review step runs; absent ⇒ it is skipped and the skip is recorded in the plan's `Score:` line.
+- **`--experts-review`** — parsed and stripped first by the mode-flags pre-step in [input-detection.md](references/input-detection.md#mode-flags). Present ⇒ the pipeline's review step runs; absent ⇒ it is skipped and the skip is recorded in the plan's `Score:` line.
 - **Current branch / worktree / issue-ID mismatch** — from the Context Map's git state ([Phase 3](#phase-3-preflight-verdict)). No prompts beyond preflight's own.
 - **Repository root** — `git rev-parse --show-toplevel`. No prompt.
 

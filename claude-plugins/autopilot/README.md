@@ -254,7 +254,7 @@ Create a Linear issue with the same five-section body as `/autopilot:issue-creat
 
 Same as `/autopilot:plan`, but stores the finished plan in its Linear ticket's description so it outlives the session — then stops, without implementing. See [the linear:plan skill](../../docs/16-linear-plan-skill.md) for the stored format.
 
-**Precondition:** a `linear` tracker in `package.json` `agents.trackers`, a Linear issue as the argument, and a reachable Linear MCP server. All three are checked before the expensive planning pass, and each names `/autopilot:plan` as the alternative. The store is gated on the plan's score: below the shared pipeline's threshold it reports the score, emits the plan to the transcript, and writes nothing.
+**Precondition:** a `linear` tracker in `package.json` `agents.trackers`, a Linear issue as the argument, and a reachable Linear MCP server. All three are checked before the expensive planning pass, and each names `/autopilot:plan` as the alternative. Storing is unconditional — expert review runs only when `--experts-review` is passed (as in `/autopilot:plan`), and the stored header records the score, or `Score: skipped` without the flag, as information for the ticket's reader, never as a gate.
 
 ```bash
 /autopilot:linear-plan ENG-123                                          # From Linear id

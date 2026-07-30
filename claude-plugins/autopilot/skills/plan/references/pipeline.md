@@ -62,7 +62,7 @@ Expert review and scoring are **one step**. Reviewers already return per-dimensi
 
 **Expert review is an enhancement, never a gate.** It improves the plan and records the panel's assessment for the plan's readers; no caller blocks, loops, or refuses to proceed on the score.
 
-**`plan` is the only caller that may skip this step.** It runs the review only when the user passed `--experts-review` (stripped by the mode-flags pre-step in [input-detection.md](input-detection.md#mode-flags-plan-only)), because its approval gate puts a human in front of the finished plan either way. Every other caller runs the step unconditionally — `linear:plan` so the stored ticket carries the panel's assessment for the teammate who reads it, and `run`, `run-primed`, and `linear:run`'s fresh-plan path because no human re-reads their plans — so for any caller other than `plan` the skip path is unreachable, and a skipped score never reaches a stored artifact. When `plan` skips: set task 4 to `completed` noting the skip, and finalize with the skipped `Score:` line from [Finalize](#finalize-task-5).
+**`plan` and `linear:plan` are the only callers that may skip this step.** Each runs the review only when the user passed `--experts-review` (stripped by the mode-flags pre-step in [input-detection.md](input-detection.md#mode-flags)) — `plan` because its approval gate puts a human in front of the finished plan either way, and `linear:plan` because the teammate reading the stored ticket is that human, and the recorded skip tells them the plan is unreviewed. The `run` family — `run`, `run-primed`, and `linear:run`'s fresh-plan path — runs the step unconditionally, because no human re-reads its plans, so for those callers the skip path is unreachable. When the review step was skipped: set task 4 to `completed` noting the skip, and finalize with the skipped `Score:` line from [Finalize](#finalize-task-5).
 
 Select experts from your stack's expert table — always the Pre-mortem Analyst, then 2-3 more by task scope. Launch them **in parallel** (single message, multiple Agent tool calls):
 
@@ -121,13 +121,13 @@ Apply the aggregated findings and score to the draft, then write the plan file, 
 Score: <N>/100 · weakest: <dimension>
 ```
 
-When `plan` skipped the review step, there are no findings to apply; replace the placeholder with the skipped variant instead:
+When the review step was skipped, there are no findings to apply; replace the placeholder with the skipped variant instead:
 
 ```text
-Score: skipped · expert review disabled (plan invoked without --experts-review)
+Score: skipped · expert review disabled (invoked without --experts-review)
 ```
 
-The line names its producer deliberately: only `plan` can skip, so this exact line appearing in any other caller's output is evidence of drift, not a valid state.
+The line is deliberately a single literal: only `plan` and `linear:plan` can skip, so this exact line appearing in `run`, `run-primed`, or `linear:run` output is evidence of drift, not a valid state.
 
 Naming the weakest dimension costs half a line and tells a later reader where the plan is soft — the aggregate alone says how good the panel thought the plan was, not what to double-check when executing it.
 
