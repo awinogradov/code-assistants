@@ -2,6 +2,68 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [2.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.19.0...autopilot@v2.0.0) (2026-07-30)
+
+## Release Notes
+
+Expert review in autopilot planning is now an optional step rather than a mandatory gate, giving you full control over when the review panel runs.
+
+## ✨ What's New
+
+### Optional Expert Review in Planning
+
+The `/autopilot:plan` skill no longer runs expert review automatically as part of every planning session. By default, planning completes without the review panel — keeping the workflow fast for routine work. When you want the deeper multi-perspective critique, pass `--experts-review` explicitly to invoke the panel on demand.
+
+The `linear:plan` variant also stores plans unconditionally now, meaning every completed plan is written to Linear regardless of any score threshold — no more plans silently discarded because they didn't clear the bar.
+
+<details><summary>Related issues</summary>
+
+- [#521: Make expert review optional in the plan skill via an --experts-review flag](https://github.com/awinogradov/code-assistants/issues/521)
+- [#522: Make expert review an optional enhancement in autopilot planning](https://github.com/awinogradov/code-assistants/pull/522)
+</details>
+
+## ⚠️ Breaking Changes
+
+### Expert Review No Longer Gates Planning
+
+Previously, every `/autopilot:plan` run passed through the expert review panel, had to reach a score of 98/100, and was allowed up to three revision passes before it could proceed. All of that gating is removed. Plans are accepted as-is without a minimum score or a retry budget. If your workflows or downstream scripts depended on the plan being held until it hit the 98-point threshold, that behaviour is gone.
+
+**What to do:** If you still want expert review on a plan, add `--experts-review` when invoking the skill. No other action is needed for teams happy to skip the panel.
+
+### Plan Score Line Format Changed
+
+The recorded score line written by the planning pipeline has a new format. Any tooling, scripts, or log parsers that read plan output will need to be updated.
+
+**Before:**
+```
+Score: <N>/100
+```
+
+**After:**
+```
+Score: <N>/100 · weakest: <dimension>
+```
+
+### `linear:plan` Stores Plans Unconditionally
+
+`linear:plan` previously required a passing score before writing a plan to Linear and performed an `ExitPlanMode` transition on completion. Both behaviours are removed — plans are now stored immediately upon completion with no score check and no mode transition. If your Linear workflows relied on the `ExitPlanMode` event to trigger downstream automation, those triggers will no longer fire.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #521 | [#522](https://github.com/awinogradov/code-assistants/pull/522) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **plan:** expert review no longer gates planning. plan skips it unless --experts-review is passed; linear:plan stores plans unconditionally with no ExitPlanMode and no score check; the 98 scoring target and three-pass revision budget are removed from the shared pipeline; the recorded score line format changed to `Score: <N>/100 · weakest: <dimension>`.
+
+Entire-Checkpoint: 4a56f00741be
+
+### Features
+
+* **plan:** make expert review an ungated opt-in step ([df68875](https://github.com/awinogradov/code-assistants/commit/df68875fb7862277a99a61f902714cb12046e8c6))
 ## [1.19.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.18.0...autopilot@v1.19.0) (2026-07-30)
 
 ## Release Notes
