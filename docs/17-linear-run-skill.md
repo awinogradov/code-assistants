@@ -87,6 +87,17 @@ The stored plan records the tree it was drafted against in `Base:`. This skill c
 
 That is a deliberate asymmetry with [`run-primed`](./15-run-primed-skill.md#the-validation-contract), which treats a stale base as a rejecting verdict. The two artifacts fail differently. A context brief describes what the repository _is_, so a stale one is actively misleading — it would have the consumer reason about code that changed. A stored plan describes what to _do_; drift makes it possibly-outdated, not wrong. And this skill's one promise is to follow the plan without changes, so a blocking staleness check would contradict the contract it is built on. Judging whether the drift matters is the reader's call, and the report is what makes that call possible.
 
+Two reports make that call possible, because a SHA alone cannot:
+
+| Report         | Question it answers                                                      |
+| -------------- | ------------------------------------------------------------------------ |
+| Revision drift | has the tree moved since the plan was drafted?                           |
+| Path drift     | did it move underneath _this_ plan — are the files it names still there? |
+
+Revision drift tells you the repository changed; it says nothing about whether the change touched anything this plan cares about. Path drift answers that directly, by checking every path in the stored `### Files` list against the checkout. Entries the plan marked `(new)` are skipped — the plan template uses that suffix for files it intends to create, so they are absent by design.
+
+This repository has already moved paths in ways that would matter: documentation chapters are positioned by number and have been renumbered wholesale, and skill prose was relocated into `references/` subdirectories. Without the check, a plan stored before either change fails partway through execution, on a step that reads as broken rather than as outdated. With it, the reader sees the specific paths that vanished before the first edit — and when nothing has moved, the report says so, because silence would be indistinguishable from the check not running.
+
 ## Where context comes from
 
 The stored plan supplies the work; the Context Map supplies the repository:

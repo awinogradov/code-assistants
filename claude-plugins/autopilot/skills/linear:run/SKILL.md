@@ -124,7 +124,20 @@ On any verdict other than **valid**, stop with the matching message and do not f
 
 Each message names the skill that would fix it. **Never invoke that skill automatically** — a silent re-plan discards the human review the stored plan represents and replaces it with an unreviewed one, while looking like success. That is precisely the outcome this skill exists to make visible.
 
-Finally, compare the plan's `Base:` against `git rev-parse origin/main`. When they differ, report `Stored plan was drafted against <base>; origin/main is now <current>` and continue. This is advisory and never a verdict.
+Finally, report how far the plan has aged. Both checks below are advisory and never a verdict — they inform the reader, they do not stop the run.
+
+**Revision drift.** Compare the plan's `Base:` against `git rev-parse origin/main`. When they differ, report `Stored plan was drafted against <base>; origin/main is now <current>`.
+
+**Path drift.** Check each path named in the stored `### Files` list against the checkout, and report the ones that are gone: `Stored plan names <n> path(s) that no longer exist: <paths>`. Say so explicitly when every path resolves, because silence is indistinguishable from the check not running.
+
+Two entry shapes need handling before the existence test, and getting either wrong reports every file as missing:
+
+- **Strip a trailing `:<line>`.** The plan template writes an existing file as `` `path/to/file.ts:NN` ``, which is a location rather than a path — test `path/to/file.ts`, not the whole token.
+- **Skip anything marked `(new)`.** The template uses that suffix for files the plan intends to create, so they are absent by design.
+
+Reporting either shape as drift would cry wolf on every plan, which costs more than the check is worth.
+
+A `Base:` SHA says the tree moved; it does not say whether it moved underneath _this_ plan. The `### Files` list is the plan's own statement of what it expects to touch, so checking it is what turns "possibly stale" into a specific answer — and a step that would otherwise fail mid-run, in a session with no latitude to improvise, becomes something the reader can weigh before the first edit.
 
 Set task 2 to `completed`.
 

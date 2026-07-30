@@ -148,6 +148,38 @@ describe("linear plan contract", () => {
     expect(linearPlan).toContain("emit the full plan text into the transcript");
   });
 
+  test.each([
+    ["revision", "Stored plan was drafted against"],
+    ["path", "path(s) that no longer exist"],
+  ])("linear:run reports %s drift", (_label, needle) => {
+    expect(linearRun).toContain(needle);
+  });
+
+  test("both drift reports stay advisory rather than becoming verdicts", () => {
+    const [, drift = ""] = linearRun.split("report how far the plan has aged");
+    expect(drift).toContain("advisory and never a verdict");
+    // A drift report must not be smuggled in as a sixth rejecting verdict.
+    for (const verdict of rejectingVerdicts) {
+      expect(`drift section names ${verdict}: ${drift.includes(`**${verdict}**`)}`).toBe(
+        `drift section names ${verdict}: false`,
+      );
+    }
+  });
+
+  /**
+   * Both carve-outs guard the same failure: the plan template stores an existing file as
+   * `path/to/file.ts:NN` and a planned one with a `(new)` suffix, so a literal existence
+   * test on the raw entry reports every file as missing — the cry-wolf outcome that would
+   * make the report worthless.
+   */
+  test.each([
+    ["files it intends to create", "absent by design"],
+    ["a trailing line number", "Strip a trailing"],
+  ])("the path check handles %s", (_label, needle) => {
+    const [, drift = ""] = linearRun.split("**Path drift.**");
+    expect(drift).toContain(needle);
+  });
+
   test("the unchanged callers state no threshold of their own", () => {
     for (const [name, source] of [
       ["plan", plan],
