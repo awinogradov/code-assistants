@@ -179,15 +179,23 @@ Every TypeScript workspace member (actions and packages) declares its scripts in
 
 Specialised script types as the project grows — e.g., `test:unit`, `test:integration`, `test:e2e`, `bench`, `start` — should be added per-member only when there is a reason to run them in isolation (the default `bun test` already covers everything under `src/`). Mirror the Turbo task graph if you add a name that should be cache-aware.
 
+### Why the `test` task takes markdown as an input
+
+Turbo's `test` inputs include `$TURBO_ROOT$` globs for `claude-plugins/`, `docs/`, `rfc/`, `rules/`, and the root `README.md` and `CONTRIBUTING.md`. That looks wrong for a TypeScript task and is deliberate.
+
+Most of what `code-review-action`'s tests guard is prose, not code: `linkResolution` walks every markdown file under the skills, agents, `docs/` and `rfc/` and checks each link and heading anchor resolves; `sharedRulesInvocation` discovers skills by `readdir`; and the producer/consumer guards parse `SKILL.md` templates. Those files are outside the package, so without the root globs a docs-only change is a cache hit — `turbo run test` reports `FULL TURBO`, no test executes, and the change that was most likely to break a guard is the one that never ran it. `turbo.json` is strict JSON with no comment support, which is why the reasoning lives here.
+
+The globs are root-relative because Turbo resolves plain `inputs` against the package directory; `docs/**` inside a member would mean that member's own `docs/`. Over-invalidation is the intended direction of error: a markdown change re-runs all eleven members' tests, which costs a few seconds, whereas under-invalidation silently skips the guards.
+
 ### Turbo task graph
 
 `turbo.json` defines three tasks. Each task runs only in workspace members that declare the matching `package.json` script — there is no global config to update when you add a new member.
 
-| Task        | `inputs`                                                                 | Cached?             |
-| ----------- | ------------------------------------------------------------------------ | ------------------- |
-| `typecheck` | `action.yml`, `*.ts`, `src/**/*.ts`, `tsconfig.json`, `package.json`     | Yes                 |
-| `test`      | `*.ts`, `src/**/*.ts`, `tsconfig.json`, `package.json` (no `action.yml`) | Yes                 |
-| `clean`     | _none_                                                                   | No (`cache: false`) |
+| Task        | `inputs`                                                                                                                                                                             | Cached?             |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------- |
+| `typecheck` | `action.yml`, `*.ts`, `src/**/*.ts`, `tsconfig.json`, `package.json`                                                                                                                 | Yes                 |
+| `test`      | `*.ts`, `src/**/*.ts`, `tsconfig.json`, `package.json` (no `action.yml`), plus `$TURBO_ROOT$` globs for `claude-plugins/`, `docs/`, `rfc/`, `rules/`, `README.md`, `CONTRIBUTING.md` | Yes                 |
+| `clean`     | _none_                                                                                                                                                                               | No (`cache: false`) |
 
 `action.yml` is intentionally excluded from `test` inputs — changes to action metadata invalidate `typecheck` but not the test cache. If you add a task that needs cache-aware action-metadata sensitivity, include `action.yml` in its `inputs`.
 
