@@ -450,6 +450,7 @@ claude-plugins/
     lib/
       linear/
         fetch-issue.mjs
+        fetch-team-members.mjs
         linearClient.mjs
     skills/
       ascii-schemas/
@@ -40826,7 +40827,7 @@ Entire-Checkpoint: 4a56f00741be
 ---
 name: analyze-pr-commits
 description: Analyze branch commits, diff, and the linked GitHub or Linear issue for PR context. Use when pr:create or pr:update needs pre-computed context without polluting parent conversation.
-tools: Bash, MCP(linear:*)
+tools: Bash
 model: sonnet
 ---
 
@@ -40868,7 +40869,13 @@ If the fetch flag is `true` and an issue identifier is provided, fetch by provid
   gh issue view <ISSUE-NUMBER> -R <REPO> --json title,body,state
   ```
 
-- **Linear** (provider is `linear`): call `mcp__plugin_autopilot_linear__get_issue` with `{ "id": "<ISSUE-ID>" }` and read `title`, `description`, `state.name`, and `url` — the issue URL is what `pr:create`/`pr:update` put after the `Closes` magic word per [RFC-0001](../../../rfc/0001-reference-formatting.md).
+- **Linear** (provider is `linear`): run the bundled GraphQL helper and read `title`, `description`, `status`, and `url` from its JSON stdout — the issue URL is what `pr:create`/`pr:update` put after the `Closes` magic word per [RFC-0001](../../../rfc/0001-reference-formatting.md):
+
+  ```bash
+  LINEAR_API_KEY="$LINEAR_API_KEY" node "${CLAUDE_PLUGIN_ROOT}/lib/linear/fetch-issue.mjs" "<ISSUE-ID>"
+  ```
+
+  `${CLAUDE_PLUGIN_ROOT}` is the plugin root Claude Code provides to plugin components; if it is unset, the caller passes an absolute `Linear helper path` to use instead.
 
 If the call fails, skip issue context — do not abort.
 
@@ -41532,7 +41539,7 @@ Emit the raw object, not the fenced form. Set `resolveError` to `null` (not the 
 ---
 name: resolve-assignees
 description: Resolve candidate assignees for an issue from CODEOWNERS and Linear team members, with the current Linear user first. Use when a creation skill needs an assignee picklist without polluting parent context.
-tools: Bash, MCP(linear:*)
+tools: Bash
 model: sonnet
 ---
 
@@ -41541,7 +41548,7 @@ You are an assignee resolver. Gather candidate assignees from the repository's C
 **Constraints:**
 
 - For **GitHub**/CODEOWNERS data, use ONLY the `gh` CLI and file reads.
-- For **Linear** data, use ONLY the session's connected Linear MCP server, matching tools by name — the suffix after the final `__` (`list_users`, `get_user`) — under whatever prefix is available to you (the bundled `mcp__plugin_autopilot_linear__*` or a user-configured Linear server such as `mcp__linear-server__*`); never `npx`/`curl`/`npm`.
+- For **Linear** data, use ONLY the bundled GraphQL helper keyed by `LINEAR_API_KEY` — never `npx`/`curl`/`npm`.
 - All variable interpolations into shell commands MUST be double-quoted.
 
 ## Input
@@ -41560,13 +41567,19 @@ Read the CODEOWNERS file from the first location that exists: `.github/CODEOWNER
 
 Best-effort throughout — never fail the whole resolution over a Linear hiccup; on any error skip the affected step, record the reason in `notes`, and fall back to whatever candidates you have (the CODEOWNERS list alone if needed).
 
-1. **Team members.** List the team's members with `list_users` scoped to the team (`{ "team": "<team>" }`). Each becomes a `{ "name", "source": "linear", "id" }` candidate.
-2. **Current user.** Resolve the authenticated caller with `get_user` (`{ "query": "me" }`) and read their `id` and `name`.
-3. **Put the caller first.** When the current user resolves, they MUST end up at candidate index 0:
+1. **Fetch members and the current user** in one call to the bundled GraphQL helper. It prints `{ "me", "members", "resolveError" }` — `me` is the API-key user (`id`, `name`, `displayName`), `members` the team's active members — and always exits 0, printing a degraded shape with a non-null `resolveError` (e.g. `unresolved — LINEAR_API_KEY unset`) on failure:
+
+   ```bash
+   LINEAR_API_KEY="$LINEAR_API_KEY" node "${CLAUDE_PLUGIN_ROOT}/lib/linear/fetch-team-members.mjs" "<team>"
+   ```
+
+   `${CLAUDE_PLUGIN_ROOT}` is the plugin root Claude Code provides to plugin components; if it is unset, the caller passes an absolute `Linear helper path` to use instead. On a non-null `resolveError`, record it in `notes` and continue with the CODEOWNERS candidates alone. Each member becomes a `{ "name", "source": "linear", "id" }` candidate.
+
+2. **Put the caller first.** When `me` resolves, they MUST end up at candidate index 0:
    - If a listed member's `id` equals the caller's `id`, set `"self": true` on that candidate and move it to the front.
    - Otherwise prepend a new `{ "name": "<caller name>", "source": "linear", "id": "<caller id>", "self": true }` candidate — the caller may file against a team they do not belong to.
 
-   Match on the Linear `id` only, so a CODEOWNERS candidate (`id: null`) is never mistaken for the caller. If the `get_user` lookup is unavailable or errors, skip this step (leave every candidate without a `self` flag) and record the reason in `notes`.
+   Match on the Linear `id` only, so a CODEOWNERS candidate (`id: null`) is never mistaken for the caller. If `me` is null, skip this step (leave every candidate without a `self` flag) and record the reason in `notes`.
 
 ## Phase 3: Output
 
@@ -41602,17 +41615,17 @@ Emit the raw object, not the fenced form.
 <file path="claude-plugins/autopilot/agents/resolve-issue-context.md">
 ---
 name: resolve-issue-context
-description: Fetch issue context from GitHub (gh) or Linear (MCP, with a GraphQL fallback) and optionally auto-assign the current user (idempotent, opt-in via caller flag). Use when commands need structured issue data without polluting parent context.
-tools: Bash, MCP(linear:*)
+description: Fetch issue context from GitHub (gh) or Linear (bundled GraphQL helper keyed by LINEAR_API_KEY) and optionally auto-assign the current user (idempotent, opt-in via caller flag). Use when commands need structured issue data without polluting parent context.
+tools: Bash
 model: sonnet
 ---
 
-You are an issue context resolver. Fetch issue data from **GitHub** (via the `gh` CLI) or **Linear** (via the `mcp__plugin_autopilot_linear__*` tools, falling back to a bundled GraphQL helper) and return a structured summary. When the caller opts in, also auto-assign the authenticated user to the issue (idempotently; GitHub only). Do not output intermediate steps — only the final structured block.
+You are an issue context resolver. Fetch issue data from **GitHub** (via the `gh` CLI) or **Linear** (via the bundled GraphQL helper keyed by `LINEAR_API_KEY`) and return a structured summary. When the caller opts in, also auto-assign the authenticated user to the issue (idempotently; GitHub only). Do not output intermediate steps — only the final structured block.
 
 **Constraints:**
 
 - For **GitHub** issues, use ONLY the `gh` CLI for issue operations.
-- For **Linear** issues, prefer the `mcp__plugin_autopilot_linear__*` tools; use the bundled GraphQL helper only as a fallback, and never `npx`/`curl`/`npm`.
+- For **Linear** issues, use ONLY the bundled GraphQL helper — never `npx`/`curl`/`npm`.
 - All variable interpolations into shell commands MUST be double-quoted (`"$NUMBER"`, `"$REPO"`, `"$LOGIN"`).
 
 ## Input
@@ -41639,18 +41652,15 @@ ISSUE_JSON=$(gh issue view "$NUMBER" -R "$REPO" --json title,body,comments,label
 
 ### Linear
 
-Use the **Linear ID** from the prompt. Try the MCP server first, then the bundled GraphQL helper, then degrade — and skip [Phase 2](#phase-2-auto-assign-current-user-opt-in) (Linear is read-only here; set `assignee` to `null`).
+Use the **Linear ID** from the prompt. Run the bundled GraphQL helper — it is the only Linear read path — and skip [Phase 2](#phase-2-auto-assign-current-user-opt-in) (Linear is read-only here; set `assignee` to `null`).
 
-1. **MCP (preferred).** Call `mcp__plugin_autopilot_linear__get_issue` with `{ "id": "<Linear ID>" }`, then `mcp__plugin_autopilot_linear__list_comments` with `{ "issueId": "<Linear ID>", "orderBy": "createdAt" }`. Map the fields to the [Phase 3](#phase-3-output) contract (see the Linear field mapping there).
-2. **GraphQL fallback.** If the Linear MCP tools are unavailable (server not connected) or return an auth/permission error, run the bundled helper. It prints the [Phase 3](#phase-3-output) JSON object directly (including `resolveError` on failure), so pass its stdout through unchanged:
+1. **GraphQL helper.** It prints the [Phase 3](#phase-3-output) JSON object directly (including `resolveError` on failure, e.g. `unresolved — LINEAR_API_KEY unset`), so pass its stdout through unchanged:
 
    ```bash
    LINEAR_API_KEY="$LINEAR_API_KEY" node "${CLAUDE_PLUGIN_ROOT}/lib/linear/fetch-issue.mjs" "<Linear ID>"
    ```
 
    `${CLAUDE_PLUGIN_ROOT}` is the plugin root Claude Code provides to plugin components; if it is unset, the caller passes an absolute `Linear helper path` to use instead.
-
-3. **Degrade.** If MCP is unavailable AND `$LINEAR_API_KEY` is unset, emit the degraded object with `status: "unresolved"`, data fields null/empty, and `resolveError: "unresolved — Linear MCP unavailable and LINEAR_API_KEY unset"`.
 
 ## Phase 2: Auto-Assign Current User (opt-in)
 
@@ -41720,12 +41730,12 @@ Output ONLY a single JSON object matching the schema below — no preamble, no s
 | `status`       | string            | Issue state — GitHub `"OPEN"`/`"CLOSED"`, or the Linear workflow state (e.g. `"In Progress"`, `"Done"`)                                                                                 |
 | `labels`       | string[]          | Label names; empty array when none                                                                                                                                                      |
 | `assignee`     | string \| null    | The [Phase 2](#phase-2-auto-assign-current-user-opt-in) status string when [Phase 2](#phase-2-auto-assign-current-user-opt-in) ran; `null` for read-only callers, and `null` for Linear |
-| `url`          | string \| null    | The issue's web URL — GitHub `url` from `gh issue view`, Linear `url` from `get_issue`/the GraphQL helper; `null` when unavailable. Callers build reference links from it (RFC-0001)    |
+| `url`          | string \| null    | The issue's web URL — GitHub `url` from `gh issue view`, Linear `url` from the GraphQL helper; `null` when unavailable. Callers build reference links from it (RFC-0001)                |
 | `description`  | string            | Issue body                                                                                                                                                                              |
 | `comments`     | object[]          | `{ "author": string, "date": string, "body": string }` per comment; empty when none                                                                                                     |
 | `resolveError` | string \| null    | Linear only; `null` (or omitted) on success, a short reason when the Linear issue could not be resolved                                                                                 |
 
-**Linear field mapping** (provider is Linear): `source` → `"Linear <identifier>"`; `issueId` → the string identifier (e.g. `"ENG-123"`); `status` → the workflow `state.name`; `labels` → label names; `url` → the issue `url`; `description` → the issue description; `comments` → each Linear comment as `{ author, date, body }`; `assignee` → `null`. The GraphQL fallback helper already emits exactly this shape, so on fallback pass its stdout through unchanged.
+**Linear field mapping** (provider is Linear): `source` → `"Linear <identifier>"`; `issueId` → the string identifier (e.g. `"ENG-123"`); `status` → the workflow `state.name`; `labels` → label names; `url` → the issue `url`; `description` → the issue description; `comments` → each Linear comment as `{ author, date, body }`; `assignee` → `null`. The GraphQL helper already emits exactly this shape, so pass its stdout through unchanged.
 
 Example:
 
@@ -41750,11 +41760,11 @@ Emit the raw object, not the fenced form. Set `assignee` to `null` (not the stri
 ---
 name: scan-and-analyze-todos
 description: Scan codebase for TODO/FIXME comments and analyze their GitHub or Linear issue status. Use when todo-cleanup needs scan + analysis without polluting parent context.
-tools: Grep, Bash, MCP(linear:*)
+tools: Grep, Bash
 model: sonnet
 ---
 
-You are a TODO scanner and analyzer. Grep-scan the codebase for TODO/FIXME comments, check linked GitHub issue statuses via `gh` (or Linear ticket statuses via the Linear MCP), and return categorized results. Do not output intermediate steps — only the final structured block.
+You are a TODO scanner and analyzer. Grep-scan the codebase for TODO/FIXME comments, check linked GitHub issue statuses via `gh` (or Linear ticket statuses via the bundled GraphQL helper), and return categorized results. Do not output intermediate steps — only the final structured block.
 
 ## Input
 
@@ -41791,7 +41801,7 @@ For each match, extract:
 
 ## Phase 3: Analyze Issue Status
 
-For a **Linear** project (provider is `linear`), check a referenced ticket with `mcp__plugin_autopilot_linear__get_issue` instead of `gh issue view`: a `state.name` of `Done` or `Canceled` is **stale**, any other state is **linked** (or **needs link** when the `@see` is missing). The GitHub buckets below apply otherwise.
+For a **Linear** project (provider is `linear`), check a referenced ticket with the bundled GraphQL helper instead of `gh issue view` — `LINEAR_API_KEY="$LINEAR_API_KEY" node "${CLAUDE_PLUGIN_ROOT}/lib/linear/fetch-issue.mjs" "<ID>"` (`${CLAUDE_PLUGIN_ROOT}` is the plugin root Claude Code provides; if unset, the caller passes an absolute `Linear helper path`): a `status` of `Done` or `Canceled` is **stale**, any other state is **linked** (or **needs link** when the `@see` is missing). The GitHub buckets below apply otherwise.
 
 Categorize each TODO into buckets:
 
@@ -41906,9 +41916,9 @@ When no matches are found, emit `{ "todos": [], "total": 0 }`. Emit the raw obje
 
 <file path="claude-plugins/autopilot/lib/linear/fetch-issue.mjs">
 #!/usr/bin/env node
-// Headless/CI fallback that fetches a Linear issue and prints the
-// resolve-issue-context JSON contract to stdout. Invoked by the
-// resolve-issue-context agent only when the Linear MCP server is unavailable.
+// Fetches a Linear issue and prints the resolve-issue-context JSON contract
+// to stdout. Invoked by the resolve-issue-context agent — the plugin bundles
+// no Linear MCP server, so this helper is that agent's only Linear read path.
 //
 // Usage:  LINEAR_API_KEY=lin_api_xxx node fetch-issue.mjs ENG-123
 //
@@ -41967,6 +41977,48 @@ async function main() {
 process.stdout.write(JSON.stringify(await main()));
 </file>
 
+<file path="claude-plugins/autopilot/lib/linear/fetch-team-members.mjs">
+#!/usr/bin/env node
+// Fetches a Linear team's members plus the current (API-key) user and prints
+// the resolve-assignees member contract to stdout. Invoked by the
+// resolve-assignees agent — the plugin bundles no Linear MCP server, so this
+// helper is that agent's only Linear read path.
+//
+// Usage:  LINEAR_API_KEY=lin_api_xxx node fetch-team-members.mjs ENG
+//
+// Always exits 0 and always prints a single JSON object: on any failure it
+// prints the degraded shape with a non-null `resolveError`, so the caller can
+// degrade to CODEOWNERS instead of failing the picklist.
+
+import { createLinearClient } from "./linearClient.mjs";
+
+const degraded = (error) => ({ me: null, members: [], resolveError: error });
+
+async function main() {
+  const team = process.argv[2];
+  const apiKey = process.env.LINEAR_API_KEY;
+
+  if (!team) return degraded("unresolved — no Linear team key provided");
+  if (!apiKey) return degraded("unresolved — LINEAR_API_KEY unset");
+
+  try {
+    const result = await createLinearClient(apiKey).fetchTeamMembers(team);
+    if (!result) return degraded(`unresolved — Linear team ${team} not found`);
+
+    return {
+      me: result.viewer,
+      members: result.members.filter((member) => member.active !== false),
+      resolveError: null,
+    };
+  } catch (error) {
+    const detail = error.cause ? ` (${Object.values(error.cause).join(" ")})` : "";
+    return degraded(`unresolved — ${error.message}${detail}`);
+  }
+}
+
+process.stdout.write(JSON.stringify(await main()));
+</file>
+
 <file path="claude-plugins/autopilot/lib/linear/linearClient.mjs">
 // Zero-dependency Linear GraphQL client for the autopilot plugin.
 //
@@ -41975,8 +42027,8 @@ process.stdout.write(JSON.stringify(await main()));
 // comments so the output matches the resolve-issue-context JSON contract. Uses the
 // global `fetch` (Node 18+), so there is no install step and no dependency tree.
 //
-// Used only as a headless/CI fallback when the Linear MCP server is unavailable;
-// interactive sessions go through mcp__plugin_autopilot_linear__* instead.
+// The plugin bundles no Linear MCP server, so this client is the agents' only
+// Linear read path (interactive and headless/CI alike), keyed by LINEAR_API_KEY.
 
 const linearApiUrl = "https://api.linear.app/graphql";
 
@@ -41994,41 +42046,62 @@ const issueQuery = `
   }
 `;
 
+const teamMembersQuery = `
+  query TeamMembers($team: String!) {
+    viewer { id name displayName }
+    teams(filter: { key: { eq: $team } }) {
+      nodes { members { nodes { id name displayName active } } }
+    }
+  }
+`;
+
 /**
  * Create a Linear API client.
  *
  * @param {string} apiKey - Linear API key (starts with `lin_api_`).
- * @returns {{ fetchIssue: (id: string) => Promise<object|null> }}
+ * @returns {{ fetchIssue: (id: string) => Promise<object|null>, fetchTeamMembers: (team: string) => Promise<object|null> }}
  */
 export function createLinearClient(apiKey) {
+  const query = async (queryText, variables) => {
+    const response = await fetch(linearApiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: apiKey,
+      },
+      body: JSON.stringify({ query: queryText, variables }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Linear API request failed", {
+        cause: { status: response.status, statusText: response.statusText },
+      });
+    }
+
+    const result = await response.json();
+    const firstError = result.errors?.[0];
+    if (firstError) {
+      const { message } = firstError;
+      if (message.includes("not found") || message.includes("Entity not found")) {
+        return null;
+      }
+      throw new Error("Linear API returned a GraphQL error", { cause: { message } });
+    }
+
+    return result.data ?? null;
+  };
+
   return {
     async fetchIssue(id) {
-      const response = await fetch(linearApiUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: apiKey,
-        },
-        body: JSON.stringify({ query: issueQuery, variables: { id } }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Linear API request failed", {
-          cause: { status: response.status, statusText: response.statusText },
-        });
-      }
-
-      const result = await response.json();
-      const firstError = result.errors?.[0];
-      if (firstError) {
-        const { message } = firstError;
-        if (message.includes("not found") || message.includes("Entity not found")) {
-          return null;
-        }
-        throw new Error("Linear API returned a GraphQL error", { cause: { message } });
-      }
-
-      return result.data?.issue ?? null;
+      const data = await query(issueQuery, { id });
+      return data?.issue ?? null;
+    },
+    async fetchTeamMembers(team) {
+      const data = await query(teamMembersQuery, { team });
+      // An unknown team key yields an empty nodes array, not a GraphQL error.
+      const teamNode = data?.teams?.nodes?.[0];
+      if (!teamNode) return null;
+      return { viewer: data?.viewer ?? null, members: teamNode.members?.nodes ?? [] };
     },
   };
 }
@@ -52551,7 +52624,7 @@ Output ONLY a single JSON object matching the schema below — no preamble, no s
 
 ### Linear MCP access
 
-**Linear MCP access:** Linear operations here use the session's connected Linear MCP server, matching tools by name — the suffix after the final `__` — under whatever server prefix the session exposes: the bundled `mcp__plugin_autopilot_linear__*` or a user-configured Linear server such as `mcp__linear-server__*` (Claude Code connects one server per endpoint; a user-scope server shadows the bundled one). The prefix must identify a Linear server (a `linear` server name or the `mcp.linear.app` endpoint) — never bind a generic tool name like `get_issue` to a non-Linear MCP. If a tool is not visible, search for it with ToolSearch by bare tool name before concluding it is absent. Only when no Linear MCP tool resolves under any prefix, stop and tell the user: `No Linear MCP available — check /mcp for a disconnected or unauthenticated Linear server, or connect one: claude mcp add --transport http linear https://mcp.linear.app/mcp`.
+**Linear MCP access:** Linear operations here use the session's connected Linear MCP server, matching tools by name — the suffix after the final `__` — under whatever server prefix the session exposes (e.g. `mcp__linear__*` or `mcp__linear-server__*`). The plugin bundles no Linear server; the server is always user- or project-configured at the consumer level. The prefix must identify a Linear server (a `linear` server name or the `mcp.linear.app` endpoint) — never bind a generic tool name like `get_issue` to a non-Linear MCP. If a tool is not visible, search for it with ToolSearch by bare tool name before concluding it is absent. Only when no Linear MCP tool resolves under any prefix, stop and tell the user: `No Linear MCP available — check /mcp for a disconnected or unauthenticated Linear server, or connect one: claude mcp add --transport http linear https://mcp.linear.app/mcp`.
 
 **The tool list is caller-supplied.** Each invoking skill names the bare tool names it needs — `linear:create` uses `save_issue`, `list_issue_statuses`, `list_issue_labels`; `branch:create` uses `get_issue`, `list_issue_statuses`, `save_issue`. The resolution rule above is identical whichever set applies.
 
@@ -53183,10 +53256,6 @@ Before writing any output that mentions a file, standard, section, commit, or is
     "wiretext": {
       "command": "npx",
       "args": ["-y", "@wiretext/mcp@0.3.3"]
-    },
-    "linear": {
-      "type": "http",
-      "url": "https://mcp.linear.app/mcp"
     }
   }
 }
@@ -55277,7 +55346,7 @@ Configure in `.mcp.json` at plugin root:
 }
 ```
 
-The plugin ships two servers: `wiretext` (ASCII wireframes) and `linear` (`https://mcp.linear.app/mcp`, OAuth) for Linear issue tracking when a project lists a `linear` entry in `agents.trackers`. The Linear read path falls back to a bundled zero-dependency GraphQL helper (`lib/linear/`) keyed by `LINEAR_API_KEY` for headless/CI. See [Linear tracker support](../../docs/11-linear-tracker.md).
+The plugin ships one server: `wiretext` (ASCII wireframes). Linear connectivity is consumer-level: interactive skills use a user- or project-configured Linear MCP server (`claude mcp add --transport http linear https://mcp.linear.app/mcp`), while agents and headless runs use a bundled zero-dependency GraphQL helper (`lib/linear/`) keyed by `LINEAR_API_KEY`. See [Linear tracker support](../../docs/11-linear-tracker.md).
 
 ### Versioning
 
@@ -57133,22 +57202,22 @@ The three tracker branches converge on the single [`resolve-issue-context`](#the
 
 Reading an issue never prompts — the id's key prefix already names the team. Creating or listing does, because the team is not given by an id: when two or more `linear` trackers are configured, [`linear:create`](../claude-plugins/autopilot/skills/linear:create/SKILL.md), [`issue:run`](../claude-plugins/autopilot/skills/issue:run/SKILL.md), and [`todo-cleanup`](../claude-plugins/autopilot/skills/todo-cleanup/SKILL.md) ask once via `AskUserQuestion` which team to file on or browse, then proceed against the chosen team. A single `linear` tracker auto-selects with no prompt, so existing one-team repos are unchanged.
 
-## Access paths: MCP first, GraphQL fallback
+## Access paths: consumer MCP for skills, GraphQL helper for agents
 
-Autopilot reaches Linear two ways:
+Autopilot reaches Linear two ways — the plugin bundles no Linear MCP server of its own:
 
-- **Linear MCP server (interactive).** The plugin ships a `linear` server in [`.mcp.json`](../claude-plugins/autopilot/.mcp.json) (`https://mcp.linear.app/mcp`, OAuth). Interactive sessions call the connected Linear MCP server's tools — the bundled `mcp__plugin_autopilot_linear__*` prefix, or a user-configured Linear server such as `mcp__linear-server__*`, which shadows the bundled one when it points at the same endpoint (Claude Code connects one server per endpoint) — no secrets to manage.
-- **GraphQL helper (headless/CI).** Where the OAuth flow cannot run, a bundled zero-dependency helper — [`fetch-issue.mjs`](../claude-plugins/autopilot/lib/linear/fetch-issue.mjs) (Node 18+, global `fetch`, no install step) — calls the Linear GraphQL API keyed by `LINEAR_API_KEY` and prints the same JSON contract as the MCP path.
+- **Consumer-configured Linear MCP server (skills).** Interactive skills call the session's connected Linear MCP server — user- or project-configured, e.g. `claude mcp add --transport http linear https://mcp.linear.app/mcp` — matching tools by name under whatever server prefix the session exposes (see [`linear-mcp-access.md`](../claude-plugins/autopilot/skills/shared-rules/references/linear-mcp-access.md)). When no Linear server is connected, the skill stops with a `No Linear MCP available …` message instead of guessing.
+- **GraphQL helper (agents, headless/CI).** Sub-agents never call MCP tools for Linear: a bundled zero-dependency helper — [`fetch-issue.mjs`](../claude-plugins/autopilot/lib/linear/fetch-issue.mjs) for issue reads, [`fetch-team-members.mjs`](../claude-plugins/autopilot/lib/linear/fetch-team-members.mjs) for member listing (Node 18+, global `fetch`, no install step) — calls the Linear GraphQL API keyed by `LINEAR_API_KEY`. The key is therefore required for every agent Linear read, interactive sessions included, not only headless/CI runs.
 
 ## The single resolution seam
 
-Every issue read flows through the [`resolve-issue-context`](../claude-plugins/autopilot/agents/resolve-issue-context.md) agent, which returns a **provider-agnostic** JSON object (`source`, `issueId`, `title`, `status`, `labels`, `assignee`, `description`, `comments`). For Linear it tries the MCP tools, falls back to the GraphQL helper, then degrades with a non-null `resolveError` that the caller surfaces before stopping. Because `plan`, `run`, and every other consumer read that JSON — never raw tracker output — GitHub and Linear share one downstream code path; only this agent and the input-detection rows are provider-aware. `issueId` is a number for GitHub and the string identifier (e.g. `"ENG-123"`) for Linear.
+Every issue read flows through the [`resolve-issue-context`](../claude-plugins/autopilot/agents/resolve-issue-context.md) agent, which returns a **provider-agnostic** JSON object (`source`, `issueId`, `title`, `status`, `labels`, `assignee`, `description`, `comments`). For Linear it runs the GraphQL helper, which degrades with a non-null `resolveError` (e.g. when `LINEAR_API_KEY` is unset) that the caller surfaces before stopping. Because `plan`, `run`, and every other consumer read that JSON — never raw tracker output — GitHub and Linear share one downstream code path; only this agent and the input-detection rows are provider-aware. `issueId` is a number for GitHub and the string identifier (e.g. `"ENG-123"`) for Linear.
 
 ## Branches and pull requests
 
 Once a Linear ticket is resolved, the write path mirrors the GitHub flow with Linear identifiers:
 
-- **Branch** — [`branch:create`](../claude-plugins/autopilot/skills/branch:create/SKILL.md) builds `<team>-<n>-<slug>` (the ticket id lowercased, e.g. `ENG-123` → `eng-123-add-auth`) instead of GitHub's `issue-<n>-<slug>`. Passing `--start` also moves the ticket to "In Progress" (best-effort) via the Linear MCP `list_issue_statuses` + `save_issue` tools.
+- **Branch** — [`branch:create`](../claude-plugins/autopilot/skills/branch:create/SKILL.md) builds `<team>-<n>-<slug>` (the ticket id lowercased, e.g. `ENG-123` → `eng-123-add-auth`) instead of GitHub's `issue-<n>-<slug>`. Passing `--start` also moves the ticket to "In Progress" (best-effort) via the consumer-configured Linear MCP server's `list_issue_statuses` + `save_issue` tools.
 - **Pull request** — [`pr:create`](../claude-plugins/autopilot/skills/pr:create/SKILL.md) and [`pr:update`](../claude-plugins/autopilot/skills/pr:update/SKILL.md) detect the provider from the branch shape, prefix the title with the uppercase id (`ENG-123: <description>`) so the ticket shows in the PR list, and put the magic word with the plain Linear issue URL (`Closes https://linear.app/<workspace>/issue/ENG-123`, or `Part of` / `Related to`) in the `**Issues:**` section — a bare Linear id is dead text on GitHub, while the URL form is both [Linear-parseable](https://linear.app/docs/github#linking-linear-issues-to-github-prs) and GitHub-clickable ([RFC-0001](../rfc/0001-reference-formatting.md)); the bare id is the fallback when no URL is resolvable. GitHub branches keep their business-only title and `Closes #N`.
 - **Done on merge** — a Linear ticket auto-closes on merge only when the [GitHub↔Linear integration](https://linear.app/docs/github) is configured for the repository; otherwise the magic word is a tracked reference.
 
@@ -57171,7 +57240,7 @@ The shared CI gates accept both conventions: the branch-name and semantic-PR-tit
 
 - **Create** — [`linear:create`](../claude-plugins/autopilot/skills/linear:create/SKILL.md) is the Linear counterpart to `issue:create`: it generates the same five-section body (Context/What/Why/Scope/Solution), then a short wizard picks the workflow status (`list_issue_statuses`), labels (`list_issue_labels`, pre-selecting the `agents.trackers` repo label), and an assignee, and creates the ticket with `save_issue`. Above the five sections it prepends the user's original prompt verbatim in a collapsed section, using Linear's `+++ … +++` collapsible fence (the [GraphQL markdown form](https://linear.app/developers/graphql), not `<details>` HTML, which Linear does not render), so the ticket keeps the exact request beside its structured interpretation.
 - **List and run** — [`issue:run`](../claude-plugins/autopilot/skills/issue:run/SKILL.md) lists the team's recent open tickets via `list_issues` (instead of `gh issue list`) and hands the chosen `TEAM-123` identifier to `autopilot:run`.
-- **Assignees** — the [`resolve-assignees`](../claude-plugins/autopilot/agents/resolve-assignees.md) agent gathers candidates from CODEOWNERS and the Linear team's members, resolves the current Linear user (`get_user "me"`), and returns that user first so self-assign is the default; Linear member listing is best-effort and degrades to CODEOWNERS when the MCP user-list tool is unavailable.
+- **Assignees** — the [`resolve-assignees`](../claude-plugins/autopilot/agents/resolve-assignees.md) agent gathers candidates from CODEOWNERS and the Linear team's members via [`fetch-team-members.mjs`](../claude-plugins/autopilot/lib/linear/fetch-team-members.mjs), which also resolves the current (API-key) user, and returns that user first so self-assign is the default; Linear member listing is best-effort and degrades to CODEOWNERS when the helper reports a `resolveError`.
 
 ## TODO links and issue state
 
