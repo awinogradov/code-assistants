@@ -1,0 +1,29 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "11bfb7150922",
+  "strategy": "manual-commit",
+  "branch": "issue-502-check-stored-plan-paths",
+  "checkpoints_count": 2,
+  "files_touched": [
+    ".github/actions/code-review-action/src/linearPlanContract.test.ts",
+    "claude-plugins/autopilot/skills/linear:run/SKILL.md",
+    "docs/17-linear-run-skill.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/11/bfb7150922/0/metadata.json",
+      "transcript": "/11/bfb7150922/0/full.jsonl",
+      "compact_transcript": "/11/bfb7150922/0/transcript.jsonl",
+      "content_hash": "/11/bfb7150922/0/content_hash.txt",
+      "prompt": "/11/bfb7150922/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 30,
+    "cache_creation_tokens": 15671,
+    "cache_read_tokens": 10602728,
+    "output_tokens": 9806,
+    "api_call_count": 15
+  }
+}

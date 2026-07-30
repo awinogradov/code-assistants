@@ -1,0 +1,17 @@
+<task-notification>
+<task-id>bm3ncmh98</task-id>
+<tool-use-id>toolu_018wsttVKECSuLxHYs7FC7z7</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-chamisa-badger/a0f2285c-709e-4de2-9866-569a01e1e104/tasks/bm3ncmh98.output</output-file>
+<status>completed</status>
+<summary>Background command "Wait for PR 507 re-verdict after force-push" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>banovwe33</task-id>
+<tool-use-id>toolu_018csf8NWgcq8ABEs4rajSfe</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-chamisa-badger/a0f2285c-709e-4de2-9866-569a01e1e104/tasks/banovwe33.output</output-file>
+<status>completed</status>
+<summary>Background command "Wait for a review on the current HEAD SHA" completed (exit code 0)</summary>
+</task-notification>
