@@ -104,7 +104,7 @@ Aggregate what survives:
 
 3. **Report honestly.** If the plan still scores below 98 once the budget is spent, record the actual score and name the weak dimension in the plan. Never inflate a score to clear the target.
 
-   What follows a below-threshold score depends on the caller, so it is stated here rather than assumed. `plan`, `run`, and `run-primed` proceed on the recorded score: their plan is approved or authorized in the same session that drafted it, and the human reading it is the backstop. `linear:plan` does not proceed — it emits the plan to the transcript and stores nothing, because a stored plan can be executed later by a session that never saw the score, so the score has to be the gate instead of the reader.
+   What follows a below-threshold score depends on the caller, so it is stated here rather than assumed. `plan`, `run`, `run-primed`, and the fresh-plan path in `linear:run` proceed on the recorded score: their plan is approved or authorized in the same session that drafted it, and the human reading it is the backstop. `linear:plan` does not proceed — it emits the plan to the transcript and stores nothing, because a stored plan can be executed later by a session that never saw the score, so the score has to be the gate instead of the reader.
 
 Do not include raw expert JSON in the plan output.
 
