@@ -44466,7 +44466,9 @@ All five sections are written, because a human reading the ticket should see the
    - **No anchor, description non-empty** — wrap the entire current description in a `+++ Original task +++` collapsible, then append the new block below it.
    - **No anchor, description empty** — write the block alone. Do not emit an empty collapsible.
 
-   Linear renders `+++ Section title` … `+++` as an initially-hidden section; `<details>` HTML does not render, which is why the fence is the only option. A description written by [`linear:create`](../linear:create/SKILL.md) already opens with its own `+++ Original prompt +++` fence, so wrapping nests one fence inside another. That is accepted deliberately — see [Linear tracker support](../../../../docs/11-linear-tracker.md).
+   Linear renders `+++ Section title` … `+++` as an initially-hidden section; `<details>` HTML does not render, which is why the fence is the only option. A description written by [`linear:create`](../linear:create/SKILL.md) already opens with its own `+++ Original prompt +++` fence, so wrapping nests one fence inside another — which Linear renders correctly, verified against a real ticket ([Linear tracker support](../../../../docs/11-linear-tracker.md)).
+
+   **Match the anchor, never the fence.** Linear rewrites `+++ Title … +++` to `>>> Title … >>>` when it saves, so a description read back never contains the marker as written. Detect a prior store by the `## Implementation plan` heading, which survives the round-trip untouched; matching on `+++` would report every re-store as a first store and stack a second wrapper.
 
 3. **Verify the preserved prefix.** Before writing, confirm the text above the anchor is byte-identical to what step 1 read. If it differs, abort with `Refusing to write: the preserved part of the description changed` and store nothing. Silently reformatting someone's original task text is the worst outcome available here, and it is unrecoverable.
 
@@ -56262,7 +56264,8 @@ Linear is the one tracker autopilot writes a **plan** to, not just a branch name
 Three properties of that write are worth knowing here, because they are Linear-specific rather than incidental:
 
 - **The store is anchored, not append-only.** It replaces from the `## Implementation plan` line to the end of the description and leaves everything above byte-identical, so re-planning the same ticket updates the plan instead of stacking copies. It aborts rather than write if the preserved prefix changed under it — silently reformatting a hand-written ticket body is the one unrecoverable outcome available.
-- **The prior description moves into a `+++ Original task +++` collapsible** on the first store, using the same fence [`linear:create`](../claude-plugins/autopilot/skills/linear:create/SKILL.md) uses for its original-prompt preamble. A ticket created by that skill therefore ends up with one collapsible nested inside another. This is accepted deliberately; Linear's [GraphQL markdown documentation](https://linear.app/developers/graphql) describes the fence without specifying nesting behaviour.
+- **The prior description moves into a `+++ Original task +++` collapsible** on the first store, using the same fence [`linear:create`](../claude-plugins/autopilot/skills/linear:create/SKILL.md) uses for its original-prompt preamble. A ticket created by that skill therefore ends up with one collapsible nested inside another, which Linear renders correctly — verified against a real ticket, with the inner section independently collapsible inside the outer one. See [the `linear:plan` skill](./16-linear-plan-skill.md#how-the-write-works) for what was observed.
+- **Linear rewrites the fence on save.** A description written with `+++ Title … +++` comes back from the API as `>>> Title … >>>`; both are accepted on input and `>>>` is the canonical stored form. Anything matching a fetched description against a literal `+++` will miss. This is why the stored-plan write anchors on the `## Implementation plan` heading, which survives the round-trip, rather than on the fence marker.
 - **The write is gated on the plan's score, not on the tracker.** Below the shared pipeline's threshold, `linear:plan` emits the plan to the transcript and stores nothing, because a stored plan may later be executed by a session that never saw the score.
 
 Everything else on this page applies unchanged: the plan is read back through the same [resolution seam](#the-single-resolution-seam), and the branch and pull-request conventions above are what `linear:run` uses once the plan is loaded.
@@ -56876,7 +56879,19 @@ The three metadata fields each earn their place:
 
 Anchoring on `## Implementation plan` rather than on the collapsible is what makes a re-store idempotent: the wrapper is created once and never stacked, because the second store matches the anchor and never reaches the wrapping branch.
 
-Linear renders `+++ Section title` … `+++` as an initially-hidden section, and `<details>` HTML does not render at all, so the fence is the only option. A description written by [`linear:create`](../claude-plugins/autopilot/skills/linear:create/SKILL.md) already opens with its own `+++ Original prompt +++` fence, so wrapping nests one inside the other. That is accepted deliberately; Linear's [GraphQL markdown documentation](https://linear.app/developers/graphql) describes the fence without specifying nesting behaviour.
+Linear renders `+++ Section title` … `+++` as an initially-hidden section, and `<details>` HTML does not render at all, so the fence is the only option. A description written by [`linear:create`](../claude-plugins/autopilot/skills/linear:create/SKILL.md) already opens with its own `+++ Original prompt +++` fence, so wrapping nests one inside the other.
+
+**All three store cases were observed rather than assumed.** Linear's [GraphQL markdown documentation](https://linear.app/developers/graphql) describes the fence without saying whether it nests, so the behaviour was exercised against a real ticket:
+
+| Case                           | Observed                                                                                                                                                                                                                        |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| First store, nested fence      | The outer section renders collapsed as `▶ Original task`; expanding it reveals a nested, independently collapsible `▶ Original prompt` beside the rest of the original body, with `## Implementation plan` outside at top level |
+| Re-store on the same ticket    | Exactly one `Original task` wrapper survives, the preserved prefix comes back byte-identical, and only the plan below the anchor is replaced                                                                                    |
+| First store, empty description | The plan is written alone — no empty collapsible appears, because there was nothing to preserve                                                                                                                                 |
+
+**Linear normalizes the fence on save, and that trips up anything that reads a description back.** Text written as `+++ Title … +++` is stored and returned by the API as `>>> Title … >>>`. Both forms are accepted on input; `>>>` is the canonical stored form. So a check that greps a fetched description for a literal `+++` finds nothing, even though the collapsible is there. The same round-trip rewrites other markdown too — `_italic_` becomes `*italic*`, `-` bullets become `*`.
+
+That normalization is exactly why the store anchors on the `## Implementation plan` heading rather than on the wrapper. A re-store locates the anchor, which survives the round-trip unchanged, so it is unaffected by the fence being rewritten underneath it — and the "never stacks a second wrapper" property holds for the same reason.
 
 ## The score gates the write, not the plan
 
