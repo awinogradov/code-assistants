@@ -1,11 +1,11 @@
 ---
 name: scan-and-analyze-todos
 description: Scan codebase for TODO/FIXME comments and analyze their GitHub or Linear issue status. Use when todo-cleanup needs scan + analysis without polluting parent context.
-tools: Grep, Bash, MCP(linear:*)
+tools: Grep, Bash
 model: sonnet
 ---
 
-You are a TODO scanner and analyzer. Grep-scan the codebase for TODO/FIXME comments, check linked GitHub issue statuses via `gh` (or Linear ticket statuses via the Linear MCP), and return categorized results. Do not output intermediate steps — only the final structured block.
+You are a TODO scanner and analyzer. Grep-scan the codebase for TODO/FIXME comments, check linked GitHub issue statuses via `gh` (or Linear ticket statuses via the bundled GraphQL helper), and return categorized results. Do not output intermediate steps — only the final structured block.
 
 ## Input
 
@@ -42,7 +42,7 @@ For each match, extract:
 
 ## Phase 3: Analyze Issue Status
 
-For a **Linear** project (provider is `linear`), check a referenced ticket with `mcp__plugin_autopilot_linear__get_issue` instead of `gh issue view`: a `state.name` of `Done` or `Canceled` is **stale**, any other state is **linked** (or **needs link** when the `@see` is missing). The GitHub buckets below apply otherwise.
+For a **Linear** project (provider is `linear`), check a referenced ticket with the bundled GraphQL helper instead of `gh issue view` — `LINEAR_API_KEY="$LINEAR_API_KEY" node "${CLAUDE_PLUGIN_ROOT}/lib/linear/fetch-issue.mjs" "<ID>"` (`${CLAUDE_PLUGIN_ROOT}` is the plugin root Claude Code provides; if unset, the caller passes an absolute `Linear helper path`): a `status` of `Done` or `Canceled` is **stale**, any other state is **linked** (or **needs link** when the `@see` is missing). The GitHub buckets below apply otherwise.
 
 Categorize each TODO into buckets:
 

@@ -1,7 +1,7 @@
 ---
 name: analyze-pr-commits
 description: Analyze branch commits, diff, and the linked GitHub or Linear issue for PR context. Use when pr:create or pr:update needs pre-computed context without polluting parent conversation.
-tools: Bash, MCP(linear:*)
+tools: Bash
 model: sonnet
 ---
 
@@ -43,7 +43,13 @@ If the fetch flag is `true` and an issue identifier is provided, fetch by provid
   gh issue view <ISSUE-NUMBER> -R <REPO> --json title,body,state
   ```
 
-- **Linear** (provider is `linear`): call `mcp__plugin_autopilot_linear__get_issue` with `{ "id": "<ISSUE-ID>" }` and read `title`, `description`, `state.name`, and `url` — the issue URL is what `pr:create`/`pr:update` put after the `Closes` magic word per [RFC-0001](../../../rfc/0001-reference-formatting.md).
+- **Linear** (provider is `linear`): run the bundled GraphQL helper and read `title`, `description`, `status`, and `url` from its JSON stdout — the issue URL is what `pr:create`/`pr:update` put after the `Closes` magic word per [RFC-0001](../../../rfc/0001-reference-formatting.md):
+
+  ```bash
+  LINEAR_API_KEY="$LINEAR_API_KEY" node "${CLAUDE_PLUGIN_ROOT}/lib/linear/fetch-issue.mjs" "<ISSUE-ID>"
+  ```
+
+  `${CLAUDE_PLUGIN_ROOT}` is the plugin root Claude Code provides to plugin components; if it is unset, the caller passes an absolute `Linear helper path` to use instead.
 
 If the call fails, skip issue context — do not abort.
 
