@@ -1,0 +1,118 @@
+/autopilot:run I still see experts review in linear plan skill. It must optional via flag but this step exists by default. Check recent changes and hotfix it.
+rebase on fresh main first.
+
+---
+
+<task-notification>
+<task-id>a0bc7c359a74fe47e</task-id>
+<tool-use-id>toolu_01M8MoUzZVQrrr19URb2a8V9</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-tortoise-coulee/960cadf0-695a-41fa-8f5d-581932433aa1/tasks/a0bc7c359a74fe47e.output</output-file>
+<status>completed</status>
+<summary>Agent "Expert review: Pre-mortem" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>{
+  "expertRole": "Pre-mortem Analyst",
+  "score": 87,
+  "dimensions": {
+    "alignment": 18,
+    "completeness": 17,
+    "typeSafety": 18,
+    "testability": 16,
+    "simplicity": 19
+  },
+  "verdict": "approved",
+  "findings": [
+    "Failure narrative 1 — silent review-coverage collapse: six months out, most linear:plan invocations omit the flag, so unreviewed plans accumulate on tickets by default (storing stays unconditional with no approval step per step 4), and linear:run explicitly never re-reviews (linear:run/SKILL.md:186 wording the plan itself strengthens to 'a score or an explicit skip — never re-assessed'). A bad unreviewed plan gets executed and nobody can point to a gate that should have caught it. Early warning sign: rising fraction of stored plans carrying 'Score: skipped'. Mitigation: step 4 already surfaces the skip in the stored header and final output, which is the right partial mitigation; consider making the final-output skip line an explicit prominent warning rather than a status field, so the invoking user consciously accepts the tradeoff.",
+    "Failure narrative 2 — the dropped invariant is a contract change, not just prose: 'a skipped score never reaches a stored artifact' currently guarantees every stored plan carries a numeric score. After this change, any consumer that assumes stored ⇒ scored (linear:run's header handling, humans triaging tickets, and downstream repos that receive these skills verbatim via sync per prior project experience with fortune-os/symbiot) can mis-handle 'skipped'. The plan updates the two known wording sites (linear:run/SKILL.md:186, docs/17:116) but adds no test asserting the exact stored-header skip format or that linear:run's contract text accepts an explicit skip. Early warning sign: a linear:run session stalling on or re-reviewing a skipped-score plan. Mitigation: add a contract assertion pinning the full stored skip line and the linear:run 'score or explicit skip' acceptance wording.",
+    "Failure narrative 3 — skip-line needle drift: step 3 changes the skip line text (dropping 'plan invoked without' for 'invoked without'), and the Context Map shows linearPlanContract.test.ts pins 'Score: skipped'. Whether the test pins the full old line or only the prefix is unverifiable from the excerpt: if the full line, step 6 must update that needle too (the plan enumerates property 6, the gates test, argument-hint, and the does-not-claim list, but not the skip-line needle explicitly) — a miss is caught early as a red test; if only the prefix, the tail wording is unguarded and can silently drift between pipeline.md and the two SKILL.md restatements over the next six months. Mitigation: state in step 6 that the test pins the complete new skip line, once, and both callers reference it rather than restating it.",
+    "Failure narrative 4 — anchor-rename stragglers outside the enumerated sweep: the excerpt names exactly two referencers of #mode-flags-plan-only (plan/SKILL.md:53, pipeline.md:65), and the plan's safety net is 'no refs remain' plus the linkResolution test. That holds only if linkResolution's coverage spans every reference site (unverifiable here beyond the excerpt; prior project experience says it skips node_modules); a stale anchor in a file outside its scan or in a downstream-synced copy would surface months later as a dead link. Severity is low because the plan's grep-style verify in step 1 is the real guard. Mitigation: make the step-1 verify an explicit repo-wide grep for the old anchor string, not just the two known sites."
+  ],
+  "grounding": [
+    "plan text",
+    "Context Map excerpt: relevant files (pipeline.md rule/skip-line/producer-naming lines, input-detection.md anchor, linearPlanContract.test.ts pinned needles, linear:run/SKILL.md:186, docs 05/16/17), test conventions",
+    "session memory (MEMORY.md): downstream verbatim skill sync (fortune-os/symbiot), linkResolution skips node_modules, skill edits activate on merge for CI consumers"
+  ],
+  "revision": {
+    "changed": "Step 4/6: add a contract assertion pinning the exact new stored-header skip line (full text, single source referenced by both callers) and extend step 5's verify to assert linear:run's 'a score or an explicit skip — never re-assessed' wording; step 1: make the anchor verify an explicit repo-wide grep for #mode-flags-plan-only.",
+    "rescore": 91
+  }
+}</result>
+<usage><subagent_tokens>19185</subagent_tokens><tool_uses>0</tool_uses><duration_ms>65056</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>ad026900ca865482e</task-id>
+<tool-use-id>toolu_015EPdfbp1TRbuy5Ajb5Ad8P</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-tortoise-coulee/960cadf0-695a-41fa-8f5d-581932433aa1/tasks/ad026900ca865482e.output</output-file>
+<status>completed</status>
+<summary>Agent "Expert review: Bun Engineer" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>{
+  "expertRole": "Principal Bun/NodeJS Engineer",
+  "score": 82,
+  "dimensions": {
+    "alignment": 17,
+    "completeness": 15,
+    "typeSafety": 18,
+    "testability": 15,
+    "simplicity": 17
+  },
+  "verdict": "needs-revision",
+  "findings": [
+    "The conditionality-paragraph rewrite (step 3) threatens two pinned needles the plan never mentions preserving: linearPlanContract pins pipeline containing 'not a gate for any caller' and expertReviewContract pins 'never a gate'. Both plausibly live in or near the paragraph being rewritten at pipeline.md:65, and the planned edit list (rename skippers, shorten skip line, drop the tail claim) is silent on whether these exact strings survive. If the rewrite rephrases them, two contract tests go red; the plan must state these needles verbatim as preserved text.",
+    "The 'Format: v1' producer/consumer agreement test between linear:plan and linear:run is not addressed. Step 4 adds a 'Score: skipped' variant to the stored header linear:plan produces and step 5 makes linear:run's consumption wording skip-aware, but step 6's test updates (header property 6, needle swap, argument-hint test.each, does-not-claim removal) never mention the Format v1 agreement test. If that test pins matching header-format strings across both files, changing the header on one side without updating the pin breaks it — the plan is unverifiable on this point and should explicitly confirm or update that test.",
+    "The retained negative test.each (linear:run, run, run-primed must NOT contain '--experts-review') constrains step 5's wording, but the plan only sketches it as 'a score or an explicit skip'. If the skip-aware sentence at linear:run/SKILL.md:186 or the docs/17:116 edit names the flag to explain WHY a skip occurred (the natural phrasing, mirroring pipeline's '(invoked without --experts-review)'), the negative pin breaks. The plan should commit to flag-free wording for every file remaining on the does-not-claim list.",
+    "Coverage gap on the new invariant itself: step 6 pins that linear:plan ADVERTISES the flag (argument-hint test.each) but no listed test pins the skip BEHAVIOR — that linear:plan stores 'Score: skipped' in the header/final output when the flag is absent. 'Header property 6' may be this pin, but the plan doesn't say what it asserts, so the central new behavior may ship prose-only. Minor stacked concerns: the docs/05:193 edit (step 7) sits in a file where expertReviewContract pins 'discarded rather than averaged' and 'weakest dimension' — the edit must not touch those lines; and any linkResolution-checked referrer to #mode-flags-plan-only beyond the two named files (e.g. a new reference added by step 4's Phase 0 parse) must use the renamed #mode-flags anchor."
+  ],
+  "grounding": [
+    "plan text",
+    "Context Map excerpt: linearPlanContract.test.ts pinned strings, expertReviewContract.test.ts pinned strings, planned pipeline.md edits"
+  ],
+  "revision": {
+    "changed": "State verbatim in step 3 that the rewritten conditionality paragraph retains 'not a gate for any caller' and 'never a gate'; add an explicit step confirming or updating the Format: v1 agreement test for the 'Score: skipped' header variant; pin the flag-free wording for linear:run/docs/17 in step 5; specify what header property 6 asserts (ideally the 'Score: skipped' skip-store pin for linear:plan).",
+    "rescore": 91
+  }
+}</result>
+<usage><subagent_tokens>18755</subagent_tokens><tool_uses>0</tool_uses><duration_ms>55143</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>ac6f94e27212cab1a</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-tortoise-coulee/960cadf0-695a-41fa-8f5d-581932433aa1/tasks/ac6f94e27212cab1a.output</output-file>
+<status>completed</status>
+<summary>Agent "Expert review: Tech Writer" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>{
+  "expertRole": "Boring Tech Writer",
+  "score": 76,
+  "dimensions": {
+    "alignment": 16,
+    "completeness": 13,
+    "typeSafety": 15,
+    "testability": 15,
+    "simplicity": 17
+  },
+  "verdict": "needs-revision",
+  "findings": [
+    "Incomplete coverage of the stale-rule inventory: the Context Map lists linear:plan/SKILL.md:115 ('This skill runs the review unconditionally — the stored ticket should carry the panel's assessment') as a restatement, but step 4's enumerated edits (argument-hint, description, Input bullet, Phase 0, Phase 3, header, final output) never name that sentence. Unless it happens to sit inside Phase 3, this exact line survives the edit and contradicts the new opt-in rule — the plan should list every stale sentence it rewrites, line by line, since the whole point of the change is that no restatement of 'always reviews' remains.",
+    "The skipped stored-header string is unspecified: step 3 fixes the pipeline's skip line verbatim ('Score: skipped · expert review disabled (invoked without --experts-review)'), but step 4 only says the stored header and final output 'document the Score: skipped variant'. The header template is 'Format: v1 · Score: &lt;N&gt;/100 · Base: &lt;sha&gt; · Stored by /autopilot:linear-plan' — a parseable artifact consumed by linear:run and pinned by tests. The plan must give the exact replacement string (e.g., 'Score: skipped') or two skills will drift on the one line that must match.",
+    "Step 5's 'become skip-aware' hides an undecided semantic, not just a wording change: linear:run/SKILL.md:186 and docs/17:116 currently justify 'no second expert review' by 'the producer's scored pipeline already finalized the stored artifact'. Once a stored ticket can carry Score: skipped, that justification is false — the plan does not say whether linear:run still runs no review (executing an unscored plan) or triggers one. The docs rewrite cannot be drafted until that decision is stated; as written the plan asks the writer to paper over an open question.",
+    "Anchor-rename ripple is asserted, not verified: step 2 updates exactly two referrers (plan/SKILL.md:53, pipeline.md:65) to #mode-flags after renaming 'Mode flags (`plan` only)'. Nothing in the plan or excerpt establishes these are the only links to the old anchor across docs/05, docs/16, and both linear skills — the plan is unverifiable on this point and should add an explicit grep sweep (and rely on the linkResolution guard) rather than a fixed two-item list.",
+    "Minor prose risks stacked: (a) the current frontmatter description's 'Storing is unconditional' claim remains TRUE after this change (only the review becomes opt-in) — step 4's 'description mentions opt-in review' must not delete the storing-unconditional guarantee along with the review-unconditional one; (b) no step commits the rewritten docs/05, docs/16 prose to RFC-0001 formatting (the new --experts-review mentions should link to the mode-flags section, not appear as bare text), and edited .md files need a prettier check per repo convention."
+  ],
+  "grounding": [
+    "plan text",
+    "Context Map excerpt: stale-rule file/line inventory, stored-plan header template, RFC-0001 formatting rule"
+  ],
+  "revision": {
+    "changed": "Enumerate every stale sentence from the inventory as an explicit edit target (including linear:plan/SKILL.md:115); specify the exact skipped stored-header and final-output strings so pipeline.md, linear:plan, linear:run, and the contract test share one literal; state the linear:run decision for tickets stored with Score: skipped before rewriting docs/17; replace the fixed two-referrer anchor update with a grep sweep for the old anchor; add a note that rewritten prose keeps 'storing is unconditional', links per RFC-0001, and passes prettier --check on edited .md.",
+    "rescore": 91
+  }
+}</result>
+<usage><subagent_tokens>18746</subagent_tokens><tool_uses>0</tool_uses><duration_ms>68090</duration_ms></usage>
+</task-notification>
