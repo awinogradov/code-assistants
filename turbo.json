@@ -9,7 +9,18 @@
       "outputs": []
     },
     "test": {
-      "inputs": ["*.ts", "src/**/*.ts", "tsconfig.json", "package.json"],
+      "inputs": [
+        "*.ts",
+        "src/**/*.ts",
+        "tsconfig.json",
+        "package.json",
+        "$TURBO_ROOT$/claude-plugins/**/*.md",
+        "$TURBO_ROOT$/docs/**/*.md",
+        "$TURBO_ROOT$/rfc/**/*.md",
+        "$TURBO_ROOT$/rules/*.md",
+        "$TURBO_ROOT$/README.md",
+        "$TURBO_ROOT$/CONTRIBUTING.md"
+      ],
       "outputs": []
     },
     "clean": {
