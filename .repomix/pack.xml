@@ -130,6 +130,7 @@ The content is organized as follows:
         2.2.0.md
         2.3.0.md
         2.4.0.md
+        3.0.0.md
       src/
         github/
           githubReview.test.ts
@@ -433,6 +434,7 @@ claude-plugins/
       1.8.0.md
       1.8.1.md
       1.9.0.md
+      2.0.0.md
     agents/
       analyze-pr-commits.md
       analyze-staged-changes.md
@@ -5732,6 +5734,70 @@ This is particularly useful for straightforward issues or urgent tasks where the
 ### Features
 
 * **linear-run:** support issues without stored plans ([a090923](https://github.com/awinogradov/code-assistants/commit/a0909235d67bc840f1bf04a6a6336cd3d9bcd918))
+</file>
+
+<file path=".github/actions/code-review-action/.release_notes/3.0.0.md">
+## [3.0.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v2.4.0...code-review-action@v3.0.0) (2026-07-30)
+
+## Release Notes
+
+Expert review in autopilot planning is now an opt-in step rather than a required gate, and the scoring system that blocked plans from being stored has been removed entirely.
+
+## ✨ What's New
+
+### Expert Review as an Optional Enhancement
+
+The `/autopilot:plan` skill no longer requires an expert review panel to complete before a plan is accepted. Previously, planning ran a multi-expert review loop that had to reach a score of 98/100 across up to three revision passes before the plan could proceed — this gate is now gone. By default, planning runs straight through to completion without the expert panel. When you want the expert review layer, pass `--experts-review` to invoke it explicitly as an enhancement step, not a prerequisite.
+
+This makes planning significantly faster for everyday use while keeping the deeper review available on demand.
+
+<details><summary>Related issues</summary>
+
+- [#521: Make expert review optional in the plan skill via an --experts-review flag](https://github.com/awinogradov/code-assistants/issues/521)
+</details>
+
+## ⚠️ Breaking Changes
+
+### Expert Review No Longer Gates Planning
+
+The 98/100 score requirement and the three-pass revision budget have been removed from the planning pipeline. Any automation or workflow that relied on plans being held until they passed expert review scoring will need to be updated — plans now proceed immediately without that gate.
+
+To preserve the expert review step, update any calls to `/autopilot:plan` to include the `--experts-review` flag.
+
+### Plans Now Stored Unconditionally in `linear:plan`
+
+`linear:plan` previously only wrote a plan to Linear after a successful `ExitPlanMode` transition and a passing minimum score. Both conditions are removed — every plan run now stores its output unconditionally. If your integration assumed that a stored plan had cleared the review threshold, that assumption no longer holds.
+
+### Plan Score Line Format Changed
+
+The recorded score format has changed. Any tooling, dashboards, or scripts that parse the plan score output will need to be updated to match the new format.
+
+**Before:**
+```
+Score: <N>/100
+```
+
+**After:**
+```
+Score: <N>/100 · weakest: <dimension>
+```
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #521 | [#522](https://github.com/awinogradov/code-assistants/pull/522) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **plan:** expert review no longer gates planning. plan skips it unless --experts-review is passed; linear:plan stores plans unconditionally with no ExitPlanMode and no score check; the 98 scoring target and three-pass revision budget are removed from the shared pipeline; the recorded score line format changed to `Score: <N>/100 · weakest: <dimension>`.
+
+Entire-Checkpoint: 4a56f00741be
+
+### Features
+
+* **plan:** make expert review an ungated opt-in step ([df68875](https://github.com/awinogradov/code-assistants/commit/df68875fb7862277a99a61f902714cb12046e8c6))
 </file>
 
 <file path=".github/actions/code-review-action/src/github/githubReview.test.ts">
@@ -14569,6 +14635,67 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [3.0.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v2.4.0...code-review-action@v3.0.0) (2026-07-30)
+
+## Release Notes
+
+Expert review in autopilot planning is now an opt-in step rather than a required gate, and the scoring system that blocked plans from being stored has been removed entirely.
+
+## ✨ What's New
+
+### Expert Review as an Optional Enhancement
+
+The `/autopilot:plan` skill no longer requires an expert review panel to complete before a plan is accepted. Previously, planning ran a multi-expert review loop that had to reach a score of 98/100 across up to three revision passes before the plan could proceed — this gate is now gone. By default, planning runs straight through to completion without the expert panel. When you want the expert review layer, pass `--experts-review` to invoke it explicitly as an enhancement step, not a prerequisite.
+
+This makes planning significantly faster for everyday use while keeping the deeper review available on demand.
+
+<details><summary>Related issues</summary>
+
+- [#521: Make expert review optional in the plan skill via an --experts-review flag](https://github.com/awinogradov/code-assistants/issues/521)
+</details>
+
+## ⚠️ Breaking Changes
+
+### Expert Review No Longer Gates Planning
+
+The 98/100 score requirement and the three-pass revision budget have been removed from the planning pipeline. Any automation or workflow that relied on plans being held until they passed expert review scoring will need to be updated — plans now proceed immediately without that gate.
+
+To preserve the expert review step, update any calls to `/autopilot:plan` to include the `--experts-review` flag.
+
+### Plans Now Stored Unconditionally in `linear:plan`
+
+`linear:plan` previously only wrote a plan to Linear after a successful `ExitPlanMode` transition and a passing minimum score. Both conditions are removed — every plan run now stores its output unconditionally. If your integration assumed that a stored plan had cleared the review threshold, that assumption no longer holds.
+
+### Plan Score Line Format Changed
+
+The recorded score format has changed. Any tooling, dashboards, or scripts that parse the plan score output will need to be updated to match the new format.
+
+**Before:**
+```
+Score: <N>/100
+```
+
+**After:**
+```
+Score: <N>/100 · weakest: <dimension>
+```
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #521 | [#522](https://github.com/awinogradov/code-assistants/pull/522) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **plan:** expert review no longer gates planning. plan skips it unless --experts-review is passed; linear:plan stores plans unconditionally with no ExitPlanMode and no score check; the 98 scoring target and three-pass revision budget are removed from the shared pipeline; the recorded score line format changed to `Score: <N>/100 · weakest: <dimension>`.
+
+Entire-Checkpoint: 4a56f00741be
+
+### Features
+
+* **plan:** make expert review an ungated opt-in step ([df68875](https://github.com/awinogradov/code-assistants/commit/df68875fb7862277a99a61f902714cb12046e8c6))
 ## [2.4.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v2.3.0...code-review-action@v2.4.0) (2026-07-30)
 
 ## Release Notes
@@ -15917,12 +16044,18 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 ### Breaking changes
 
 - the consuming repo's PR quality-gate workflow must be named `PR` (name:
+
+## From 2.4.0 to 3.0.0
+
+### Breaking changes
+
+- expert review no longer gates planning. plan skips it unless --experts-review is passed; linear:plan stores plans unconditionally with no ExitPlanMode and no score check; the 98 scoring target and three-pass revision budget are removed from the shared pipeline; the recorded score line format changed to `Score: <N>/100 · weakest: <dimension>`.
 </file>
 
 <file path=".github/actions/code-review-action/package.json">
 {
   "name": "@code-assistants/code-review-action",
-  "version": "2.4.0",
+  "version": "3.0.0",
   "description": "Composite GitHub Action that runs AI code review on pull requests via Claude Code.",
   "private": true,
   "type": "module",
@@ -15958,7 +16091,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/README.md">
 # Code review action
 
-[![GitHub Release](https://img.shields.io/badge/release-v2.4.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v3.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that runs AI code review on pull requests using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Has two modes:
@@ -16142,7 +16275,7 @@ uses: awinogradov/code-assistants/.github/actions/code-review-action@v1
 </file>
 
 <file path=".github/actions/code-review-action/version">
-2.4.0
+3.0.0
 </file>
 
 <file path=".github/actions/code-review-cost-monitor/.release_notes/0.1.0.md">
@@ -39042,7 +39175,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "1.19.0",
+  "version": "2.0.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -40622,6 +40755,71 @@ Issues generated for GitHub and Linear now include as much context as the work a
 
 * **autopilot:** enter plan mode in plan skill ([8064b81](https://github.com/awinogradov/code-assistants/commit/8064b81560ae2eda762b4a30bde7808804a5ca6a))
 * **autopilot:** sharpen issue sections, drop size caps ([45e3401](https://github.com/awinogradov/code-assistants/commit/45e3401764a23908a42de246ee16b5b31a2fced8))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/2.0.0.md">
+## [2.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.19.0...autopilot@v2.0.0) (2026-07-30)
+
+## Release Notes
+
+Expert review in autopilot planning is now an optional step rather than a mandatory gate, giving you full control over when the review panel runs.
+
+## ✨ What's New
+
+### Optional Expert Review in Planning
+
+The `/autopilot:plan` skill no longer runs expert review automatically as part of every planning session. By default, planning completes without the review panel — keeping the workflow fast for routine work. When you want the deeper multi-perspective critique, pass `--experts-review` explicitly to invoke the panel on demand.
+
+The `linear:plan` variant also stores plans unconditionally now, meaning every completed plan is written to Linear regardless of any score threshold — no more plans silently discarded because they didn't clear the bar.
+
+<details><summary>Related issues</summary>
+
+- [#521: Make expert review optional in the plan skill via an --experts-review flag](https://github.com/awinogradov/code-assistants/issues/521)
+- [#522: Make expert review an optional enhancement in autopilot planning](https://github.com/awinogradov/code-assistants/pull/522)
+</details>
+
+## ⚠️ Breaking Changes
+
+### Expert Review No Longer Gates Planning
+
+Previously, every `/autopilot:plan` run passed through the expert review panel, had to reach a score of 98/100, and was allowed up to three revision passes before it could proceed. All of that gating is removed. Plans are accepted as-is without a minimum score or a retry budget. If your workflows or downstream scripts depended on the plan being held until it hit the 98-point threshold, that behaviour is gone.
+
+**What to do:** If you still want expert review on a plan, add `--experts-review` when invoking the skill. No other action is needed for teams happy to skip the panel.
+
+### Plan Score Line Format Changed
+
+The recorded score line written by the planning pipeline has a new format. Any tooling, scripts, or log parsers that read plan output will need to be updated.
+
+**Before:**
+```
+Score: <N>/100
+```
+
+**After:**
+```
+Score: <N>/100 · weakest: <dimension>
+```
+
+### `linear:plan` Stores Plans Unconditionally
+
+`linear:plan` previously required a passing score before writing a plan to Linear and performed an `ExitPlanMode` transition on completion. Both behaviours are removed — plans are now stored immediately upon completion with no score check and no mode transition. If your Linear workflows relied on the `ExitPlanMode` event to trigger downstream automation, those triggers will no longer fire.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #521 | [#522](https://github.com/awinogradov/code-assistants/pull/522) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **plan:** expert review no longer gates planning. plan skips it unless --experts-review is passed; linear:plan stores plans unconditionally with no ExitPlanMode and no score check; the 98 scoring target and three-pass revision budget are removed from the shared pipeline; the recorded score line format changed to `Score: <N>/100 · weakest: <dimension>`.
+
+Entire-Checkpoint: 4a56f00741be
+
+### Features
+
+* **plan:** make expert review an ungated opt-in step ([df68875](https://github.com/awinogradov/code-assistants/commit/df68875fb7862277a99a61f902714cb12046e8c6))
 </file>
 
 <file path="claude-plugins/autopilot/agents/analyze-pr-commits.md">
@@ -52999,6 +53197,68 @@ Before writing any output that mentions a file, standard, section, commit, or is
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [2.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.19.0...autopilot@v2.0.0) (2026-07-30)
+
+## Release Notes
+
+Expert review in autopilot planning is now an optional step rather than a mandatory gate, giving you full control over when the review panel runs.
+
+## ✨ What's New
+
+### Optional Expert Review in Planning
+
+The `/autopilot:plan` skill no longer runs expert review automatically as part of every planning session. By default, planning completes without the review panel — keeping the workflow fast for routine work. When you want the deeper multi-perspective critique, pass `--experts-review` explicitly to invoke the panel on demand.
+
+The `linear:plan` variant also stores plans unconditionally now, meaning every completed plan is written to Linear regardless of any score threshold — no more plans silently discarded because they didn't clear the bar.
+
+<details><summary>Related issues</summary>
+
+- [#521: Make expert review optional in the plan skill via an --experts-review flag](https://github.com/awinogradov/code-assistants/issues/521)
+- [#522: Make expert review an optional enhancement in autopilot planning](https://github.com/awinogradov/code-assistants/pull/522)
+</details>
+
+## ⚠️ Breaking Changes
+
+### Expert Review No Longer Gates Planning
+
+Previously, every `/autopilot:plan` run passed through the expert review panel, had to reach a score of 98/100, and was allowed up to three revision passes before it could proceed. All of that gating is removed. Plans are accepted as-is without a minimum score or a retry budget. If your workflows or downstream scripts depended on the plan being held until it hit the 98-point threshold, that behaviour is gone.
+
+**What to do:** If you still want expert review on a plan, add `--experts-review` when invoking the skill. No other action is needed for teams happy to skip the panel.
+
+### Plan Score Line Format Changed
+
+The recorded score line written by the planning pipeline has a new format. Any tooling, scripts, or log parsers that read plan output will need to be updated.
+
+**Before:**
+```
+Score: <N>/100
+```
+
+**After:**
+```
+Score: <N>/100 · weakest: <dimension>
+```
+
+### `linear:plan` Stores Plans Unconditionally
+
+`linear:plan` previously required a passing score before writing a plan to Linear and performed an `ExitPlanMode` transition on completion. Both behaviours are removed — plans are now stored immediately upon completion with no score check and no mode transition. If your Linear workflows relied on the `ExitPlanMode` event to trigger downstream automation, those triggers will no longer fire.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #521 | [#522](https://github.com/awinogradov/code-assistants/pull/522) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **plan:** expert review no longer gates planning. plan skips it unless --experts-review is passed; linear:plan stores plans unconditionally with no ExitPlanMode and no score check; the 98 scoring target and three-pass revision budget are removed from the shared pipeline; the recorded score line format changed to `Score: <N>/100 · weakest: <dimension>`.
+
+Entire-Checkpoint: 4a56f00741be
+
+### Features
+
+* **plan:** make expert review an ungated opt-in step ([df68875](https://github.com/awinogradov/code-assistants/commit/df68875fb7862277a99a61f902714cb12046e8c6))
 ## [1.19.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.18.0...autopilot@v1.19.0) (2026-07-30)
 
 ## Release Notes
@@ -54522,6 +54782,12 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
 ### Breaking changes
 
 - removed the parallel_fanout and review_model_overrides action inputs
+
+## From 1.19.0 to 2.0.0
+
+### Breaking changes
+
+- expert review no longer gates planning. plan skips it unless --experts-review is passed; linear:plan stores plans unconditionally with no ExitPlanMode and no score check; the 98 scoring target and three-pass revision budget are removed from the shared pipeline; the recorded score line format changed to `Score: <N>/100 · weakest: <dimension>`.
 </file>
 
 <file path="claude-plugins/autopilot/package.json">
@@ -54533,14 +54799,14 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
   "release": {
     "type": "claude-plugin"
   },
-  "version": "1.19.0"
+  "version": "2.0.0"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.19.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v2.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -55029,7 +55295,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-1.19.0
+2.0.0
 </file>
 
 <file path="docs/01-workspace-structure.md">
