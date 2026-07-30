@@ -190,7 +190,7 @@ The mechanics sit in the phase that runs them: [Phase 5](#phase-5--embed-branch-
 
 Expert review and scoring are **one step**. Experts are selected from the stack's expert table — always the Pre-mortem Analyst, plus 2–3 more by task scope — and launched as parallel `expert-review` sub-agents.
 
-The step is opt-in for `plan` alone: it runs only when the user passed `--experts-review`, because `plan`'s approval gate puts a human in front of the finished plan either way. Without the flag the plan file records `Score: skipped · expert review disabled (plan invoked without --experts-review)` — a line that names its producer, so its appearance in any other caller's output is drift, not a valid state. Every other caller runs the review unconditionally, which is why a skipped score never reaches a stored artifact.
+The step is opt-in for `plan` and [`linear:plan`](./16-linear-plan-skill.md): each runs it only when the user passed `--experts-review` — `plan` because its approval gate puts a human in front of the finished plan either way, `linear:plan` because the teammate reading the stored ticket is that human. Without the flag the plan file records `Score: skipped · expert review disabled (invoked without --experts-review)` — a single literal, so its appearance in `run`, `run-primed`, or `linear:run` output is drift, not a valid state. The `run` family runs the review unconditionally because no human re-reads its plans; a skipped score can reach a stored ticket, where it tells the reader the plan is unreviewed.
 
 Each reviewer receives a **Context Map excerpt** alongside the plan text. A reviewer with no view of the repository infers file contents, and an invented finding costs more than a missing one.
 

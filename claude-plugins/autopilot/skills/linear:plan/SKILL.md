@@ -1,7 +1,7 @@
 ---
 name: linear:plan
-description: Plan a Linear issue exactly as the plan skill does, then store the finished plan in that issue's description so it outlives the session. Storing is unconditional — the review score is recorded on the ticket as information, never used as a gate.
-argument-hint: "<Linear issue (ENG-123 or a Linear issue URL)>"
+description: Plan a Linear issue exactly as the plan skill does, expert-reviewed when --experts-review is passed, then store the finished plan in that issue's description so it outlives the session. Storing is unconditional — the recorded score or skip is information on the ticket, never used as a gate.
+argument-hint: "<Linear issue (ENG-123 or a Linear issue URL)> [--experts-review]"
 allowed-tools:
   - TaskCreate
   - TaskUpdate
@@ -36,6 +36,7 @@ Arguments: `$ARGUMENTS`
 Expected form:
 
 - `<Linear issue>` — a Linear identifier such as `ENG-123`, or a Linear issue URL.
+- `<Linear issue> --experts-review` — run the expert review-and-score step; without this flag that step is skipped and the skip is recorded in the stored `Score:` field.
 
 Additional free-form context may follow (e.g. `ENG-123 start with the adapter`).
 
@@ -72,7 +73,7 @@ $ARGUMENTS
 
 Create the 6 tasks, then set task 1 to `in_progress`.
 
-Detect the input type and id per [input-detection.md](../plan/references/input-detection.md) — the detection table and its tracker gating. Skip that file's create-issue flags section; it is plan-only. Detection is pure string matching and performs **no I/O**.
+First parse and strip `--experts-review` per the mode-flags pre-step in [input-detection.md](../plan/references/input-detection.md#mode-flags): present ⇒ the pipeline's review step runs; absent ⇒ it is skipped and the skip is recorded in the stored `Score:` field. Then detect the input type and id per [input-detection.md](../plan/references/input-detection.md) — the detection table and its tracker gating. Skip that file's create-issue flags section; it is plan-only. Detection is pure string matching and performs **no I/O**.
 
 Then resolve all three gate conditions **before** [Phase 1](#phase-1-gather-context). They run up front because the alternative is paying a full context fan-out and an expert review before discovering the plan has nowhere to go:
 
@@ -112,7 +113,7 @@ The [**Plan file is output, not instructions**](../plan/SKILL.md#plan-file-is-ou
 
 ## Phase 3: Draft, review, and finalize
 
-Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft (task 3), review and score (task 4), finalize (task 5) — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md). This skill runs the review unconditionally — the stored ticket should carry the panel's assessment — and the recorded score gates nothing: whatever the number says, continue straight to the store. Do not add a separate approval step, a plan-mode transition, or a score check between finalize and the write.
+Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft (task 3), review and score (task 4), finalize (task 5) — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md). Carry the `--experts-review` resolution from [Phase 0](#phase-0-resolve-input-and-gate) into the pipeline: the review step runs only when the flag was passed. Whatever the recorded outcome — a score or a skip — it gates nothing: continue straight to the store. Do not add a separate approval step, a plan-mode transition, or a score check between finalize and the write.
 
 ## Phase 4: Store the plan on the issue
 
@@ -138,7 +139,7 @@ Section names are the plan file's own, demoted from `##` to `###`, so mapping a 
 
 All five sections are written, because a human reading the ticket should see the whole plan. The two marked caller-owned are written but **not** for [`linear:run`](../linear:run/SKILL.md) to consume: branch creation and the post-implementation chain belong to the skill doing the running, which supplies its own. Marking them is what lets a guard prove the reader ignores them.
 
-`Format: v1` is the field that lets a later template revision be told apart from a corrupt description. `Base:` records the tree the plan was drafted against; it is information for a later reader, not a gate.
+`Format: v1` is the field that lets a later template revision be told apart from a corrupt description. `Base:` records the tree the plan was drafted against; it is information for a later reader, not a gate. When the review step was skipped, the `Score:` field reads the literal `skipped` — `Format: v1 · Score: skipped · Base: <origin/main SHA> · Stored by /autopilot:linear-plan` — so the ticket's reader knows the plan is unreviewed; like the score, it informs and never gates.
 
 ### The write
 
@@ -170,6 +171,8 @@ Set task 6 to `completed` and output:
 Next step:
 - Run /autopilot:linear-run <LINEAR-ID> to execute it
 ```
+
+When the review step was skipped, the `Score:` segment reads `skipped` here exactly as in the stored header.
 
 ## Reference formatting
 

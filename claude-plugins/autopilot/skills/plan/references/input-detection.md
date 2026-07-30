@@ -4,11 +4,11 @@ Reference for [`plan/SKILL.md`](../SKILL.md) and [`run/SKILL.md`](../../run/SKIL
 
 Detection is pure string matching — it performs **no I/O**. That is why the issue id is known before anything is fetched, and why [`gather-context`](../../gather-context/SKILL.md) can launch every context call in one fan-out.
 
-## Mode flags (`plan` only)
+## Mode flags
 
 Parse and strip `--experts-review` from the arguments before anything else, including the create-issue pre-step below. Its presence enables the expert review step for this invocation; when it is absent, [the pipeline](pipeline.md#review-and-score-task-4) skips that step. The flag is a mode toggle, not input: once stripped it never reaches the detection table, and it files nothing.
 
-`run` never parses this flag — its review is always-on by design; see the conditionality rule in [pipeline.md](pipeline.md#review-and-score-task-4).
+`plan` and [`linear:plan`](../../linear:plan/SKILL.md) are the only skills that parse this flag. The `run` family — `run`, `run-primed`, and `linear:run` — never does: its review is always-on by design; see the conditionality rule in [pipeline.md](pipeline.md#review-and-score-task-4).
 
 ## Create-issue flags (`plan` only)
 

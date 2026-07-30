@@ -18,10 +18,11 @@
  * 5. Expert review is an enhancement, never a gate. The pipeline states no scoring
  *    threshold and no revision budget, and `linear:plan` stores unconditionally with
  *    no plan-mode transition — a re-introduced gate would silently start losing plans.
- * 6. Expert review is opt-in for `plan` alone. The pipeline names `plan` as the only
- *    caller that may skip the step and records an explicit skipped score; the
- *    `--experts-review` flag lives in `plan` and nowhere else, so no other caller can
- *    quietly grow the skip.
+ * 6. Expert review is opt-in for `plan` and `linear:plan` alone. The pipeline names them
+ *    as the only callers that may skip the step and records one literal skipped score
+ *    line; the `--experts-review` flag lives in those two skills and nowhere else, so
+ *    the `run` family cannot quietly grow the skip — and a skipped store must stay
+ *    visible, so `linear:plan` pins the `Score: skipped` stored-header variant.
  *
  * The section names are extracted from the producer's own text rather than hardcoded,
  * so the guard tracks the source instead of a copy of it.
@@ -198,17 +199,27 @@ describe("linear plan contract", () => {
     expect(drift).toContain(needle);
   });
 
-  test("the pipeline gates the review step on plan alone", () => {
-    expect(pipeline).toContain("the only caller that may skip");
-    expect(pipeline).toContain("Score: skipped");
-  });
-
-  test("plan's argument-hint carries the --experts-review flag", () => {
-    expect(plan).toMatch(/argument-hint:.*--experts-review/);
+  test("the pipeline gates the review step on plan and linear:plan alone", () => {
+    expect(pipeline).toContain("the only callers that may skip");
+    expect(pipeline).toContain(
+      "Score: skipped · expert review disabled (invoked without --experts-review)",
+    );
   });
 
   test.each([
+    ["plan", plan],
     ["linear:plan", linearPlan],
+  ])("%s's argument-hint carries the --experts-review flag", (_name, source) => {
+    expect(source).toMatch(/argument-hint:.*--experts-review/);
+  });
+
+  test("linear:plan documents the skipped stored-header variant", () => {
+    expect(linearPlan).toContain(
+      "Format: v1 · Score: skipped · Base: <origin/main SHA> · Stored by /autopilot:linear-plan",
+    );
+  });
+
+  test.each([
     ["linear:run", linearRun],
     ["run", run],
     ["run-primed", runPrimed],
