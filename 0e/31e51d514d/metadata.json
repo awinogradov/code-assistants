@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "0e31e51d514d",
+  "strategy": "manual-commit",
+  "branch": "issue-525-linear-mcp-removal",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "claude-plugins/autopilot/.mcp.json",
+    "claude-plugins/autopilot/README.md",
+    "claude-plugins/autopilot/agents/analyze-pr-commits.md",
+    "claude-plugins/autopilot/agents/resolve-assignees.md",
+    "claude-plugins/autopilot/agents/resolve-issue-context.md",
+    "claude-plugins/autopilot/agents/scan-and-analyze-todos.md",
+    "claude-plugins/autopilot/lib/linear/fetch-issue.mjs",
+    "claude-plugins/autopilot/lib/linear/fetch-team-members.mjs",
+    "claude-plugins/autopilot/lib/linear/linearClient.mjs",
+    "claude-plugins/autopilot/skills/shared-rules/references/linear-mcp-access.md",
+    "docs/11-linear-tracker.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0e/31e51d514d/0/metadata.json",
+      "transcript": "/0e/31e51d514d/0/full.jsonl",
+      "compact_transcript": "/0e/31e51d514d/0/transcript.jsonl",
+      "content_hash": "/0e/31e51d514d/0/content_hash.txt",
+      "prompt": "/0e/31e51d514d/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 261,
+    "cache_creation_tokens": 301087,
+    "cache_read_tokens": 18322682,
+    "output_tokens": 83801,
+    "api_call_count": 84
+  }
+}
