@@ -1,0 +1,29 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "50cb61e8af5d",
+  "strategy": "manual-commit",
+  "branch": "issue-501-record-fence-rendering",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "claude-plugins/autopilot/skills/linear:plan/SKILL.md",
+    "docs/11-linear-tracker.md",
+    "docs/16-linear-plan-skill.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/50/cb61e8af5d/0/metadata.json",
+      "transcript": "/50/cb61e8af5d/0/full.jsonl",
+      "compact_transcript": "/50/cb61e8af5d/0/transcript.jsonl",
+      "content_hash": "/50/cb61e8af5d/0/content_hash.txt",
+      "prompt": "/50/cb61e8af5d/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 47,
+    "cache_creation_tokens": 1471163,
+    "cache_read_tokens": 17253987,
+    "output_tokens": 20571,
+    "api_call_count": 25
+  }
+}

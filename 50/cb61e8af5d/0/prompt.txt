@@ -1,0 +1,15 @@
+<task-notification>
+<task-id>bwuxuwg2e</task-id>
+<tool-use-id>toolu_01RUPXJ86gJE8soVs9GNXrU1</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-chamisa-badger/a0f2285c-709e-4de2-9866-569a01e1e104/tasks/bwuxuwg2e.output</output-file>
+<status>completed</status>
+<summary>Background command "Wait for ai-review on the new HEAD of PR 508" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+continue with 502
+
+---
+
+continue with 501 and 503
