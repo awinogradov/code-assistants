@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.19.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.18.0...autopilot@v1.19.0) (2026-07-30)
+
+## Release Notes
+
+The `linear-run` command can now execute any Linear issue directly, even when no implementation plan has been saved for it.
+
+## ✨ What's New
+
+### Run Any Linear Issue Without a Pre-Saved Plan
+
+Previously, `linear-run` would only work with Linear issues that already had a stored implementation plan attached. Now, it can pick up and execute any Linear issue autonomously — even those that haven't gone through a prior planning step. This means fewer blockers when kicking off work on freshly created or unplanned issues, and a smoother handoff from ticket creation to autonomous execution.
+
+<details><summary>Related issues</summary>
+
+- [#516: Allow linear-run to execute any Linear issue](https://github.com/awinogradov/code-assistants/issues/516)
+- [#517: Allow linear-run to execute any Linear issue](https://github.com/awinogradov/code-assistants/pull/517)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #516 | [#517](https://github.com/awinogradov/code-assistants/pull/517) | @rovnyart |
+
+### Features
+
+* **linear-run:** support issues without stored plans ([a090923](https://github.com/awinogradov/code-assistants/commit/a0909235d67bc840f1bf04a6a6336cd3d9bcd918))
 ## [1.18.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.17.0...autopilot@v1.18.0) (2026-07-30)
 
 ## Release Notes
