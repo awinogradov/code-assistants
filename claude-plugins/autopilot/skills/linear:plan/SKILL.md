@@ -177,7 +177,9 @@ All five sections are written, because a human reading the ticket should see the
    - **No anchor, description non-empty** — wrap the entire current description in a `+++ Original task +++` collapsible, then append the new block below it.
    - **No anchor, description empty** — write the block alone. Do not emit an empty collapsible.
 
-   Linear renders `+++ Section title` … `+++` as an initially-hidden section; `<details>` HTML does not render, which is why the fence is the only option. A description written by [`linear:create`](../linear:create/SKILL.md) already opens with its own `+++ Original prompt +++` fence, so wrapping nests one fence inside another. That is accepted deliberately — see [Linear tracker support](../../../../docs/11-linear-tracker.md).
+   Linear renders `+++ Section title` … `+++` as an initially-hidden section; `<details>` HTML does not render, which is why the fence is the only option. A description written by [`linear:create`](../linear:create/SKILL.md) already opens with its own `+++ Original prompt +++` fence, so wrapping nests one fence inside another — which Linear renders correctly, verified against a real ticket ([Linear tracker support](../../../../docs/11-linear-tracker.md)).
+
+   **Match the anchor, never the fence.** Linear rewrites `+++ Title … +++` to `>>> Title … >>>` when it saves, so a description read back never contains the marker as written. Detect a prior store by the `## Implementation plan` heading, which survives the round-trip untouched; matching on `+++` would report every re-store as a first store and stack a second wrapper.
 
 3. **Verify the preserved prefix.** Before writing, confirm the text above the anchor is byte-identical to what step 1 read. If it differs, abort with `Refusing to write: the preserved part of the description changed` and store nothing. Silently reformatting someone's original task text is the worst outcome available here, and it is unrecoverable.
 

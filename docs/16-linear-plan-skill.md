@@ -116,7 +116,19 @@ The three metadata fields each earn their place:
 
 Anchoring on `## Implementation plan` rather than on the collapsible is what makes a re-store idempotent: the wrapper is created once and never stacked, because the second store matches the anchor and never reaches the wrapping branch.
 
-Linear renders `+++ Section title` … `+++` as an initially-hidden section, and `<details>` HTML does not render at all, so the fence is the only option. A description written by [`linear:create`](../claude-plugins/autopilot/skills/linear:create/SKILL.md) already opens with its own `+++ Original prompt +++` fence, so wrapping nests one inside the other. That is accepted deliberately; Linear's [GraphQL markdown documentation](https://linear.app/developers/graphql) describes the fence without specifying nesting behaviour.
+Linear renders `+++ Section title` … `+++` as an initially-hidden section, and `<details>` HTML does not render at all, so the fence is the only option. A description written by [`linear:create`](../claude-plugins/autopilot/skills/linear:create/SKILL.md) already opens with its own `+++ Original prompt +++` fence, so wrapping nests one inside the other.
+
+**All three store cases were observed rather than assumed.** Linear's [GraphQL markdown documentation](https://linear.app/developers/graphql) describes the fence without saying whether it nests, so the behaviour was exercised against a real ticket:
+
+| Case                           | Observed                                                                                                                                                                                                                        |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| First store, nested fence      | The outer section renders collapsed as `▶ Original task`; expanding it reveals a nested, independently collapsible `▶ Original prompt` beside the rest of the original body, with `## Implementation plan` outside at top level |
+| Re-store on the same ticket    | Exactly one `Original task` wrapper survives, the preserved prefix comes back byte-identical, and only the plan below the anchor is replaced                                                                                    |
+| First store, empty description | The plan is written alone — no empty collapsible appears, because there was nothing to preserve                                                                                                                                 |
+
+**Linear normalizes the fence on save, and that trips up anything that reads a description back.** Text written as `+++ Title … +++` is stored and returned by the API as `>>> Title … >>>`. Both forms are accepted on input; `>>>` is the canonical stored form. So a check that greps a fetched description for a literal `+++` finds nothing, even though the collapsible is there. The same round-trip rewrites other markdown too — `_italic_` becomes `*italic*`, `-` bullets become `*`.
+
+That normalization is exactly why the store anchors on the `## Implementation plan` heading rather than on the wrapper. A re-store locates the anchor, which survives the round-trip unchanged, so it is unaffected by the fence being rewritten underneath it — and the "never stacks a second wrapper" property holds for the same reason.
 
 ## The score gates the write, not the plan
 
