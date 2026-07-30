@@ -265,7 +265,7 @@ Same as `/autopilot:plan`, but stores the finished plan in its Linear ticket's d
 
 Same as `/autopilot:run`, but reads the plan already stored on the Linear ticket instead of drafting one, and executes those steps verbatim. See [the linear:run skill](../../docs/17-linear-run-skill.md) for the validation contract.
 
-**Precondition:** the ticket must already carry a plan stored by `/autopilot:linear-plan`. When it is missing, written in an unreadable format, malformed, or has a step with no `verify:` line, the skill stops with an actionable error and names `/autopilot:linear-plan` as the fix; it never re-plans on its own, because that would silently replace a reviewed plan with an unreviewed one.
+**Precondition:** the ticket must already carry a plan stored by `/autopilot:linear-plan`. When it is missing, written in an unreadable format, malformed, or has a step with no `verify:` line, the skill stops with an actionable error and names `/autopilot:linear-plan` as the fix; it never re-plans on its own, because that would silently replace the durable artifact with a different plan.
 
 ```bash
 /autopilot:linear-run ENG-123                                           # From Linear id

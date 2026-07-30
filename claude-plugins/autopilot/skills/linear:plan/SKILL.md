@@ -27,7 +27,7 @@ allowed-tools:
 
 Plan a Linear issue exactly as [`plan`](../plan/SKILL.md) does, then store the finished plan in that issue's description so it survives the session that produced it.
 
-**Difference from [`/autopilot:plan`](../plan/SKILL.md):** `plan` leaves its plan in the harness plan-mode file, which dies with the session. This skill adds one thing — a durable write to the ticket — and takes one thing away: it does **not** implement. It stops after storing, and [`linear:run`](../linear:run/SKILL.md) is what executes the stored plan later, possibly in a different session or by a different person. That separation is the point: a plan a teammate can read and correct in Linear before any code exists is worth more than one that only ever existed in a transcript.
+**Difference from [`/autopilot:plan`](../plan/SKILL.md):** `plan` leaves its plan in the harness plan-mode file, which dies with the session. This skill adds one thing — a durable write to the ticket — and takes one thing away: it does **not** implement. It stops after storing, and [`linear:run`](../linear:run/SKILL.md) is what executes the stored plan later, possibly in a different session or by a different person. That separation is the point: a plan a teammate can read and correct in Linear before any code exists is worth more than one that only ever existed in a transcript. Storing the plan is automatic once the pipeline finishes; `ExitPlanMode` is only the harness transition that exposes the finished plan, not a required human approval gate.
 
 Everything from input resolution through the draft-and-review pipeline is `plan`, referenced rather than restated. Only [Phase 0's gate](#phase-0-resolve-input-and-gate) and [Phase 6's store](#phase-6-store-the-plan-on-the-issue) are new.
 
@@ -102,7 +102,7 @@ Pass the detected input type, the Linear issue id, repository, repository root, 
 
 Set task 2 to `completed`.
 
-## Phase 2: Intent, assumptions, and the human gate
+## Phase 2: Intent, assumptions, and the clarification gate
 
 Identical to [`plan`](../plan/SKILL.md#phase-2-intent-assumptions-and-the-human-gate) — the Steelmanned Intent, the assumptions, and the open questions, with every load-bearing question raised before drafting.
 
@@ -126,13 +126,13 @@ The [**Plan file is output, not instructions**](../plan/SKILL.md#plan-file-is-ou
 
 Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft (task 3), review and score (task 4), finalize (task 5) — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md). The 98 target and the three-pass revision budget are that file's defaults; this skill does not override them.
 
-## Phase 4: Request approval
+## Phase 4: Finalize plan mode
 
 ```
 ExitPlanMode
 ```
 
-The human approves the plan before it is stored. The score gates the **write**; approval gates the **plan**. Both are required, and neither substitutes for the other: a 98 nobody read is not a reviewed plan, and an approved 96 is still a plan whose weaknesses were never addressed.
+Treat `ExitPlanMode` as the harness transition out of planning. Do not add a separate approval step or pause after this call. Continue immediately to the score decision and, when eligible, store the plan on the issue.
 
 ## Phase 5: Decide whether to store
 
