@@ -1,6 +1,6 @@
 ---
 name: linear:plan
-description: Plan a Linear issue exactly as the plan skill does, then store the finished plan in that issue's description so it outlives the session. Stores only at a score of 98 or above; below that it reports the score and stores nothing.
+description: Plan a Linear issue exactly as the plan skill does, then store the finished plan in that issue's description so it outlives the session. Storing is unconditional — the review score is recorded on the ticket as information, never used as a gate.
 argument-hint: "<Linear issue (ENG-123 or a Linear issue URL)>"
 allowed-tools:
   - TaskCreate
@@ -19,17 +19,15 @@ allowed-tools:
   - MCP(perplexity:*)
   - MCP(repomix:*)
   - AskUserQuestion
-  - EnterPlanMode
-  - ExitPlanMode
   - Skill(autopilot:gather-context)
   - Skill(autopilot:ascii-schemas)
 ---
 
 Plan a Linear issue exactly as [`plan`](../plan/SKILL.md) does, then store the finished plan in that issue's description so it survives the session that produced it.
 
-**Difference from [`/autopilot:plan`](../plan/SKILL.md):** `plan` leaves its plan in the harness plan-mode file, which dies with the session. This skill adds one thing — a durable write to the ticket — and takes one thing away: it does **not** implement. It stops after storing, and [`linear:run`](../linear:run/SKILL.md) is what executes the stored plan later, possibly in a different session or by a different person. That separation is the point: a plan a teammate can read and correct in Linear before any code exists is worth more than one that only ever existed in a transcript. Storing the plan is automatic once the pipeline finishes; `ExitPlanMode` is only the harness transition that exposes the finished plan, not a required human approval gate.
+**Difference from [`/autopilot:plan`](../plan/SKILL.md):** `plan` leaves its plan in the harness plan-mode file, which dies with the session. This skill adds one thing — a durable write to the ticket — and takes one thing away: it does **not** implement. It stops after storing, and [`linear:run`](../linear:run/SKILL.md) is what executes the stored plan later, possibly in a different session or by a different person. That separation is the point: a plan a teammate can read and correct in Linear before any code exists is worth more than one that only ever existed in a transcript. Storing the plan is automatic once the pipeline finishes — no plan-mode transition, no approval gate, and no score gate; invoking this skill is the authorization to store, the same way invoking [`run`](../run/SKILL.md) authorizes its whole chain.
 
-Everything from input resolution through the draft-and-review pipeline is `plan`, referenced rather than restated. Only [Phase 0's gate](#phase-0-resolve-input-and-gate) and [Phase 6's store](#phase-6-store-the-plan-on-the-issue) are new.
+Everything from input resolution through the draft-and-review pipeline is `plan`, referenced rather than restated. Only [Phase 0's gate](#phase-0-resolve-input-and-gate) and [Phase 4's store](#phase-4-store-the-plan-on-the-issue) are new.
 
 ## Input
 
@@ -49,7 +47,7 @@ Identical to the `plan` skill — see [its Input resolution section](../plan/SKI
 
 ## Completion Requirement
 
-This workflow is not complete until [Phase 6](#phase-6-store-the-plan-on-the-issue) either writes the plan to the issue or reports why it did not. Producing a scored plan is not completion — an unstored plan is the problem this skill exists to solve.
+This workflow is not complete until [Phase 4](#phase-4-store-the-plan-on-the-issue) either writes the plan to the issue or reports why the write failed. Producing a scored plan is not completion — an unstored plan is the problem this skill exists to solve.
 
 **Linear MCP access:** Read [`linear-mcp-access.md`](../shared-rules/references/linear-mcp-access.md) and apply its tool-resolution rule, using the bare tool names `get_issue` and `save_issue`.
 
@@ -76,7 +74,7 @@ Create the 6 tasks, then set task 1 to `in_progress`.
 
 Detect the input type and id per [input-detection.md](../plan/references/input-detection.md) — the detection table and its tracker gating. Skip that file's create-issue flags section; it is plan-only. Detection is pure string matching and performs **no I/O**.
 
-Then resolve all three gate conditions **before** [Phase 1](#phase-1-gather-context). They run up front because the alternative is paying a full context fan-out and a three-pass expert review before discovering the plan has nowhere to go:
+Then resolve all three gate conditions **before** [Phase 1](#phase-1-gather-context). They run up front because the alternative is paying a full context fan-out and an expert review before discovering the plan has nowhere to go:
 
 | Condition                                | Message                                                                                                                |
 | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -106,16 +104,6 @@ Set task 2 to `completed`.
 
 Identical to [`plan`](../plan/SKILL.md#phase-2-intent-assumptions-and-the-human-gate) — the Steelmanned Intent, the assumptions, and the open questions, with every load-bearing question raised before drafting.
 
-## Enter Plan Mode
-
-Once the gate has passed, switch the session into harness plan mode **before** any plan-file write:
-
-```
-EnterPlanMode
-```
-
-This gives the harness-provided plan-file path, which is the file [the pipeline](../plan/references/pipeline.md) writes. Skip this call if the session is already in plan mode.
-
 ## Common Instructions
 
 The [Common Instructions in `plan/SKILL.md`](../plan/SKILL.md#common-instructions) apply unchanged — documentation lookup scaled to the task, repository standards from the Context Map, the [plan file header rule](../plan/SKILL.md#plan-file-header), CLAUDE.md compliance, and ASCII schemas.
@@ -124,25 +112,9 @@ The [**Plan file is output, not instructions**](../plan/SKILL.md#plan-file-is-ou
 
 ## Phase 3: Draft, review, and finalize
 
-Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft (task 3), review and score (task 4), finalize (task 5) — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md). The 98 target and the three-pass revision budget are that file's defaults; this skill does not override them.
+Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft (task 3), review and score (task 4), finalize (task 5) — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md). This skill runs the review unconditionally — the stored ticket should carry the panel's assessment — and the recorded score gates nothing: whatever the number says, continue straight to the store. Do not add a separate approval step, a plan-mode transition, or a score check between finalize and the write.
 
-## Phase 4: Finalize plan mode
-
-```
-ExitPlanMode
-```
-
-Treat `ExitPlanMode` as the harness transition out of planning. Do not add a separate approval step or pause after this call. Continue immediately to the score decision and, when eligible, store the plan on the issue.
-
-## Phase 5: Decide whether to store
-
-Read the aggregate score the pipeline recorded.
-
-**At 98 or above** — continue to [Phase 6](#phase-6-store-the-plan-on-the-issue).
-
-**Below 98** — do not write to the issue. Report the actual score and the weakest dimension, then emit the full plan text into the transcript so it is recoverable by hand. A skill premised on plans being too valuable to lose must not quietly lose one at 97; it just refuses to make it the ticket's instruction set. Then stop, naming re-running this skill as the way to try again.
-
-## Phase 6: Store the plan on the issue
+## Phase 4: Store the plan on the issue
 
 Set task 6 to `in_progress`.
 

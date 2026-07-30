@@ -15,12 +15,16 @@
  * 4. The two skills agree on the stored format version. `Format:` is the only thing that
  *    keeps "written under an older template" apart from "corrupt", and a version the
  *    producer writes but the consumer does not read collapses that distinction.
- * 5. One scoring threshold governs every caller. The threshold is read out of
- *    `pipeline.md` rather than asserted as a literal, so tuning it stays a one-file
- *    change — but a caller that restates it must restate the same number.
+ * 5. Expert review is an enhancement, never a gate. The pipeline states no scoring
+ *    threshold and no revision budget, and `linear:plan` stores unconditionally with
+ *    no plan-mode transition — a re-introduced gate would silently start losing plans.
+ * 6. Expert review is opt-in for `plan` alone. The pipeline names `plan` as the only
+ *    caller that may skip the step and records an explicit skipped score; the
+ *    `--experts-review` flag lives in `plan` and nowhere else, so no other caller can
+ *    quietly grow the skip.
  *
- * The section names and the threshold are extracted from the producer's own text rather
- * than hardcoded, so the guard tracks the source instead of a copy of it.
+ * The section names are extracted from the producer's own text rather than hardcoded,
+ * so the guard tracks the source instead of a copy of it.
  *
  * What this CANNOT prove: that the gate runs, or that the model honours it. CI sees text
  * in a file, nothing more — the same limit `sharedRulesInvocation.test.ts` states for its
@@ -74,12 +78,6 @@ function sectionTableRow(source: string, key: string): string {
     .find((cells) => cells.length > 2 && cells[1] === key);
   return row ? row[2] : "";
 }
-
-/** The scoring threshold the shared pipeline states, e.g. `98` from `Scoring target: 98+`. */
-const threshold = pipeline.match(/Scoring target:\s*(\d+)\+/)?.[1] ?? "";
-
-/** The revision budget the shared pipeline states, e.g. `three` from `at most three passes`. */
-const passBudget = pipeline.match(/at most (\w+) passes/)?.[1] ?? "";
 
 describe("linear plan contract", () => {
   test("the stored-plan template still exposes a required/caller-owned split", () => {
@@ -148,36 +146,18 @@ describe("linear plan contract", () => {
     expect(linearRun).toContain(`\`${written}\``);
   });
 
-  test("the shared pipeline states one threshold and one revision budget", () => {
-    expect(threshold).not.toBe("");
-    expect(passBudget).not.toBe("");
-    for (const rule of ["is below", "still scores below"]) {
-      const line = pipeline.split("\n").find((l) => l.includes(rule));
-      expect(`${rule}: ${line ?? "<absent>"}`).toContain(threshold);
-    }
+  test("the pipeline states no scoring threshold and no revision budget", () => {
+    expect(pipeline).not.toContain("Scoring target");
+    expect(pipeline).not.toMatch(/at most \w+ passes/);
+    expect(pipeline).toContain("not a gate for any caller");
   });
 
-  test("linear:plan restates the pipeline's threshold and budget, not its own", () => {
-    expect(linearPlan).toContain(`${threshold} or above`);
-    expect(linearPlan).toContain(`Below ${threshold}`);
-    expect(linearPlan).toContain(`${passBudget}-pass`);
-  });
-
-  test("the pipeline reconciles below-threshold behaviour per caller", () => {
-    const [, belowThreshold = ""] = pipeline.split("Report honestly");
-    for (const caller of ["`plan`", "`run`", "`run-primed`", "`linear:run`", "`linear:plan`"]) {
-      expect(belowThreshold).toContain(caller);
-    }
-  });
-
-  test("linear:plan refuses to store below the threshold without discarding the plan", () => {
-    expect(linearPlan).toContain("emit the full plan text into the transcript");
-  });
-
-  test("linear:plan stores eligible plans without a separate human approval step", () => {
+  test("linear:plan stores unconditionally, with no plan-mode transition", () => {
+    expect(linearPlan).toContain("Storing is unconditional");
     expect(linearPlan).toContain("Do not add a separate approval step");
-    expect(linearPlan).not.toContain("## Phase 4: Request approval");
-    expect(linearPlan).not.toContain("The human approves the plan before it is stored");
+    expect(linearPlan).not.toContain("ExitPlanMode");
+    expect(linearPlan).not.toContain("EnterPlanMode");
+    expect(linearPlan).not.toContain("Decide whether to store");
   });
 
   test("linear:run treats the stored plan as a durable artifact, not proof of approval", () => {
@@ -216,6 +196,24 @@ describe("linear plan contract", () => {
   ])("the path check handles %s", (_label, needle) => {
     const [, drift = ""] = linearRun.split("**Path drift.**");
     expect(drift).toContain(needle);
+  });
+
+  test("the pipeline gates the review step on plan alone", () => {
+    expect(pipeline).toContain("the only caller that may skip");
+    expect(pipeline).toContain("Score: skipped");
+  });
+
+  test("plan's argument-hint carries the --experts-review flag", () => {
+    expect(plan).toMatch(/argument-hint:.*--experts-review/);
+  });
+
+  test.each([
+    ["linear:plan", linearPlan],
+    ["linear:run", linearRun],
+    ["run", run],
+    ["run-primed", runPrimed],
+  ])("%s does not claim the --experts-review flag", (name, source) => {
+    expect(`${name}: ${source.includes("--experts-review")}`).toBe(`${name}: false`);
   });
 
   test("the unchanged callers state no threshold of their own", () => {

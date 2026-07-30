@@ -1,7 +1,7 @@
 ---
 name: plan
-description: Perform deep analysis of the codebase, recent changes, and the requested task. Create a validated, expert-reviewed implementation plan
-argument-hint: "<task description, GitHub/Linear issue, or GitHub issue URL> [--issue | --linear-issue]"
+description: Perform deep analysis of the codebase, recent changes, and the requested task. Create a validated implementation plan, expert-reviewed when --experts-review is passed
+argument-hint: "<task description, GitHub/Linear issue, or GitHub issue URL> [--issue | --linear-issue] [--experts-review]"
 allowed-tools:
   - TaskCreate
   - TaskUpdate
@@ -29,7 +29,7 @@ allowed-tools:
   - Skill(autopilot:pr-create)
 ---
 
-Perform deep analysis of the codebase, recent changes, and the requested task. Create a validated, expert-reviewed implementation plan.
+Perform deep analysis of the codebase, recent changes, and the requested task. Create a validated implementation plan, expert-reviewed when `--experts-review` is passed.
 
 ## Input
 
@@ -42,6 +42,7 @@ Expected forms:
 - `<GitHub-issue-URL>` — full URL (e.g., `https://github.com/org/repo/issues/789`)
 - `<task description> --issue` — file a GitHub issue from the description first, then plan against it
 - `<task description> --linear-issue` — file a Linear issue first — requires a `linear` tracker (see [Linear tracker](../../../../docs/11-linear-tracker.md))
+- `<any form above> --experts-review` — run the expert review-and-score step; without this flag that step is skipped
 
 Additional free-form context may follow any form (e.g., `#42 I think we should start with the auth module`).
 
@@ -49,6 +50,7 @@ Additional free-form context may follow any form (e.g., `#42 I think we should s
 
 - **Task description / issue identifier** — parsed from `$ARGUMENTS`. If empty, prompt once via `AskUserQuestion`: "What should we plan?" with a free-form slot. Do not abort silently.
 - **`--issue` / `--linear-issue`** — handled by the create-issue pre-step in [input-detection.md](references/input-detection.md) before detection. Neither flag ⇒ today's behavior.
+- **`--experts-review`** — parsed and stripped first by the mode-flags pre-step in [input-detection.md](references/input-detection.md#mode-flags-plan-only). Present ⇒ the pipeline's review step runs; absent ⇒ it is skipped and the skip is recorded in the plan's `Score:` line.
 - **Current branch / worktree / issue-ID mismatch** — from the Context Map's git state ([Phase 3](#phase-3-preflight-verdict)). No prompts beyond preflight's own.
 - **Repository root** — `git rev-parse --show-toplevel`. No prompt.
 
@@ -164,7 +166,7 @@ Skip diagrams for pure refactors with no structural change, formatting or depend
 
 ## Phase 4: Draft, review, and finalize
 
-Execute the shared pipeline in [pipeline.md](references/pipeline.md) — draft (task 3), review and score (task 4), finalize (task 5) — resolving your stack's deltas from [stack-deltas.md](references/stack-deltas.md).
+Execute the shared pipeline in [pipeline.md](references/pipeline.md) — draft (task 3), review and score (task 4), finalize (task 5) — resolving your stack's deltas from [stack-deltas.md](references/stack-deltas.md). Carry the `--experts-review` resolution from [Phase 0](#phase-0-resolve-input) into the pipeline: the review step runs only when the flag was passed.
 
 ## Phase 5: Embed branch creation and request approval
 

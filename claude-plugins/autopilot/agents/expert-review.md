@@ -13,7 +13,6 @@ The invoking skill provides in the prompt:
 
 - **Expert role** (e.g., "Principal Bun/NodeJS Engineer")
 - **Focus areas** (e.g., "Performance, async, error handling, memory")
-- **Scoring target** (default: 98)
 - **Context Map excerpt** — the relevant files, patterns, key types, test conventions, and applicable standards the caller gathered
 - **Full plan text** to review
 
@@ -37,7 +36,7 @@ Score the plan's domain alignment from 0 to 100:
 - **60-79**: Needs work — meaningful gaps identified
 - **Below 60**: Major issues in your domain
 
-These bands describe your confidence in the plan, not the gate it has to clear. The scoring target is stricter than the top band, so a plan you would call excellent can still sit below the target — say so plainly instead of nudging the number to match the band.
+These bands describe your confidence in the plan. Your score is recorded as information for the plan's readers, not a gate the plan has to clear — score plainly instead of nudging the number toward any target.
 
 Then score each of the five rubric dimensions from 0 to 20. The caller aggregates these across reviewers into the plan's single score, so there is no second rubric downstream — a dimension you score carelessly is not corrected later.
 
@@ -53,7 +52,7 @@ Score every dimension, including those outside your specialty — the caller ave
 
 ## Phase 3: Recommend Changes
 
-Score the plan AS WRITTEN — never raise your score for changes the parent has not applied. If your score is below the target (default 98):
+Score the plan AS WRITTEN — never raise your score for changes the parent has not applied. When you see concrete changes that would raise your score:
 
 1. Identify the specific gaps that lowered your score
 2. Determine the concrete changes that would address them
@@ -74,7 +73,7 @@ Output ONLY a single JSON object matching the schema below — no preamble, no s
 | `expertRole` | string                             | Your expert role, verbatim from the prompt                                                                                                     |
 | `score`      | integer                            | 0–100; the score of the plan AS WRITTEN (see [Phase 3](#phase-3-recommend-changes))                                                            |
 | `dimensions` | object                             | `{ "alignment": int, "completeness": int, "typeSafety": int, "testability": int, "simplicity": int }`, each 0–20; all five keys always present |
-| `verdict`    | `"approved"` \| `"needs-revision"` | `"approved"` when `score` meets the target, otherwise `"needs-revision"`                                                                       |
+| `verdict`    | `"approved"` \| `"needs-revision"` | `"approved"` when you would ship the plan as written, `"needs-revision"` when your findings warrant changes                                    |
 | `findings`   | string[]                           | 3–5 entries, strongest first; stack minor objections together rather than listing each                                                         |
 | `grounding`  | string[]                           | What you actually consulted, one entry each — see [Phase 4a](#phase-4a-declare-your-grounding). Never empty                                    |
 | `revision`   | object \| null                     | `null` when no [Phase 3](#phase-3-recommend-changes) changes were needed; otherwise advisory `{ "changed": string, "rescore": integer }`       |

@@ -2,9 +2,9 @@
 
 > Chapter 16 of the [repository docs](../README.md#repository-docs).
 
-How `/autopilot:linear-plan` turns a plan from a session artifact into something durable on its Linear ticket — and why it would rather store nothing than store a plan that has not earned it.
+How `/autopilot:linear-plan` turns a plan from a session artifact into something durable on its Linear ticket — reviewed by the expert panel for the teammate who reads it, and stored unconditionally.
 
-> Source of truth: `claude-plugins/autopilot/skills/linear:plan/SKILL.md` (the skill), `…/skills/plan/references/pipeline.md` (the scoring threshold and revision budget it inherits), and `…/skills/linear:create/SKILL.md` (the description this one rewrites).
+> Source of truth: `claude-plugins/autopilot/skills/linear:plan/SKILL.md` (the skill), `…/skills/plan/references/pipeline.md` (the shared review pipeline it executes), and `…/skills/linear:create/SKILL.md` (the description this one rewrites).
 
 ## The pattern this exists for
 
@@ -24,7 +24,6 @@ In all three the plan has to live somewhere a second reader can reach, and the t
 | -------------------------- | ---------------------------------------- |
 | Input detection, gathering | `plan`, unchanged                        |
 | Draft, review, score       | `plan`, unchanged — the shared pipeline  |
-| Finalize plan mode         | `ExitPlanMode` harness transition        |
 | Store on the ticket        | **new**                                  |
 | Implement, commit, PR      | **removed** — that is `linear:run`'s job |
 
@@ -42,7 +41,7 @@ Three conditions stop the run, and all three are checked **before** the context 
 | The input is not a Linear issue          | a description, GitHub issue, or alert has no ticket either     |
 | No Linear MCP tool resolves              | the write path is unavailable, so the plan could not be stored |
 
-Ordering matters for cost, not correctness. A three-pass expert review at a 98 threshold is the most expensive thing autopilot does; discovering afterwards that the plan has nowhere to go wastes all of it. Each message names `/autopilot:plan` as the alternative and the producer never falls through to it automatically. [`linear:run`](./17-linear-run-skill.md) has a different responsibility on the read side: an unusable stored artifact selects its fresh-plan path instead of blocking issue execution.
+Ordering matters for cost, not correctness. An expert review pass is the most expensive thing autopilot does; discovering afterwards that the plan has nowhere to go wastes all of it. Each message names `/autopilot:plan` as the alternative and the producer never falls through to it automatically. [`linear:run`](./17-linear-run-skill.md) has a different responsibility on the read side: an unusable stored artifact selects its fresh-plan path instead of blocking issue execution.
 
 No preflight check runs, and none is needed: this skill creates no branch and no commit, so there is no git state to protect. What the tree looked like is recorded in the stored plan instead.
 
@@ -130,15 +129,13 @@ Linear renders `+++ Section title` … `+++` as an initially-hidden section, and
 
 That normalization is exactly why the store anchors on the `## Implementation plan` heading rather than on the wrapper. A re-store locates the anchor, which survives the round-trip unchanged, so it is unaffected by the fence being rewritten underneath it — and the "never stacks a second wrapper" property holds for the same reason.
 
-## The score gates the write
+## Storing is unconditional
 
-The plan is stored automatically after the shared review pipeline reaches its threshold. `ExitPlanMode` is the harness transition that exposes the final plan; the skill does not add a separate human approval step. The shared pipeline's threshold and its three-pass revision budget are inherited from [`pipeline.md`](./05-plan-run-skills.md#review-and-score) rather than restated here, so tuning them stays a one-file change.
-
-**Below the threshold, the plan is reported and emitted to the transcript — not discarded.** A skill whose premise is that plans are too valuable to lose must not quietly lose one at 97. It just declines to make it something a later session will execute unattended.
+The plan is stored automatically the moment the shared review pipeline finishes — no plan-mode transition, no separate human approval step, and no score check between finalize and the write. The review score is recorded on the ticket as information for the teammate who reads it, never used as a gate. Unlike [`plan`](./05-plan-run-skills.md#review-and-score), which may skip expert review via its opt-in `--experts-review` flag, this skill accepts no such flag: it always reviews, so the stored ticket always carries the panel's assessment.
 
 ## How this is guarded
 
-`linear:plan` and `linear:run` are prompt files with no import between them, so a renamed stored section would break the reader with nothing failing in between. `linearPlanContract.test.ts` closes that gap the way [`primedBriefContract.test.ts`](./15-run-primed-skill.md#how-this-is-guarded) does for the explore pair: it extracts the section names and their markers from this skill's own template and asserts the reader consumes exactly the required subset and none of the caller-owned ones. It also pins the format version across both sides, asserts the reader maps every verdict to stored-plan or fresh-plan behavior, asserts the fallback never dispatches the producer or overwrites Linear, and reads the scoring threshold out of `pipeline.md` to assert one stated threshold governs every caller.
+`linear:plan` and `linear:run` are prompt files with no import between them, so a renamed stored section would break the reader with nothing failing in between. `linearPlanContract.test.ts` closes that gap the way [`primedBriefContract.test.ts`](./15-run-primed-skill.md#how-this-is-guarded) does for the explore pair: it extracts the section names and their markers from this skill's own template and asserts the reader consumes exactly the required subset and none of the caller-owned ones. It also pins the format version across both sides, asserts the reader maps every verdict to stored-plan or fresh-plan behavior, asserts the fallback never dispatches the producer or overwrites Linear, and asserts `pipeline.md` states no scoring threshold or revision budget — the review is an enhancement, and a re-introduced gate would silently start losing plans.
 
 **What no test can show:** that Linear renders the stored description the way this chapter says. That is settled by a dry run on a real ticket, recorded on the pull request, because no `linear` tracker is configured in this repository and neither skill can execute here. Nothing under `.github/workflows/` runs `bun test` either, so the guard gates locally and in review rather than in CI.
 
@@ -149,6 +146,6 @@ The plan is stored automatically after the shared review pipeline reaches its th
 | `claude-plugins/autopilot/skills/linear:plan/SKILL.md`                         | The skill: gate, pipeline by reference, anchored store |
 | `claude-plugins/autopilot/skills/linear:run/SKILL.md`                          | The reader that consumes the stored format             |
 | `claude-plugins/autopilot/skills/plan/SKILL.md`                                | Input resolution and Common Instructions               |
-| `claude-plugins/autopilot/skills/plan/references/pipeline.md`                  | The threshold and revision budget this skill inherits  |
+| `claude-plugins/autopilot/skills/plan/references/pipeline.md`                  | The shared draft-review-finalize pipeline it executes  |
 | `claude-plugins/autopilot/skills/shared-rules/references/linear-mcp-access.md` | How `get_issue` and `save_issue` are resolved          |
 | `.github/actions/code-review-action/src/linearPlanContract.test.ts`            | The producer/consumer guard                            |
