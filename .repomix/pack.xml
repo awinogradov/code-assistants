@@ -173,6 +173,7 @@ The content is organized as follows:
         skipComment.test.ts
         skipComment.ts
         submitReview.ts
+        turboInputsDocSync.test.ts
       action.yml
       CHANGELOG.md
       MIGRATING.md
@@ -13612,6 +13613,89 @@ if (event === "APPROVE" && validComments.length > 0) {
     console.log(`✓ Unresolved ${autoResolvedThreads.length} auto-resolved thread(s)`);
   }
 }
+</file>
+
+<file path=".github/actions/code-review-action/src/turboInputsDocSync.test.ts">
+/**
+ * Guards the Turbo task-graph table in `docs/01-workspace-structure.md` against
+ * `turbo.json`, which it restates.
+ *
+ * A doc that repeats configuration drifts from it, and this one already did: the `test`
+ * task gained root-relative markdown globs while the table eight lines below still listed
+ * the TypeScript-only inputs, contradicting the section that explained them. The same
+ * failure shape — a second copy of a contract nobody re-reads — has now been fixed three
+ * separate times in this repository, so the copy is pinned rather than trusted.
+ *
+ * The check is deliberately loose about glob syntax and strict about coverage: for each
+ * root-relative input, the directory or filename it targets must be named in the table
+ * row. Asserting the literal glob would fail on harmless rewording of the row; asserting
+ * nothing would let a whole input disappear from the documentation unnoticed.
+ *
+ * What this CANNOT prove: that the inputs are correct, only that the documentation matches
+ * them. Whether a docs-only change actually busts the cache is a Turbo behaviour, verified
+ * by running it rather than by reading either file.
+ */
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
+import { describe, expect, test } from "bun:test";
+
+const actionDir = join(import.meta.dirname, "..");
+const repoRoot = join(actionDir, "..", "..", "..");
+
+const [turboRaw, chapter] = await Promise.all([
+  readFile(join(repoRoot, "turbo.json"), "utf8"),
+  readFile(join(repoRoot, "docs/01-workspace-structure.md"), "utf8"),
+]);
+
+const turbo = JSON.parse(turboRaw) as {
+  tasks: Record<string, { inputs?: string[] }>;
+};
+
+const testInputs = turbo.tasks.test?.inputs ?? [];
+const rootPrefix = "$TURBO_ROOT$/";
+
+/** Root-relative inputs, reduced to the directory or filename each one targets. */
+const rootTargets = testInputs
+  .filter((input) => input.startsWith(rootPrefix))
+  .map((input) =>
+    input
+      .slice(rootPrefix.length)
+      .replace(/\*\*\/\*\.md$/, "")
+      .replace(/\*\.md$/, ""),
+  );
+
+/**
+ * The `| \`test\` |` row of the Turbo task-graph table.
+ *
+ * Scoped to that section first: the chapter's Workspace-scripts table also has a `test`
+ * row and appears earlier, so an unscoped search matches the wrong one and the assertions
+ * below check a row that never mentions inputs at all.
+ */
+const taskGraphSection = chapter.split("### Turbo task graph")[1] ?? "";
+const testRow =
+  taskGraphSection.split("\n").find((line) => /^\|\s*`test`\s*\|/.test(line)) ?? "<row absent>";
+
+describe("turbo inputs doc sync", () => {
+  test("the test task declares root-relative markdown inputs", () => {
+    // If this fails the cache gap has been reintroduced, not merely undocumented.
+    expect(rootTargets.length).toBeGreaterThan(0);
+  });
+
+  test("the task-graph table row exists", () => {
+    expect(testRow).not.toBe("<row absent>");
+  });
+
+  test.each(rootTargets)("the table row names the %s input", (target) => {
+    expect(testRow).toContain(target);
+  });
+
+  test("the table row still names the package-relative inputs", () => {
+    for (const input of testInputs.filter((i) => !i.startsWith(rootPrefix))) {
+      expect(testRow).toContain(input);
+    }
+  });
+});
 </file>
 
 <file path=".github/actions/code-review-action/action.yml">
@@ -54633,15 +54717,23 @@ Every TypeScript workspace member (actions and packages) declares its scripts in
 
 Specialised script types as the project grows — e.g., `test:unit`, `test:integration`, `test:e2e`, `bench`, `start` — should be added per-member only when there is a reason to run them in isolation (the default `bun test` already covers everything under `src/`). Mirror the Turbo task graph if you add a name that should be cache-aware.
 
+### Why the `test` task takes markdown as an input
+
+Turbo's `test` inputs include `$TURBO_ROOT$` globs for `claude-plugins/`, `docs/`, `rfc/`, `rules/`, and the root `README.md` and `CONTRIBUTING.md`. That looks wrong for a TypeScript task and is deliberate.
+
+Most of what `code-review-action`'s tests guard is prose, not code: `linkResolution` walks every markdown file under the skills, agents, `docs/` and `rfc/` and checks each link and heading anchor resolves; `sharedRulesInvocation` discovers skills by `readdir`; and the producer/consumer guards parse `SKILL.md` templates. Those files are outside the package, so without the root globs a docs-only change is a cache hit — `turbo run test` reports `FULL TURBO`, no test executes, and the change that was most likely to break a guard is the one that never ran it. `turbo.json` is strict JSON with no comment support, which is why the reasoning lives here.
+
+The globs are root-relative because Turbo resolves plain `inputs` against the package directory; `docs/**` inside a member would mean that member's own `docs/`. Over-invalidation is the intended direction of error: a markdown change re-runs all eleven members' tests, which costs a few seconds, whereas under-invalidation silently skips the guards.
+
 ### Turbo task graph
 
 `turbo.json` defines three tasks. Each task runs only in workspace members that declare the matching `package.json` script — there is no global config to update when you add a new member.
 
-| Task        | `inputs`                                                                 | Cached?             |
-| ----------- | ------------------------------------------------------------------------ | ------------------- |
-| `typecheck` | `action.yml`, `*.ts`, `src/**/*.ts`, `tsconfig.json`, `package.json`     | Yes                 |
-| `test`      | `*.ts`, `src/**/*.ts`, `tsconfig.json`, `package.json` (no `action.yml`) | Yes                 |
-| `clean`     | _none_                                                                   | No (`cache: false`) |
+| Task        | `inputs`                                                                                                                                                                             | Cached?             |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------- |
+| `typecheck` | `action.yml`, `*.ts`, `src/**/*.ts`, `tsconfig.json`, `package.json`                                                                                                                 | Yes                 |
+| `test`      | `*.ts`, `src/**/*.ts`, `tsconfig.json`, `package.json` (no `action.yml`), plus `$TURBO_ROOT$` globs for `claude-plugins/`, `docs/`, `rfc/`, `rules/`, `README.md`, `CONTRIBUTING.md` | Yes                 |
+| `clean`     | _none_                                                                                                                                                                               | No (`cache: false`) |
 
 `action.yml` is intentionally excluded from `test` inputs — changes to action metadata invalidate `typecheck` but not the test cache. If you add a task that needs cache-aware action-metadata sensitivity, include `action.yml` in its `inputs`.
 
@@ -61964,7 +62056,18 @@ In scope: the source code in this repository and the artifacts it publishes. Out
       "outputs": []
     },
     "test": {
-      "inputs": ["*.ts", "src/**/*.ts", "tsconfig.json", "package.json"],
+      "inputs": [
+        "*.ts",
+        "src/**/*.ts",
+        "tsconfig.json",
+        "package.json",
+        "$TURBO_ROOT$/claude-plugins/**/*.md",
+        "$TURBO_ROOT$/docs/**/*.md",
+        "$TURBO_ROOT$/rfc/**/*.md",
+        "$TURBO_ROOT$/rules/*.md",
+        "$TURBO_ROOT$/README.md",
+        "$TURBO_ROOT$/CONTRIBUTING.md"
+      ],
       "outputs": []
     },
     "clean": {
