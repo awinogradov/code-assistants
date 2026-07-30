@@ -1,0 +1,24 @@
+<task-notification>
+<task-id>bog5hbx2z</task-id>
+<summary>Monitor event: "PR 527 review/CI status changes"</summary>
+<event>state=OPEN decision=REVIEW_REQUIRED fails=none pending=3</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bog5hbx2z</task-id>
+<summary>Monitor event: "PR 527 review/CI status changes"</summary>
+<event>state=OPEN decision=REVIEW_REQUIRED fails=none pending=1</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bog5hbx2z</task-id>
+<summary>Monitor event: "PR 527 review/CI status changes"</summary>
+<event>state=OPEN decision=CHANGES_REQUESTED fails=none pending=0</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>

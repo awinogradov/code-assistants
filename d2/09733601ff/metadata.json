@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "d209733601ff",
+  "strategy": "manual-commit",
+  "branch": "hotfix-linear-plan-experts-review",
+  "checkpoints_count": 3,
+  "files_touched": [
+    ".github/actions/code-review-action/src/linearPlanContract.test.ts",
+    "claude-plugins/autopilot/README.md",
+    "claude-plugins/autopilot/skills/linear:plan/SKILL.md",
+    "claude-plugins/autopilot/skills/linear:run/SKILL.md",
+    "claude-plugins/autopilot/skills/plan/SKILL.md",
+    "claude-plugins/autopilot/skills/plan/references/input-detection.md",
+    "claude-plugins/autopilot/skills/plan/references/pipeline.md",
+    "docs/05-plan-run-skills.md",
+    "docs/16-linear-plan-skill.md",
+    "docs/17-linear-run-skill.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/d2/09733601ff/0/metadata.json",
+      "transcript": "/d2/09733601ff/0/full.jsonl",
+      "compact_transcript": "/d2/09733601ff/0/transcript.jsonl",
+      "content_hash": "/d2/09733601ff/0/content_hash.txt",
+      "prompt": "/d2/09733601ff/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 6155,
+    "cache_creation_tokens": 40033,
+    "cache_read_tokens": 3636762,
+    "output_tokens": 8383,
+    "api_call_count": 17
+  }
+}
