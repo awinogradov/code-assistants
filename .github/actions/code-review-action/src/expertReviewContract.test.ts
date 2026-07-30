@@ -120,6 +120,36 @@ describe("expert review contract", () => {
     expect(pipeline).toContain("report that the plan is unreviewed");
   });
 
+  /**
+   * The recorded score line is the sample that answers whether the threshold is set
+   * correctly. An aggregate alone cannot separate "cleared it immediately" from "burned
+   * the whole budget to land just short", so the passes and the exit reason have to be
+   * written down at the moment they are known — nothing reconstructs them later.
+   */
+  test.each(["target reached", "no improvement", "budget spent"])(
+    "the pipeline records the %s exit reason",
+    (reason) => {
+      expect(pipeline).toContain(reason);
+    },
+  );
+
+  test("the recorded score line carries passes, exit reason, and weakest dimension", () => {
+    expect(pipeline).toContain("pass(es)");
+    expect(pipeline).toContain("exit reason");
+    // Without this the below-target case records a number with no indication of what
+    // was weak, which is the half of the sample that says why the bar was missed.
+    expect(pipeline).toContain("weakest:");
+    expect(pipeline).toContain("weakest dimension");
+  });
+
+  test("chapter 5 documents the same recorded score line", () => {
+    expect(chapter).toContain("pass(es)");
+    expect(chapter).toContain("weakest dimension");
+    for (const reason of ["target reached", "no improvement", "budget spent"]) {
+      expect(chapter).toContain(reason);
+    }
+  });
+
   test("the agent still forbids asserting unread file contents", () => {
     expect(agent).toContain("an inferred file listing is a fabrication");
     expect(agent).toContain("Do not list a file you did not open");

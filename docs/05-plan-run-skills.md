@@ -202,6 +202,8 @@ Scoring used to be a separate phase running a second rubric over what the expert
 
 Apply the aggregated findings and score to the draft, replace the `Score:` placeholder, and write the plan file, with every reference formatted per RFC-0001.
 
+The recorded line carries how the score was reached, not only what it was — `Score: <N>/100 · <P> pass(es) · <exit reason>`, where the exit reason is `target reached`, `no improvement`, or `budget spent`, plus the weakest dimension when the score fell short. That distinction is the point: an aggregate alone cannot separate a plan that cleared the bar on the first pass from one that spent the whole budget to land just under, and those two say opposite things about whether the threshold is set correctly. Because every plan file records it, the sample needed to answer that accrues on its own rather than requiring plans to be re-run.
+
 ## Phase 5 — Embed branch creation
 
 The skill embeds the branch step into the plan file so it runs first, before any code changes — in `plan` after the user approves, in `run` straight away. [`references/branch-blocks.md`](../claude-plugins/autopilot/skills/plan/references/branch-blocks.md) keys two things by input type: the prose body inserted into the plan file, and the **Mechanics** paragraph beside it holding the `branch-create` invocation the caller runs. Because the flags live in Mechanics rather than in the inserted text, all four bodies are identical for `plan` and `run` — a `run` variant is now a different argument at execution time, not a different section body.
