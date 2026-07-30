@@ -144,6 +144,68 @@
         "label": "Skill: autopilot:commits-create",
         "default_collapsed": true
       }
+    },
+    {
+      "id": "claude-skill-toolu_01Nfxc6qywH1fbqMpM7F3TJK",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "autopilot:pr-create"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "ba732291926d",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 690,
+        "end": 691,
+        "entry_ids": [
+          "2dad3c95-5850-4cc1-a439-4d3c815104de"
+        ],
+        "tool_use_id": "toolu_01Nfxc6qywH1fbqMpM7F3TJK"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01Nfxc6qywH1fbqMpM7F3TJK"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: autopilot:pr-create",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01SfeYRkeytdX22yzfCBvVVo",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "autopilot:pr-monitor"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "ba732291926d",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 748,
+        "end": 749,
+        "entry_ids": [
+          "005e1119-15c1-45b4-87e7-2bbb7c375467"
+        ],
+        "tool_use_id": "toolu_01SfeYRkeytdX22yzfCBvVVo"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01SfeYRkeytdX22yzfCBvVVo"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: autopilot:pr-monitor",
+        "default_collapsed": true
+      }
     }
   ],
   "session_metrics": {
