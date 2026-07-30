@@ -239,6 +239,37 @@
         "label": "Skill: autopilot:pr-resolve",
         "default_collapsed": true
       }
+    },
+    {
+      "id": "claude-skill-toolu_012Lv41M5H2sXzWjC3PaZdWn",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "autopilot:pr-update"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "f4dcb29a9252",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 865,
+        "end": 866,
+        "entry_ids": [
+          "e5c22b69-b158-4682-9cfd-8ef3141aa69e"
+        ],
+        "tool_use_id": "toolu_012Lv41M5H2sXzWjC3PaZdWn"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_012Lv41M5H2sXzWjC3PaZdWn"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: autopilot:pr-update",
+        "default_collapsed": true
+      }
     }
   ],
   "session_metrics": {
