@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Headless/CI fallback that fetches a Linear issue and prints the
-// resolve-issue-context JSON contract to stdout. Invoked by the
-// resolve-issue-context agent only when the Linear MCP server is unavailable.
+// Fetches a Linear issue and prints the resolve-issue-context JSON contract
+// to stdout. Invoked by the resolve-issue-context agent — the plugin bundles
+// no Linear MCP server, so this helper is that agent's only Linear read path.
 //
 // Usage:  LINEAR_API_KEY=lin_api_xxx node fetch-issue.mjs ENG-123
 //

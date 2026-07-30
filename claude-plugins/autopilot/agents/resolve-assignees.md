@@ -1,7 +1,7 @@
 ---
 name: resolve-assignees
 description: Resolve candidate assignees for an issue from CODEOWNERS and Linear team members, with the current Linear user first. Use when a creation skill needs an assignee picklist without polluting parent context.
-tools: Bash, MCP(linear:*)
+tools: Bash
 model: sonnet
 ---
 
@@ -10,7 +10,7 @@ You are an assignee resolver. Gather candidate assignees from the repository's C
 **Constraints:**
 
 - For **GitHub**/CODEOWNERS data, use ONLY the `gh` CLI and file reads.
-- For **Linear** data, use ONLY the session's connected Linear MCP server, matching tools by name — the suffix after the final `__` (`list_users`, `get_user`) — under whatever prefix is available to you (the bundled `mcp__plugin_autopilot_linear__*` or a user-configured Linear server such as `mcp__linear-server__*`); never `npx`/`curl`/`npm`.
+- For **Linear** data, use ONLY the bundled GraphQL helper keyed by `LINEAR_API_KEY` — never `npx`/`curl`/`npm`.
 - All variable interpolations into shell commands MUST be double-quoted.
 
 ## Input
@@ -29,13 +29,19 @@ Read the CODEOWNERS file from the first location that exists: `.github/CODEOWNER
 
 Best-effort throughout — never fail the whole resolution over a Linear hiccup; on any error skip the affected step, record the reason in `notes`, and fall back to whatever candidates you have (the CODEOWNERS list alone if needed).
 
-1. **Team members.** List the team's members with `list_users` scoped to the team (`{ "team": "<team>" }`). Each becomes a `{ "name", "source": "linear", "id" }` candidate.
-2. **Current user.** Resolve the authenticated caller with `get_user` (`{ "query": "me" }`) and read their `id` and `name`.
-3. **Put the caller first.** When the current user resolves, they MUST end up at candidate index 0:
+1. **Fetch members and the current user** in one call to the bundled GraphQL helper. It prints `{ "me", "members", "resolveError" }` — `me` is the API-key user (`id`, `name`, `displayName`), `members` the team's active members — and always exits 0, printing a degraded shape with a non-null `resolveError` (e.g. `unresolved — LINEAR_API_KEY unset`) on failure:
+
+   ```bash
+   LINEAR_API_KEY="$LINEAR_API_KEY" node "${CLAUDE_PLUGIN_ROOT}/lib/linear/fetch-team-members.mjs" "<team>"
+   ```
+
+   `${CLAUDE_PLUGIN_ROOT}` is the plugin root Claude Code provides to plugin components; if it is unset, the caller passes an absolute `Linear helper path` to use instead. On a non-null `resolveError`, record it in `notes` and continue with the CODEOWNERS candidates alone. Each member becomes a `{ "name", "source": "linear", "id" }` candidate.
+
+2. **Put the caller first.** When `me` resolves, they MUST end up at candidate index 0:
    - If a listed member's `id` equals the caller's `id`, set `"self": true` on that candidate and move it to the front.
    - Otherwise prepend a new `{ "name": "<caller name>", "source": "linear", "id": "<caller id>", "self": true }` candidate — the caller may file against a team they do not belong to.
 
-   Match on the Linear `id` only, so a CODEOWNERS candidate (`id: null`) is never mistaken for the caller. If the `get_user` lookup is unavailable or errors, skip this step (leave every candidate without a `self` flag) and record the reason in `notes`.
+   Match on the Linear `id` only, so a CODEOWNERS candidate (`id: null`) is never mistaken for the caller. If `me` is null, skip this step (leave every candidate without a `self` flag) and record the reason in `notes`.
 
 ## Phase 3: Output
 

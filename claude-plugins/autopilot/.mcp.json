@@ -3,10 +3,6 @@
     "wiretext": {
       "command": "npx",
       "args": ["-y", "@wiretext/mcp@0.3.3"]
-    },
-    "linear": {
-      "type": "http",
-      "url": "https://mcp.linear.app/mcp"
     }
   }
 }
