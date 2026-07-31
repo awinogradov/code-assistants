@@ -141,6 +141,67 @@ All five sections are written, because a human reading the ticket should see the
 
 `Format: v1` is the field that lets a later template revision be told apart from a corrupt description. `Base:` records the tree the plan was drafted against; it is information for a later reader, not a gate. When the review step was skipped, the `Score:` field reads the literal `skipped` — `Format: v1 · Score: skipped · Base: <origin/main SHA> · Stored by /autopilot:linear-plan` — so the ticket's reader knows the plan is unreviewed; like the score, it informs and never gates.
 
+### The emission template
+
+The marker list above is the machine-readable contract between this skill and its reader; the block below is the literal text the store writes. Emit it verbatim: replace only the `<angle-bracket>` placeholders and leave every other byte — the anchor line, the header line, each `###` heading, their order, and the blank-line layout — exactly as written. The `<- required` / `<- caller-owned` annotations belong to the contract list alone and never appear in a stored description.
+
+```text
+## Implementation plan
+
+Format: v1 · Score: <score> · Base: <sha> · Stored by /autopilot:linear-plan
+
+### Summary
+
+<the plan's Summary body, including its Steelmanned intent line>
+
+### Implementation Steps
+
+<the plan's numbered steps, each keeping its verify: line>
+
+### Files
+
+<the plan's file list>
+
+### Pre-Implementation
+
+<the plan's branch outcome, stated as prose>
+
+### Post-Implementation
+
+<the plan's post-implementation prose>
+```
+
+Fill rules:
+
+- `<score>` — `N/100` from the review step, or the literal `skipped` when the review was skipped, matching the two header variants above.
+- `<sha>` — the full SHA exactly as `git rev-parse origin/main` printed it; never abbreviate or reconstruct it.
+- Each section placeholder — that section's body from the finalized plan file, demoted headings included, adjusted only as far as the Linear-safe markdown rules below require.
+
+**The first-store wrapper.** On a first store over a non-empty description ([The write](#the-write), second case), the prior body is wrapped in the same collapsible form [`linear:create`](../linear:create/SKILL.md) uses for its original-prompt preamble, emitted literally as:
+
+```text
++++ Original task
+
+<the prior description, byte-identical>
+
++++
+```
+
+then a blank line, then the filled template above. The title is exactly `Original task`. The prior description is inserted byte-identical and treated as opaque — never reworded, re-linked, or rewritten into the Linear-safe forms below, because it is preserved text, not authored text. A read-back shows `>>> Original task … >>>`; that fence normalization is why the write anchors on the heading and never on the fence.
+
+### Linear-safe markdown
+
+Linear's editor accepts most Markdown on input ([editor reference](https://linear.app/docs/editor)) but normalizes several author forms when it saves, so a stored description reads back byte-identical only when it is written in the canonical forms. Section bodies filled into the template use only:
+
+- `###`/`####` headings — the anchor and section headings come from the template itself
+- `*` bullets and `1.` numbered lists — never `-` or `+` bullets, which Linear rewrites to `*`
+- `**bold**` and `*italic*` — never `_underscore emphasis_`, which Linear rewrites to `*`
+- inline code and fenced code blocks (`text`-tagged fences for ASCII diagrams)
+- plain URLs and `[text](url)` links
+- `+++ Title` … `+++` as the only collapsible form — Linear stores it as `>>> Title … >>>`, which is why reads never match the fence
+
+Never emit HTML (`<details>` and every other tag do not render), checkbox lists (`[]` becomes an interactive checklist, and the plan file bans checkboxes), or any construct the [editor reference](https://linear.app/docs/editor) does not list. Writing the canonical forms directly is what keeps a re-store's read-back comparable to what was written, instead of diffing against Linear's rewrites.
+
 ### The write
 
 1. **Read the current description** with `get_issue`.
