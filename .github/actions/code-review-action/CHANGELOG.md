@@ -2,6 +2,47 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [4.0.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v3.0.0...code-review-action@v4.0.0) (2026-07-31)
+
+## Release Notes
+
+The `/autopilot:linear-plan` skill no longer runs the expert-review panel automatically — it's now an opt-in step you must explicitly request.
+
+## ⚠️ Breaking Changes
+
+### Expert Review Panel is Now Opt-In for Linear Planning
+
+Previously, every time `/autopilot:linear-plan` ran, it automatically triggered a full expert-review panel as part of the planning process. As of this release, that panel is skipped by default.
+
+If your team relies on the expert review scoring as part of your planning workflow, you must now explicitly pass the `--experts-review` flag when invoking the skill:
+
+```
+/autopilot:linear-plan --experts-review
+```
+
+**What happens if you don't update:**
+Plans generated without the flag will complete normally, but the stored plan header will record `Score: skipped` instead of an actual review score. Any downstream processes or reports that read or depend on the `Score` field in stored plan headers will see that value change.
+
+**Migration steps:**
+1. Identify any workflows, runbooks, or automations that invoke `/autopilot:linear-plan`.
+2. For any invocation where expert review scoring is expected or required, append `--experts-review` to the command.
+3. For invocations where scoring is not needed, no change is required — plans will continue to generate normally, with `Score: skipped` recorded in the header.
+
+<details><summary>Related issues</summary>
+
+- [#527: HOTFIX: Make Linear planning expert review opt-in](https://github.com/awinogradov/code-assistants/pull/527)
+</details>
+
+
+### ⚠ BREAKING CHANGES
+
+* **linear-plan:** /autopilot:linear-plan no longer runs the expert-review panel by default; pass --experts-review to keep the previous always-review behavior. Plans stored without the flag record Score: skipped in the stored header.
+
+Entire-Checkpoint: d209733601ff
+
+### Bug Fixes
+
+* **linear-plan:** gate expert review behind opt-in flag ([99bca11](https://github.com/awinogradov/code-assistants/commit/99bca114ff702189b7f6f2bddd4de52234a160b7))
 ## [3.0.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v2.4.0...code-review-action@v3.0.0) (2026-07-30)
 
 ## Release Notes
