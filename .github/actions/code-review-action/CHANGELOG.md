@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [4.0.1](https://github.com/awinogradov/code-assistants/compare/code-review-action@v4.0.0...code-review-action@v4.0.1) (2026-07-31)
+
+## Release Notes
+
+The `linear-plan` skill now stores plans using a strict template that guarantees valid Linear markdown, preventing parse failures when plans are consumed by `linear-run`.
+
+## ✨ What's New
+
+### Strict Template for Stored Linear Plans
+
+When the `linear-plan` skill writes a plan back to a Linear ticket, it now uses a controlled emission template restricted to markdown that Linear can reliably parse. Previously, plans could include formatting that looked fine in preview but caused issues downstream when `linear-run` picked them up for execution. With this change, stored plans are always structured in a way Linear accepts, so the handoff between planning and execution is clean and predictable.
+
+<details><summary>Related issues</summary>
+
+- [#531: Add a strict stored-plan template to the linear-plan skill](https://github.com/awinogradov/code-assistants/issues/531)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #531 | [#532](https://github.com/awinogradov/code-assistants/pull/532) | @awinogradov |
+
+### Tests
+
+* **code-review:** pin linear-plan emission template ([18a8228](https://github.com/awinogradov/code-assistants/commit/18a822862fb1e7c52597290d28ed4b5e4af75581))
 ## [4.0.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v3.0.0...code-review-action@v4.0.0) (2026-07-31)
 
 ## Release Notes
