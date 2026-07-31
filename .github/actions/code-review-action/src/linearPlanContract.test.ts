@@ -71,6 +71,22 @@ function storedSections(source: string, kind: "required" | "caller-owned"): stri
 const requiredSections = storedSections(linearPlan, "required");
 const callerOwnedSections = storedSections(linearPlan, "caller-owned");
 
+/**
+ * The fenced emission template in `linear:plan` — the literal block the store writes,
+ * as opposed to the annotated marker list the sections above are parsed from. Pinning
+ * it keeps the emitted bytes (anchor, header line, section order) from drifting away
+ * from the contract, and keeps contract annotations from leaking into a live ticket.
+ */
+const emissionTemplate =
+  linearPlan.match(/### The emission template.*?```text\n(.*?)```/s)?.[1] ?? "";
+
+/**
+ * The literal first-store wrapper — the `+++ Original task +++` collapsible the prior
+ * description moves into. Pinned so the cut around preserved user text stays a fixed
+ * emission form, mirroring the `+++ Original prompt +++` preamble in `linear:create`.
+ */
+const originalTaskWrapper = linearPlan.match(/```text\n(\+\+\+ Original task\n.*?)```/s)?.[1] ?? "";
+
 /** The `Source | Section` table rows in `linear:run`, keyed by the source cell. */
 function sectionTableRow(source: string, key: string): string {
   const row = source
@@ -217,6 +233,34 @@ describe("linear plan contract", () => {
     expect(linearPlan).toContain(
       "Format: v1 · Score: skipped · Base: <origin/main SHA> · Stored by /autopilot:linear-plan",
     );
+  });
+
+  test("the emission template opens with the anchor and the placeholder header line", () => {
+    expect(emissionTemplate).toStartWith("## Implementation plan\n");
+    expect(emissionTemplate).toContain(
+      "Format: v1 · Score: <score> · Base: <sha> · Stored by /autopilot:linear-plan",
+    );
+  });
+
+  test("the emission template lists every stored section in contract order", () => {
+    const headings = [...emissionTemplate.matchAll(/^### (.+)$/gm)].map((row) => row[1]);
+    expect(headings).toEqual([...requiredSections, ...callerOwnedSections]);
+  });
+
+  test("no contract annotation leaks into the emission template", () => {
+    expect(emissionTemplate).not.toContain("<- ");
+  });
+
+  test("the emission template carries none of the Linear-normalized author forms", () => {
+    expect(emissionTemplate).not.toContain("<details>");
+    expect(emissionTemplate).not.toMatch(/^[-+] /m);
+    expect(emissionTemplate).not.toMatch(/_[^_\n]+_/);
+  });
+
+  test("the first-store wrapper pins the collapsible cut around the prior description", () => {
+    expect(originalTaskWrapper).toStartWith("+++ Original task\n");
+    expect(originalTaskWrapper).toContain("<the prior description, byte-identical>");
+    expect(originalTaskWrapper.trimEnd()).toEndWith("\n+++");
   });
 
   test.each([
