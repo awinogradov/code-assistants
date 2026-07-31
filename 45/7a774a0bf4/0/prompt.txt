@@ -1,0 +1,64 @@
+/autopilot:plan I see some issues with linear plan submiting. Let's add strict template to skill to avoid submiting with linear mcp (check docs) --issue
+
+---
+
+<task-notification>
+<task-id>adcc9b7d1f3309853</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-palo-verde-quail/6f98d774-bad0-4a79-b112-b88e937b5ae8/tasks/adcc9b7d1f3309853.output</output-file>
+<status>completed</status>
+<summary>Agent "Digest repo standards" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>```json
+{
+  "conventions": [
+    {
+      "source": "CLAUDE.md",
+      "rule": "No generic file names (index.ts/init.ts equivalents) — use descriptive names; keep the fixed skill file name (SKILL.md) but write descriptive section headers"
+    },
+    {
+      "source": "CLAUDE.md",
+      "rule": "No raw `git commit`/`git checkout -b`/`gh pr create`/`gh issue create` — all git/PR/issue mutations route through `Skill(autopilot:*)`; this applies to landing the linear:plan change itself"
+    },
+    {
+      "source": "CLAUDE.md",
+      "rule": "TODO/FIXME comments (if any land in the template) must use `// TODO: &lt;desc&gt;` / `// FIXME: &lt;desc&gt;` with a `@see &lt;issue-url&gt;` line immediately below — no XXX/HACK/NOTE markers"
+    },
+    {
+      "source": "docs/05-plan-run-skills.md",
+      "rule": "Plan File Header: every plan file begins with a single `# &lt;Title&gt;` line and a fixed section order; Phase 3 Draft Plan template is `## Summary` (steelmanned intent + `Score:` placeholder), `## Implementation Steps` (each with an observable `verify:` line), `## Files`, `## Post-Implementation` — a strict stored-plan template for Linear should not diverge from this shape without reason"
+    },
+    {
+      "source": "docs/11-linear-tracker.md",
+      "rule": "Collapsible/hidden sections destined for Linear must use the GraphQL `+++ Title … +++` fence, never `&lt;details&gt;` HTML — Linear does not render HTML details"
+    },
+    {
+      "source": "docs/11-linear-tracker.md",
+      "rule": "Magic-word lines (`Closes`/`Fixes`/`Related to`) targeting Linear must use the plain issue URL only — never a markdown-bracket link, which breaks Linear's close-parser; bare tracker IDs (e.g. `ENG-123`) are dead text everywhere else and must be markdown-linked in prose"
+    },
+    {
+      "source": "claude-plugins/autopilot/skills/linear:create/SKILL.md",
+      "rule": "Canonical cross-file boilerplate (e.g. the Linear MCP access paragraph, the RFC-0001 reference-formatting block) is duplicated verbatim across sibling Linear skills with an explicit HTML comment noting which files must stay in sync — a new linear:plan/linear:run pair should follow the same sync-comment pattern for any shared block"
+    }
+  ],
+  "standards": [
+    {
+      "id": "RFC-0001",
+      "title": "Reference formatting &amp; readability",
+      "status": "Accepted",
+      "path": "rfc/0001-reference-formatting.md",
+      "defaulted": false,
+      "why": "The task adds a new SKILL.md that will generate/validate markdown content (a stored plan) referencing files, sections, RFCs, and possibly Linear issue links; RFC-0001's block must be inlined verbatim (guarded by the referenceFormattingSync and linkResolution tests) and its Linear-specific magic-word/tracker-ID rules directly govern what the template must accept as valid"
+    }
+  ],
+  "dropped": [],
+  "principles": [],
+  "digestError": null
+}
+```</result>
+<usage><subagent_tokens>56461</subagent_tokens><tool_uses>13</tool_uses><duration_ms>65701</duration_ms></usage>
+</task-notification>
+
+---
+
+I dont see cut rules for original prompt

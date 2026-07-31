@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "457a774a0bf4",
+  "strategy": "manual-commit",
+  "branch": "issue-531-linear-plan-template",
+  "checkpoints_count": 2,
+  "files_touched": [
+    ".github/actions/code-review-action/src/linearPlanContract.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/45/7a774a0bf4/0/metadata.json",
+      "transcript": "/45/7a774a0bf4/0/full.jsonl",
+      "compact_transcript": "/45/7a774a0bf4/0/transcript.jsonl",
+      "content_hash": "/45/7a774a0bf4/0/content_hash.txt",
+      "prompt": "/45/7a774a0bf4/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 269,
+    "cache_creation_tokens": 256945,
+    "cache_read_tokens": 14531254,
+    "output_tokens": 63838,
+    "api_call_count": 76
+  }
+}
