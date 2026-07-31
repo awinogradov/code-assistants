@@ -2,6 +2,112 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [3.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v2.0.0...autopilot@v3.0.0) (2026-07-31)
+
+## Release Notes
+
+The autopilot plugin drops its bundled Linear MCP server in v3.0.0, requiring teams to connect their own — and expert review in `linear:plan` is now opt-in rather than automatic.
+
+## ⚠️ Breaking Changes
+
+### Linear MCP Server No Longer Bundled
+
+The plugin previously shipped its own Linear MCP server, which caused silent conflicts when teams had already configured their own. That bundled server has been removed entirely. You must now connect a Linear MCP server yourself before interactive Linear skills (issue lookup, assignee resolution, PR analysis, TODO status updates) will work.
+
+Run the following once per environment where you use the plugin:
+
+```bash
+claude mcp add --transport http linear https://mcp.linear.app/mcp
+```
+
+Additionally, `LINEAR_API_KEY` is now required for all agent-side Linear reads — not just CI/headless runs. If you haven't already set this in your environment, agent skills like `resolve-issue-context`, `resolve-assignees`, `fetch-pr-reviews`, and `scan-and-analyze-todos` will fail to reach Linear.
+
+<details><summary>Related issues</summary>
+
+- [#401: Linear status transitions silently no-op with a user-configured Linear MCP](https://github.com/awinogradov/code-assistants/issues/401)
+- [#525: Remove the bundled Linear MCP server from the autopilot plugin](https://github.com/awinogradov/code-assistants/issues/525)
+- [#526: Remove the bundled Linear MCP server from the autopilot plugin](https://github.com/awinogradov/code-assistants/pull/526)
+</details>
+
+### Expert Review Panel in `linear:plan` Is Now Opt-In
+
+Previously, running `/autopilot:linear-plan` always triggered the full expert-review panel at the end of planning, which added significant time to every plan run. Expert review is now skipped by default. Plans produced without the flag will record `Score: skipped` in the stored plan header.
+
+To keep the previous behavior, pass the new flag explicitly:
+
+```bash
+/autopilot:linear-plan --experts-review
+```
+
+<details><summary>Related issues</summary>
+
+- [#410: Put the current user first in the Linear assignee picklist](https://github.com/awinogradov/code-assistants/issues/410)
+- [#527: HOTFIX: Make Linear planning expert review opt-in](https://github.com/awinogradov/code-assistants/pull/527)
+</details>
+
+## ✨ What's New
+
+### Current User Prioritized in Linear Assignee Picklist
+
+When assigning a Linear issue through the plugin, your own account now appears at the top of the picklist rather than somewhere in the middle of the team list. This is resolved through a new team-members GraphQL helper that runs independently of the MCP server, so it works correctly even as the MCP setup moves to consumer-configured.
+
+<details><summary>Related issues</summary>
+
+- [#410: Put the current user first in the Linear assignee picklist](https://github.com/awinogradov/code-assistants/issues/410)
+- [#526: Remove the bundled Linear MCP server from the autopilot plugin](https://github.com/awinogradov/code-assistants/pull/526)
+</details>
+
+## ⚙️ Configuration Required
+
+### Connect Your Own Linear MCP Server
+
+**Required** — without this, all interactive Linear skills will be unavailable.
+
+```bash
+claude mcp add --transport http linear https://mcp.linear.app/mcp
+```
+
+Run this in each environment (user, project, or local) that matches the scope you installed the plugin at. See the [installation scope table](https://github.com/awinogradov/code-assistants/tree/main/claude-plugins/autopilot#installation) in the plugin README for guidance.
+
+### `LINEAR_API_KEY` Now Required for All Environments
+
+**Required** — previously only needed in CI/headless runs, this key is now required everywhere the plugin runs agent-side Linear reads.
+
+Set it in your shell environment or `.env` before starting Claude Code:
+
+```bash
+export LINEAR_API_KEY=lin_api_xxxxxxxxxxxxxxxx
+```
+
+Without this, the `resolve-issue-context`, `resolve-assignees`, `fetch-pr-reviews`, and `scan-and-analyze-todos` agents will be unable to query Linear.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #401 | [#526](https://github.com/awinogradov/code-assistants/pull/526) | @awinogradov |
+| #410 | [#526](https://github.com/awinogradov/code-assistants/pull/526) | @awinogradov |
+| #525 | [#526](https://github.com/awinogradov/code-assistants/pull/526) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **linear-plan:** /autopilot:linear-plan no longer runs the expert-review panel by default; pass --experts-review to keep the previous always-review behavior. Plans stored without the flag record Score: skipped in the stored header.
+
+Entire-Checkpoint: d209733601ff
+* **autopilot:** the plugin no longer ships a linear MCP server. Connect
+your own for interactive skills (claude mcp add --transport http linear
+https://mcp.linear.app/mcp) and set LINEAR_API_KEY for agent Linear reads.
+
+Entire-Checkpoint: 0e31e51d514d
+
+### Features
+
+* **autopilot:** remove bundled linear mcp server ([c962792](https://github.com/awinogradov/code-assistants/commit/c962792a04ee08ea728c5328c026e542a50d7131))
+
+### Bug Fixes
+
+* **linear-plan:** gate expert review behind opt-in flag ([99bca11](https://github.com/awinogradov/code-assistants/commit/99bca114ff702189b7f6f2bddd4de52234a160b7))
 ## [2.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v1.19.0...autopilot@v2.0.0) (2026-07-30)
 
 ## Release Notes
