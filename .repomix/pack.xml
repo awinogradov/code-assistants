@@ -8249,6 +8249,22 @@ function storedSections(source: string, kind: "required" | "caller-owned"): stri
 const requiredSections = storedSections(linearPlan, "required");
 const callerOwnedSections = storedSections(linearPlan, "caller-owned");
 
+/**
+ * The fenced emission template in `linear:plan` — the literal block the store writes,
+ * as opposed to the annotated marker list the sections above are parsed from. Pinning
+ * it keeps the emitted bytes (anchor, header line, section order) from drifting away
+ * from the contract, and keeps contract annotations from leaking into a live ticket.
+ */
+const emissionTemplate =
+  linearPlan.match(/### The emission template.*?```text\n(.*?)```/s)?.[1] ?? "";
+
+/**
+ * The literal first-store wrapper — the `+++ Original task +++` collapsible the prior
+ * description moves into. Pinned so the cut around preserved user text stays a fixed
+ * emission form, mirroring the `+++ Original prompt +++` preamble in `linear:create`.
+ */
+const originalTaskWrapper = linearPlan.match(/```text\n(\+\+\+ Original task\n.*?)```/s)?.[1] ?? "";
+
 /** The `Source | Section` table rows in `linear:run`, keyed by the source cell. */
 function sectionTableRow(source: string, key: string): string {
   const row = source
@@ -8395,6 +8411,34 @@ describe("linear plan contract", () => {
     expect(linearPlan).toContain(
       "Format: v1 · Score: skipped · Base: <origin/main SHA> · Stored by /autopilot:linear-plan",
     );
+  });
+
+  test("the emission template opens with the anchor and the placeholder header line", () => {
+    expect(emissionTemplate).toStartWith("## Implementation plan\n");
+    expect(emissionTemplate).toContain(
+      "Format: v1 · Score: <score> · Base: <sha> · Stored by /autopilot:linear-plan",
+    );
+  });
+
+  test("the emission template lists every stored section in contract order", () => {
+    const headings = [...emissionTemplate.matchAll(/^### (.+)$/gm)].map((row) => row[1]);
+    expect(headings).toEqual([...requiredSections, ...callerOwnedSections]);
+  });
+
+  test("no contract annotation leaks into the emission template", () => {
+    expect(emissionTemplate).not.toContain("<- ");
+  });
+
+  test("the emission template carries none of the Linear-normalized author forms", () => {
+    expect(emissionTemplate).not.toContain("<details>");
+    expect(emissionTemplate).not.toMatch(/^[-+] /m);
+    expect(emissionTemplate).not.toMatch(/_[^_\n]+_/);
+  });
+
+  test("the first-store wrapper pins the collapsible cut around the prior description", () => {
+    expect(originalTaskWrapper).toStartWith("+++ Original task\n");
+    expect(originalTaskWrapper).toContain("<the prior description, byte-identical>");
+    expect(originalTaskWrapper.trimEnd()).toEndWith("\n+++");
   });
 
   test.each([
@@ -45389,6 +45433,67 @@ All five sections are written, because a human reading the ticket should see the
 
 `Format: v1` is the field that lets a later template revision be told apart from a corrupt description. `Base:` records the tree the plan was drafted against; it is information for a later reader, not a gate. When the review step was skipped, the `Score:` field reads the literal `skipped` — `Format: v1 · Score: skipped · Base: <origin/main SHA> · Stored by /autopilot:linear-plan` — so the ticket's reader knows the plan is unreviewed; like the score, it informs and never gates.
 
+### The emission template
+
+The marker list above is the machine-readable contract between this skill and its reader; the block below is the literal text the store writes. Emit it verbatim: replace only the `<angle-bracket>` placeholders and leave every other byte — the anchor line, the header line, each `###` heading, their order, and the blank-line layout — exactly as written. The `<- required` / `<- caller-owned` annotations belong to the contract list alone and never appear in a stored description.
+
+```text
+## Implementation plan
+
+Format: v1 · Score: <score> · Base: <sha> · Stored by /autopilot:linear-plan
+
+### Summary
+
+<the plan's Summary body, including its Steelmanned intent line>
+
+### Implementation Steps
+
+<the plan's numbered steps, each keeping its verify: line>
+
+### Files
+
+<the plan's file list>
+
+### Pre-Implementation
+
+<the plan's branch outcome, stated as prose>
+
+### Post-Implementation
+
+<the plan's post-implementation prose>
+```
+
+Fill rules:
+
+- `<score>` — `N/100` from the review step, or the literal `skipped` when the review was skipped, matching the two header variants above.
+- `<sha>` — the full SHA exactly as `git rev-parse origin/main` printed it; never abbreviate or reconstruct it.
+- Each section placeholder — that section's body from the finalized plan file, demoted headings included, adjusted only as far as the Linear-safe markdown rules below require.
+
+**The first-store wrapper.** On a first store over a non-empty description ([The write](#the-write), second case), the prior body is wrapped in the same collapsible form [`linear:create`](../linear:create/SKILL.md) uses for its original-prompt preamble, emitted literally as:
+
+```text
++++ Original task
+
+<the prior description, byte-identical>
+
++++
+```
+
+then a blank line, then the filled template above. The title is exactly `Original task`. The prior description is inserted byte-identical and treated as opaque — never reworded, re-linked, or rewritten into the Linear-safe forms below, because it is preserved text, not authored text. A read-back shows `>>> Original task … >>>`; that fence normalization is why the write anchors on the heading and never on the fence.
+
+### Linear-safe markdown
+
+Linear's editor accepts most Markdown on input ([editor reference](https://linear.app/docs/editor)) but normalizes several author forms when it saves, so a stored description reads back byte-identical only when it is written in the canonical forms. Section bodies filled into the template use only:
+
+- `###`/`####` headings — the anchor and section headings come from the template itself
+- `*` bullets and `1.` numbered lists — never `-` or `+` bullets, which Linear rewrites to `*`
+- `**bold**` and `*italic*` — never `_underscore emphasis_`, which Linear rewrites to `*`
+- inline code and fenced code blocks (`text`-tagged fences for ASCII diagrams)
+- plain URLs and `[text](url)` links
+- `+++ Title` … `+++` as the only collapsible form — Linear stores it as `>>> Title … >>>`, which is why reads never match the fence
+
+Never emit HTML (`<details>` and every other tag do not render), checkbox lists (`[]` becomes an interactive checklist, and the plan file bans checkboxes), or any construct the [editor reference](https://linear.app/docs/editor) does not list. Writing the canonical forms directly is what keeps a re-store's read-back comparable to what was written, instead of diffing against Linear's rewrites.
+
 ### The write
 
 1. **Read the current description** with `get_issue`.
@@ -58127,6 +58232,12 @@ The three metadata fields each earn their place:
 - **`Score:`** records what the plan actually achieved, so a later reader can weigh it.
 - **`Base:`** records the tree the plan was drafted against. It is information, not a gate — see [why drift does not block](./17-linear-run-skill.md#drift-is-reported-not-enforced).
 
+The annotated list above is the contract; what the store actually writes is a literal **emission template** the skill carries beside it — the exact stored block with `<angle-bracket>` placeholders for the score (or the literal `skipped`), the base SHA, and each section body. Only placeholders are filled; every other byte — anchor, header line, headings, order, blank-line layout — is emitted verbatim, and the `<- required` / `<- caller-owned` annotations never reach a ticket. That removes the failure mode where each store re-derives the markdown from prose and submits a structurally different description that the reader then rejects as unusable. The first-store `+++ Original task +++` cut is a literal emission form too — the same collapsible shape as `linear:create`'s original-prompt preamble, with the prior description inserted byte-identical and treated as opaque rather than rewritten into the canonical forms below.
+
+### Linear-safe markdown
+
+Linear's editor accepts most Markdown on input ([editor reference](https://linear.app/docs/editor)) but normalizes several author forms on save — the fence rewrite below, `_italic_` to `*italic*`, `-` bullets to `*`. The skill therefore constrains section bodies to the canonical forms: `###`/`####` headings, `*` bullets and `1.` lists, `**bold**`/`*italic*`, inline code and `text`-tagged fences, plain URLs and `[text](url)` links, and the `+++ … +++` fence as the only collapsible. HTML (including `<details>`) and checkbox lists are never emitted. Writing the canonical forms directly is what keeps a re-store's read-back comparable to what was written.
+
 ## How the write works
 
 ```text
@@ -58191,7 +58302,7 @@ The plan is stored automatically the moment the shared review pipeline finishes 
 
 ## How this is guarded
 
-`linear:plan` and `linear:run` are prompt files with no import between them, so a renamed stored section would break the reader with nothing failing in between. `linearPlanContract.test.ts` closes that gap the way [`primedBriefContract.test.ts`](./15-run-primed-skill.md#how-this-is-guarded) does for the explore pair: it extracts the section names and their markers from this skill's own template and asserts the reader consumes exactly the required subset and none of the caller-owned ones. It also pins the format version across both sides, asserts the reader maps every verdict to stored-plan or fresh-plan behavior, asserts the fallback never dispatches the producer or overwrites Linear, and asserts `pipeline.md` states no scoring threshold or revision budget — the review is an enhancement, and a re-introduced gate would silently start losing plans.
+`linear:plan` and `linear:run` are prompt files with no import between them, so a renamed stored section would break the reader with nothing failing in between. `linearPlanContract.test.ts` closes that gap the way [`primedBriefContract.test.ts`](./15-run-primed-skill.md#how-this-is-guarded) does for the explore pair: it extracts the section names and their markers from this skill's own template and asserts the reader consumes exactly the required subset and none of the caller-owned ones. It also pins the format version across both sides, asserts the reader maps every verdict to stored-plan or fresh-plan behavior, asserts the fallback never dispatches the producer or overwrites Linear, and asserts `pipeline.md` states no scoring threshold or revision budget — the review is an enhancement, and a re-introduced gate would silently start losing plans. The [emission template](#the-stored-plan-format) is pinned the same way: it must open with the anchor and placeholder header line, list every contract section in order, leak no `<-` annotation, and carry none of the author forms Linear normalizes away.
 
 **What no test can show:** that Linear renders the stored description the way this chapter says. That is settled by a dry run on a real ticket, recorded on the pull request, because no `linear` tracker is configured in this repository and neither skill can execute here. Nothing under `.github/workflows/` runs `bun test` either, so the guard gates locally and in review rather than in CI.
 
