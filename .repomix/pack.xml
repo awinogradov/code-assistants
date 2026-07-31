@@ -438,6 +438,7 @@ claude-plugins/
       1.9.0.md
       2.0.0.md
       3.0.0.md
+      3.1.0.md
     agents/
       analyze-pr-commits.md
       analyze-staged-changes.md
@@ -39382,7 +39383,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -41136,6 +41137,37 @@ Entire-Checkpoint: 0e31e51d514d
 ### Bug Fixes
 
 * **linear-plan:** gate expert review behind opt-in flag ([99bca11](https://github.com/awinogradov/code-assistants/commit/99bca114ff702189b7f6f2bddd4de52234a160b7))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/3.1.0.md">
+## [3.1.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v3.0.0...autopilot@v3.1.0) (2026-07-31)
+
+## Release Notes
+
+The `linear-plan` skill now stores plans using a strict template that guarantees valid Linear markdown, preventing parse errors when plans are executed via `linear-run`.
+
+## ✨ What's New
+
+### Strict Plan Storage for Linear Tickets
+
+When the `linear-plan` skill stores a plan on a Linear ticket, it now uses a controlled emission template that limits output to Linear-safe markdown only. Previously, stored plans could include markdown constructs that Linear's parser doesn't support, causing issues when those plans were later picked up and run by `linear-run`. Plans stored from this release forward will always parse cleanly in Linear, making the plan → execute workflow more reliable end-to-end.
+
+<details><summary>Related issues</summary>
+
+- [#531: Add a strict stored-plan template to the linear-plan skill](https://github.com/awinogradov/code-assistants/issues/531)
+- [#532: Store Linear plans from a strict template](https://github.com/awinogradov/code-assistants/pull/532)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #531 | [#532](https://github.com/awinogradov/code-assistants/pull/532) | @awinogradov |
+
+### Features
+
+* **linear-plan:** add strict stored-plan template ([e0ef2cf](https://github.com/awinogradov/code-assistants/commit/e0ef2cf2d71afe408d875445a1e7aff77f924bb8))
 </file>
 
 <file path="claude-plugins/autopilot/agents/analyze-pr-commits.md">
@@ -53645,6 +53677,34 @@ Before writing any output that mentions a file, standard, section, commit, or is
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [3.1.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v3.0.0...autopilot@v3.1.0) (2026-07-31)
+
+## Release Notes
+
+The `linear-plan` skill now stores plans using a strict template that guarantees valid Linear markdown, preventing parse errors when plans are executed via `linear-run`.
+
+## ✨ What's New
+
+### Strict Plan Storage for Linear Tickets
+
+When the `linear-plan` skill stores a plan on a Linear ticket, it now uses a controlled emission template that limits output to Linear-safe markdown only. Previously, stored plans could include markdown constructs that Linear's parser doesn't support, causing issues when those plans were later picked up and run by `linear-run`. Plans stored from this release forward will always parse cleanly in Linear, making the plan → execute workflow more reliable end-to-end.
+
+<details><summary>Related issues</summary>
+
+- [#531: Add a strict stored-plan template to the linear-plan skill](https://github.com/awinogradov/code-assistants/issues/531)
+- [#532: Store Linear plans from a strict template](https://github.com/awinogradov/code-assistants/pull/532)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #531 | [#532](https://github.com/awinogradov/code-assistants/pull/532) | @awinogradov |
+
+### Features
+
+* **linear-plan:** add strict stored-plan template ([e0ef2cf](https://github.com/awinogradov/code-assistants/commit/e0ef2cf2d71afe408d875445a1e7aff77f924bb8))
 ## [3.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v2.0.0...autopilot@v3.0.0) (2026-07-31)
 
 ## Release Notes
@@ -55360,14 +55420,14 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
   "release": {
     "type": "claude-plugin"
   },
-  "version": "3.0.0"
+  "version": "3.1.0"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v3.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v3.1.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -55856,7 +55916,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-3.0.0
+3.1.0
 </file>
 
 <file path="docs/01-workspace-structure.md">
