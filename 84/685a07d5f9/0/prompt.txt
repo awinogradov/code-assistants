@@ -1,0 +1,1 @@
+/autopilot:plan I see some issues with linear plan submiting. Let's add strict template to skill to avoid submiting with linear mcp (check docs) --issue

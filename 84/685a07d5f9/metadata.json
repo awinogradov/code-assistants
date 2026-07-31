@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "84685a07d5f9",
+  "strategy": "manual-commit",
+  "branch": "issue-531-linear-plan-template",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "claude-plugins/autopilot/skills/linear:plan/SKILL.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/84/685a07d5f9/0/metadata.json",
+      "transcript": "/84/685a07d5f9/0/full.jsonl",
+      "compact_transcript": "/84/685a07d5f9/0/transcript.jsonl",
+      "content_hash": "/84/685a07d5f9/0/content_hash.txt",
+      "prompt": "/84/685a07d5f9/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 269,
+    "cache_creation_tokens": 256945,
+    "cache_read_tokens": 14531254,
+    "output_tokens": 63838,
+    "api_call_count": 76
+  }
+}

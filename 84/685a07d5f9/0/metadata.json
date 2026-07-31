@@ -1,0 +1,241 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_id": "84685a07d5f9",
+  "session_id": "6f98d774-bad0-4a79-b112-b88e937b5ae8",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-31T18:15:23.061134Z",
+  "branch": "issue-531-linear-plan-template",
+  "checkpoints_count": 2,
+  "save_step_count": 1,
+  "files_touched": [
+    "claude-plugins/autopilot/skills/linear:plan/SKILL.md"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-fable-5",
+  "turn_id": "84868549ad21",
+  "token_usage": {
+    "input_tokens": 269,
+    "cache_creation_tokens": 256945,
+    "cache_read_tokens": 14531254,
+    "output_tokens": 63838,
+    "api_call_count": 76
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "prompt-skill-claude-code-autopilot:plan-2026-07-31T17:48:00.976977Z",
+      "event_type": "prompt_invocation",
+      "skill": {
+        "name": "autopilot:plan"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "prompt_slash_command",
+        "confidence": "explicit"
+      },
+      "turn_id": "69701d3a3238",
+      "timestamp": "2026-07-31T17:48:00.976977Z",
+      "native": {
+        "command": "/autopilot:plan"
+      },
+      "collapse": {
+        "target": "user_message",
+        "label": "/autopilot:plan",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01FU2dbEKYWnvAx5MJoNs3qV",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "autopilot:issue-create"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "84868549ad21",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 73,
+        "end": 74,
+        "entry_ids": [
+          "cc0ae16d-3368-4a1f-8ca8-7653bf06277a"
+        ],
+        "tool_use_id": "toolu_01FU2dbEKYWnvAx5MJoNs3qV"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01FU2dbEKYWnvAx5MJoNs3qV"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: autopilot:issue-create",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01PzdYT8WCqtdsJo1mj9ts4X",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "autopilot:gather-context"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "84868549ad21",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 199,
+        "end": 200,
+        "entry_ids": [
+          "9d19f042-2034-4750-82f1-b4a491a4192e"
+        ],
+        "tool_use_id": "toolu_01PzdYT8WCqtdsJo1mj9ts4X"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01PzdYT8WCqtdsJo1mj9ts4X"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: autopilot:gather-context",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01NsBTypbnUmPhsdZE2zigRN",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "autopilot:branch-create"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "84868549ad21",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 381,
+        "end": 382,
+        "entry_ids": [
+          "73f1741f-4792-460a-a116-7da969910fd8"
+        ],
+        "tool_use_id": "toolu_01NsBTypbnUmPhsdZE2zigRN"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01NsBTypbnUmPhsdZE2zigRN"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: autopilot:branch-create",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01Rz3eKND6Dc7DNCPnCE9AAz",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "autopilot:commits-create"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "84868549ad21",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 590,
+        "end": 591,
+        "entry_ids": [
+          "b4e4b72a-4ede-4842-a13d-73a6204987ca"
+        ],
+        "tool_use_id": "toolu_01Rz3eKND6Dc7DNCPnCE9AAz"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01Rz3eKND6Dc7DNCPnCE9AAz"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: autopilot:commits-create",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01PKvDne6j93uJzsa4MRPxuf",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "autopilot:pr-create"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "84868549ad21",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 656,
+        "end": 657,
+        "entry_ids": [
+          "318da9b8-5a72-4bf7-99e5-bafc755cb52f"
+        ],
+        "tool_use_id": "toolu_01PKvDne6j93uJzsa4MRPxuf"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01PKvDne6j93uJzsa4MRPxuf"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: autopilot:pr-create",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-31T18:15:23.008011Z",
+    "agent_lines": 230,
+    "agent_removed": 0,
+    "human_added": 12,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 242,
+    "total_lines_changed": 242,
+    "agent_percentage": 95.0413223140496,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 20,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".husky/_/commit-msg": 4,
+        ".husky/_/post-commit": 4,
+        ".husky/_/post-rewrite": 4,
+        ".husky/_/pre-push": 5,
+        ".husky/_/prepare-commit-msg": 3
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    }
+  ]
+}
