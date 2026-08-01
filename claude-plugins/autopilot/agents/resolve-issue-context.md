@@ -53,7 +53,7 @@ Use the **Linear ID** from the prompt. Run the bundled GraphQL helper — it is 
 
 Run this phase ONLY when the caller's prompt contains `Auto-assign current user: true` **and** the provider is GitHub. Otherwise skip directly to [Phase 3](#phase-3-output) and omit the `**Assignee:**` line from the output.
 
-The agent emits exactly one of the status strings below into the [Phase 3](#phase-3-output) `**Assignee:**` line:
+Assignment is idempotent and best-effort: never fail the whole resolution because assignment failed — every outcome maps to a status string. Emit exactly one of these into the [Phase 3](#phase-3-output) `**Assignee:**` line (callers parse them verbatim):
 
 - `@<login> (just assigned)`
 - `@<login> (already assigned)`
@@ -62,42 +62,17 @@ The agent emits exactly one of the status strings below into the [Phase 3](#phas
 - `unassigned — permission denied or assignee limit reached`
 - `unassigned — gh edit error: <first line of stderr>`
 
-Resolve the status with these steps:
+Resolve the status with these steps — each states the contract to satisfy; choose your own `gh`/`jq` invocations:
 
-1. Resolve the authenticated login, caching the result for 5 minutes:
+1. Resolve the authenticated `gh` login. If there is none, emit `unassigned — gh not authenticated` and skip to [Phase 3](#phase-3-output) — no fallback identity lookup.
 
-   ```bash
-   LOGIN=$(gh api user --cache 5m --jq .login 2>/dev/null)
-   ```
+2. If the [Phase 1](#phase-1-fetch-issue) issue `state` is `CLOSED`, emit `unassigned — issue closed` and skip to [Phase 3](#phase-3-output). Planning work on a closed issue is almost always a mistake; surface it instead of silently mutating.
 
-   If `LOGIN` is empty, set status to `unassigned — gh not authenticated` and skip to [Phase 3](#phase-3-output). Do NOT attempt an email-based fallback — `gh api search/users` requires `gh` to be working anyway, can match unrelated accounts that expose the same public email, and shares the same auth/rate-limit failure modes.
+3. Check whether the login is already among the issue's assignees (`ISSUE_JSON` from [Phase 1](#phase-1-fetch-issue) already carries them). If it is, emit `@<login> (already assigned)` and skip to [Phase 3](#phase-3-output).
 
-2. If the [Phase 1](#phase-1-fetch-issue) issue `state` is `CLOSED`, set status to `unassigned — issue closed` and skip to [Phase 3](#phase-3-output). Planning work on a closed issue is almost always a mistake; surface it instead of silently mutating.
+4. Otherwise attempt the assignment (`gh issue edit --add-assignee`), capturing stderr and the exit code. If the edit exits non-zero, emit `unassigned — gh edit error: <first line of stderr>`.
 
-3. Check whether `LOGIN` is already in the assignees array from [Phase 1](#phase-1-fetch-issue), with an explicit `jq` variable binding:
-
-   ```bash
-   ALREADY=$(printf '%s' "$ISSUE_JSON" | jq -r --arg login "$LOGIN" 'any(.assignees[]?; .login == $login)')
-   ```
-
-   If `ALREADY == "true"`, set status to `@<LOGIN> (already assigned)` and skip to [Phase 3](#phase-3-output).
-
-4. Otherwise attempt the assignment with explicit stderr capture:
-
-   ```bash
-   STDERR=$(gh issue edit "$NUMBER" -R "$REPO" --add-assignee "$LOGIN" 2>&1 >/dev/null)
-   EDIT_EXIT=$?
-   ```
-
-5. Post-verify via a fresh read, because `gh issue edit --add-assignee` returns exit 0 even when GitHub silently drops the addition (caller lacks `triage`/`write` permission, or the issue is already at the 10-assignee limit). `gh --jq` only accepts a single expression and cannot pass `--arg` through to `jq`, so pipe the JSON to `jq` directly:
-
-   ```bash
-   VERIFIED=$(gh issue view "$NUMBER" -R "$REPO" --json assignees 2>/dev/null | jq -r --arg login "$LOGIN" 'any(.assignees[]?; .login == $login)' 2>/dev/null)
-   ```
-
-   - `EDIT_EXIT == 0` AND `VERIFIED == "true"` → `@<LOGIN> (just assigned)`
-   - `EDIT_EXIT == 0` AND `VERIFIED != "true"` → `unassigned — permission denied or assignee limit reached`
-   - `EDIT_EXIT != 0` → `unassigned — gh edit error: <first line of $STDERR>`
+5. If the edit exits 0, verify with a fresh read of the issue's assignees — `gh issue edit --add-assignee` returns exit 0 even when GitHub silently drops the addition (caller lacks `triage`/`write` permission, or the issue is already at the 10-assignee limit). Login present → `@<login> (just assigned)`; absent → `unassigned — permission denied or assignee limit reached`.
 
 ## Phase 3: Output
 
