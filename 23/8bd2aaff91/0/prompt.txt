@@ -530,3 +530,43 @@ Each reference file opens with a one-line header naming the parent skill and lin
 - `bun test src/linkResolution.test.ts` (the anchors guard): 776 pass, 0 fail — all new `./references/examples.md` links and re-pointed `../SKILL.md#phase-…` anchors resolve.</result>
 <usage><subagent_tokens>89533</subagent_tokens><tool_uses>19</tool_uses><duration_ms>260902</duration_ms></usage>
 </task-notification>
+
+---
+
+<task-notification>
+<task-id>ad3db580dfdb7f91f</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-dust-devil-pictograph/dc3eb34f-6473-4070-ac05-77b1d02d3206/tasks/ad3db580dfdb7f91f.output</output-file>
+<status>completed</status>
+<summary>Agent "WP-F: ascii-schemas + branch:create splits" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>Both tasks complete. All checks green.
+
+## Files
+
+**Task 1 — ascii-schemas split**
+- `/Users/tony_vi/.warp/worktrees/code-assistants/dust-devil-pictograph/claude-plugins/autopilot/skills/ascii-schemas/SKILL.md` — 508 → 154 lines. Kept: frontmatter, intro, When to Use, MCP Integration, Core Rules, the four Character Quick Reference tables (Box Drawing, Arrows and Connectors, Flow References, UI Symbols), Border Style Selection, Anti-Patterns, Reference formatting (untouched).
+- `references/technical-diagrams.md` (new, 149 lines) — "Technical Diagram Types" (architecture/flow, ER, deployment/topology, sequence, CI/CD examples with Flow Legend) + "Construction Guidelines" (Box Sizing, Spacing and Alignment, Flow Legend Format, Internal Subdivisions), verbatim.
+- `references/ui-wireframes.md` (new, 151 lines) — "UI Wireframe Patterns" (browser frame, navbar, sidebar, card grid, data table, modal, form, mobile frames, pricing, chat bubbles), verbatim.
+- `references/component-patterns.md` (new, 71 lines) — "UI Component Patterns" mini-widgets (toggle → image placeholder), verbatim.
+- Dispatch: a new "## Pattern References" section (three bullets: technical schema + construction guidelines → technical-diagrams.md; page/screen wireframe → ui-wireframes.md; individual widgets → component-patterns.md) sits where the moved bulk was. No inbound anchor links to the moved sections existed anywhere in the repo, and the moved content itself contained no links, so nothing needed repointing.
+
+**Task 2 — branch:create self-assign trim**
+- `/Users/tony_vi/.warp/worktrees/code-assistants/dust-devil-pictograph/claude-plugins/autopilot/skills/branch:create/SKILL.md` — 339 → 301 lines. Phase 2 step 5 keeps the intent sentence, the "runs on every issue branch / on ANY failure emit the status line and continue" paragraph, the six-string status vocabulary, plus the new line: `Execution steps: read references/self-assign.md at this step.`
+- `references/self-assign.md` (new, 44 lines) — the canonical-sync HTML comment plus "Resolve it with these steps:" and numbered steps 1–5 with all bash blocks and gh/jq caveats, verbatim except link depth.
+
+## Judgment calls
+1. **Border Style Selection promoted `###` → `##`** in ascii-schemas SKILL.md — its parent "## Construction Guidelines" moved away, so it can't stay nested; the GitHub anchor `#border-style-selection` is unchanged (no inbound links anyway). Table content and mixing rule are verbatim.
+2. **"UI Component Patterns" promoted `###` → `##`** inside component-patterns.md (its parent "## Character Quick Reference" stayed behind); anchor unchanged.
+3. **Link-depth fixes inside moved content** (required by the "every link resolves" constraint): the canonical comment's `../../agents/resolve-issue-context.md#phase-2-auto-assign-current-user-opt-in` became `../../../agents/...` (references/ is one level deeper — anchor verified against the agent file's heading), and the four bare `[Phase 3](#phase-3-generate-branch-slug)` anchors in the moved steps became `../SKILL.md#phase-3-generate-branch-slug`. The "In all cases, continue to Phase 3" closer moved with the algorithm (it's the algorithm's exit rule; the kept prose retains its own continue-to-Phase-3 rule). Step 2's "the issue `state` from step 2" wording kept verbatim (it refers to Phase 2 step 2, recoverable from the file's header line). The agent file's reciprocal sync comment still points at `SKILL.md#phase-2-fetch-github-issue`, which remains valid — no edit needed there.
+4. Each reference file opens with the repo's established `# Title` + "Reference for [`…/SKILL.md`](../SKILL.md)" header line (matching `plan/references/*` style); frontmatter of both skills untouched (`Read` needs no allowlisting).
+
+## Verification
+- `bunx prettier@3.8.3 --write` on all six files — all reported unchanged (tables already padded correctly).
+- `bun run validate` from repo root — 40 checks OK.
+- `bun test linkResolution` — 776 pass, 0 fail (new references/ files are walked and their anchors validated).
+- Full code-review-action suite — 1281 pass, 0 fail.
+
+Note: `git status` shows sibling skills (issue:create, pr:review, pr:update, shared-rules) also modified in this worktree — those are other agents' findings from the same issue; I did not touch them. Nothing committed, per instructions.</result>
+<usage><subagent_tokens>93908</subagent_tokens><tool_uses>23</tool_uses><duration_ms>311108</duration_ms></usage>
+</task-notification>
