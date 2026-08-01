@@ -330,7 +330,7 @@ After all commits are created successfully:
 
 1. Check if a PR exists for the current branch: `gh pr view --json number,url 2>/dev/null`
 2. If the command fails (no PR), skip silently — do not show any message
-3. If a PR exists, invoke `Skill(autopilot:pr-update)` directly. Do not ask first: the PR already exists and the commits are already made, so refreshing its title and description to match them is bookkeeping, not a decision.
+3. If a PR exists, invoke `Skill(autopilot:pr-update)` with `--autopilot`: the PR already exists and the commits are already made, so refreshing its title and description to match them is bookkeeping, not a decision — the flag is what makes the callee skip its own dialogs.
 
 ## Examples
 

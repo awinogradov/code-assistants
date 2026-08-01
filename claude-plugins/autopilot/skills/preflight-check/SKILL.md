@@ -93,11 +93,11 @@ For all other modes (`plan`, `branch`, `commits`), skip this check — uncommitt
 Run:
 
 ```bash
-git log origin/main..HEAD --oneline
+git cherry origin/main HEAD
 ```
 
-- If the output is empty (no unmerged commits), the branch IS merged — go to Phase 2a.
-- If the output is non-empty, the branch has unmerged commits — go to Phase 2b.
+- If every line starts with `-` (or the output is empty), the branch IS merged — go to Phase 2a. `git cherry` compares patches, not SHAs, so a branch whose commits landed upstream rewritten by a rebase-merge is still detected as merged; a `git log origin/main..HEAD` emptiness test misses exactly that case.
+- If any line starts with `+`, the branch has unmerged commits — go to Phase 2b.
 
 ### Phase 2a: Branch Is Merged
 
