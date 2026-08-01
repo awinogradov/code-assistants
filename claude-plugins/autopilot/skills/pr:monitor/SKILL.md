@@ -120,6 +120,17 @@ If no PR found, abort: "No pull request found for the current branch. Create one
 
 Store PR number, owner/repo (extract from url), title, and state.
 
+### Approval Sweep (shared procedure)
+
+Run whenever `reviewDecision` is `APPROVED` — from the [§1.1](#11-early-exit-checks) pre-loop check or the [§2.2](#22-check-pr-state) per-cycle check. Only the follow-up outputs and continue targets differ, and those stay with each caller.
+
+1. Record current HEAD: `git rev-parse HEAD` → store as `headBefore`
+2. Invoke `Skill(autopilot:pr-resolve)` to evaluate unresolved suggestions and nitpicks. The skill will exit early if no actionable comments remain. For each suggestion:
+   - If reasonable and improves the code → fix it
+   - If not applicable or doesn't make sense → reply explaining why
+3. Check if HEAD changed: `git rev-parse HEAD` → compare with `headBefore`
+4. If HEAD changed (pr:resolve pushed new commits — new CI must pass and the approval may be stale), set `cooldownRemaining = 3`; the caller resumes monitoring. If HEAD unchanged, the caller decides whether to exit.
+
 ### 1.1 Early Exit Checks
 
 **If `state` is `MERGED`:**
@@ -132,18 +143,13 @@ Store PR number, owner/repo (extract from url), title, and state.
 
 **If `reviewDecision` is `APPROVED`:**
 
-1. Record current HEAD: `git rev-parse HEAD` → store as `headBefore`
-2. Invoke `Skill(autopilot:pr-resolve)` to evaluate unresolved suggestions and nitpicks. The skill will exit early if no actionable comments remain. For each suggestion:
-   - If reasonable and improves the code → fix it
-   - If not applicable or doesn't make sense → reply explaining why
-3. Check if HEAD changed: `git rev-parse HEAD` → compare with `headBefore`
-4. If HEAD changed (pr:resolve pushed new commits):
+1. Run the [Approval Sweep](#approval-sweep-shared-procedure)
+2. If HEAD changed:
    - Output: "PR #N was approved but pr:resolve pushed fixes. Resuming monitoring for new CI and approval..."
-   - Set `cooldownRemaining = 3`
    - Continue to Phase 1.2
-5. If HEAD unchanged AND all checks in `statusCheckRollup` have `state === "SUCCESS"`:
+3. If HEAD unchanged AND all checks in `statusCheckRollup` have `state === "SUCCESS"`:
    - Exit: "PR #N is already approved with all checks passing. No monitoring needed."
-6. If HEAD unchanged AND checks are not all passing:
+4. If HEAD unchanged AND checks are not all passing:
    - Output: "PR #N is approved but has failing CI checks. Attempting to fix..."
    - Run the **CI Fix Workflow** (see [§2.2a](#22a-check-ci-status))
    - After fix, output: "CI fixes pushed. Starting monitoring..."
@@ -191,7 +197,7 @@ Enter a loop that repeats until the PR is approved with all checks passing, merg
 
 Maintain the following state across iterations:
 
-- `cooldownRemaining`: number of poll cycles to skip CI checks after a fix push (starts at 0)
+- `cooldownRemaining`: number of poll cycles to skip CI checks after a fix push (starts at 0; a push sets it to 3 so fresh CI runs have time to replace the stale failures of the superseded commit before checks are read again)
 - `fixAttempts`: map of `checkName → { attempts: number, lastRunId: string }` tracking CI fix attempts
 
 ### 2.1 Sleep
@@ -218,16 +224,11 @@ gh pr view <PR_NUMBER> --json state,reviewDecision,statusCheckRollup
 
 **If `reviewDecision` is `APPROVED` AND all checks in `statusCheckRollup` have `state === "SUCCESS"`:**
 
-1. Record current HEAD: `git rev-parse HEAD` → store as `headBefore`
-2. Invoke `Skill(autopilot:pr-resolve)` to evaluate unresolved suggestions and nitpicks. The skill will exit early if no actionable comments remain. For each suggestion:
-   - If reasonable and improves the code → fix it
-   - If not applicable or doesn't make sense → reply explaining why
-3. Check if HEAD changed: `git rev-parse HEAD` → compare with `headBefore`
-4. If HEAD changed (pr:resolve pushed new commits):
+1. Run the [Approval Sweep](#approval-sweep-shared-procedure)
+2. If HEAD changed:
    - Output: "pr:resolve pushed fixes. Resuming monitoring for new CI and approval..."
-   - Set `cooldownRemaining = 3`
    - Continue polling loop (go to 2.1)
-5. If HEAD unchanged:
+3. If HEAD unchanged:
    - Exit to [Phase 3](#phase-3-exit) with status "approved"
 
 **If `reviewDecision` is `CHANGES_REQUESTED`:**
@@ -369,20 +370,11 @@ URL: <pr-url>
 
 ## Edge Cases
 
-- **No PR found** → abort with suggestion to create one
-- **PR already approved with all checks passing** → invoke pr:resolve, then exit only if HEAD unchanged (no new commits pushed)
-- **pr:resolve pushes new commits on approved PR** → resume polling loop with cooldown (new CI must pass, approval may be stale)
-- **PR merged during monitoring** → exit with merge message
-- **PR closed during monitoring** → exit with close message
-- **No reviewers assigned** → warn user, offer to continue or cancel
+Cases the phases do not already cover:
+
 - **pr:resolve fails** → report error, ask user via AskUserQuestion: "Resolve review encountered an error. How would you like to proceed?" with options: Retry / Continue monitoring / Cancel
-- **CI checks pending** → wait for completion, do not act
-- **CI checks cancelled** → treat as pending (new run likely starting due to `cancel-in-progress`)
 - **CI fix attempt fails** → report error, ask user in foreground / return summary in background
-- **Max fix attempts reached (2 per check)** → mark check as unfixable, ask user
-- **Empty logs from cancelled run** → skip fix, wait for new run to complete
 - **Fix causes a different failure** → counts as a new attempt for that check
-- **Post-push cooldown active** → skip CI check phase, only check review status
 - **GitHub API rate limit (403/429)** → increase sleep interval to 120 seconds (2 minutes), warn user: "GitHub API rate limit detected. Increasing poll interval to 2 minutes."
 - **Network error** → retry API call once after 30 seconds; if still failing, warn user and ask whether to continue
 

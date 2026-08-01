@@ -114,7 +114,7 @@ Use the agent's analysis to decide the commit flow:
    - The specific technical change (what was added, removed, or replaced)
    - The concrete modifications made (what files, functions, values, or behaviors changed)
 3. Generate commit message following the format below — the title must name the specific thing that changed, and the body must list the concrete modifications
-4. **WHAT-not-WHY validation**: Check the generated title against the WHY signal words and vague signal words listed in the WHAT-not-WHY Rule section below. If the title contains any of those words followed by abstract goals (not technical specifics), or contains the words "review", "feedback", "comments", or "suggestions", regenerate the title using only concrete technical details from the diff. Repeat up to 3 times. If the title still fails, hand it to the [validation failure dialog](#validation-failure-dialog) with the failing check named — do not commit it.
+4. **WHAT-not-WHY validation**: Answer the rubric in the [WHAT-not-WHY Rule](#what-not-why-rule-mandatory) section for the generated title. If any rubric question fails, regenerate the title using only concrete technical details from the diff. Repeat up to 3 times. If the title still fails, hand it to the [validation failure dialog](#validation-failure-dialog) with the failing check named — do not commit it.
 5. Validate the composed candidate message with [Commit Message Validation](#commit-message-validation) — every checkable rule from the config plus commitlint when installed. On any violation, regenerate and re-validate (≤3 attempts); do not commit a message that still fails.
 6. Run `git commit -m "<message>"`. There is no confirmation step: the message is derived from a diff the user just produced, and steps 4–5 are the gate that stands in for reading it. Continue to [Phase 5](#phase-5-update-pr).
 
@@ -197,45 +197,21 @@ The body is required for `feat`, `fix`, and `refactor` commits. It may be omitte
 
 ### WHAT-not-WHY Rule (MANDATORY)
 
-Both the title and body MUST describe WHAT changed, NEVER WHY it changed. Context from calling skills (e.g., "fixes for PR review comments") must NOT influence the title — the title must describe what changed in the code.
+The title and body describe WHAT changed, never WHY. The title names the specific technical change so a reader knows what changed without opening the diff — motivation, review references, and rule citations belong nowhere in the message. Context from calling skills (e.g., "fixes for PR review comments") must NOT influence the title.
 
-**Title:** Name the specific technical change. Do NOT state the motivation, goal, or intent behind the change.
+| WRONG (goal or vague)                       | CORRECT (names the change)                             |
+| ------------------------------------------- | ------------------------------------------------------ |
+| `fix: address review feedback`              | `fix(parser): replace bcrypt with argon2 for hashing`  |
+| `feat: improve error handling`              | `feat(api): add retry with exponential backoff`        |
+| body: `- CLAUDE.md enforces max-depth of 2` | body: `- Change nesting depth threshold from >5 to >2` |
 
-| WHY-focused (WRONG)                       | WHAT-focused (CORRECT)                                |
-| ----------------------------------------- | ----------------------------------------------------- |
-| `fix: close coverage gaps`                | `fix(auth): add null-check and expiry validation`     |
-| `fix: address review feedback`            | `fix(parser): replace bcrypt with argon2 for hashing` |
-| `refactor: ensure compliance with rules`  | `refactor(lint): change nesting depth threshold to 2` |
-| `feat: improve error handling`            | `feat(api): add retry with exponential backoff`       |
-| `fix: cover edge cases`                   | `fix(validator): handle null and empty-string inputs` |
-| `refactor: address code quality concerns` | `refactor(db): extract connection pool into module`   |
+**Rubric** — answer for the drafted title (and each body bullet):
 
-**Body:** List the concrete modifications. Do NOT explain reasoning or reference rules.
+1. Does it name the concrete thing that changed (file, function, value, or behavior)?
+2. Would it still be true read against only the diff, with no conversation context?
+3. Does any part state a goal, motivation, or reference (review, rule, coverage) instead of a change?
 
-| WHY-focused body bullet (WRONG)                | WHAT-focused body bullet (CORRECT)                   |
-| ---------------------------------------------- | ---------------------------------------------------- |
-| `- CLAUDE.md enforces max-depth of 2`          | `- Change nesting depth threshold from >5 to >2`     |
-| `- Tests were missing for auth edge cases`     | `- Add tests for expired token and null user inputs` |
-| `- Review requested switching to argon2`       | `- Replace bcrypt with argon2 in hashPassword()`     |
-| `- Needed to close coverage gap in validation` | `- Add boundary checks for negative and zero values` |
-
-**WHY signal words to avoid in titles:** "close", "address", "ensure", "improve", "cover", "resolve", "satisfy", "comply", "meet" (when followed by abstract goals rather than technical specifics — e.g., "handle edge cases" is WHY, "handle null input in parseToken" is WHAT)
-
-### Anti-patterns
-
-The title must "contain the answer" — a reader should understand what changed without opening the diff.
-
-| Bad (vague)                  | Good (specific)                                          | Why                                 |
-| ---------------------------- | -------------------------------------------------------- | ----------------------------------- |
-| `fix: review updates`        | `fix(auth): replace bcrypt with argon2 for hashing`      | Names the actual replacement        |
-| `fix: resolve issue`         | `fix(api): return 404 instead of 500 for missing users`  | States the concrete behavior change |
-| `feat: add new feature`      | `feat(billing): add monthly invoice PDF export`          | Names the specific feature          |
-| `refactor: clean up code`    | `refactor(db): extract query builder from repository`    | Names what was extracted            |
-| `chore: update dependencies` | `chore(deps): upgrade zod from 3.21 to 3.23`             | Names the package and versions      |
-| `fix: close coverage gaps`   | `fix(auth): add null-check and expiry validation`        | Names what was actually added       |
-| `refactor: address feedback` | `refactor(parser): extract tokenizer into separate file` | Names the structural change         |
-
-**Vague signal words to avoid in titles:** "update", "fix stuff", "changes", "improvements", "tweaks", "adjustments", "various", "some", "misc", "review updates", "address feedback", "resolve issue", "close gaps", "cover edge cases", "ensure compliance", "improve handling", "address concerns", "satisfy requirements"
+Pass = yes, yes, no. The binding conventions and examples are in [CONTRIBUTING.md § Commits](../../../../CONTRIBUTING.md#commits).
 
 ### Commit Message Validation
 

@@ -2,7 +2,7 @@
 
 Reference for [`branch:create/SKILL.md`](../SKILL.md) [Phase 2](../SKILL.md#phase-2-fetch-github-issue) step 5 — the command algorithm behind the self-assign status line.
 
-<!-- Canonical: [resolve-issue-context.md Phase 2](../../../agents/resolve-issue-context.md#phase-2-auto-assign-current-user-opt-in) — keep this self-assign algorithm (statuses + steps) in sync with it. -->
+<!-- The six-string status vocabulary stays in sync with [resolve-issue-context.md Phase 2](../../../agents/resolve-issue-context.md#phase-2-auto-assign-current-user-opt-in); the command steps below are this file's own. -->
 
 Resolve it with these steps:
 

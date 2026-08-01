@@ -106,12 +106,7 @@ After all calls complete, store the `outputId` from the snapshot acquisition (at
 
 **First review (no previous reviews by REVIEWER):**
 
-- Start with a short greeting to @PR_AUTHOR (triggers notification). Rotate randomly between these tones — never use the same tone twice in a row:
-  1. **Dry wit** — "Thanks @PR_AUTHOR — let's see what you've brought to the table."
-  2. **Curious** — "New PR from @PR_AUTHOR — interesting, let's take a look."
-  3. **Straight shooter** — "Alright @PR_AUTHOR, let's get into it."
-  4. **Simple thanks** — "Thanks @PR_AUTHOR!"
-- Keep the greeting to ONE short sentence. No elaboration, no praise of the code after it.
+- Start with a greeting: ONE short sentence that @-mentions PR_AUTHOR — the @-mention is what triggers their notification. Vary the wording each time in your own voice; no praise, no round-labeling, no elaboration after it.
 - **Precedence:** Greeting applies only when the review has findings (blockers, suggestions, or nitpicks). For first-time approvals with no issues, use the minimal approval format — empty `reviewComment`, no body text at all.
 
 **Follow-up review (previous review by REVIEWER exists):**
@@ -411,21 +406,17 @@ Map `severity` to its emoji when rendering in [Phase 3](#phase-3-submit-review):
 
 ### Verdict Decision Rules
 
-**STRICT RULES - No exceptions:**
+This mapping is exhaustive and deterministic — every review lands in exactly one case. Apply it as written:
 
 0. **Nothing new to report** → no structured output (review skipped)
    - Follow-up with identical findings as previous review
    - Follow-up with no findings and no unresolved issues
    - Already approved + no new commits since last approval
-1. **Any 🚧 Blockers exist** → `verdict: "requestChanges"`
+1. **Any 🚧 Blockers exist** → `verdict: "requestChanges"` — stated as required changes, not as a conditional approval ("Once X is fixed, approve")
 2. **No blockers, only 🙋‍♂️ suggestions** → `verdict: "approve"` (suggestions are non-blocking)
 3. **No issues at all** → `verdict: "approve"`, `reviewComment: ""`
 
-**FORBIDDEN:**
-
-- Never use "👍 Approve" when blockers exist
-- Never use conditional approval language ("Once X is fixed, approve")
-- Never mismatch verdict field and section header
+A non-empty body's closing verdict header must match the `verdict` field per the header mapping in [reviewComment Format](#reviewcomment-format-30-lines-max).
 
 ---
 
@@ -449,7 +440,7 @@ Map `severity` to its emoji when rendering in [Phase 3](#phase-3-submit-review):
 
 ### reviewComment Format (~30 lines max)
 
-**CRITICAL: Use these EXACT section names. "Observations", "Positive Notes", or similar variations are NOT allowed.**
+Section names are fixed because downstream tooling keys on them — use exactly the four defined in the body template below (🚧 Blockers, 🙋‍♂️ Suggestions, 💡 Nitpicks, and the closing verdict header).
 
 **SKIP empty sections entirely. Do NOT write "None" or "N/A" - just omit the section.**
 
@@ -572,14 +563,9 @@ Add an optional `suggestion` to an inline comment when the fix is concrete and m
 
 ### Exclude
 
-- Code examples or implementation suggestions in the comment prose — put a concrete, mechanical fix in the structured `suggestion` field instead (see Code suggestions); it renders as a one-click GitHub suggestion block
-- "## Summary", "## Verdict", or any top-level markdown headers in review body
-- "Observations", "Positive Observations", or any praise/compliment sections
-- Multi-sentence greetings or praise after the opening greeting ("Great work", "Clean implementation", "well-structured", etc.)
-- Explanations of why code is good or well-written — if no issues, just approve silently
-- "🔁 Follow-up review" prefix or any round-labeling preamble
-- CLAUDE.md compliance checklists
-- File/line change statistics
-- Hedging words: "should", "could", "might"
-- Duplicate content between reviewComment and inlineComments
-- Empty sections with "None", "N/A", or similar placeholders
+The body is findings only: no praise, no meta-commentary, no statistics, no process narration — every sentence is either a finding or required by the template, and each finding states a fact and the change it calls for, not a hedged possibility. With no issues, approve silently.
+
+Two format contracts downstream tooling keys on:
+
+- No top-level (`##`) markdown headers — the body's only headers are the template's `###` sections
+- A concrete, mechanical fix goes in the structured `suggestion` field (see [Code suggestions](#code-suggestions)), which renders as a one-click GitHub suggestion block — not as a code example in the comment prose

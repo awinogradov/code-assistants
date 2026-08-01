@@ -9,19 +9,17 @@ allowed-tools:
 
 Validate the git working environment before proceeding. This skill checks the current branch state, detects stale or merged branches, and — depending on mode — either prepares `main` for a new plan/branch or warns against committing/opening a PR directly on `main`.
 
+The skill protects two invariants; the phases below implement them:
+
+1. Never create a branch from a stale branch or a `main` that is behind its remote.
+2. Never commit or open a PR on `main` without the user explicitly acknowledging it.
+
 ## Context
 
-This skill receives the following from conversation history:
+The invoking skill supplies these inputs in this conversation:
 
-- **Mode**: one of `plan`, `branch`, `commits`, `pr`. Defaults to `plan` when not present.
-- **Issue ID** (optional): resolved issue identifier (e.g., `#42`). Used only in `plan` mode for branch comparison.
-
-Pick the mode from these hints:
-
-- Invoked from `/autopilot:plan` or `/autopilot:run` → `plan`
-- Invoked from `Skill(autopilot:branch-create)` → `branch`
-- Invoked from `Skill(autopilot:commits-create)` → `commits`
-- Invoked from `Skill(autopilot:pr-create)` → `pr`
+- **Mode** — one of `plan`, `branch`, `commits`, `pr`. Every caller passes it explicitly (`mode: <plan|branch|commits|pr>`); default to `plan` only when it is absent.
+- **Issue ID** (optional, `plan` mode only) — the resolved issue identifier (e.g., `#42`), used for the branch-vs-issue comparison in [Phase 2b](#phase-2b-branch-has-unmerged-commits).
 
 The action noun used in prompts below follows the mode:
 
@@ -31,6 +29,8 @@ The action noun used in prompts below follows the mode:
 | `branch`  | branch creation |
 | `commits` | commit          |
 | `pr`      | pull request    |
+
+**Decision points.** Every user decision below uses AskUserQuestion. Read [`askuserquestion-format.md`](../shared-rules/references/askuserquestion-format.md) once and apply it to every `question` you compose. Each decision point states the situation, a suggested header, the choices with their consequences, and the action each choice triggers — compose the dialog from that. The quoted output strings are the skill's contract with its callers (they parse them, e.g. for the word "cancelled") — emit them EXACTLY as written.
 
 ## Phase 1: Detect Current Branch
 
@@ -69,22 +69,11 @@ If mode is `pr`, run:
 git status --porcelain
 ```
 
-If the output is non-empty, use AskUserQuestion:
+If the output is non-empty, ask (header "Uncommitted"): uncommitted changes were detected on `<currentBranch>` — how to proceed before opening the pull request?
 
-Tool parameters:
-
-- `question`: "Uncommitted changes detected on <currentBranch>.\n\nHow would you like to proceed before opening the pull request?"
-- `header`: "Uncommitted"
-- `options`: [
-  { label: "Commit first", description: "Run /autopilot:commits-create before creating PR" },
-  { label: "Continue anyway", description: "Create PR without committing these changes" },
-  { label: "Cancel", description: "Stop so I can handle changes first" }
-  ]
-- `multiSelect`: false
-
-- If "Commit first": invoke `Skill(autopilot:commits-create)`, then continue below.
-- If "Cancel": output "Pull request cancelled. Commit or stash changes first." and abort.
-- If "Continue anyway": continue below.
+- **Commit first** — run `/autopilot:commits-create` before creating the PR: invoke `Skill(autopilot:commits-create)`, then continue below.
+- **Continue anyway** — create the PR without committing these changes: continue below.
+- **Cancel** — stop so the user can handle changes first: output "Pull request cancelled. Commit or stash changes first." and abort.
 
 For all other modes (`plan`, `branch`, `commits`), skip this check — uncommitted changes are expected in `commits` mode, irrelevant in `plan`/`branch` mode before branch creation.
 
@@ -110,20 +99,10 @@ This is a worktree with no unmerged commits — likely a fresh worktree or a mer
 
 **If `isWorktree` is false:**
 
-Use AskUserQuestion:
+Ask (header "Merged branch"): branch `<currentBranch>` is already merged into main and appears stale — switch to main before <action noun>?
 
-Tool parameters:
-
-- `question`: "You are on branch <currentBranch> which is already merged into main.\n\nThis branch appears stale. Switch to main before <action noun>?"
-- `header`: "Merged branch"
-- `options`: [
-  { label: "Switch to main", description: "Checkout main and continue with <action noun>" },
-  { label: "Stay on this branch", description: "Continue with <action noun> on the current branch" }
-  ]
-- `multiSelect`: false
-
-- If "Switch to main": run `git checkout main`, then go to [Phase 3](#phase-3-on-main).
-- If "Stay on this branch": output "Continuing on branch <currentBranch>" and exit skill.
+- **Switch to main** — checkout main and continue with <action noun>: run `git checkout main`, then go to [Phase 3](#phase-3-on-main).
+- **Stay on this branch** — continue with <action noun> on the current branch: output "Continuing on branch <currentBranch>" and exit skill.
 
 ### Phase 2b: Branch Has Unmerged Commits
 
@@ -136,7 +115,7 @@ Parse the branch name to extract an issue number:
 
 #### Compare with plan-mode issue ID
 
-If mode is not `plan`, skip the comparison entirely and proceed to the "matching" prompt below.
+If mode is not `plan`, skip the comparison entirely and proceed to the "matching" decision point below.
 
 If mode is `plan`:
 
@@ -146,51 +125,19 @@ Read the plan issue ID from the `/autopilot:plan` or `/autopilot:run` input earl
 
 **If issue IDs do NOT match (plan mode only):**
 
-Use AskUserQuestion:
+Ask (header "Branch mismatch"): the current branch `<currentBranch>` (issue `<branchIssueId>`) does not match the target issue `<planIssueId>` — how to proceed?
 
-Tool parameters:
-
-- `question`: "You are on branch <currentBranch> (issue: <branchIssueId>) but planning for <planIssueId>.\n\nThe branch does not match the target issue. How to proceed?"
-- `header`: "Branch mismatch"
-- If `isWorktree` is true, use these `options`: [
-  { label: "Continue on this branch", description: "Plan for <planIssueId> on branch <currentBranch> — branch creation available after planning" },
-  { label: "Cancel", description: "Stop planning" }
-  ]
-- If `isWorktree` is false, use these `options`: [
-  { label: "Continue on this branch", description: "Plan for <planIssueId> on branch <currentBranch>" },
-  { label: "Switch to main", description: "Checkout main before planning" },
-  { label: "Cancel", description: "Stop planning" }
-  ]
-- `multiSelect`: false
-
-Handle user choice:
-
-- "Continue on this branch": output "Continuing on branch <currentBranch>" and exit skill.
-- "Switch to main" (non-worktree only): run `git checkout main`, then go to [Phase 3](#phase-3-on-main).
-- "Cancel": output "Planning cancelled by user." and abort.
+- **Continue on this branch** — plan for <planIssueId> on branch <currentBranch> (when `isWorktree` is true, note that branch creation is available after planning): output "Continuing on branch <currentBranch>" and exit skill.
+- **Switch to main** (offer only when `isWorktree` is false) — checkout main before planning: run `git checkout main`, then go to [Phase 3](#phase-3-on-main).
+- **Cancel** — stop planning: output "Planning cancelled by user." and abort.
 
 **Matching branch (plan mode) or any mode other than plan:**
 
-Use AskUserQuestion:
+Ask (header "Feature branch"): you are on branch `<currentBranch>` with `<N>` unmerged commit(s) — continue with <action noun> on this branch?
 
-Tool parameters:
-
-- `question`: "You are on branch <currentBranch> with <N> unmerged commit(s).\n\nContinue with <action noun> on this branch?"
-- `header`: "Feature branch"
-- If `isWorktree` is true, use these `options`: [
-  { label: "Continue on this branch", description: "Proceed with <action noun> on the current feature branch" },
-  { label: "Cancel", description: "Stop <action noun>" }
-  ]
-- If `isWorktree` is false, use these `options`: [
-  { label: "Continue on this branch", description: "Proceed with <action noun> on the current feature branch" },
-  { label: "Switch to main", description: "Checkout main and start fresh" },
-  { label: "Cancel", description: "Stop <action noun>" }
-  ]
-- `multiSelect`: false
-
-- "Continue on this branch": output "Continuing on branch <currentBranch>" and exit skill.
-- "Switch to main" (non-worktree only): run `git checkout main`, then go to [Phase 3](#phase-3-on-main).
-- "Cancel": output "<Action noun> cancelled by user." and abort.
+- **Continue on this branch** — proceed with <action noun> on the current feature branch: output "Continuing on branch <currentBranch>" and exit skill.
+- **Switch to main** (offer only when `isWorktree` is false) — checkout main and start fresh: run `git checkout main`, then go to [Phase 3](#phase-3-on-main).
+- **Cancel** — stop <action noun>: output "<Action noun> cancelled by user." and abort.
 
 ## Phase 3: On Main
 
@@ -202,22 +149,10 @@ Run:
 git status --porcelain
 ```
 
-If the output is non-empty:
+If the output is non-empty, ask (header "Uncommitted changes"): there are uncommitted changes on main that may interfere with <action noun> — how to proceed?
 
-Use AskUserQuestion:
-
-Tool parameters:
-
-- `question`: "You have uncommitted changes on main.\n\nUncommitted changes may interfere with <action noun>. How to proceed?"
-- `header`: "Uncommitted changes"
-- `options`: [
-  { label: "Continue anyway", description: "Proceed with <action noun> despite uncommitted changes" },
-  { label: "Cancel", description: "Stop so I can handle changes first" }
-  ]
-- `multiSelect`: false
-
-- If "Cancel": output "<Action noun> cancelled. Commit or stash changes first." and abort.
-- If "Continue anyway": continue below.
+- **Continue anyway** — proceed with <action noun> despite uncommitted changes: continue below.
+- **Cancel** — stop so the user can handle changes first: output "<Action noun> cancelled. Commit or stash changes first." and abort.
 
 ### Mode-specific handling
 
@@ -238,41 +173,16 @@ git rev-list HEAD..origin/main --count
 ```
 
 - If count is 0: output "Branch main is up to date with origin." and exit skill.
-- If count > 0:
-
-Use AskUserQuestion:
-
-Tool parameters:
-
-- `question`: "Your local main is <N> commit(s) behind origin/main.\n\nPull the latest changes before <action noun>?"
-- `header`: "Updates available"
-- `options`: [
-  { label: "Pull updates", description: "Run git pull to get latest changes" },
-  { label: "Continue without pulling", description: "Proceed against current local state" }
-  ]
-- `multiSelect`: false
-
-- If "Pull updates": run `git pull origin main`, output "Pulled latest changes from origin/main." and exit skill.
-- If "Continue without pulling": output "Continuing with local state (<N> commits behind origin)." and exit skill.
+- If count > 0, ask (header "Updates available"): local main is `<N>` commit(s) behind origin/main — pull the latest changes before <action noun>?
+  - **Pull updates** — run `git pull origin main` to get the latest changes, output "Pulled latest changes from origin/main." and exit skill.
+  - **Continue without pulling** — proceed against current local state: output "Continuing with local state (<N> commits behind origin)." and exit skill.
 
 **Mode `commits` or `pr`:**
 
-Creating a commit or PR directly from `main` is almost always wrong. Do not fetch or pull. Warn the user:
+Creating a commit or PR directly from `main` is almost always wrong. Do not fetch or pull. Ask (header "On main"): creating a <action noun> directly on main is usually wrong; to switch to a feature branch, cancel and run `/autopilot:branch-create` before retrying — how to proceed?
 
-Use AskUserQuestion:
-
-Tool parameters:
-
-- `question`: "You are on main. Creating a <action noun> directly on main is usually wrong.\n\nTo switch to a feature branch, cancel and run /autopilot:branch-create before retrying. How to proceed?"
-- `header`: "On main"
-- `options`: [
-  { label: "Continue on main", description: "Proceed anyway (hotfix/maintenance/trivial cases)" },
-  { label: "Cancel", description: "Stop so I can run /autopilot:branch-create first" }
-  ]
-- `multiSelect`: false
-
-- If "Continue on main": output "Continuing on main." and exit skill.
-- If "Cancel": output "<Action noun> cancelled. Run /autopilot:branch-create to switch to a feature branch, then retry." and abort.
+- **Continue on main** — proceed anyway (hotfix/maintenance/trivial cases): output "Continuing on main." and exit skill.
+- **Cancel** — stop so the user can run `/autopilot:branch-create` first: output "<Action noun> cancelled. Run /autopilot:branch-create to switch to a feature branch, then retry." and abort.
 
 ## Reference formatting
 
