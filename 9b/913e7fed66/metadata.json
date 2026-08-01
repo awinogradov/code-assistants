@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "9b913e7fed66",
+  "strategy": "manual-commit",
+  "branch": "issue-535-gen5-context-rules",
+  "checkpoints_count": 2,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/9b/913e7fed66/0/metadata.json",
+      "transcript": "/9b/913e7fed66/0/full.jsonl",
+      "compact_transcript": "/9b/913e7fed66/0/transcript.jsonl",
+      "content_hash": "/9b/913e7fed66/0/content_hash.txt",
+      "prompt": "/9b/913e7fed66/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 198,
+    "cache_creation_tokens": 462608,
+    "cache_read_tokens": 33081286,
+    "output_tokens": 162487,
+    "api_call_count": 105
+  }
+}
