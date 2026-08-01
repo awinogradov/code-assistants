@@ -140,25 +140,18 @@ After committing, push: `git push -u origin <branch>`. Set task 6 to `completed`
 
 Set task 7 ("Create PR") to `in_progress`.
 
-**CRITICAL — direct `gh pr create` and `gh pr edit` are FORBIDDEN in autopilot.** ALL PR creation and updates MUST go through `Skill(autopilot:pr-create)` and `Skill(autopilot:pr-update)`. Direct CLI calls produce PRs in the incorrect format. If a skill call fails or times out, report the error and stop — do NOT fall back to direct CLI commands.
+PR creation and updates go through `Skill(autopilot:pr-create)` and `Skill(autopilot:pr-update)`, which own the PR title and body grammar. Never fall back to raw `gh pr create` or `gh pr edit`, even when a skill call fails or times out — surface the failure and stop instead.
 
 1. Check whether a PR exists: `gh pr view --json number,url`
-   - Exit code 0 (PR exists): invoke `Skill(autopilot:pr-update)` — NEVER `gh pr edit`. Proceed to the format check.
+   - Exit code 0 (PR exists): invoke `Skill(autopilot:pr-update)`. Proceed to the format check.
    - Exit code 1 (no PR): proceed with creation.
    - Other error (network/auth): report and stop.
 
-2. Invoke `Skill(autopilot:pr-create)` with `--autopilot` (append `--release-notes` when the branch's commits include `feat:` or `fix:`). Release notes are added automatically for breaking changes regardless. NEVER run `gh pr create` directly — even if the skill fails.
+2. Invoke `Skill(autopilot:pr-create)` with `--autopilot` (append `--release-notes` when the branch's commits include `feat:` or `fix:`). Release notes are added automatically for breaking changes regardless.
 
 Output the PR URL. Set task 7 to `completed`.
 
-3. **Format check** — after creating or updating, run `gh pr view --json title,body` and verify:
-   - The body contains `**Issues:**` as a section heading (skip for hotfix/trivial/maintenance/proposal/security branches). For a `security-*` branch, instead verify an `**Alert:**` reference and NO `Closes #` — alerts close on re-scan, not via PR magic words.
-   - At least one `---` separator on its own line.
-   - `**Issues:**` appears AFTER the last `---` separator (it must be the final section).
-   - If `**Release notes:**` is present, it appears BEFORE `**Issues:**` and AFTER the description text.
-   - The `**Issues:**` section uses magic words (`Closes`/`Related to`), not markdown links.
-
-   If any check fails: output "PR format violation detected — skill may have been bypassed. Running pr:update to fix...", invoke `Skill(autopilot:pr-update)`, and re-validate once. If it still fails, output "PR format could not be auto-fixed. Manual review required." and continue.
+3. **Format check** — after creating or updating, run `gh pr view --json title,body`. If the body does not match [`pr-body-grammar.md`](../shared-rules/references/pr-body-grammar.md), invoke `Skill(autopilot:pr-update)` once more and re-check; if it still does not match, report it and continue.
 
 #### Step 3: Monitor PR
 
@@ -187,5 +180,3 @@ Once the plan file carries `## Pre-Implementation` and `## Post-Implementation (
 The only user prompts in the entire run are the branch-type pick for plain-description inputs and review-feedback handling during PR monitoring. There is no plan-approval step.
 
 When you write the plan file, apply the reference-formatting rules in [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (RFC-0001, read it first) to every reference it contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
-
-**Reference self-check (MANDATORY):** after composing the output, re-read it against [`reference-formatting.md`](../shared-rules/references/reference-formatting.md). A bare commit SHA, a bare tracker id outside a magic-word line, or an unlinked mention of a file that exists in the repo is a violation — fix it before emitting.

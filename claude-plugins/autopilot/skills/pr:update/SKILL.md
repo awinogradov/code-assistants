@@ -44,56 +44,7 @@ Arguments are optional. Resolve each field:
 
 ## AskUserQuestion Contract (MANDATORY)
 
-Every AskUserQuestion call that presents content for review (PR previews in [Phase 6](#phase-6-verify-with-user)) MUST follow these exact rules. Simple choice dialogs ([Phase 4](#phase-4-ask-user-for-context-optional) Auto-generate/Add context) are exempt from the preview requirement.
-
-1. **`question` is FIXED TEXT** — use the EXACT string specified in each phase. NEVER add PR titles, bodies, metadata, file lists, diffs, or any other content to the question field.
-2. **`header` is FIXED TEXT** — use the EXACT string specified in each phase.
-3. **`preview` is MANDATORY** — every option MUST include a `preview` field. The PR content (title + body with separators) goes ONLY in `preview`. NEVER put content in `question`, `label`, or `description`.
-4. **`label` values are EXACT** — use the exact text specified (e.g., "Update PR", "Edit content", "Cancel"). No abbreviations, no paraphrasing, no creative alternatives.
-5. **`description` values are EXACT** — use the exact text specified. No rewording.
-6. **ALL options are REQUIRED** — include every option listed in the phase. NEVER omit "Cancel".
-7. **Same `preview` on all options** — the user chooses an action, not content. All options show identical preview text.
-8. **NO shorthand in `preview`** — never pass `"..."`, `"<same content>"`, `"<full PR content>"`, or any other placeholder string as a preview value. Copy the full preview string literally into every option. Shorthand is illustrative only; it must never appear in an actual AskUserQuestion tool call.
-
-### WRONG — PR content in question field
-
-```
-AskUserQuestion({
-  question: "Title: Allow editor theme selection\nBase: main\nBranch: issue-749-editor-theme\n5 commits, 8 files changed\n\nBody:\nUsers can now pick an editor theme per workspace.\n\n- Added editor_theme setting\n- Falls back to system theme\n\nCloses #749",
-  header: "Update PR",
-  options: [
-    { label: "Update PR", description: "Apply changes" },
-    { label: "Edit", description: "Let me adjust" }
-  ]
-})
-```
-
-### WRONG — abbreviated labels, no preview, missing Cancel
-
-```
-AskUserQuestion({
-  question: "Review the updated pull request and choose an action.",
-  header: "Update PR",
-  options: [
-    { label: "Update", description: "Allow editor theme selection - Added editor_theme setting..." },
-    { label: "Edit", description: "Modify" }
-  ]
-})
-```
-
-### CORRECT
-
-```
-AskUserQuestion({
-  question: "Review the updated pull request and choose an action.",
-  header: "Update PR",
-  options: [
-    { label: "Update PR", description: "Apply changes to PR #42", preview: "Allow editor theme selection per workspace\n\nUsers can now pick an editor theme per workspace.\n\n- Added editor_theme setting\n- Falls back to system theme\n\n---\n\n**Issues:**\n\nCloses #749" },
-    { label: "Edit content", description: "Modify title or description", preview: "Allow editor theme selection per workspace\n\nUsers can now pick an editor theme per workspace.\n\n- Added editor_theme setting\n- Falls back to system theme\n\n---\n\n**Issues:**\n\nCloses #749" },
-    { label: "Cancel", description: "Keep the PR unchanged", preview: "Allow editor theme selection per workspace\n\nUsers can now pick an editor theme per workspace.\n\n- Added editor_theme setting\n- Falls back to system theme\n\n---\n\n**Issues:**\n\nCloses #749" }
-  ]
-})
-```
+Read [`askuserquestion-contract.md`](../shared-rules/references/askuserquestion-contract.md) and apply it to the [Phase 6](#phase-6-verify-with-user) PR preview dialog — the PR content (title + body with separators) is the preview. Simple choice dialogs ([Phase 4](#phase-4-ask-user-for-context-optional) Auto-generate/Add context) are exempt from the preview requirement.
 
 ## Phase 1: Detect PR
 
@@ -114,10 +65,7 @@ AskUserQuestion({
 ## Phase 3: Gather Context
 
 1. Get current branch name with `git branch --show-current`
-2. Validate branch name follows convention:
-   - GitHub: `issue-<number>-<short-description>` (e.g., `issue-123-add-feature`)
-   - Linear: `<team>-<number>-<short-description>` (e.g., `eng-123-add-auth`)
-   - Special prefix: `<hotfix|trivial|maintenance|proposal|security>-<short-description>` (e.g., `hotfix-memory-leak-editor`, `security-tainted-format-string`)
+2. Validate the branch name against the branch grammar in [`pr-title-grammar.md`](../shared-rules/references/pr-title-grammar.md)
 3. Determine the provider and issue reference from the branch, checking **in this order**:
    - **GitHub** — `^issue-([0-9]+)-`: extract the number; `provider = github`; link as `Closes #<n>`.
    - **Special prefix** — `hotfix-`/`trivial-`/`maintenance-`/`proposal-`/`security-`: the PR title uses the uppercased prefix (e.g., `HOTFIX:`). For a `security-` branch, emit NO `Closes #` — keep the code-scanning alert reference (see the `**Alert:**` rule below).
@@ -164,7 +112,7 @@ Tool parameters:
 
 Read [`pr-title-grammar.md`](../shared-rules/references/pr-title-grammar.md) and conform the updated title to it.
 
-**Title self-check (MANDATORY):** re-verify the updated title against the [Phase 3](#phase-3-gather-context) provider before [Phase 7](#phase-7-push-and-update) executes `gh pr edit`. If `provider = linear`, the title MUST start with the branch's `<team>-<number>` uppercased plus `: ` (branch `frtns-28-pr-gate` → title starts with `FRTNS-28: `); if the prefix is missing — including when the existing PR title lacked it — or names a different id, fix the title now so an update restores the convention instead of preserving the defect. If `provider = github` or a special prefix, the title MUST NOT start with a `TEAM-N:` ticket prefix. This check is the gate, exactly like the reference-formatting self-check below is for the body.
+**Title self-check (MANDATORY):** before [Phase 7](#phase-7-push-and-update) executes `gh pr edit`, run the Title self-check from [`pr-title-grammar.md`](../shared-rules/references/pr-title-grammar.md) against the [Phase 3](#phase-3-gather-context) provider.
 
 ### PR Body
 
@@ -341,5 +289,3 @@ User selects "Update PR".
 ```
 ✓ Updated PR #45: https://github.com/org/repo/pull/45
 ```
-
-**Reference self-check (MANDATORY):** after composing the output, re-read it against [`reference-formatting.md`](../shared-rules/references/reference-formatting.md). A bare commit SHA, a bare tracker id outside a magic-word line, or an unlinked mention of a file that exists in the repo is a violation — fix it before emitting.

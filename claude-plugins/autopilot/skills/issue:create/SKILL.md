@@ -45,16 +45,7 @@ This workflow is not complete until [Phase 8](#phase-8-create-issue) executes `g
 
 ## AskUserQuestion Contract (MANDATORY)
 
-Every AskUserQuestion call that presents content for review (the issue preview in [Phase 7](#phase-7-verify-with-user)) MUST follow these exact rules.
-
-1. **`question` is FIXED TEXT** — use the EXACT string specified in each phase. NEVER add the issue title, body, metadata, or any other content to the question field.
-2. **`header` is FIXED TEXT** — use the EXACT string specified.
-3. **`preview` is MANDATORY** — every option MUST include a `preview` field. The issue content (title + body + labels, plus an optional duplicate-warning line at the top) goes ONLY in `preview`. NEVER put content in `question`, `label`, or `description`.
-4. **`label` values are EXACT** — use the exact text specified (e.g., "Create issue", "Edit content", "Cancel"). No abbreviations.
-5. **`description` values are EXACT** — use the exact text specified.
-6. **ALL options are REQUIRED** — include every option listed. NEVER omit "Cancel".
-7. **Same `preview` on all options** — the user chooses an action, not content. All options show identical preview text.
-8. **NO shorthand in `preview`** — never pass `"..."`, `"<same content>"`, or any placeholder string. Copy the full preview string literally into every option.
+Every AskUserQuestion call that presents content for review (the issue preview in [Phase 7](#phase-7-verify-with-user)) is governed by the shared contract: read [`askuserquestion-contract.md`](../shared-rules/references/askuserquestion-contract.md) and apply it. In this skill the preview content is the issue title + body + labels, plus an optional duplicate-warning line at the top.
 
 ## Phase 0: Resolve Repository and Hint
 
@@ -149,92 +140,12 @@ For each open item returned by [Phase 3](#phase-3-find-related-issues-and-prs), 
 
 ## Phase 5: Generate Body
 
-**CRITICAL — Section ordering is MANDATORY and MUST NOT be rearranged:**
+Read [`issue-body-grammar.md`](../shared-rules/references/issue-body-grammar.md) and apply it — it defines the five-section structure, the per-section rules, and the linkability pass that runs after drafting.
 
-1. `## Context` (FIRST)
-2. `## What`
-3. `## Why`
-4. `## Scope`
-5. `## Solution` (LAST)
+Caller-specific wiring:
 
-Heading format MUST be exact: `## Context` (single space, no trailing colon, no bold `**Heading:**`). Reordering sections is a format violation.
-
-**Single-responsibility rule:** each section answers exactly one question and MUST NOT repeat what another section already covers — cross-reference a sibling section instead of restating it. Length follows the content: include as much context as a reader needs to act on the issue, and never cap a section at a fixed paragraph count. Do not pad — every sentence must add information.
-
-**Section 1: Context**
-
-- The situation and background only: the current state of the world, what work area this touches, and what surfaced it now. Do NOT state user impact or motivation (that is Why), and do NOT propose a fix (that is Solution)
-- As many paragraphs as the background genuinely needs
-- Single continuous line per paragraph (no hard-wrapping — GitHub renders single newlines as visible line breaks)
-- If [Phase 3](#phase-3-find-related-issues-and-prs) returned related items, end the section with a single `Related:` line:
-  ```
-  Related: #123 (open), #456 (closed), #789 (merged)
-  ```
-  Use the plain `#N (state)` format — NEVER use magic words like `Closes #N` here (those would close issues on merge, which is wrong for a context reference).
-
-**Section 2: What**
-
-- The deliverable: the observable end state once this is done, in plain terms. Describe WHAT changes, not HOW to achieve it (the approach is Solution)
-- A paragraph or bullet list, as long as needed to enumerate the deliverables
-- Single continuous line per item
-
-**Section 3: Why**
-
-- User impact and business motivation only: what problem this solves and the cost of leaving it unsolved
-- Assume the reader has already read Context — do NOT restate the situation
-- A reader on day one should understand the stakes
-
-**Section 4: Scope**
-
-- Bullet list with two sub-headings: `**In scope:**` and `**Out of scope:**`
-- Bound the work by referencing the What deliverables — do NOT re-describe them in full here
-- If there are no out-of-scope items, write `_None — this is the entire change._` under "Out of scope"
-- Never invent out-of-scope items just to fill the section
-
-**Section 5: Solution**
-
-- The high-level approach: HOW the What gets delivered. Do NOT restate the deliverable itself (that is What)
-- As detailed as the approach warrants
-- **Diagram trigger rule:** invoke `Skill(autopilot:ascii-schemas)` whenever a diagram would aid understanding — a flow or sequence between components, an architecture or data schema, a UI layout, a comparison, or a logical relationship worth seeing at a glance. Default to including one whenever it makes the approach clearer; skip it only when prose alone is unambiguous
-- Embed the schema output verbatim in a fenced ` ```text ` block
-
-**Linkability pass (after drafting all five sections):**
-
-Sweep the body per the reference-formatting block at the end of this skill — every prose mention of a file or path that exists in the repo becomes an absolute `<repo-blob-url>` link, and every cited external source (article, post, vendor doc, standard) whose URL is in context becomes an inline `[title](url)` link. Backticks remain only on code specimens: identifiers, files the issue proposes to create, and command or fenced-block content. Never invent a URL for an unlinkable mention — leave it backticked (files) or plain prose (external sources).
-
-**Example body skeleton:**
-
-```
-## Context
-
-<situation paragraph>
-
-Related: #123 (closed)
-
-## What
-
-<deliverable>
-
-## Why
-
-<motivation>
-
-## Scope
-
-- **In scope:**
-  - <item>
-  - <item>
-- **Out of scope:**
-  - <item>
-
-## Solution
-
-<approach paragraph>
-
-\`\`\`text
-<optional ASCII diagram>
-\`\`\`
-```
+- The related items from [Phase 3](#phase-3-find-related-issues-and-prs) feed the Context section's `Related:` line.
+- Linkability-pass links must use the absolute `<repo-blob-url>` form — the body is posted outside the repo, where relative paths do not resolve.
 
 ## Phase 6: Suggest Labels
 
@@ -458,5 +369,3 @@ Issue creation cancelled. Consider commenting on #200 instead.
 ```
 
 When you generate the issue body, apply the reference-formatting rules in [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (RFC-0001, read it first) to every reference it contains — link files, docs, skills, agents, sections, and commit SHAs as absolute `<repo-blob-url>` URLs (the body is posted outside the repo, where relative paths do not resolve), link cited external resources to their canonical source URL, and never leave a reference as bare text.
-
-**Reference self-check (MANDATORY):** after composing the output, re-read it against [`reference-formatting.md`](../shared-rules/references/reference-formatting.md). A bare commit SHA, a bare tracker id outside a magic-word line, or an unlinked mention of a file that exists in the repo is a violation — fix it before emitting.

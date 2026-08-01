@@ -1,6 +1,6 @@
 ---
 name: shared-rules
-description: Canonical home for instruction blocks shared by several autopilot skills and agents — reference formatting (RFC-0001), AskUserQuestion formatting, repomix snapshot acquisition, agent structured output, Linear MCP access, and PR title/body grammar. Read the one block you need instead of carrying a copy.
+description: Canonical home for instruction blocks shared by several autopilot skills and agents — reference formatting (RFC-0001), AskUserQuestion formatting and content-preview contract, repomix snapshot acquisition, agent structured output, issue body grammar, Linear MCP access, peer CLI delegation, and PR title/body grammar. Read the one block you need instead of carrying a copy.
 ---
 
 # Shared Rules
@@ -23,15 +23,18 @@ Apply the block's content **verbatim**. It is an instruction, not a summary to p
 
 ## Blocks
 
-| Block                           | File                                                                | Read it when                                                                        |
-| ------------------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Reference formatting (RFC-0001) | [reference-formatting.md](./references/reference-formatting.md)     | before writing any output that mentions a file, standard, section, commit, or issue |
-| AskUserQuestion formatting      | [askuserquestion-format.md](./references/askuserquestion-format.md) | before composing an AskUserQuestion `question` parameter                            |
-| Repomix snapshot acquisition    | [repomix-snapshot.md](./references/repomix-snapshot.md)             | before acquiring a codebase snapshot                                                |
-| Agent structured output         | [agent-json-output.md](./references/agent-json-output.md)           | when an agent must return a bare JSON object to its parent                          |
-| Linear MCP access               | [linear-mcp-access.md](./references/linear-mcp-access.md)           | before calling any Linear MCP tool                                                  |
-| PR title and branch grammar     | [pr-title-grammar.md](./references/pr-title-grammar.md)             | before generating or validating a PR title or branch name                           |
-| PR body grammar                 | [pr-body-grammar.md](./references/pr-body-grammar.md)               | before generating or updating a PR description                                      |
+| Block                            | File                                                                    | Read it when                                                                        |
+| -------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Reference formatting (RFC-0001)  | [reference-formatting.md](./references/reference-formatting.md)         | before writing any output that mentions a file, standard, section, commit, or issue |
+| AskUserQuestion formatting       | [askuserquestion-format.md](./references/askuserquestion-format.md)     | before composing an AskUserQuestion `question` parameter                            |
+| AskUserQuestion preview contract | [askuserquestion-contract.md](./references/askuserquestion-contract.md) | before composing a dialog that presents generated content for review                |
+| Repomix snapshot acquisition     | [repomix-snapshot.md](./references/repomix-snapshot.md)                 | before acquiring a codebase snapshot                                                |
+| Agent structured output          | [agent-json-output.md](./references/agent-json-output.md)               | when an agent must return a bare JSON object to its parent                          |
+| Issue body grammar               | [issue-body-grammar.md](./references/issue-body-grammar.md)             | before generating a GitHub or Linear issue body                                     |
+| Linear MCP access                | [linear-mcp-access.md](./references/linear-mcp-access.md)               | before calling any Linear MCP tool                                                  |
+| Peer CLI delegation              | [peer-cli-delegation.md](./references/peer-cli-delegation.md)           | before delegating a task to a peer AI CLI and evaluating its output                 |
+| PR title and branch grammar      | [pr-title-grammar.md](./references/pr-title-grammar.md)                 | before generating or validating a PR title or branch name                           |
+| PR body grammar                  | [pr-body-grammar.md](./references/pr-body-grammar.md)                   | before generating or updating a PR description                                      |
 
 Two blocks are parameterised by the caller rather than fixed: the repomix `includePatterns` value, and the Linear tool-name list. Each block file states what the caller supplies.
 

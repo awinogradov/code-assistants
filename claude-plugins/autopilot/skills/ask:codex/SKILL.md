@@ -12,14 +12,7 @@ allowed-tools:
 
 # Ask Codex
 
-Delegate a task to the OpenAI Codex CLI and report the result. Codex runs as a peer model — its output is evaluated critically, never accepted blindly.
-
-## When to Use
-
-- The user asks to run Codex (`codex exec`, `codex resume`) or references OpenAI Codex.
-- The user wants a second model's analysis, refactor, or automated edit of the code.
-
-Do NOT use for: git/PR workflows (use the other autopilot skills) or tasks that do not involve the Codex CLI.
+Delegate a task to the OpenAI Codex CLI and report the result. Codex runs as a peer model: read [`peer-cli-delegation.md`](../shared-rules/references/peer-cli-delegation.md) and apply it throughout — it owns the delegation mechanics, the follow-up loop, the critical evaluation of Codex output, and the error-handling protocol, while this file supplies the CLI name, the exec command, the resume syntax, and the flag table. Do NOT use for: git/PR workflows (use the other autopilot skills) or tasks that do not involve the Codex CLI.
 
 ## Input
 
@@ -38,11 +31,10 @@ Parse `$ARGUMENTS` for an optional task description and optional `--model` / `--
    - `--skip-git-repo-check`
    - `"your prompt here"` (final positional argument)
 4. Always pass `--skip-git-repo-check`.
-5. Resume: continue a prior session with `echo "your prompt here" | codex exec --skip-git-repo-check resume --last 2>/dev/null`. Insert any flags **between** `exec` and `resume`, and pass no config flags on resume unless the user explicitly requests them (the session inherits the original model, effort, and sandbox).
+5. Resume: continue a prior session with `echo "your prompt here" | codex exec --skip-git-repo-check resume --last 2>/dev/null`. Insert any flags **between** `exec` and `resume`; per the shared block's inherit rule, pass no config flags on resume unless the user explicitly requests them.
 6. **IMPORTANT**: append `2>/dev/null` to every `codex exec` command to suppress thinking tokens (stderr). Only show stderr when the user explicitly asks to see thinking tokens or for debugging.
-7. **IMPORTANT (stdin)**: `codex exec` always reads stdin and concatenates it with the positional prompt. If stdin is not closed, codex blocks forever. When stdin is not a TTY but also not closed (background tasks, hooks, scripts), append `</dev/null`, e.g. `codex exec ... "prompt" </dev/null 2>/dev/null`. Symptom of getting this wrong: zero bytes of stdout, zero CPU, process hangs.
-8. Run the command, capture stdout (filtered as appropriate), and summarize the outcome for the user.
-9. After Codex completes, tell the user: "You can resume this Codex session at any time by saying 'codex resume' or asking me to continue with additional analysis or changes."
+7. **IMPORTANT (stdin)**: `codex exec` always reads stdin and concatenates it with the positional prompt — apply the shared block's stdin guard, e.g. `codex exec ... "prompt" </dev/null 2>/dev/null`.
+8. Run the command and follow the shared block's reporting and resume-offer loop; the user resumes by saying "codex resume".
 
 ### Quick Reference
 
@@ -54,35 +46,18 @@ Parse `$ARGUMENTS` for an optional task description and optional `--model` / `--
 | Resume recent session          | inherited from original | `echo "prompt" \| codex exec --skip-git-repo-check resume --last 2>/dev/null` (no flags) |
 | Run from another directory     | match task needs        | `-C <DIR>` plus other flags `2>/dev/null`                                                |
 
-## Following Up
+## Codex Specifics for the Shared Rules
 
-- After every `codex` command, use `AskUserQuestion` to confirm next steps, collect clarifications, or decide whether to resume.
-- When resuming, pipe the new prompt via stdin: `echo "new prompt" | codex exec --skip-git-repo-check resume --last 2>/dev/null`. The resumed session reuses the original model, effort, and sandbox.
-- Restate the chosen model, reasoning effort, and sandbox mode when proposing follow-up actions.
+The shared block leaves these caller-supplied:
 
-## Critical Evaluation of Codex Output
-
-Codex is powered by OpenAI models with their own knowledge cutoffs and limitations. Treat Codex as a **colleague, not an authority**.
-
-- **Trust your own knowledge** when confident. If Codex claims something you know is wrong, push back directly.
-- **Research disagreements** with `WebSearch` or documentation before accepting Codex's claims.
-- **Remember knowledge cutoffs** — Codex may not know about recent releases, APIs, or changes.
-- **Don't defer blindly**, especially on model names/capabilities, recent library versions or API changes, and evolving best practices.
-
-When Codex is wrong: state the disagreement to the user, provide evidence, and optionally resume the session to discuss — identify yourself as Claude using your actual current model name, frame it as a peer discussion (either AI could be wrong), and let the user decide on genuine ambiguity:
+- The peer CLI is **Codex**, powered by OpenAI models; its version check is `codex --version`.
+- High-impact flags that need permission first: `--full-auto`, `--sandbox danger-full-access`, `--skip-git-repo-check`.
+- Resume syntax for follow-ups and peer discussion of a disagreement:
 
 ```bash
 echo "This is Claude (<your current model name>) following up. I disagree with [X] because [evidence]. What's your take?" | codex exec --skip-git-repo-check resume --last 2>/dev/null
 ```
 
-## Error Handling
-
-- Stop and report failures whenever `codex --version` or a `codex exec` command exits non-zero; ask for direction before retrying.
-- Before using high-impact flags (`--full-auto`, `--sandbox danger-full-access`, `--skip-git-repo-check`) ask permission via `AskUserQuestion` unless already granted.
-- When output includes warnings or partial results, summarize them and ask how to adjust via `AskUserQuestion`.
-
 ## Reference formatting
 
 Before writing any output that mentions a file, standard, section, commit, or issue, read [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (RFC-0001) and apply it verbatim — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
-
-**Reference self-check (MANDATORY):** after composing the output, re-read it against [`reference-formatting.md`](../shared-rules/references/reference-formatting.md). A bare commit SHA, a bare tracker id outside a magic-word line, or an unlinked mention of a file that exists in the repo is a violation — fix it before emitting.

@@ -137,6 +137,13 @@ release-<version>
 
 If BRANCH_NAME is empty, skip branch name validation entirely (Dependabot and similar bots cannot follow branch naming conventions).
 
+#### Title self-check
+
+Before submitting a title, re-verify it against the resolved provider:
+
+- `provider = linear` — the title MUST start with the branch's `<team>-<number>` uppercased plus `: ` (branch `frtns-28-pr-gate` → title starts with `FRTNS-28: `). A missing or wrong prefix — including one inherited from an existing defective title — is fixed now, never preserved.
+- `provider = github` or a special prefix — the title MUST NOT start with a `TEAM-N:` ticket prefix.
+
 #### Avoid
 
 - Implementation details (those belong in PR body)
