@@ -1,0 +1,63 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "fd41e303d761",
+  "strategy": "manual-commit",
+  "branch": "issue-535-gen5-context-rules",
+  "checkpoints_count": 9,
+  "files_touched": [
+    ".github/actions/code-review-action/src/sharedBlockSync.test.ts",
+    ".github/actions/code-review-action/src/sharedRulesInvocation.test.ts",
+    ".github/actions/release-action/src/releaseNotesPrompt.ts",
+    "claude-plugins/autopilot/skills/ascii-schemas/SKILL.md",
+    "claude-plugins/autopilot/skills/ask:codex/SKILL.md",
+    "claude-plugins/autopilot/skills/ask:gemini/SKILL.md",
+    "claude-plugins/autopilot/skills/branch:create/SKILL.md",
+    "claude-plugins/autopilot/skills/commits:create/SKILL.md",
+    "claude-plugins/autopilot/skills/commits:restructure/SKILL.md",
+    "claude-plugins/autopilot/skills/dependabot:resolve/SKILL.md",
+    "claude-plugins/autopilot/skills/explore/SKILL.md",
+    "claude-plugins/autopilot/skills/gather-context/SKILL.md",
+    "claude-plugins/autopilot/skills/issue:create/SKILL.md",
+    "claude-plugins/autopilot/skills/issue:run/SKILL.md",
+    "claude-plugins/autopilot/skills/linear:create/SKILL.md",
+    "claude-plugins/autopilot/skills/linear:plan/SKILL.md",
+    "claude-plugins/autopilot/skills/linear:run/SKILL.md",
+    "claude-plugins/autopilot/skills/pdf:create/SKILL.md",
+    "claude-plugins/autopilot/skills/plan/SKILL.md",
+    "claude-plugins/autopilot/skills/pr:answer/SKILL.md",
+    "claude-plugins/autopilot/skills/pr:create/SKILL.md",
+    "claude-plugins/autopilot/skills/pr:monitor/SKILL.md",
+    "claude-plugins/autopilot/skills/pr:resolve/SKILL.md",
+    "claude-plugins/autopilot/skills/pr:review/SKILL.md",
+    "claude-plugins/autopilot/skills/pr:update/SKILL.md",
+    "claude-plugins/autopilot/skills/pr:validate/SKILL.md",
+    "claude-plugins/autopilot/skills/preflight-check/SKILL.md",
+    "claude-plugins/autopilot/skills/run-primed/SKILL.md",
+    "claude-plugins/autopilot/skills/run/SKILL.md",
+    "claude-plugins/autopilot/skills/shared-rules/SKILL.md",
+    "claude-plugins/autopilot/skills/shared-rules/references/askuserquestion-contract.md",
+    "claude-plugins/autopilot/skills/shared-rules/references/issue-body-grammar.md",
+    "claude-plugins/autopilot/skills/shared-rules/references/peer-cli-delegation.md",
+    "claude-plugins/autopilot/skills/shared-rules/references/pr-title-grammar.md",
+    "claude-plugins/autopilot/skills/shared-rules/references/reference-formatting.md",
+    "claude-plugins/autopilot/skills/todo-cleanup/SKILL.md",
+    "rfc/0001-reference-formatting.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/fd/41e303d761/0/metadata.json",
+      "transcript": "/fd/41e303d761/0/full.jsonl",
+      "compact_transcript": "/fd/41e303d761/0/transcript.jsonl",
+      "content_hash": "/fd/41e303d761/0/content_hash.txt",
+      "prompt": "/fd/41e303d761/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 120,
+    "cache_creation_tokens": 360155,
+    "cache_read_tokens": 15279958,
+    "output_tokens": 119329,
+    "api_call_count": 64
+  }
+}
