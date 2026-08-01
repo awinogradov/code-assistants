@@ -1,7 +1,7 @@
 ---
 name: pr:update
 description: Update an existing pull request's title and description based on current branch commits. Use when PR needs to be refreshed after new commits or when asked to update PR.
-argument-hint: "[--release-notes] [--closes #N,#M] [--related #X,#Y]"
+argument-hint: "[--release-notes] [--closes #N,#M] [--related #X,#Y] [--autopilot]"
 allowed-tools:
   - Bash(git *)
   - Bash(gh *)
@@ -29,6 +29,7 @@ Expected flags (all optional):
 - `--release-notes` — add or refresh the release notes section (auto-enabled on breaking changes)
 - `--closes #N,#M` — additional issue numbers to close on merge
 - `--related #X,#Y` — related issues to link without closing
+- `--autopilot` — non-interactive mode used by skill callers (`commits:create`, `commits:restructure`) and `/autopilot:run`. Skips the [Phase 4](#phase-4-ask-user-for-context-optional) context dialog (auto-generate) and the [Phase 6](#phase-6-verify-with-user) confirmation — the update is applied directly, because the caller already established that refreshing the PR is bookkeeping, not a decision.
 
 ## Input resolution
 
@@ -36,6 +37,7 @@ Arguments are optional. Resolve each field:
 
 - **`--release-notes`** — `$ARGUMENTS` → auto-enable on breaking changes detected in commit log → default `false`. Do NOT prompt.
 - **`--closes`** / **`--related`** — `$ARGUMENTS` only. No inference, no prompt. Treat absence as intentional.
+- **`--autopilot`** — `$ARGUMENTS` or the invoking skill's instruction only. Never inferred from conversation history. Default: `false` (interactive mode).
 - **Existing PR** — detect via `gh pr view --json number,url,title,body,baseRefName,headRefName`. If no PR exists, abort with a clear message.
 - **Branch + base + issue number** — from `git branch --show-current` and the `^issue-([0-9]+)-` pattern. Special prefix branches (`hotfix-`, `trivial-`, `maintenance-`, `proposal-`) have no issue number.
 - **Repository conventions** — read `CONTRIBUTING.md` directly.
@@ -137,6 +139,8 @@ After the agent completes, store the structured results (commit log, diff summar
 
 ## Phase 4: Ask User for Context (Optional)
 
+**Autopilot bypass:** if `--autopilot` was passed, skip this phase — proceed with auto-generation.
+
 Use **AskUserQuestion tool** to ask if user wants to highlight anything:
 
 **Formatting Note:** Read [`askuserquestion-format.md`](../shared-rules/references/askuserquestion-format.md) and apply it before composing the `question` parameter.
@@ -179,6 +183,8 @@ Read [`pr-body-grammar.md`](../shared-rules/references/pr-body-grammar.md) and c
 3. If `--related` provided, add `Related to #<n>` for each related issue (dedup with existing)
 
 ## Phase 6: Verify with User
+
+**Autopilot bypass:** if `--autopilot` was passed, skip the dialog — compose the full PR content (title + body), run the [Phase 5](#phase-5-generate-updated-pr-title-and-body) Title self-check, and proceed directly to [Phase 7](#phase-7-push-and-update).
 
 Present the updated PR using **AskUserQuestion tool** with preview.
 
