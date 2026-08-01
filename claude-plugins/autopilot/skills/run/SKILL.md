@@ -143,7 +143,7 @@ Set task 7 ("Create PR") to `in_progress`.
 PR creation and updates go through `Skill(autopilot:pr-create)` and `Skill(autopilot:pr-update)`, which own the PR title and body grammar. Never fall back to raw `gh pr create` or `gh pr edit`, even when a skill call fails or times out — surface the failure and stop instead.
 
 1. Check whether a PR exists: `gh pr view --json number,url`
-   - Exit code 0 (PR exists): invoke `Skill(autopilot:pr-update)`. Proceed to the format check.
+   - Exit code 0 (PR exists): invoke `Skill(autopilot:pr-update)` with `--autopilot`. Proceed to the format check.
    - Exit code 1 (no PR): proceed with creation.
    - Other error (network/auth): report and stop.
 
@@ -151,7 +151,7 @@ PR creation and updates go through `Skill(autopilot:pr-create)` and `Skill(autop
 
 Output the PR URL. Set task 7 to `completed`.
 
-3. **Format check** — after creating or updating, run `gh pr view --json title,body`. If the body does not match [`pr-body-grammar.md`](../shared-rules/references/pr-body-grammar.md), invoke `Skill(autopilot:pr-update)` once more and re-check; if it still does not match, report it and continue.
+3. **Format check** — after creating or updating, run `gh pr view --json title,body`. If the body does not match [`pr-body-grammar.md`](../shared-rules/references/pr-body-grammar.md), invoke `Skill(autopilot:pr-update)` with `--autopilot` once more and re-check; if it still does not match, report it and continue.
 
 #### Step 3: Monitor PR
 
