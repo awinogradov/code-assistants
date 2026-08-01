@@ -104,7 +104,7 @@ Agent 1 (fetch-pr-reviews):
 After all calls complete:
 
 - Store the `outputId` from the snapshot acquisition (attach or pack) response — use `grep_repomix_output` and `read_repomix_output` with this ID to search and read codebase content during [Phase 3](#phase-3-address-comments-code-fixes) (code fixes)
-- Store the categorized review comments from `fetch-pr-reviews` — use in [Phase 2](#phase-2-present-findings-to-user)
+- Store the `fetch-pr-reviews` JSON — `reviewState`, the severity-tagged `comments` (each carrying the `commentId` used for replies in [Phase 5](#phase-5-reply-to-review-threads)), and `note` — use in [Phase 2](#phase-2-present-findings-to-user)
 
 ### 1.5 Project Rules
 
@@ -118,7 +118,7 @@ After all calls complete:
 
 **Formatting Note:** Read [`askuserquestion-format.md`](../shared-rules/references/askuserquestion-format.md) and apply it before composing the `question` parameter.
 
-Build a summary of all findings:
+Build a summary of all findings, grouping the agent's `comments` by `severity`:
 
 ```
 Review Comments for PR #<N>
@@ -137,12 +137,12 @@ Questions to answer (N):
   <file>:<line> - @<reviewer>: <comment summary>
 ```
 
-If no actionable comments found:
+If the agent returned `comments: []` with `note: "no-comments"`:
 
 - Output: "No unresolved review comments found on PR #N."
 - Stop
 
-If all comments are resolved:
+If it returned `comments: []` with `note: "all-resolved"`:
 
 - Output: "All review comments on PR #N are already resolved."
 - Stop

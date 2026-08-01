@@ -63,32 +63,46 @@ Scan the commit log for:
 
 ## Phase 4: Output
 
-Output ONLY the structured block. No preamble or commentary:
+<!-- agent-json:start -->
 
+Output ONLY a single JSON object matching the schema below — no preamble, no surrounding code fence, no commentary. The parent parses it directly, so any extra text breaks consumption.
+
+<!-- agent-json:end -->
+
+| Field          | Type           | Constraint                                                                                                                                                                                                                                                                             |
+| -------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `branch`       | string         | Branch name                                                                                                                                                                                                                                                                            |
+| `base`         | string         | Base branch                                                                                                                                                                                                                                                                            |
+| `issue`        | string \| null | GitHub number (`"123"`), Linear id (`"ENG-123"`), or special prefix (`"HOTFIX"`/`"TRIVIAL"`/`"MAINTENANCE"`); `null` when none                                                                                                                                                         |
+| `commitCount`  | integer        | Commits since the base                                                                                                                                                                                                                                                                 |
+| `issueContext` | object \| null | `{ "title": string, "url": string \| null, "description": string, "status": string }`; `description` is the first 2-3 sentences of the issue body, `url` is `null` when the fetch returned none; the whole object is `null` when the `Fetch issue` flag is `false` or the fetch failed |
+| `significance` | object         | `{ "breaking": boolean, "breakingSubject": string \| null, "meaningful": boolean, "commitTypes": string[] }` per [Phase 3](#phase-3-analyze-change-significance); `breakingSubject` is the breaking commit's subject, `null` when `breaking` is `false`                                |
+| `commitLog`    | string         | `git log --oneline` output, verbatim                                                                                                                                                                                                                                                   |
+| `diffSummary`  | string         | `git diff --stat` output, verbatim                                                                                                                                                                                                                                                     |
+
+Example:
+
+```json
+{
+  "branch": "issue-123-add-feature",
+  "base": "main",
+  "issue": "123",
+  "commitCount": 2,
+  "issueContext": {
+    "title": "Add the feature",
+    "url": "https://github.com/awinogradov/code-assistants/issues/123",
+    "description": "Users need X. This adds Y behind the existing flag.",
+    "status": "OPEN"
+  },
+  "significance": {
+    "breaking": false,
+    "breakingSubject": null,
+    "meaningful": true,
+    "commitTypes": ["feat", "docs"]
+  },
+  "commitLog": "1a2b3c4 feat: add feature\n5d6e7f8 docs: document feature",
+  "diffSummary": " scripts/feature.ts | 40 +++++\n 2 files changed, 44 insertions(+)"
+}
 ```
-## PR Commit Analysis
 
-**Branch:** [branch name]
-**Issue:** #[issue number] (GitHub), [ENG-123] (Linear), or Special prefix: [HOTFIX/TRIVIAL/MAINTENANCE]
-**Base:** [base branch]
-**Commits:** N since [base]
-
-### Issue Context
-**Title:** [GitHub issue title]
-**URL:** [issue web URL, or "unresolvable" when the fetch returned none]
-**Description:** [first 2-3 sentences of issue body]
-**Status:** [state]
-
-### Change Significance
-- Breaking changes: true/false ([commit subject if true])
-- Meaningful changes: true/false
-- Commit types: [feat, fix, chore, docs...]
-
-### Commit Log
-[git log --oneline output, verbatim]
-
-### Diff Summary
-[git diff --stat output, verbatim]
-```
-
-Omit the "Issue Context" section if the `Fetch issue` flag is `false` or the fetch failed.
+Emit the raw object, not the fenced form.

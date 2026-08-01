@@ -72,17 +72,12 @@ Work happens on a new `security-<slug>` branch created from an up-to-date `main`
 Work happens on a new branch created from an up-to-date `main`. Its type is chosen when implementation starts — hotfix for an emergency production fix, trivial for typos, docs, or formatting, maintenance for dependencies, CI, or configs — and the resulting name is confirmed before the branch is created.
 ```
 
-**Mechanics:** ask for the branch type via AskUserQuestion, then invoke `Skill(autopilot:branch-create)` with `--<chosen-prefix> "<description>"`, where `<description>` is a short summary derived from the user's description. Both the type pick and the name confirmation are required — never skip them or create the branch directly with git commands.
+**Mechanics:** ask for the branch type via AskUserQuestion (header "Branch type"): which branch type fits this change? The choice set and its prefix mapping are exact — compose the dialog wording yourself:
 
-Tool parameters:
+- **Hotfix** — an emergency production fix: `--hotfix`, yielding `hotfix-<slug>`.
+- **Trivial** — typos, docs, or formatting: `--trivial`, yielding `trivial-<slug>`.
+- **Maintenance** — dependencies, CI, or configs: `--maintenance`, yielding `maintenance-<slug>`.
 
-- `question`: "Choose a branch type for this change."
-- `header`: "Branch type"
-- `options`: [
-  { label: "Hotfix", description: "Emergency production fix (hotfix-<slug>)" },
-  { label: "Trivial", description: "Typos, docs, formatting (trivial-<slug>)" },
-  { label: "Maintenance", description: "Deps, CI, configs (maintenance-<slug>)" }
-  ]
-- `multiSelect`: false
+Then invoke `Skill(autopilot:branch-create)` with `--<chosen-prefix> "<description>"`, where `<description>` is a short summary derived from the user's description. Both the type pick and the name confirmation are required — never skip them or create the branch directly with git commands.
 
 **run variant:** append `--autopilot` to the branch-create arguments, which suppresses the name confirmation. The branch-type pick is the one prompt `run` keeps — a special-prefix type cannot be inferred from a free-form description.

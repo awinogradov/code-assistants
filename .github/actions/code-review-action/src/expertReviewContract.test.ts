@@ -1,6 +1,6 @@
 /**
  * Guards the contract between the `expert-review` agent, which returns a scored plan
- * review, and `pipeline.md`, which aggregates a panel of them into the plan's single score.
+ * review, and `pipeline.md`, which records a panel of them as per-reviewer verdicts.
  *
  * The reason this guard exists: the agent repeatedly returned confident reviews built on
  * file contents it had never read, reporting no tool use, and its own prose prohibition
@@ -121,13 +121,37 @@ describe("expert review contract", () => {
   });
 
   /**
-   * The recorded score line names the weakest dimension because the aggregate alone
-   * says how good the panel thought the plan was, not what to double-check when
+   * The recorded score line names each reviewer's weakest dimension because the scores
+   * alone say how good the panel thought the plan was, not what to double-check when
    * executing it — and nothing reconstructs that later.
    */
   test("the recorded score line carries the weakest dimension", () => {
     expect(pipeline).toContain("weakest:");
     expect(pipeline).toContain("weakest dimension");
+  });
+
+  /**
+   * The dimension rubric is the sole scoring interface: `score` is the sum of the five
+   * dimensions, not a second independently judged number. Without this pin the agent
+   * once carried both a 0-100 prose-band rubric and the dimensions, with the relation
+   * unstated — a score of 92 over dimensions summing to 88 was schema-valid.
+   */
+  test("score is derived from the dimensions, not independently judged", () => {
+    const row = agent.split("\n").find((l) => /^\|\s*`score`/.test(l)) ?? "";
+    expect(`score row: ${row}`).toContain("sum of the five `dimensions`");
+  });
+
+  test("the prose score bands stay deleted — the dimension rubric carries the meaning", () => {
+    expect(agent).not.toContain("95-100");
+  });
+
+  test("the retired revision.rescore field stays retired", () => {
+    expect(agent).not.toContain("rescore");
+    expect(pipeline).not.toContain("rescore");
+  });
+
+  test("the pipeline records per-reviewer verdicts rather than averaging them", () => {
+    expect(pipeline).toContain("no cross-reviewer averaging");
   });
 
   test("the review step gates nothing", () => {

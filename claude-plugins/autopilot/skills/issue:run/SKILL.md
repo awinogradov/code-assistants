@@ -20,45 +20,6 @@ Pick one of the repository's recent open issues and hand it to `autopilot:run`, 
 - When you want to start work but first need to browse the repository's open issues
 - When you already know the issue number and want a shortcut straight into `autopilot:run`
 
-## Flow
-
-```text
-┌────────────────────────────────────┐
-│  /issue:run  [optional #number]    │ ①
-└─────────────────┬──────────────────┘
-                  ▼
-┌────────────────────────────────────┐
-│  gh issue list --state open        │ ②
-│  --search "sort:updated-desc"      │
-└─────────────────┬──────────────────┘
-                  ▼
-┌────────────────────────────────────┐
-│  AskUserQuestion (single-select)   │ ③
-│    (●) #142  Fix login bug         │
-│    ( ) #138  Flaky CI run          │
-│    ( ) #131  Docs typo             │
-│    ( ) #129  Add dark mode         │
-│    ( ) Other: type any number…     │
-└─────────────────┬──────────────────┘
-                  ▼
-┌────────────────────────────────────┐
-│  Skill(autopilot:run) <number>     │ ④
-└─────────────────┬──────────────────┘
-                  ▼
-┌────────────────────────────────────┐
-│  plan → implement → commit →       │ ⑤
-│  PR → monitor                      │
-└────────────────────────────────────┘
-```
-
-**Flow legend:**
-
-- ① User invokes `/issue:run`; an optional issue number skips straight to ④.
-- ② Skill lists recent unassigned open issues, most-recently-updated first; `--all` includes assigned issues too.
-- ③ AskUserQuestion shows up to four issues; the auto-provided "Other" accepts any number.
-- ④ Skill hands the chosen number to `autopilot:run`.
-- ⑤ `autopilot:run` owns the rest of the pipeline.
-
 ## Input
 
 Arguments: `$ARGUMENTS`
@@ -73,6 +34,8 @@ Expected form:
 - **Issue number** — if `$ARGUMENTS` contains an issue number, skip Phases 1-2 and hand it straight to [Phase 3](#phase-3-hand-off-to-autopilot). Otherwise list and prompt.
 - **`--all` flag** — parse `$ARGUMENTS` for `--all` independently of the issue number (order does not matter). The skill consumes the flag itself: it only toggles the [Phase 1](#phase-1-fetch-recent-open-issues) search string and is never forwarded to a `gh` call. Because a bare issue number skips Phases 1-2, `--all` is a no-op when an issue number is also supplied.
 - **Repository** — `gh repo view --json nameWithOwner --jq .nameWithOwner`. No prompt. Pass `--repo <owner/repo>` to every `gh` call so the skill is correct inside git worktrees.
+
+**Decision points.** Every user choice below uses AskUserQuestion (single-select). Read [`askuserquestion-format.md`](../shared-rules/references/askuserquestion-format.md) once and apply it to every `question` you compose.
 
 ## Phase 0: Resolve Repository and Provider
 
@@ -123,59 +86,23 @@ gh issue list --repo <repo> --state open --limit 4 --search "sort:updated-desc n
 
 ## Phase 2: Select an Issue
 
-Present the fetched issues with `AskUserQuestion` (single-select):
+Ask (header "Issue"): which issue should autopilot run on? The choice set is exact — one choice per fetched issue, labeled with its identifier and title (truncate the title so the label stays short), described by its labels (or "no labels"); selecting a choice hands that issue to autopilot. Compose the dialog wording yourself, and mention that the free-text "Other" accepts any issue number.
 
-- `question`: "Which issue should autopilot run on? Pick one, or choose Other to enter any issue number."
-- `header`: "Issue"
-- `options`: one entry per fetched issue, `{ label: "#<number> <title>", description: "<comma-separated labels, or 'no labels'>" }` (truncate the title so the label stays short). `AskUserQuestion` requires two to four options, so: with two or more issues, list up to four; with exactly one, list it plus a second option `Enter a different number`; with none, follow [Phase 1](#phase-1-fetch-recent-open-issues)'s empty-result handling and do not call `AskUserQuestion`.
-- `multiSelect`: false
+Two constraints shape the option list:
 
-Do NOT add an "Other" option — `AskUserQuestion` always provides a free-text "Other" automatically, and adding one is invalid. The auto-provided "Other" lets the user type any issue number, including issues beyond the four shown.
+- `AskUserQuestion` requires two to four options: with two or more issues, list up to four; with exactly one, list it plus a second choice for entering a different issue number; with none, follow [Phase 1](#phase-1-fetch-recent-open-issues)'s empty-result handling and do not call `AskUserQuestion`.
+- Do NOT add an "Other" option — `AskUserQuestion` always provides a free-text "Other" automatically, and adding one is invalid. The auto-provided "Other" lets the user type any issue number, including issues beyond the four shown.
 
 Resolve the selection to an issue identifier (a GitHub number or a Linear id):
 
-- A listed issue option — use its `<number>`.
-- `Enter a different number` (shown only in the single-issue case) or the auto-provided free-text "Other" — read the entered value, strip a leading `#`, and take the leading integer. If it is not a positive integer, re-prompt once; if it still fails, report the invalid input and stop.
+- A listed issue choice — use its identifier.
+- The enter-a-different-number choice (shown only in the single-issue case) or the auto-provided free-text "Other" — read the entered value, strip a leading `#`, and take the leading integer. If it is not a positive integer, re-prompt once; if it still fails, report the invalid input and stop.
 
 Existence and open/closed state are not checked here — `autopilot:run` owns issue resolution, so a syntactically valid number is handed off as-is.
 
 ## Phase 3: Hand Off to Autopilot
 
 Invoke `Skill(autopilot:run)` with the resolved identifier as its argument (a bare integer like `142`, or a Linear id like `ENG-123`). `autopilot:run` owns everything downstream — issue resolution, planning, branch creation, implementation, commit, PR, and monitoring. This skill makes no further changes after the hand-off.
-
-## Examples
-
-### Example 1: Pick from the list
-
-```
-/issue:run
-```
-
-Lists the four most-recently-updated open issues; the user selects `#142 Fix login bug`; the skill invokes `Skill(autopilot:run)` with `142`.
-
-### Example 2: Skip the picker
-
-```
-/issue:run 142
-```
-
-`$ARGUMENTS` is a number, so the skill skips the listing and invokes `Skill(autopilot:run)` with `142` directly.
-
-### Example 3: An issue beyond the top four
-
-```
-/issue:run
-```
-
-The target issue is not among the four shown; the user chooses "Other" and types `131`; the skill invokes `Skill(autopilot:run)` with `131`.
-
-### Example 4: Include assigned issues
-
-```
-/issue:run --all
-```
-
-`--all` drops the default `no:assignee` filter, so the picker lists every open issue including assigned ones; the user selects `#138 Flaky CI run`; the skill invokes `Skill(autopilot:run)` with `138`.
 
 ## Reference formatting
 

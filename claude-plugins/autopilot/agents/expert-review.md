@@ -29,16 +29,7 @@ Ground every finding in the Context Map excerpt, the plan text, or something you
 
 ## Phase 2: Score
 
-Score the plan's domain alignment from 0 to 100:
-
-- **95-100**: Excellent — no significant gaps in your domain
-- **80-94**: Good — minor improvements possible
-- **60-79**: Needs work — meaningful gaps identified
-- **Below 60**: Major issues in your domain
-
-These bands describe your confidence in the plan. Your score is recorded as information for the plan's readers, not a gate the plan has to clear — score plainly instead of nudging the number toward any target.
-
-Then score each of the five rubric dimensions from 0 to 20. The caller aggregates these across reviewers into the plan's single score, so there is no second rubric downstream — a dimension you score carelessly is not corrected later.
+Score each of the five rubric dimensions from 0 to 20. This rubric is the sole scoring interface: your `score` is the sum of the five dimension values — computed, never judged separately — so there is no second rubric anywhere, and a dimension you score carelessly is not corrected later.
 
 | Dimension      | Criteria                                                                                                                            |
 | -------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
@@ -48,7 +39,9 @@ Then score each of the five rubric dimensions from 0 to 20. The caller aggregate
 | `testability`  | Clear test strategy, edge cases identified                                                                                          |
 | `simplicity`   | Minimal code, reuses existing functions, no over-engineering, every change traces to steelmanned intent, no opportunistic refactors |
 
-Score every dimension, including those outside your specialty — the caller averages across reviewers, so a domain expert's view of an adjacent dimension is signal, not noise. Where your role gives you no basis to judge, score to the plan's stated evidence rather than assuming the worst.
+Your derived score is recorded as information for the plan's readers, not a gate the plan has to clear — score each dimension plainly instead of nudging any number toward a target.
+
+Score every dimension, including those outside your specialty — the caller records your verdict beside the other reviewers', so a domain expert's view of an adjacent dimension is signal, not noise. Where your role gives you no basis to judge, score to the plan's stated evidence rather than assuming the worst.
 
 ## Phase 3: Recommend Changes
 
@@ -56,7 +49,7 @@ Score the plan AS WRITTEN — never raise your score for changes the parent has 
 
 1. Identify the specific gaps that lowered your score
 2. Determine the concrete changes that would address them
-3. Record them in the `revision` object as ADVISORY input for the parent (`changed` = what to change; `rescore` = the score the plan would reach with those changes)
+3. Record them in the `revision` object as ADVISORY input for the parent (`changed` = what to change)
 
 Do this at most once — do not loop. The parent owns the plan and applies your `findings` itself, so your `score` and `verdict` must describe the drafted plan, not a hypothetical revision.
 
@@ -71,12 +64,12 @@ Output ONLY a single JSON object matching the schema below — no preamble, no s
 | Field        | Type                               | Constraint                                                                                                                                     |
 | ------------ | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `expertRole` | string                             | Your expert role, verbatim from the prompt                                                                                                     |
-| `score`      | integer                            | 0–100; the score of the plan AS WRITTEN (see [Phase 3](#phase-3-recommend-changes))                                                            |
+| `score`      | integer                            | Derived, not judged: the sum of the five `dimensions` values (0–100), for the plan AS WRITTEN (see [Phase 3](#phase-3-recommend-changes))      |
 | `dimensions` | object                             | `{ "alignment": int, "completeness": int, "typeSafety": int, "testability": int, "simplicity": int }`, each 0–20; all five keys always present |
 | `verdict`    | `"approved"` \| `"needs-revision"` | `"approved"` when you would ship the plan as written, `"needs-revision"` when your findings warrant changes                                    |
 | `findings`   | string[]                           | 3–5 entries, strongest first; stack minor objections together rather than listing each                                                         |
 | `grounding`  | string[]                           | What you actually consulted, one entry each — see [Phase 4a](#phase-4a-declare-your-grounding). Never empty                                    |
-| `revision`   | object \| null                     | `null` when no [Phase 3](#phase-3-recommend-changes) changes were needed; otherwise advisory `{ "changed": string, "rescore": integer }`       |
+| `revision`   | object \| null                     | `null` when no [Phase 3](#phase-3-recommend-changes) changes were needed; otherwise advisory `{ "changed": string }`                           |
 
 Example (illustrative — emit the raw object, not this fenced form):
 

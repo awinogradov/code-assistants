@@ -85,31 +85,25 @@ Each returns JSON (`expertRole`, `score`, `dimensions`, `verdict`, `findings`, `
 
 Name every discard in the run — `Discarded <role>: <reason>` — and never silently shrink the panel. A single surviving reviewer is a single opinion, so say so instead of presenting its score as a panel aggregate; when nothing survives, report that the plan is unreviewed rather than emitting a score. Re-launching a discarded role once is reasonable; doing it repeatedly is not, because the same prompt tends to fail the same way.
 
-Aggregate what survives:
+Record what survives:
 
-1. **Score** — average each reviewer's `dimensions` into the five-dimension rubric below, 20 points each, 100 total.
+1. **Per-reviewer verdicts.** Each reviewer's `score` is derived — the sum of its five `dimensions` values (0–20 each; the rubric lives in [the agent](../../../agents/expert-review.md) and nowhere else). When a reported `score` disagrees with its own dimensions, recompute the sum and use that. Record one verdict per surviving reviewer, in launch order: the derived score and that reviewer's weakest dimension with its points. There is no cross-reviewer averaging — verdicts side by side tell the reader more than one blended number.
 
-   | Dimension        | Criteria                                                                                                                            |
-   | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-   | **Alignment**    | Follows CLAUDE.md, project patterns, naming conventions, and complies with Accepted RFCs / `docs/` conventions                      |
-   | **Completeness** | All requirements addressed, no missing steps                                                                                        |
-   | **Type Safety**  | Proper types, Zod schemas, no unsafe `as` assertions                                                                                |
-   | **Testability**  | Clear test strategy, edge cases identified                                                                                          |
-   | **Simplicity**   | Minimal code, reuses existing functions, no over-engineering, every change traces to steelmanned intent, no opportunistic refactors |
+2. **Apply the findings — once.** Fold the panel's findings into the draft in a single pass: no re-running the panel, no iterating on the verdicts, no threshold to clear. Ask via `AskUserQuestion` only when a finding hinges on a material ambiguity the Context Map cannot settle.
 
-2. **Apply the findings — once.** Fold the panel's findings into the draft in a single pass: no re-running the panel, no iterating on the aggregate, no threshold to clear. Ask via `AskUserQuestion` only when a finding hinges on a material ambiguity the Context Map cannot settle.
-
-3. **Record honestly.** Record the actual aggregate and name the weakest dimension in the plan; never inflate the number. The score informs the reader — the human at `plan`'s approval gate, or the teammate reading the ticket `linear:plan` stores — it is not a gate for any caller, and every caller proceeds on whatever the number says.
+3. **Record honestly.** Record each reviewer's actual derived score and weakest dimension in the plan; never inflate a number. The scores inform the reader — the human at `plan`'s approval gate, or the teammate reading the ticket `linear:plan` stores — it is not a gate for any caller, and every caller proceeds on whatever the numbers say.
 
 Do not include raw expert JSON in the plan output.
 
 ## Finalize (task 5)
 
-Apply the aggregated findings and score to the draft, then write the plan file, replacing the `Score:` placeholder with a line that records the panel's assessment:
+Apply the panel's findings to the draft, then write the plan file, replacing the `Score:` placeholder with a line that records the per-reviewer verdicts:
 
 ```text
-Score: <N>/100 · weakest: <dimension>
+Score: <score> & <score> · weakest: <dimension> (<points>) & <dimension> (<points>) · findings applied
 ```
+
+One `<score>` entry per surviving reviewer, in launch order, joined by `&`; `weakest:` names each reviewer's weakest dimension with its points, in the same order — e.g. `Score: 87 & 92 · weakest: testability (15) & simplicity (18) · findings applied`. The trailing `findings applied` is literal: it records that the panel's findings were folded into the draft, which the scores alone cannot show. A single surviving reviewer yields a single entry, which reads as the single opinion it is.
 
 When the review step was skipped, there are no findings to apply; replace the placeholder with the skipped variant instead:
 
@@ -119,6 +113,6 @@ Score: skipped · expert review disabled (invoked without --experts-review)
 
 The line is deliberately a single literal: only `plan` and `linear:plan` can skip, so this exact line appearing in `run`, `run-primed`, or `linear:run` output is evidence of drift, not a valid state.
 
-Naming the weakest dimension costs half a line and tells a later reader where the plan is soft — the aggregate alone says how good the panel thought the plan was, not what to double-check when executing it.
+Naming each reviewer's weakest dimension costs half a line and tells a later reader where the plan is soft — the scores alone say how good the panel thought the plan was, not what to double-check when executing it.
 
 Apply the reference-formatting rules (RFC-0001, inlined at the end of the calling skill) to every reference the plan contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
