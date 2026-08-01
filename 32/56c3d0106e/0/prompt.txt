@@ -698,3 +698,38 @@ Plus the dialog directive: "Every user decision below uses AskUserQuestion. Read
 5. `git status` shows three other modified files (commits:create, pr:monitor, pr:review SKILL.md) — pre-existing uncommitted work on this branch; untouched. `bunx prettier` briefly saved the lockfile but git shows it clean.</result>
 <usage><subagent_tokens>74404</subagent_tokens><tool_uses>18</tool_uses><duration_ms>200541</duration_ms></usage>
 </task-notification>
+
+---
+
+<task-notification>
+<task-id>aaa77843153f084cf</task-id>
+<tool-use-id>toolu_014kD9upHhNy8JpVJ8YD3tCV</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-dust-devil-pictograph/dc3eb34f-6473-4070-ac05-77b1d02d3206/tasks/aaa77843153f084cf.output</output-file>
+<status>completed</status>
+<summary>Agent "WP-I: commits:create + pr:monitor trims" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>Both findings are implemented, validated, and green. Summary:
+
+## commits:create/SKILL.md (finding 15) — net −33 lines (48 changed: ~7 added, ~40 removed)
+
+- Replaced "### WHAT-not-WHY Rule (MANDATORY)" (2 tables + WHY-word list) and "### Anti-patterns" (table + vague-word list) with one compact "### WHAT-not-WHY Rule (MANDATORY)" section: intent statement (WHAT never WHY; title names the specific technical change readable without the diff; motivation/review references/rule citations belong nowhere), a 3-row example table (2 title contrasts + 1 body-bullet contrast), the rubric, and a pointer to `CONTRIBUTING.md#commits` (verified `### Commits` heading exists; anchor resolves under the test's slug algorithm). Both word blacklists deleted.
+- Phase 4 step 4 now reads: "Answer the rubric in the [WHAT-not-WHY Rule](#what-not-why-rule-mandatory) section for the generated title. If any rubric question fails, regenerate the title using only concrete technical details from the diff. Repeat up to 3 times…" — escalation to the validation failure dialog unchanged.
+- Section name kept as-is so the anchor and the validation-failure-dialog paragraph's "Phase 4 WHAT-not-WHY check" mention stay valid; the cross-file link from commits:restructure targets `#rules`, untouched.
+
+**New rubric text:** 1. Does it name the concrete thing that changed (file, function, value, or behavior)? 2. Would it still be true read against only the diff, with no conversation context? 3. Does any part state a goal, motivation, or reference (review, rule, coverage) instead of a change? Pass = yes, yes, no.
+
+## pr:monitor/SKILL.md (finding 17) — net −17 lines (50 changed: ~17 added, ~33 removed)
+
+- Extracted "### Approval Sweep (shared procedure)" (placed in Phase 1, before §1.1): headBefore capture → pr:resolve suggestion evaluation → HEAD compare → on change set `cooldownRemaining = 3`. §1.1 and §2.2 now each say "Run the [Approval Sweep]" and keep only their differing outputs/continue-targets/exit conditions. Identical checks, values, and exits.
+- Edge Cases cut from 17 bullets to 5 (pr:resolve fails dialog, CI fix attempt fails, fix-causes-different-failure attempt counting, rate-limit 120s backoff, network-error retry).
+
+**Judgment calls:**
+- "cancelled-run empty logs" and "post-push cooldown active" bullets were deleted despite the finding naming the first as a keeper: §2.2a step 2 and its opening line state both behaviors verbatim, and the instruction said to delete anything a phase already states.
+- The why-3-cycles cooldown rationale existed nowhere, so I added it to the Phase 2 `cooldownRemaining` state definition ("so fresh CI runs have time to replace the stale failures of the superseded commit"); the approval-may-be-stale rationale from the deleted bullet moved into Approval Sweep step 4.
+- Old table rows chosen for the surviving 3: `address review feedback` (review-reference class) and `improve error handling` (abstract-goal class) for titles, `CLAUDE.md enforces max-depth` (rule-citation class) for the body.
+
+**Verification:** `bunx prettier@3.8.3 --write` both files (unchanged — already conformant, no bun.lock drift); `bun run validate` — 40 checks OK; `bun test src/linkResolution.test.ts src/sharedRulesInvocation.test.ts` — 869 pass, 0 fail. The guarded phrase was not introduced; the "## Reference formatting" paragraphs, validation section, and AskUserQuestion contract are untouched. Nothing committed or staged.
+
+Files: `/Users/tony_vi/.warp/worktrees/code-assistants/dust-devil-pictograph/claude-plugins/autopilot/skills/commits:create/SKILL.md`, `/Users/tony_vi/.warp/worktrees/code-assistants/dust-devil-pictograph/claude-plugins/autopilot/skills/pr:monitor/SKILL.md`</result>
+<usage><subagent_tokens>83239</subagent_tokens><tool_uses>18</tool_uses><duration_ms>248951</duration_ms></usage>
+</task-notification>
