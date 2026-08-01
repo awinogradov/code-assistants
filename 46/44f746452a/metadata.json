@@ -1,0 +1,46 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "4644f746452a",
+  "strategy": "manual-commit",
+  "branch": "issue-535-gen5-context-rules",
+  "checkpoints_count": 4,
+  "files_touched": [
+    ".github/actions/code-review-action/src/expertReviewContract.test.ts",
+    ".github/actions/code-review-action/src/sharedBlockSync.test.ts",
+    "claude-plugins/autopilot/agents/analyze-pr-commits.md",
+    "claude-plugins/autopilot/agents/analyze-staged-changes.md",
+    "claude-plugins/autopilot/agents/expert-review.md",
+    "claude-plugins/autopilot/agents/fetch-pr-reviews.md",
+    "claude-plugins/autopilot/agents/scan-and-analyze-todos.md",
+    "claude-plugins/autopilot/skills/issue:run/SKILL.md",
+    "claude-plugins/autopilot/skills/linear:plan/SKILL.md",
+    "claude-plugins/autopilot/skills/linear:run/SKILL.md",
+    "claude-plugins/autopilot/skills/plan/SKILL.md",
+    "claude-plugins/autopilot/skills/plan/references/branch-blocks.md",
+    "claude-plugins/autopilot/skills/plan/references/pipeline.md",
+    "claude-plugins/autopilot/skills/plan/references/stack-deltas.md",
+    "claude-plugins/autopilot/skills/pr:resolve/SKILL.md",
+    "claude-plugins/autopilot/skills/pr:review/SKILL.md",
+    "claude-plugins/autopilot/skills/run-primed/SKILL.md",
+    "claude-plugins/autopilot/skills/todo-cleanup/SKILL.md",
+    "docs/05-plan-run-skills.md",
+    "docs/16-linear-plan-skill.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/46/44f746452a/0/metadata.json",
+      "transcript": "/46/44f746452a/0/full.jsonl",
+      "compact_transcript": "/46/44f746452a/0/transcript.jsonl",
+      "content_hash": "/46/44f746452a/0/content_hash.txt",
+      "prompt": "/46/44f746452a/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 170,
+    "cache_creation_tokens": 424776,
+    "cache_read_tokens": 25628250,
+    "output_tokens": 149148,
+    "api_call_count": 89
+  }
+}
