@@ -101,8 +101,6 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
 
 5. **Self-assign the current user** — idempotent and best-effort; it must never block branch creation.
 
-   <!-- Canonical: [resolve-issue-context.md Phase 2](../../agents/resolve-issue-context.md#phase-2-auto-assign-current-user-opt-in) — keep this self-assign algorithm (statuses + steps) in sync with it. -->
-
    Assigning the issue the moment work starts keeps "who is working on what" accurate. This runs on every issue branch (special-prefix branches skip [Phase 2](#phase-2-fetch-github-issue), so they never assign). On ANY failure, emit the status line and continue to [Phase 3](#phase-3-generate-branch-slug) — the branch is the deliverable; assignment is a side effect.
 
    Emit exactly one status (same vocabulary as the canonical agent):
@@ -113,43 +111,7 @@ Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversa
    - `unassigned — permission denied or assignee limit reached`
    - `unassigned — gh edit error: <first line of stderr>`
 
-   Resolve it with these steps:
-   1. Resolve the authenticated login (cached 5 minutes):
-
-      ```bash
-      LOGIN=$(gh api user --cache 5m --jq .login 2>/dev/null)
-      ```
-
-      If `LOGIN` is empty → `unassigned — gh not authenticated`; continue to [Phase 3](#phase-3-generate-branch-slug).
-
-   2. If the issue `state` from step 2 is `CLOSED` → `unassigned — issue closed`; continue to [Phase 3](#phase-3-generate-branch-slug).
-
-   3. Check whether `LOGIN` is already assigned. GitHub logins are `[A-Za-z0-9-]`, so the login is safe to interpolate into a single `gh --jq` expression (gh's `--jq` cannot take `--arg`); `.assignees[]?` tolerates a null or absent array:
-
-      ```bash
-      ALREADY=$(gh issue view <ISSUE-NUMBER> -R "$REPO" --json assignees --jq "any(.assignees[]?; .login==\"$LOGIN\")" 2>/dev/null)
-      ```
-
-      If `ALREADY == "true"` → `@<LOGIN> (already assigned)`; continue to [Phase 3](#phase-3-generate-branch-slug).
-
-   4. Otherwise attempt the assignment, capturing stderr and exit code (keep this order; read `$?` on the very next line):
-
-      ```bash
-      STDERR=$(gh issue edit <ISSUE-NUMBER> -R "$REPO" --add-assignee "$LOGIN" 2>&1 >/dev/null)
-      EDIT_EXIT=$?
-      ```
-
-   5. **Only when `EDIT_EXIT == 0`**, post-verify with a fresh read, because `gh issue edit --add-assignee` returns exit 0 even when GitHub silently drops the addition (caller lacks `triage`/`write` permission, or the issue is at the 10-assignee limit). When `EDIT_EXIT != 0` the edit never landed, so skip this read and emit `unassigned — gh edit error: <first line of $STDERR>` directly:
-
-      ```bash
-      VERIFIED=$(gh issue view <ISSUE-NUMBER> -R "$REPO" --json assignees --jq "any(.assignees[]?; .login==\"$LOGIN\")" 2>/dev/null)
-      ```
-
-      - `EDIT_EXIT == 0` AND `VERIFIED == "true"` → `@<LOGIN> (just assigned)`
-      - `EDIT_EXIT == 0` AND `VERIFIED != "true"` → `unassigned — permission denied or assignee limit reached`
-      - `EDIT_EXIT != 0` → `unassigned — gh edit error: <first line of $STDERR>`
-
-   In all cases, continue to [Phase 3](#phase-3-generate-branch-slug).
+   Execution steps: read [`references/self-assign.md`](./references/self-assign.md) at this step.
 
 ## Phase 3: Generate Branch Slug
 
