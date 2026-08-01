@@ -2,6 +2,141 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [4.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v3.1.0...autopilot@v4.0.0) (2026-08-01)
+
+## Release Notes
+
+Agent output contracts changed from markdown blocks to bare JSON schemas, and `expert-review` now derives scores from its review dimensions rather than accepting an explicit rescore field.
+
+## ✨ What's New
+
+### Claude 5 Context Engineering Alignment
+
+The autopilot plugin's skills and agents have been restructured to work with Claude 5's context engineering model. Bulk content is now disclosed progressively, shared instruction blocks have a single owner rather than being duplicated across files, and skill instructions describe intent rather than enumerating prohibitions. This reduces token consumption and improves consistency across all autopilot workflows.
+
+<details><summary>Related issues</summary>
+
+- [#535: Align autopilot skills and agents with Claude 5 context engineering rules](https://github.com/awinogradov/code-assistants/issues/535)
+</details>
+
+### `pr:review` Loads Check Details On Demand
+
+The `pr:review` skill now fetches check-family details only when needed, rather than loading everything upfront. Every rule link remains resolvable, but the per-review token cost is meaningfully lower — especially useful on PRs with many CI checks.
+
+<details><summary>Related issues</summary>
+
+- [#535: Align autopilot skills and agents with Claude 5 context engineering rules](https://github.com/awinogradov/code-assistants/issues/535)
+</details>
+
+### Autopilot Non-Interactive Mode for `pr:update`
+
+`pr:update` now accepts an `--autopilot` flag, allowing it to be called non-interactively from other skill callers. This unblocks fully automated commit flows where `pr:update` is invoked as part of a larger autopilot chain without requiring user interaction.
+
+<details><summary>Related issues</summary>
+
+- [#535: Align autopilot skills and agents with Claude 5 context engineering rules](https://github.com/awinogradov/code-assistants/issues/535)
+</details>
+
+### Stale-Merge Detection in `preflight-check`
+
+`preflight-check` now detects branches whose commits have already landed upstream via rebase-merge. Previously, a branch that had been rebased and merged could slip through preflight undetected. This check prevents stale branches from being processed as if they were still active.
+
+<details><summary>Related issues</summary>
+
+- [#535: Align autopilot skills and agents with Claude 5 context engineering rules](https://github.com/awinogradov/code-assistants/issues/535)
+</details>
+
+## 📋 Protocol & Contract Changes
+
+### Agent Output Format: Markdown Blocks → Bare JSON Objects
+
+Four agents that previously returned markdown-wrapped output now emit bare JSON objects. Any downstream tooling or parsing logic that reads agent output must switch from extracting content out of markdown fences to reading the structured schema fields directly.
+
+Affected agents:
+- [`fetch-pr-reviews`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/fetch-pr-reviews.md)
+- [`analyze-pr-commits`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/analyze-pr-commits.md)
+- [`analyze-staged-changes`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/analyze-staged-changes.md)
+- [`scan-and-analyze-todos`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/scan-and-analyze-todos.md)
+
+**Before:**
+```
+```json
+{ "field": "value" }
+```
+```
+
+**After:**
+```
+{ "field": "value" }
+```
+
+### `expert-review` Score Derivation and Plan Format
+
+The `expert-review` agent no longer accepts a `revision.rescore` field. Score is now derived automatically from the agent's five review dimensions. Additionally, stored review plan `Score:` lines now record per-reviewer verdicts individually rather than collapsing them into a single average.
+
+**Before:**
+```
+revision.rescore: 8.5        # explicit override accepted
+Score: 8.2                   # single averaged score across reviewers
+```
+
+**After:**
+```
+# revision.rescore field removed — score is derived from dimensions
+Score: reviewer-a=9 reviewer-b=7 reviewer-c=8   # per-reviewer verdicts
+```
+
+## ⚠️ Breaking Changes
+
+### Agent Output is Now Bare JSON — Markdown Parsers Will Break
+
+Any integration that parses agent output by extracting content from a markdown code block will stop working. The four affected agents (`fetch-pr-reviews`, `analyze-pr-commits`, `analyze-staged-changes`, `scan-and-analyze-todos`) now emit a raw JSON object as their top-level output.
+
+**Migration steps:**
+1. Identify any scripts, agents, or skills that consume output from the four affected agents.
+2. Remove any logic that strips markdown fences (` ```json ... ``` `) before parsing.
+3. Parse the agent output directly as JSON using the schema fields defined in each agent file.
+4. Validate against the updated output schemas in the respective agent files linked above.
+
+### `expert-review` Drops `revision.rescore` — Stored Plans Need Updating
+
+If you have stored review plans that contain a `Score:` line representing a single average, or any tooling that passes `revision.rescore` to `expert-review`, both will need to be updated.
+
+**Migration steps:**
+1. Remove any `revision.rescore` field from inputs to `expert-review`.
+2. Update stored plan `Score:` lines from a single averaged value to the per-reviewer verdict format (e.g. `reviewer-a=9 reviewer-b=7`).
+3. Update any downstream logic that reads the `Score:` line — it now carries a map of verdicts, not a single number.
+
+<details><summary>Related issues</summary>
+
+- [#535: Align autopilot skills and agents with Claude 5 context engineering rules](https://github.com/awinogradov/code-assistants/issues/535)
+- [#536: PR — Align autopilot skills and agents with Claude 5 context engineering rules](https://github.com/awinogradov/code-assistants/pull/536)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #535 | [#536](https://github.com/awinogradov/code-assistants/pull/536) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **autopilot:** the four migrated agents emit bare JSON objects instead of markdown blocks, expert-review drops revision.rescore and derives score from its dimensions, and stored plan Score: lines record per-reviewer verdicts instead of a single average
+
+Entire-Checkpoint: 77d4ce846534
+
+### Bug Fixes
+
+* **autopilot:** add pr:update autopilot flag and stale-merge check ([8cb0578](https://github.com/awinogradov/code-assistants/commit/8cb0578a216d44303ddc44dac6771b65f927cdee))
+* **autopilot:** pass autopilot flag to run pr-update calls ([6d9acdd](https://github.com/awinogradov/code-assistants/commit/6d9acdd99c3bf5dd9f549cf966e06d4c6ee0b641))
+
+### Refactoring
+
+* **autopilot:** dedupe shared instruction blocks across skills ([3f369ed](https://github.com/awinogradov/code-assistants/commit/3f369edcc032e056bf70b5c54087ff7abcedb7e9))
+* **autopilot:** define agent outputs as schemas not samples ([bb1d3dc](https://github.com/awinogradov/code-assistants/commit/bb1d3dcf97685f6865948e720a239ed8bdb9116f))
+* **autopilot:** split large skill bodies into references files ([7e904b3](https://github.com/awinogradov/code-assistants/commit/7e904b37234cb33e0b8104321565dbcb01c20edd))
+* **autopilot:** state intent over prohibition lists in skills ([29f250a](https://github.com/awinogradov/code-assistants/commit/29f250a722affc1e502972d1f46ab99905ca22c6))
 ## [3.1.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v3.0.0...autopilot@v3.1.0) (2026-07-31)
 
 ## Release Notes

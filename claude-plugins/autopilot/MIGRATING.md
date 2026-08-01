@@ -34,3 +34,9 @@
 
 - /autopilot:linear-plan no longer runs the expert-review panel by default; pass --experts-review to keep the previous always-review behavior. Plans stored without the flag record Score: skipped in the stored header.
 - the plugin no longer ships a linear MCP server. Connect
+
+## From 3.1.0 to 4.0.0
+
+### Breaking changes
+
+- the four migrated agents emit bare JSON objects instead of markdown blocks, expert-review drops revision.rescore and derives score from its dimensions, and stored plan Score: lines record per-reviewer verdicts instead of a single average
