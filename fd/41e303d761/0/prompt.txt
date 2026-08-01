@@ -405,3 +405,44 @@ group by phases. one phase — one commit. go ahead to implement and create pr
 - Note: `git status` shows many other modified files from parallel agents on this shared branch; I touched only my six files and did not commit or stage anything.</result>
 <usage><subagent_tokens>121011</subagent_tokens><tool_uses>24</tool_uses><duration_ms>234426</duration_ms></usage>
 </task-notification>
+
+---
+
+<task-notification>
+<task-id>ae47343f349bd6660</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-dust-devil-pictograph/dc3eb34f-6473-4070-ac05-77b1d02d3206/tasks/ae47343f349bd6660.output</output-file>
+<status>completed</status>
+<summary>Agent "WP-D: peer-CLI block + task subjects" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>All four tasks are complete. Prettier reports all five files unchanged (already conformant), `bun run validate` passes 40/40, and the guard tests covering my files pass.
+
+## Edited files
+
+**`/Users/tony_vi/.warp/worktrees/code-assistants/dust-devil-pictograph/claude-plugins/autopilot/skills/shared-rules/references/peer-cli-delegation.md`**
+Replaced the PLACEHOLDER between the byte-exact `&lt;!-- peer-cli:start --&gt;` / `&lt;!-- peer-cli:end --&gt;` sentinels with the caller-neutral block: colleague-not-authority framing, a Delegation paragraph (self-contained prompt composition, current-working-directory expectation, capture/summarize, resume offer), a Following-up paragraph (AskUserQuestion after every command, settings-inherit rule on resume, restate model/mode), the four shared critical-evaluation bullets plus the "identify yourself as Claude / peer discussion" disagreement protocol, and the shared Error-handling bullets ending with the stdin pitfall carrying the sync-guarded phrase "zero bytes of stdout, zero CPU, process hangs". It states explicitly that the invoking skill supplies the CLI name, exec command, resume syntax, and flag table.
+
+**`/Users/tony_vi/.warp/worktrees/code-assistants/dust-devil-pictograph/claude-plugins/autopilot/skills/ask:codex/SKILL.md`**
+Frontmatter untouched. Intro now names the CLI, points at the block via `../shared-rules/references/peer-cli-delegation.md`, and retains the "Do NOT use for: git/PR workflows" guard as a sentence. Input, the numbered Running-a-Task mechanics (models, effort, sandbox flags, `--skip-git-repo-check`, `2&gt;/dev/null`, resume pipe syntax), and the Quick Reference table are kept; steps 5/7/8 now defer to the block's inherit rule, stdin guard, and reporting/resume-offer loop while keeping the exact `codex exec ... &lt;/dev/null 2&gt;/dev/null` example. The removed Following Up / Critical Evaluation / Error Handling sections are replaced by a "Codex Specifics for the Shared Rules" section listing the caller-supplied pieces: version check, high-impact flags, and the verbatim disagreement-resume command. "zero bytes of stdout" is gone; the final Reference formatting paragraph is untouched.
+
+**`/Users/tony_vi/.warp/worktrees/code-assistants/dust-devil-pictograph/claude-plugins/autopilot/skills/ask:gemini/SKILL.md`**
+Mirror treatment: intro + read directive + do-not-use guard; kept the gemini-specific mechanics (`-p` non-interactive rule, approval modes, `-s` sandbox pairing, JSON `.response`/`jq` output handling, `gemini -r "latest"` resume) and Quick Reference table; added "Gemini Specifics for the Shared Rules" (version check, high-impact flags, disagreement-resume command). Deleted the HTML "keep the two in sync" comment (which also removed the only link to ask:codex's now-deleted Critical Evaluation heading, so no dangling anchor). "zero bytes of stdout" removed; Reference formatting paragraph untouched.
+
+**`/Users/tony_vi/.warp/worktrees/code-assistants/dust-devil-pictograph/claude-plugins/autopilot/skills/plan/references/pipeline.md`**
+Deleted all six bare "Set task N … to `in_progress`/`completed`" lines — each duplicated the callers' general protocol (in_progress at phase start, completed at phase end) with the phase headings marking the boundaries. The one load-bearing occurrence (the skip path, which completes with a note and jumps to Finalize) was rephrased by subject: "mark the Review-and-score task `completed` noting the skip". Scoring/review content untouched.
+
+**`/Users/tony_vi/.warp/worktrees/code-assistants/dust-devil-pictograph/claude-plugins/autopilot/skills/linear:run/SKILL.md`**
+Deleted both index-translation tables. The pipeline mapping became one sentence ("The pipeline's phases track this skill's plan tasks by subject: its Draft-plan phase is the Establish-plan task…"), and the delivery mapping became "`run` numbers its delivery tasks differently; track them by subject — where its chain sets the Commit-changes, Create-PR, or Monitor-PR task, use this skill's task of the same name." Nothing else in the file changed.
+
+## Judgment calls
+
+1. **Kept pipeline.md's "(task N)" heading suffixes.** The anchor `#review-and-score-task-4` is linked from `expert-review.md` and `input-detection.md` — both outside my allowed set — and run/SKILL.md's untouchable prose also cites those numbers, so renaming headings would break resolvable-link and consistency guarantees I cannot repair.
+2. **Dropped both When-to-Use sections entirely** — the bullets were the generic pattern with only the CLI name swapped and are fully covered by each frontmatter description; the non-generic "Do NOT use for" guard was folded into each intro paragraph so no behavior is lost.
+3. **Kept `-C &lt;DIR&gt;` / `--include-directories` in the skills** and wrote the block's working-directory expectation generically ("run it from the repository the task concerns; reach for the invoking skill's directory flags only when the task lives elsewhere").
+
+## Findings
+
+- `bun test src/sharedRulesInvocation.test.ts` has **one pre-existing failure outside my scope**: `pr:update` still carries the askuserquestion-contract phrase ("Copy the full preview string literally into every option"). `pr:update/SKILL.md` is not among my assigned files (it belongs to another phase of #535), so I left it. All checks touching my five files pass, including sharedBlockSync (peer-cli canonical), linkResolution (719 pass), and validate-plugins (40 OK).
+- The worktree contains many other in-flight modifications from parallel #535 work; I did not touch or revert any of them, and per instructions nothing was committed or staged.</result>
+<usage><subagent_tokens>96667</subagent_tokens><tool_uses>28</tool_uses><duration_ms>329327</duration_ms></usage>
+</task-notification>
