@@ -1,0 +1,532 @@
+/explore
+
+---
+
+Review agents and skills with the new rules for 5th gen models and find opportunities to improve. Sources:
+- https://claude.com/blog/the-new-rules-of-context-engineering-for-claude-5-generation-models
+- https://claude.com/blog/a-field-guide-to-claude-fable-finding-your-unknowns
+[Image #1] [Image #2] [Image #3] [Image #4] --issue
+
+---
+
+<task-notification>
+<task-id>a45b836c9b0ab0aff</task-id>
+<tool-use-id>toolu_01ADNiy8x1Fpogho4aQR8Lgh</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-dust-devil-pictograph/dc3eb34f-6473-4070-ac05-77b1d02d3206/tasks/a45b836c9b0ab0aff.output</output-file>
+<status>completed</status>
+<summary>Agent "Review agents + utility skills vs gen-5 rules" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>## Findings (prioritized)
+
+### 1. `claude-plugins/autopilot/skills/ascii-schemas/SKILL.md` — Progressive Disclosure
+**Evidence:** 26,082 bytes in a single always-loaded body. Section spine: `### Browser Frame`, `### Navbar`, `### Sidebar + Content Layout`, `### Card Grid (KPI / Stats)`, `### Data Table`, `### Modal Overlay`, `### Form Layout`, `### Mobile Screen Frame`, `### Pricing / Emphasis with Double Border`, `### Chat Bubbles` (lines 294–441), plus five numbered worked diagrams under `## Technical Diagram Types` (lines 189–293). No `references/` directory exists for this skill.
+**Why it conflicts:** Rule 3 — the whole corpus loads whenever any of the ~15 trigger words fires, even when the user wants one ER diagram. It is also Rule 2/6 inverted: ~40 rendered pictures where a character table + sizing contract would do the same work in a tenth of the tokens.
+**Proposed direction:** Keep in SKILL.md only `## Core Rules`, `### Box Drawing`, `### Border Style Selection`, MCP integration, and `## Anti-Patterns` (~120 lines); move the rest to `references/technical-diagrams.md`, `references/ui-wireframes.md`, and `references/component-patterns.md`, with a one-line dispatch table naming which to read for which request.
+**Impact:** high — the single largest always-loaded body in the set, and the cheapest to fix (pure file split, no semantics change).
+
+### 2. `agents/fetch-pr-reviews.md`, `agents/analyze-pr-commits.md`, `agents/analyze-staged-changes.md`, `agents/scan-and-analyze-todos.md` — Interfaces, not Examples
+**Evidence:** `fetch-pr-reviews.md` Phase 4: "Output ONLY the structured block. No preamble or commentary:" followed by a fenced markdown mock with `- \`[file]:[line]\` - @[reviewer]: [comment summary] (comment_id: [id])`, then **two additional full output templates** for "no unresolved comments" and "all comments are resolved". The other seven agents use a `| Field | Type | Constraint |` table plus the guarded `&lt;!-- agent-json:start --&gt;` sentinel.
+**Why it conflicts:** Rule 2/6 — these four define their contract *by sample output*, so the parent has to string-match prose headings, and the three alternate empty-state templates are three shapes the caller must each handle. The repo already has the better pattern in-house.
+**Proposed direction:** Migrate the four to the schema-table + `agent-json` sentinel form (e.g. `{ pr, author, reviewState, reviewers[], comments[{ commentId, path, line, reviewer, severity: "blocker"|"suggestion"|"nitpick"|"question", summary }] }`); the empty and all-resolved cases collapse into `comments: []` plus a `note` field instead of separate templates. Register the new copies in `sharedBlockSync.test.ts`'s `retainedCopies` matrix.
+**Impact:** high — removes the last non-schema agent outputs and makes all 11 agents one interface family.
+
+### 3. `claude-plugins/autopilot/skills/pr:monitor/SKILL.md` — Judgement, not Rules (+ Repeat Yourself)
+**Evidence:** §1.1 "If `reviewDecision` is `APPROVED`" and §2.2 "If `reviewDecision` is `APPROVED` AND all checks…" carry the same five-step `headBefore` / `git rev-parse` / `cooldownRemaining = 3` procedure almost verbatim. Then `## Edge Cases` restates 18 bullets already handled in-phase: "**No PR found** → abort with suggestion to create one", "**PR merged during monitoring** → exit with merge message", "**Post-push cooldown active** → skip CI check phase".
+**Why it conflicts:** Rule 1 and Rule 4 — an exhaustive branch enumeration plus a duplicate recap of it. The genuinely load-bearing content is small: the loop invariant, the two-attempt fix budget, the 3-cycle cooldown *and why it exists*, and the exit statuses.
+**Proposed direction:** State the pre-loop check and the per-cycle check as one shared procedure invoked from both entry points, and cut `## Edge Cases` to the entries that carry information not derivable from the phases (rate-limit backoff to 120s, cancelled-run empty logs, cooldown rationale).
+**Impact:** high — 16KB skill that runs in a polling loop, so every redundant line is re-read on each invocation.
+
+### 4. `skills/ask:codex/SKILL.md` + `skills/ask:gemini/SKILL.md` — Repeat Yourself
+**Evidence:** `ask:gemini` line: `&lt;!-- The model-agnostic peer-evaluation guidance below (the four bullets and the colleague framing) is shared with [ask:codex](../ask:codex/SKILL.md#critical-evaluation-of-codex-output); keep the two in sync. --&gt;`. In practice `## When to Use`, `## Input`, `## Following Up`, `## Critical Evaluation`, and `## Error Handling` are the same text with the CLI name swapped; step 7 ("**IMPORTANT (stdin)**… Symptom of getting this wrong: zero bytes of stdout, zero CPU, process hangs") is near word-for-word identical.
+**Why it conflicts:** Rule 4, and it is exactly the failure mode `shared-rules/SKILL.md` was created to end ("That is why the AskUserQuestion note drifted into two wordings across 11 copies with nothing detecting it — a copy has no owner"). A sync-by-HTML-comment has no owner and no guard.
+**Proposed direction:** Extract the peer framing, follow-up loop, stdin/exit-code error semantics into `shared-rules/references/peer-cli-delegation.md` parameterised by CLI name + resume syntax, register the sentinel in `sharedBlockSync.test.ts`, and leave each SKILL.md with only its flag contract and Quick Reference table.
+**Impact:** med-high — two skills shrink to ~40 lines each and the drift risk becomes test-detectable.
+
+### 5. `agents/resolve-issue-context.md` — Judgement, not Rules (over-specified mechanics)
+**Evidence:** Phase 2 step 5: "`gh --jq` only accepts a single expression and cannot pass `--arg` through to `jq`, so pipe the JSON to `jq` directly:" followed by the exact `VERIFIED=$(…)` command; step 1 similarly pins `--cache 5m` and adds a paragraph arguing against an email-based fallback. 10,155 bytes — the largest agent.
+**Why it conflicts:** Rule 1 / Fable's over-specificity warning — this is the *how*, transcribed. The contract is small: assignment must be idempotent, must be verified by a fresh read because `gh issue edit` exits 0 on a silently dropped assignment, and must resolve to exactly one of six status strings.
+**Proposed direction:** Keep the six enumerated status strings (that is the real interface) and one sentence of *why* post-verification is required; drop the shell transcripts and the jq/gh tool-trivia justifications, letting the agent choose its own invocation.
+**Impact:** med — biggest agent body, invoked by most planning paths; the enum is what callers depend on, not the commands.
+
+### 6. `agents/expert-review.md` — Rich References / Interfaces
+**Evidence:** Phase 2 defines a 0–100 `score` with four prose bands ("**95-100**: Excellent — no significant gaps…"), then *also* five rubric dimensions each 0–20, with "The caller aggregates these across reviewers into the plan's single score".
+**Why it conflicts:** Rule 2/6 — two numeric interfaces over the same quantity, with the relationship between them left unstated. `score: 92` with dimensions summing to 88 is schema-valid and silently inconsistent; the prose bands add nothing the dimension rubric table does not already encode.
+**Proposed direction:** Make the dimension table the sole rubric and define `score` as derived (`score = sum(dimensions)`), marked as such in the schema table — or drop `score` from the output and let the caller compute it.
+**Impact:** med — this score is recorded on plans and Linear tickets, so an internally inconsistent pair is visible to humans.
+
+### 7. `agents/resolve-alert-context.md` — Simple Tool Descriptions (each instruction once)
+**Evidence:** The "emit only JSON" rule appears four times in one file: the intro ("Do not output intermediate steps — only the final structured block"), a Constraints bullet ("Emit ONLY the final JSON object — no preamble, no surrounding code fence, no commentary. The parent parses it directly."), the guarded `&lt;!-- agent-json:start --&gt;` block (same sentence), and the closing "Emit the raw object, not the fenced form."
+**Why it conflicts:** Rule 4 — only the sentinel copy is owned and byte-guarded; the other three are unguarded paraphrases that can drift from it. Phase 1's `mktemp` + `awk 'NR==1 {print $2; exit}'` header-splitting recipe is a second, smaller instance of Rule 1 over-specification.
+**Proposed direction:** Delete the Constraints bullet and the intro clause and keep the guarded sentinel as sole owner (safe — `sharedBlockSync` guards only the sentinel span). Replace the awk header surgery with the contract: "capture HTTP status, body, and stderr separately so Phase 2 can classify."
+**Impact:** med — same pattern is present in the other JSON agents; fixing one establishes the trim for all seven.
+
+### 8. `skills/pr:resolve/SKILL.md` Phase 5 — Progressive Disclosure / Rich References
+**Evidence:** A single ~350-word paragraph beginning "Format every reply per [RFC-0001]…" that inlines commit-SHA linking, `&lt;repo-blob-url&gt;` construction, `CHECK-` rule-code anchoring, `pr%3Areview` percent-encoding, GitHub's lowercase-anchor behaviour, and a fallback rule — while the same file *also* ends with the standard `## Reference formatting` read directive pointing at `reference-formatting.md`.
+**Why it conflicts:** Rules 3 and 6 — the hardest, most mechanical part of the rule is delivered as an unstructured wall of prose in the always-loaded body, next to a pointer to the block that is supposed to own it.
+**Proposed direction:** Move the absolute-URL construction rules into a `shared-rules/references/github-comment-references.md` block (a short URL-template table: kind → template → example), read on demand in Phase 5; leave one sentence in the body stating that replies render as GitHub comments so every reference must be absolute.
+**Impact:** med — improves the most-quoted, most error-prone instruction in the skill and puts it under the sync guard rather than in free prose.
+
+## Already aligned
+
+- **The inlined `agent-json` copies are correctly justified, not a Rule 4 violation.** `shared-rules/SKILL.md` explains agents declare restrictive `tools` (expert-review declares `tools: []`) and `sharedBlockSync.test.ts` asserts each copy byte-identical — single-sourced, only the delivery differs. Do not "fix" these.
+- **`agents/digest-branch-diff.md`, `digest-repo-standards.md`, `resolve-assignees.md`** — `| Field | Type | Constraint |` tables with typed unions and one compact example each. This is the Rule 2/6 target state; use them as the template for finding 2.
+- **`resolve-alert-context.md` Phase 2** — an ordered, first-match failure ladder mapping each condition to a fixed `resolveError` string. Error semantics as an enum rather than prose advice.
+- **Agent frontmatter descriptions** consistently follow "…Use when *&lt;caller&gt;* needs *&lt;thing&gt;* without polluting parent context", which makes the caller's when-to-use decision mechanical (the Fable guidance on agent descriptions).
+- **`digest-branch-diff.md` and `digest-repo-standards.md` open with the *why*** ("The point of this agent is bounding…", "The point of this agent is context isolation…") before any procedure — intent framing, exactly Rule 1's shape.</result>
+<usage><subagent_tokens>87013</subagent_tokens><tool_uses>17</tool_uses><duration_ms>166013</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>ab997a10116314c45</task-id>
+<tool-use-id>toolu_01MinYcL2nHs6eea9ntpAbjj</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-dust-devil-pictograph/dc3eb34f-6473-4070-ac05-77b1d02d3206/tasks/ab997a10116314c45.output</output-file>
+<status>completed</status>
+<summary>Agent "Review pr:review group vs gen-5 rules" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>Read all files from `origin/main`. Findings below.
+
+## Findings
+
+### 1. `claude-plugins/autopilot/skills/pr:review/SKILL.md` — the 92-rule check catalog is one always-loaded block
+- **rule:** #3 Progressive Disclosure (+ #2 Design Interfaces)
+- **evidence:** §2.3 "Review Checks" spans lines ~185–815 of a 1027-line file — 631 lines, ~61% of the skill, 92 `&lt;a id="CHECK-…"&gt;` rules. Several families already declare their own precondition in prose: "Applies when the diff adds or changes log calls…" (Logging), "Applies to repositories carrying a `docs/` folder" (Documentation), "Applies to repositories carrying an `rfc/` folder" (RFCs), "Applies to repositories carrying a `principles/` folder", "Applies when the diff adds or changes a backend service's API, entrypoint, or runtime config" (Service Standards).
+- **why it conflicts:** Every run pays input tokens for ~10 families that the skill's own text says are inapplicable most of the time, and per the repo constraint the rule count also drives output cost. The gating conditions are already known at §1.5 (Context Map has stack, changed files, whether `rfc/`/`principles/`/`docs/` exist) — this is exactly the "load the branch at the right moment" case.
+- **proposed direction:** Keep an always-loaded rules *index* in SKILL.md — one row per rule (`id | severity | scope/stack | one-line title`), which preserves the `&lt;a id&gt;` anchors that `RULES_DOC_URL` must resolve against — and move the prose + `Example:` + `Skip:` bodies into `references/checks-&lt;family&gt;.md`, read only when §1.5 says the family applies. If detail must stay linkable, retarget the action's `rules_doc_url` default (single source, guarded by `rulesDocUrlSync.test.ts`) at a canonical rules doc instead of the skill.
+- **impact:** **high** — the single largest per-CI-run token cost in the repo, and the gating conditions are already computed.
+
+### 2. `pr:review/SKILL.md` + `pr:answer/SKILL.md` — rule-code rendering restated six times, unguarded
+- **rule:** #4 State Each Instruction Once
+- **evidence:** §2.5 "Rule Codes" (line ~822) defines the single/shared/absent forms. Then the "reviewComment body template" preamble repeats them ("If two checks flagged the same `(path, line)`, render the merged form `[[CHECK-BUG-002](&lt;RULES_DOC_URL&gt;#check-bug-002), …]`"), "inlineComments Usage" repeats them again, the "Include" list repeats them a fourth time, and `pr:answer` restates the whole single/shared/absent triple twice — in *Reply* and again in *Review Body Update* ("rendered exactly as in the [`pr:review` skill's §2.5]… (single: … ; shared: …)"), i.e. it links to the canonical section *and* copies it.
+- **why it conflicts:** Six copies of one micro-format with no sync test (unlike the `sharedBlockSync`-guarded blocks) is precisely the drift the repo's own shared-rules SKILL.md warns about: "a copy has no owner."
+- **proposed direction:** Make §2.5 the sole statement; everywhere else say "render rule codes per §2.5" with the link and delete the inline restatement. If `pr:answer` needs it standalone, promote §2.5 to `shared-rules/references/rule-code-links.md` and register it in `sharedBlockSync`/`sharedRulesInvocation` like the other blocks.
+- **impact:** **high** — drift risk on a format that silently produces dead/404 links, plus ~40 redundant lines in the hottest CI skill.
+
+### 3. `pr:review/SKILL.md` — reference-link rules stated in four layers, two of them mutually divergent
+- **rule:** #4 State Each Instruction Once (+ #3)
+- **evidence:** "File and doc links" (line ~895) defines `&lt;pr-blob-url&gt;`, percent-encoding, `?plain=1`, "Only resolvable targets", and ends with a **Self-check** ("any resolvable repo-relative file or doc path — with OR without a line number — a bare `RFC-NNNN` id, or a bare 7–40-char hex token is a violation…"). The "Include" list restates full-path linking. The file then ends with a *second*, differently worded **"Reference self-check (MANDATORY)"** ("A bare commit SHA, a bare tracker id outside a magic-word line, or an unlinked mention of a file that exists in the repo is a violation") — and that same paragraph is copied verbatim into 27 skills including `pr:validate` and `pr:answer`, while the block it guards (`reference-formatting.md`) already says "Never wrap a SHA or issue/PR number in backticks."
+- **why it conflicts:** Two self-checks in one file with different violation lists is an instruction the model must reconcile at runtime; the 27-file copy is unguarded duplication sitting one layer above a guarded block.
+- **proposed direction:** Fold the self-check sentence into `reference-formatting.md` itself (an RFC-0001 version bump, per the repo's stated process) so each skill carries only the read directive; keep in `pr:review` only what RFC-0001 genuinely does not cover — the `&lt;pr-blob-url&gt;` construction from `headRefOid`, `?plain=1`, and the inline-comment exception.
+- **impact:** **medium-high** — drift risk across 27 files; the RFC-bump path respects the sync-test constraint rather than deleting copies.
+
+### 4. `pr:review/SKILL.md` — "Exclude"/"FORBIDDEN" prohibition lists where intent would do
+- **rule:** #1 Give Claude Judgement
+- **evidence:** "Exclude" (line ~1013) enumerates 11 bans — "Hedging words: 'should', 'could', 'might'", "'🔁 Follow-up review' prefix or any round-labeling preamble", "CLAUDE.md compliance checklists", "File/line change statistics", "Explanations of why code is good". "Verdict Decision Rules" adds "**STRICT RULES - No exceptions:**" and a "**FORBIDDEN:**" list. §"reviewComment Format" opens "**CRITICAL: Use these EXACT section names. 'Observations', 'Positive Notes', or similar variations are NOT allowed.**"
+- **why it conflicts:** Exhaustive negative enumeration is the pattern Anthropic cut &gt;80% of. It also self-contradicts: the hedging ban collides with the skill's own approved output ("Consider exponential backoff…") and with checks worded as "should" (CHECK-PR-007, CHECK-DOC-001).
+- **proposed direction:** Replace the Exclude list with the intent plus the one hard contract: "The body is findings only — no praise, no meta-commentary, no statistics; section names are fixed to the four below because downstream filters key on them." Keep the verdict↔header mapping as a table (it is a machine contract), drop the "FORBIDDEN"/"STRICT/No exceptions" framing.
+- **impact:** **medium** — over-constraint that already produces an internal contradiction; modest token saving.
+
+### 5. `pr:review/SKILL.md` — three worked JSON examples where the schema is the interface
+- **rule:** #2 Design Interfaces, not Examples
+- **evidence:** After the "Structured Output Schema" block, lines ~930–965 carry three full examples ("approve with no findings", "requestChanges with blockers", "approve with suggestions"), all three built on the same fictional payment-webhook PR, followed by a fourth artifact — the markdown "reviewComment body template".
+- **why it conflicts:** The schema plus field semantics already fully determine the output; the examples add ~35 lines and anchor tone/shape to one scenario (every example is a webhook retry finding with one blocker).
+- **proposed direction:** Keep the JSON schema and the markdown body template (that one *is* the interface for prose structure); replace the three examples with one minimal empty-approval example plus a field table stating when `startLine`/`suggestion`/`reviewComment: ""` apply.
+- **impact:** **medium** — token cost every run plus anchoring; the constraint that the format must be exact is served better by the template than by instances.
+
+### 6. `pr-body-grammar.md` — section ordering asserted three times plus two near-identical templates
+- **rule:** #4 State Each Instruction Once (+ #2)
+- **evidence:** "**CRITICAL — Section ordering is MANDATORY and MUST NOT be rearranged:**" with a numbered list, then "The `**Issues:**` section is ALWAYS last. Placing it before the description or release notes is a format violation.", then under Release Notes "The section MUST be placed between the description and the `**Issues:**` section", then two example templates ("with release notes" / "without release notes") that differ only by the middle block.
+- **why it conflicts:** The template *is* the ordering spec; the three prose assertions are redundant reinforcement, and the second template is the first minus one optional section.
+- **proposed direction:** Keep one template with the release-notes block marked `&lt;optional&gt;`, state ordering once as a caption on it, and drop the repeated MUST prose. Note `sharedBlockSync`/`sharedRulesInvocation` match on the phrase "DO NOT use `**Release Notes:**` (capital" — keep that literal or update the test's phrase map in the same change.
+- **impact:** **medium** — ~25 lines on a block read by several skills; low behavioural risk.
+
+### 7. `pr:review/SKILL.md` §1.3 — scripted greeting rotation with unverifiable state
+- **rule:** #2 Design Interfaces / Fable "map, not territory"
+- **evidence:** "Rotate randomly between these tones — **never use the same tone twice in a row**" followed by four verbatim scripts ("Dry wit — 'Thanks @PR_AUTHOR — let's see what you've brought to the table.'" …).
+- **why it conflicts:** Each CI run is a fresh context with no record of the previous run's tone, so "never twice in a row" is an instruction the model cannot satisfy or verify — and the four literal strings make output deterministic in exactly the way "rotate randomly" tries to avoid.
+- **proposed direction:** Replace with the contract only: "One short sentence @-mentioning the author so they get a notification; vary the wording, no praise." Drop the numbered scripts and the cross-run constraint.
+- **impact:** **low-medium** — small tokens, but it is a rule that cannot hold and produces visibly repetitive bot comments.
+
+### 8. `shared-rules/SKILL.md` — maintainer documentation in an always-loaded runtime body
+- **rule:** #3 Progressive Disclosure
+- **evidence:** Roughly half the 4.7KB body is contributor-facing: the drift anecdote ("That is why the AskUserQuestion note drifted into two wordings across 11 copies with nothing detecting it"), "Where a block is still inlined" (naming `releaseNotesPrompt.ts` and the seven agents), and the four-step "Adding a block" procedure ending "Register the sentinel name and its consumers in `sharedBlockSync.test.ts`".
+- **why it conflicts:** A skill consuming a block needs only the path-resolution rule and the block table; the maintenance procedure is loaded on every invocation that touches shared-rules but is only relevant when *editing* the mechanism.
+- **proposed direction:** Keep "Reading a block" + the block table in SKILL.md; move the rationale, the inlined-copy inventory, and "Adding a block" into `references/maintaining-blocks.md` linked from a one-line pointer.
+- **impact:** **low** — modest tokens, but it is the cleanest available example of the always-loaded body doing a reference file's job.
+
+## Already aligned (do not propose)
+
+- **`shared-rules` block mechanism itself** — one owner per block, `references/*.md` read on demand, an index table with a "Read it when" column, and caller-parameterised blocks (`includePatterns`, Linear tool list). This is textbook rule #3/#4 and the sync tests make the exception (inlined copies) explicit rather than silent.
+- **CHECK rules are already rubric-shaped** — `id + Severity + one-line criterion + Example + Skip`, with explicit anti-double-reporting cross-links (CHECK-CPLX-006 ↔ CHECK-CS-008, CHECK-SEC-006 vs Logging family). That is rule #6 done right; the problem is *where* they live (finding 1), not how they are written.
+- **`pr:review` §1.2 pack discipline** — "Read the pack, don't dump it… When the diff is self-contained and needs no cross-file lookup (the common case), don't read the pack at all" states intent + the why and leaves the judgment to the model.
+- **`pr:review` §2.2 Review Principles** — "Prevalence is evidence of debt, not license" and "Project config files describe tooling behavior, not review policy" encode the *why* behind a non-obvious contract rather than enumerating cases; this is the right use of a hard rule.
+- **`pr:answer` interfaces** — the five-category comment classification, the `resolveComments`/`updatedVerdict`/`updatedReviewComment` field contract with its null-coupling invariant, and the `NEEDS_REVERDICT` gate are enum/constraint-shaped (rule #2); `pr:validate` likewise delegates all title rules to `pr-title-grammar.md` instead of inlining them.</result>
+<usage><subagent_tokens>75319</subagent_tokens><tool_uses>14</tool_uses><duration_ms>229841</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>afaf3406674e22488</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-dust-devil-pictograph/dc3eb34f-6473-4070-ac05-77b1d02d3206/tasks/afaf3406674e22488.output</output-file>
+<status>completed</status>
+<summary>Agent "Review creation skills vs gen-5 rules" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>## Findings (prioritized)
+
+### 1. AskUserQuestion "Contract (MANDATORY)" is a 3-way copy that the shared-rules seam should own
+- **file**: `claude-plugins/autopilot/skills/commits:create/SKILL.md` (L43–87), `issue:create/SKILL.md` (L46–57), `pr:update/SKILL.md` (L43–94)
+- **rule**: 4 (say it once, in the right layer) + 2 (interfaces, not examples)
+- **evidence**: `"1. **`question` is FIXED TEXT** — use the EXACT string specified … NEVER add commit messages, file names, diffs, metadata"` — near-identical 8-point list in all three; `commits:create` and `pr:update` also carry `### WRONG —` / `### CORRECT` worked tool calls (pr:update L56–94 alone is ~40 lines of example JSON).
+- **why it conflicts**: the same contract is stated three times with three wordings (`issue:create` and `pr:update` have the "NO shorthand in `preview`" clause, `commits:create` does not), and it is taught by anti-example rather than by an option/preview schema. `shared-rules/references/askuserquestion-format.md` already exists as the seam for exactly this text, and `sharedRulesInvocation.test.ts` only guards the *directive*, so the drift is invisible.
+- **proposed direction**: add `shared-rules/references/askuserquestion-contract.md` via the documented 3-step process (sentinel pair → table row → register in `sharedBlockSync.test.ts` + `sharedRulesInvocation.test.ts`), express it as a field contract (`question`/`header` = fixed text; `preview` = full resolved content, identical on every option; options = fixed label/description set), and replace the three bodies with a read directive. Drop the WRONG/CORRECT blocks — the field contract carries the same information. The same pattern applies to the byte-identical `**Reference self-check (MANDATORY):**` paragraph now duplicated in 27 skills (md5-identical across all four of my files).
+- **impact**: high — removes ~120 lines from always-loaded bodies and closes an already-drifting rule.
+
+### 2. `commits:create` WHAT-not-WHY: banned-word lists and 17 example rows instead of a rubric
+- **file**: `claude-plugins/autopilot/skills/commits:create/SKILL.md` (L229–269, plus the Phase 4 step 4 check at L148)
+- **rule**: 1 (judgment, not rules) + 2 (interfaces, not examples)
+- **evidence**: `"**Vague signal words to avoid in titles:** \"update\", \"fix stuff\", \"changes\", \"improvements\", \"tweaks\", \"adjustments\", \"various\"…"` and `"Check the generated title against the WHY signal words and vague signal words listed in the WHAT-not-WHY Rule section below."`
+- **why it conflicts**: it converts a judgment ("the title must contain the answer") into token-blacklist matching over two overlapping tables (WHAT-not-WHY at L235–251 and Anti-patterns at L259–267 share four of the same rows), and the words are only sometimes wrong — `resolve merge conflict in tsconfig` is a fine title that this check rejects. `CONTRIBUTING.md` §Commits already binds the same rule with its own ✅/❌ pairs, and the skill's copy has already drifted (`refactor(lint): change nesting depth threshold to 2` vs CONTRIBUTING's `…from 5 to 2`).
+- **proposed direction**: keep one sentence of intent in the body ("title names the specific technical change; a reader knows what changed without opening the diff; motivation belongs nowhere in the message") plus the pass/fail rubric, and move the example tables out — either cite `CONTRIBUTING.md` §Commits (the binding source, read on demand) or a `references/commit-title-rubric.md`. Replace the step-4 word-scan with "re-read the title against the rubric".
+- **impact**: high — largest block in the largest skill; removes the anchoring that makes the model dodge words rather than describe changes.
+
+### 3. `commits:create` transcribes `commitlint.config.mjs` into prose and asks the model to keep it in sync
+- **file**: `claude-plugins/autopilot/skills/commits:create/SKILL.md` (L271–301)
+- **rule**: 6 (rich references — real artifacts over prose) + 4
+- **evidence**: `"It mirrors the rules in [commitlint.config.mjs](../../../../commitlint.config.mjs) — that file is the source of truth; keep this list in sync with it."`
+- **why it conflicts**: the real, executable spec is a 60-line config file the skill can `Read` with no install, yet the body hand-restates seven of its rules and has already dropped four (`subject-empty`, `scope-case`, `body-leading-blank`, `body-max-line-length`). Nothing guards this copy, unlike the sentinel-guarded shared blocks.
+- **proposed direction**: keep the intent and the escalation ladder in the body ("every candidate message is validated before `git commit`; `commitlint.config.mjs` is the contract"), and have the skill `Read` that config to derive the checks when `node_modules/.bin/commitlint` is absent, running the binary when present. Delete the transcribed rule list.
+- **impact**: high — removes a silent-divergence class where the skill's floor is laxer than CI.
+
+### 4. `pr:update` has no non-interactive contract, but two skills invoke it with "do not ask first"
+- **file**: `claude-plugins/autopilot/skills/pr:update/SKILL.md` (frontmatter `argument-hint`, Phase 4 L138–155, Phase 6 L181–224); callers at `commits:create` L333 and `commits:restructure` L155
+- **rule**: 4 (one instruction, one layer) + Fable (encode the contract at the interface)
+- **evidence**: caller says `"invoke `Skill(autopilot:pr-update)` directly. Do not ask first: … refreshing its title and description to match them is bookkeeping, not a decision."` — while `pr:update` Phase 4 unconditionally asks `"Would you like to highlight anything specific…"` and Phase 6 gates on `"Only proceed after user selects \"Update PR\""`.
+- **why it conflicts**: the interaction policy is asserted in the caller's prose instead of being expressed in the callee's interface, so in `--autopilot` runs the flow either stalls on two dialogs or the model improvises a skip that no rule sanctions. Every sibling skill (`commits:create`, `branch:create`, `pr:create`) already carries `--autopilot` as an explicit flag.
+- **proposed direction**: add `--autopilot` to `pr:update`'s `argument-hint` and Input resolution with the same "bypass" phrasing the siblings use, and have both callers pass it; delete the "do not ask first" prose from the callers.
+- **impact**: high — a live behavioural conflict in the autopilot path, not just prompt weight.
+
+### 5. Five-section issue body is duplicated in `linear:create` with a manual sync note
+- **file**: `claude-plugins/autopilot/skills/linear:create/SKILL.md` (L72–80) vs `issue:create/SKILL.md` (L150–204)
+- **rule**: 4 + 6
+- **evidence**: `"The five-section spec is canonical in [issue:create Phase 5](../issue:create/SKILL.md#phase-5-generate-body) — keep this list in sync with it."` (and again for the linkability pass at L80)
+- **why it conflicts**: a cross-skill "keep in sync" comment is exactly the unowned-copy failure `shared-rules/SKILL.md` was created to end ("a copy has no owner"), and `pr-body-grammar.md` is the precedent for this identical shape of content. `linear:create` also reaches into another skill's anchor at runtime, which breaks if `issue:create` is re-phased.
+- **proposed direction**: extract `shared-rules/references/issue-body-grammar.md` (sections + single-responsibility rule + linkability pass), register it in the two guard tests, and have both skills read it; `linear:create` keeps only its genuinely Linear-specific delta (the `+++ Original prompt` preamble).
+- **impact**: med-high — cheap, precedented, removes two cross-skill anchors.
+
+### 6. Branch grammar and the Linear title self-check restated in `pr:create` and `pr:update`
+- **file**: `claude-plugins/autopilot/skills/pr:create/SKILL.md` (L63–70, L105) and `pr:update/SKILL.md` (L115–122, L163)
+- **rule**: 4 + 3
+- **evidence**: both files carry `"GitHub: \`issue-&lt;number&gt;-&lt;short-description&gt;\` … Special prefix: \`&lt;hotfix|trivial|maintenance|proposal|security&gt;-&lt;short-description&gt;\`"`, and near-verbatim `"**Title self-check (MANDATORY):** … the title MUST start with the branch's \`&lt;team&gt;-&lt;number&gt;\` uppercased plus \`: \` (branch \`frtns-28-pr-gate\` → title starts with \`FRTNS-28: \`)"` — while `pr-title-grammar.md` already states both (L32, L68–102) and both skills already read it one section later.
+- **why it conflicts**: the same grammar is loaded twice per run (inline + reference), and `sharedRulesInvocation.test.ts` only checks the phrase `Release keyword is required…`, so these partial re-inlines pass CI. The self-check even justifies itself with "a rule stated only here demonstrably gets dropped" — the fix for that is a verification rubric in the grammar file, not a second copy per skill.
+- **proposed direction**: reduce each skill's Phase to "resolve `provider` and the issue reference from the branch (precedence: `issue-` → special prefix → Linear), per `pr-title-grammar.md`", and move the title self-check into the grammar block as its verification rubric so both consumers inherit one wording.
+- **impact**: med — removes ~20 duplicated lines and one drift vector between the two PR skills.
+
+### 7. Worked previews repeated 3–4× per example dominate the two biggest bodies
+- **file**: `claude-plugins/autopilot/skills/issue:create/SKILL.md` (Examples, L316–458 — ~30% of the file) and `pr:update/SKILL.md` (L237–337)
+- **rule**: 2 (don't anchor on examples) + 3 (progressive disclosure)
+- **evidence**: `issue:create` Example 1 spells the same ~1,200-character preview string into all three options (L331–333); `pr:update` does the same across four options in three separate examples (e.g. L264–267).
+- **why it conflicts**: the "identical preview on every option" rule is already stated in the contract, so the repetition teaches nothing new and burns always-loaded context; a fully written five-section issue body also anchors generated issues toward the sample's shape and length.
+- **proposed direction**: keep one abbreviated example inline per skill (as `issue:create` Example 3 already does — "abbreviated for readability"), and move the full worked cases to `references/examples.md` read only when a call site is ambiguous.
+- **impact**: med — largest single token cut available; low behavioural risk since the contract carries the rule.
+
+### 8. `branch:create` inlines a 50-line self-assign algorithm marked canonical elsewhere
+- **file**: `claude-plugins/autopilot/skills/branch:create/SKILL.md` (Phase 2 step 5, L102–152)
+- **rule**: 3 (progressive disclosure) + 4
+- **evidence**: `"&lt;!-- Canonical: [resolve-issue-context.md Phase 2] — keep this self-assign algorithm (statuses + steps) in sync with it. --&gt;"` followed by five bash steps, `$?`-ordering caveats and a six-string status vocabulary.
+- **why it conflicts**: a best-effort side effect ("the branch is the deliverable; assignment is a side effect") occupies a quarter of an always-loaded 19KB body, and it is a second copy of an agent's algorithm with only a comment holding it in sync.
+- **proposed direction**: keep the intent and the status enum in the body, and move the shell sequence to `branch:create/references/self-assign.md` read at that step — or invoke `resolve-issue-context` and just surface its status line.
+- **impact**: med — shrinks the body and removes an unguarded algorithm copy.
+
+## Already aligned
+- `pr:create` Phase 3/4 and `pr:update` Phase 5 read `pr-title-grammar.md` / `pr-body-grammar.md` on demand rather than inlining them — the progressive-disclosure seam working as designed.
+- `shared-rules/SKILL.md` defines a 4-step contract for adding a block plus two guard tests (`sharedBlockSync`, `sharedRulesInvocation`), and is explicit about why two runtimes must keep literal copies — the exception is reasoned, not accidental.
+- `commits:create` commit ordering is framed as a default with permission to deviate: "The goal is stability at every checkout, not rigid adherence to a fixed sequence" — intent plus judgment, exactly the gen-5 shape.
+- `linear:create` Phases 3–5 build choices from live Linear data ("Only labels returned by the call may be selected — never invent a label") instead of enumerating example metadata — a constrained interface rather than worked examples.
+- `issue:create` Phase 1 classifies the hint and picks among MCPs with best-effort fallbacks ("Do NOT block issue creation on MCP availability") rather than prescribing a fixed research script.</result>
+<usage><subagent_tokens>110180</subagent_tokens><tool_uses>19</tool_uses><duration_ms>245385</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>aa3e3f8cf2d40577a</task-id>
+<tool-use-id>toolu_01ADan79KnR1YYG1cEEnbwcX</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-dust-devil-pictograph/dc3eb34f-6473-4070-ac05-77b1d02d3206/tasks/aa3e3f8cf2d40577a.output</output-file>
+<status>completed</status>
+<summary>Agent "Review planning skills vs gen-5 rules" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>## Findings (prioritized)
+
+### 1. `plan/SKILL.md` — shared instructions live in the orchestrator body, not behind the reference seam
+**File:** `claude-plugins/autopilot/skills/plan/SKILL.md` (§ "Input resolution", § "Common Instructions"); consumers `run/SKILL.md`, `run-primed/SKILL.md`, `linear:plan/SKILL.md`, `linear:run/SKILL.md`
+**Rule:** 3 (progressive disclosure) — the split is *drawn in the wrong place*, not missing
+**Evidence:** `run/SKILL.md`: "The [Common Instructions in `plan/SKILL.md`](../plan/SKILL.md#common-instructions) apply here unchanged"; `run-primed`, `linear:plan` carry the same pointer, and `linear:run` points at `run`, which points at `plan`.
+**Why it conflicts:** Per your own constraint, skills load whole-file. So a `run` session either (a) never actually loads the shared rules — silent divergence — or (b) loads all ~1,960 words of the plan orchestrator, including `Phase 2` (human clarification gate), `Enter Plan Mode`/`ExitPlanMode`, and `Phase 6` ("All changes implemented and verified. What's next?"). Those are exactly the behaviors `run` then has to *forbid* in three separate places ("`run` never enters plan mode — do NOT call `EnterPlanMode`"). The prohibitions exist because the seam leaks.
+**Proposed direction:** Move `Input resolution`, `Documentation Lookup Protocol`, `Repository standards`, `Plan File Header`, `Plan file is output, not instructions`, `CLAUDE.md Compliance`, and `Visualize with ASCII Schemas` into `plan/references/common-instructions.md`, a sibling of the existing `pipeline.md`. All five callers then load the shared half only; `plan/SKILL.md` keeps only its own gates and shrinks to an orchestrator.
+**Impact:** High — removes the main cause of the anti-instruction density in `run`/`run-primed`/`linear:run` and cuts three skills' effective always-loaded context.
+
+### 2. `preflight-check/SKILL.md` — a rule tree where an interface plus intent belongs
+**File:** `claude-plugins/autopilot/skills/preflight-check/SKILL.md` (whole file, 281 lines)
+**Rule:** 1 (judgment not rules) + 2 (interfaces not examples)
+**Evidence:** "## Context — This skill receives the following from conversation history: **Mode**: one of `plan`, `branch`, `commits`, `pr`… Pick the mode from these hints: Invoked from `/autopilot:plan` … → `plan`". Followed by Phases 1 → 1.5 → 2 → 2a/2b → 3 with six fully spelled-out `AskUserQuestion` parameter blocks, several duplicated per `isWorktree` branch.
+**Why it conflicts:** `gather-context/SKILL.md` in the same plugin proves the better pattern — an explicit `## Input` contract with an enum (`Scope` = `task | broad | primed`) and a declared output shape. `preflight-check` instead infers its mode from transcript archaeology and then hard-codes every leaf of the decision tree, including prompt copy. It also re-derives `isStaleMerged` with `git log origin/main..HEAD` emptiness — the exact test that `branch-blocks.md` and `explore/SKILL.md` both warn is wrong under rebase.
+**Proposed direction:** Give it a real input contract (`Mode` enum, optional `IssueId`) passed by the caller, state the four states it must surface and the two invariants it protects (never branch from a stale/behind `main`; never commit or PR on `main` unacknowledged), and let the model compose prompts under `askuserquestion-format.md`. Read `isStaleMerged` from the Context Map like every other consumer.
+**Impact:** High — biggest rules-per-value ratio in the set, and it currently disagrees with the rest of the plugin about how staleness is computed.
+
+### 3. `run/SKILL.md` — prohibition block plus a re-implementation of `pr-create`'s own contract
+**File:** `claude-plugins/autopilot/skills/run/SKILL.md` (Phase 4, "Step 2: Auto-Create PR")
+**Rule:** 4 (state each instruction once, in the right layer)
+**Evidence:** "**CRITICAL — direct `gh pr create` and `gh pr edit` are FORBIDDEN in autopilot.**… NEVER run `gh pr create` directly — even if the skill fails." then a 5-bullet "Format check" asserting "`**Issues:**` appears AFTER the last `---` separator", "`**Release notes:**` … BEFORE `**Issues:**`", "uses magic words … not markdown links".
+**Why it conflicts:** Those five clauses are verbatim restatements of `shared-rules/references/pr-body-grammar.md` lines 12–15, 50, 62 — a third copy in a third layer, guarding a skill that already owns the grammar. The caller now has to be updated whenever the grammar moves, and `sharedRulesInvocation.test.ts` cannot catch it (it only matches one distinctive phrase per block).
+**Proposed direction:** Replace the checklist with intent: "PR creation and updates go through `pr:create`/`pr:update`, which own the body grammar; if the result does not match `pr-body-grammar.md`, re-run `pr:update` once, then report." Keep the no-fallback rule as a one-liner; drop the CRITICAL/FORBIDDEN/NEVER stack.
+**Impact:** High — removes a drift-prone duplicate of a guarded canonical block without touching the guard.
+
+### 4. `pipeline.md` + `linear:run/SKILL.md` — task *indices* are hard-coded, so callers ship translation tables
+**File:** `claude-plugins/autopilot/skills/plan/references/pipeline.md` and `claude-plugins/autopilot/skills/linear:run/SKILL.md` (Phase 4 "Fresh-plan mode", Phase 6)
+**Rule:** 4 (say it once) + Fable over-specificity
+**Evidence:** `pipeline.md`: "Set task 3 (\"Draft plan\") to `in_progress`" … "Set task 3 to `completed`" (×3 phases). `linear:run`: "| Pipeline says | Use here |\n| task 3 (\"Draft plan\") | task 4 (\"Establish plan\") |" and a second table "| `run` says | Use here |\n| task 6 (\"Commit changes\") | task 7 |".
+**Why it conflicts:** Every skill's `Task Progress Protocol` already says "Set each to `in_progress` at the start of its phase and `completed` at the end" — stated once, then re-executed ~10 more times as literal index instructions. Because the index, not the subject, is the identifier, `linear:run` needs two renumbering tables that exist purely as bookkeeping about bookkeeping, and they break the moment any skill inserts a phase.
+**Proposed direction:** Have `pipeline.md` name tasks by subject ("the Draft task"), delete the per-phase `Set task N…` lines in favour of the one protocol sentence, and delete both `linear:run` mapping tables.
+**Impact:** Med-high — removes ~15 restatements and two tables, and makes the shared pipeline genuinely caller-agnostic.
+
+### 5. `pipeline.md` — the rubric is right; the score *aggregate* around it is ceremony
+**File:** `claude-plugins/autopilot/skills/plan/references/pipeline.md` (§ "Review and score (task 4)", § "Finalize"); `agents/expert-review.md` (Phase 3)
+**Rule:** 6 (rubrics for verification) — half-honoured
+**Evidence:** "**Expert review is an enhancement, never a gate.** … no caller blocks, loops, or refuses to proceed on the score." Then: "average each reviewer's `dimensions` into the five-dimension rubric below, 20 points each, 100 total", plus a discard protocol, plus a literal `Score: skipped · expert review disabled (invoked without --experts-review)` string, plus `revision.rescore` in the agent contract, which nothing reads ("ADVISORY input for the parent").
+**Why it conflicts:** The five-dimension table *is* a good verification rubric and should stay. The arithmetic on top of it is not verification: averaging a Boring Tech Writer's `typeSafety` with a Principal Engineer's produces a number that gates nothing, and the agent file has to argue for it ("a domain expert's view of an adjacent dimension is signal, not noise"). Meanwhile the thing that actually changes the plan — "Apply the findings — once" — gets one sentence. Note the constraint: the stored `Score:` field is part of `linear:plan`'s contract (`linearPlanContract.test.ts`), so the field must survive.
+**Proposed direction:** Keep the rubric, the grounding screen, and the discard rule; drop the cross-reviewer numeric average in favour of recording per-reviewer verdicts + the weakest dimension + findings-applied in the same `Score:` slot the contract test parses. Drop `revision.rescore` from the agent schema since no consumer reads it.
+**Impact:** Med-high — keeps the verification signal, removes a number that is arithmetically weak and decision-free.
+
+### 6. `run-primed/SKILL.md` and `linear:run/SKILL.md` — verdict tables immediately restated as ordered lists
+**File:** `claude-plugins/autopilot/skills/run-primed/SKILL.md` (Phase 1); `claude-plugins/autopilot/skills/linear:run/SKILL.md` (Phase 1)
+**Rule:** 4 (say it once) / 2 (make the interface carry the meaning)
+**Evidence:** `run-primed`: a 5-row table (`missing | malformed | revision-mismatch | stale | valid`) followed by "Resolve the verdict in this exact order, stopping at the first one that fires: 1. **missing** — … 5. **stale** — …". `linear:run` does the same with four verdicts.
+**Why it conflicts:** The verdict tables are the best interface work in the set — enumerated states, one test each. Then each is re-expressed as a numbered procedure carrying the same content, and the *ordering* — the only new information — is buried in prose ("The order is load-bearing"). Two copies of the same state machine in one file is exactly what drifts.
+**Proposed direction:** Make the table ordered (rows top-to-bottom, first match wins, one `Why this order` note per row where it is load-bearing, as `input-detection.md`'s detection table already does), and delete the numbered restatement. Keep the message strings — they are the user-facing contract.
+**Impact:** Med — halves two of the longest phases without weakening the gate `primedBriefContract.test.ts` guards.
+
+### 7. Hard-coded `AskUserQuestion` parameter blocks in five files
+**File:** `plan/references/branch-blocks.md` (§ "Plain description"), `plan/references/stack-deltas.md` (§ "Routing"), `plan/SKILL.md` (Phase 6), `issue:run/SKILL.md` (Phase 2 + § "Examples"), `preflight-check/SKILL.md` (six blocks)
+**Rule:** 2 (interfaces, not examples) + 4
+**Evidence:** `branch-blocks.md`: "- `question`: \"Choose a branch type for this change.\"\n- `header`: \"Branch type\"\n- `options`: [ { label: \"Hotfix\", … } ]\n- `multiSelect`: false". `plan/SKILL.md` Phase 6 goes further: "With no user-facing changes, the \"Create PR\" description reads `\"Run /autopilot:pr-create to open a pull request\"` instead." `issue:run` then adds four worked examples that all end in the same hand-off.
+**Why it conflicts:** `AskUserQuestion` already has a schema and `askuserquestion-format.md` already owns the formatting rule — every one of these blocks re-specifies `multiSelect: false` and hand-writes UI copy. Fable's warning applies directly: pinning the exact description string makes the model reproduce it even when the situation calls for a different phrasing, and `issue:run`'s four examples are anchors for a one-line behaviour ("hand the resolved identifier to `run`").
+**Proposed direction:** State the *choice set and its semantics* (Hotfix/Trivial/Maintenance → `hotfix-`/`trivial-`/`maintenance-` prefixes; the four stacks; the three next-steps), and let the model bind the tool parameters under the shared formatting block. Delete `issue:run`'s Examples section and the ASCII flow diagram with it.
+**Impact:** Med — cuts roughly 150 lines across five files and removes the strongest anchor risk in the set.
+
+### 8. The reference-formatting tail is nine near-identical copies
+**File:** all nine reviewed `SKILL.md` files (final two paragraphs); `plan/SKILL.md` carries it after `## Additional Resources`
+**Rule:** 4 (state each instruction once, in the right layer)
+**Evidence:** Repeated verbatim in every file: "**Reference self-check (MANDATORY):** after composing the output, re-read it against [`reference-formatting.md`](…). A bare commit SHA, a bare tracker id outside a magic-word line, or an unlinked mention of a file that exists in the repo is a violation — fix it before emitting."
+**Why it conflicts:** `shared-rules/SKILL.md` states the premise plainly — "Skills used to carry these blocks inline… a copy has no owner." The pointer is the block's job; the three example violations restated in nine callers are the block's *content* leaking back out. Constraint-checked: `sharedRulesInvocation.test.ts` asserts only that the string `shared-rules/references/reference-formatting.md` appears in each skill and that no removed-block phrase (`"Backticks suppress GitHub autolinking"`) reappears — so collapsing the tail to a single sentence keeps every test green.
+**Proposed direction:** Reduce the tail in all nine files to one line that names the block and when to read it; move the three violation examples into `reference-formatting.md` itself (or leave them there if already present) so there is one owner.
+**Impact:** Med — ~800 words of always-loaded duplicated text removed, zero test churn.
+
+---
+
+## Already aligned
+
+- `gather-context/SKILL.md` is the reference implementation for Rule 2: explicit `## Input` contract, a real enum (`Scope: task | broad | primed`) that changes behaviour in two phases, a declared Context Map output shape, and an "empty section is written `none`" invariant instead of a prohibition list.
+- `plan/SKILL.md` § "Plan file is output, not instructions" is intent-and-contract framing done right — it explains *why* (the reader approves the file) and lets the model own the *how*, then points at where the tool calls actually live.
+- `plan/references/input-detection.md`'s detection table is a genuine interface: ordered rows, first-match-wins, with the one load-bearing ordering constraint (alert URL before `github.com`) explained rather than asserted.
+- `pipeline.md`'s grounding screen — discard a reviewer whose `grounding` cannot support its findings, name every discard, "a single surviving reviewer is a single opinion" — is a rubric for verification, not prose ceremony, and it is the part of the review machinery worth keeping.
+- `explore/SKILL.md`'s delta-refresh classification (exclude derived artifacts, watch everything else, stable sections byte-identical) encodes the *why* behind a non-obvious choice in one paragraph and lets the model execute it — good Fable-style map-not-territory writing.</result>
+<usage><subagent_tokens>93773</subagent_tokens><tool_uses>16</tool_uses><duration_ms>244469</duration_ms></usage>
+</task-notification>
+
+---
+
+group by phases. one phase — one commit. go ahead to implement and create pr
+
+---
+
+<task-notification>
+<task-id>a4f6a318b74c33d05</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-dust-devil-pictograph/dc3eb34f-6473-4070-ac05-77b1d02d3206/tasks/a4f6a318b74c33d05.output</output-file>
+<status>completed</status>
+<summary>Agent "WP-B: creation skills dedup" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>All checks pass. Final report:
+
+## Edited files
+
+1. **`/Users/tony_vi/.warp/worktrees/code-assistants/dust-devil-pictograph/claude-plugins/autopilot/skills/commits:create/SKILL.md`** — In the AskUserQuestion Contract section, kept the heading, autopilot-bypass paragraph, the two-dialog list, the Phase 1 file-selection carve-out, and the "never presented on the success path" sentence; replaced the 7 numbered rules and both WRONG/CORRECT example blocks with a read directive to `../shared-rules/references/askuserquestion-contract.md` plus the skill-specific line that `preview` belongs to the validation failure dialog only (strategy prompt takes none). In Commit Message Validation, replaced the transcribed per-rule inline floor (subject-max-length/subject-case/etc. with their `wc`/`tr` shell recipes) with a "Read the config" step pointing at `../../../../commitlint.config.mjs` as the contract, checking every declared rule that is checkable by inspection; kept the `[ -x node_modules/.bin/commitlint ]` gate, the bunx command, the fresh-worktree rationale, the 3-attempt ladder, the don't-string-lowercase guidance, the failure-dialog handoff, and the whole-validation-passes success note (reworded from "inline floor" to "every checkable declared rule"). Updated the two Phase 4 flow steps and the commitlint-absent sentence that used the now-dead "inline floor" term, and trimmed the "### Rules" title bullet to the human-facing statement (lowercase, no period, imperative, ≤50 subject, no camelCase) without commitlint rule-name/limit enumeration. The validation-failure-dialog section, including its placeholder-substitution note, is untouched.
+
+2. **`/Users/tony_vi/.warp/worktrees/code-assistants/dust-devil-pictograph/claude-plugins/autopilot/skills/issue:create/SKILL.md`** — Contract section: kept the heading and framing sentence, replaced the 8 numbered rules with the read directive to `askuserquestion-contract.md` plus one skill-specific line naming the preview content (title + body + labels + optional duplicate-warning line). Phase 5: deleted the CRITICAL ordering list, heading-format rule, single-responsibility rule, all five per-section rule blocks, the linkability-pass paragraph, and the example body skeleton; replaced with a read directive to `issue-body-grammar.md` plus two caller-wiring bullets (Phase 3 related items feed the `Related:` line; links use absolute `&lt;repo-blob-url&gt;` because the body posts outside the repo). No intra-file anchors pointed at the deleted content (Phase 5 had no sub-headings), so no link fixes were needed.
+
+3. **`/Users/tony_vi/.warp/worktrees/code-assistants/dust-devil-pictograph/claude-plugins/autopilot/skills/linear:create/SKILL.md`** — In Phase 2, replaced the summarized five-section list (with its "canonical in issue:create Phase 5 — keep in sync" note) and the linkability-pass sync paragraph with a single **Body:** read directive to `issue-body-grammar.md` plus the absolute-`&lt;repo-blob-url&gt;` caller line; both cross-skill `../issue:create/SKILL.md#phase-5-generate-body` anchors are gone. Kept all Linear deltas: the title rule, the entire `+++ Original prompt … +++` preamble subsection (fence syntax, no-`&lt;details&gt;` warning, opaque-content and PII notes), and the deliberate omission of related-issue detection in Phase 1.
+
+## Verification
+
+- Both sync-guarded phrases ("Copy the full preview string literally into every option", "each section answers exactly one question") grep to zero hits across the three files; "inline floor" also fully gone.
+- All remaining relative links resolve (shared-rules references exist on disk; all intra-file `#phase-*` anchors point at surviving headings); the final "## Reference formatting" paragraphs with `shared-rules/references/reference-formatting.md` are untouched in all three files.
+- `bunx prettier@3.8.3 --write` on all three: unchanged (already formatted). `bun run validate` exits 0 (40 checks OK, including per-skill link checks).
+
+## Judgment calls
+
+- Kept commits:create's Phase 1 file-selection carve-out paragraph in the contract section — it names a dialog the contract does *not* govern, which is skill-specific framing, not duplicated rule text.
+- Kept a trimmed `LC_ALL=C.UTF-8` note ("run any shell checks under…") in the validation section since the commitlint bunx invocation and any inspection checks still run in a shell.
+- In the "### Rules" bullet I kept "camelCase identifiers are not allowed" as part of the human-facing statement (it is behavior guidance, not a rule-name enumeration), while dropping the header-≤100 limit and the `subject-case`/`subject-max-length`/`header-max-length` name list — the validation section pointing at the config is now the single owner of those.
+- Left commits:create Phase 3's separate `askuserquestion-format.md` reference untouched — it is a different shared block (question-composition formatting), not the contract being deduplicated.
+- The many other modified files in `git status` are the parent's concurrent edits on this branch; I did not touch them, and `bun.lock` stayed clean.</result>
+<usage><subagent_tokens>92319</subagent_tokens><tool_uses>23</tool_uses><duration_ms>216091</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a5394ba63d2b08b0d</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-dust-devil-pictograph/dc3eb34f-6473-4070-ac05-77b1d02d3206/tasks/a5394ba63d2b08b0d.output</output-file>
+<status>completed</status>
+<summary>Agent "WP-C: PR-pipeline dedup" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>All done and green. Final report:
+
+## Edited files
+
+1. **`/Users/tony_vi/.warp/worktrees/code-assistants/dust-devil-pictograph/claude-plugins/autopilot/skills/shared-rules/references/pr-title-grammar.md`** — Added a new `#### Title self-check` subsection inside the `pr-title-grammar:start/end` sentinels, placed after the branch-name section and before `#### Avoid`. It states, caller-neutrally: verify the drafted title against the resolved provider — `linear` requires the branch's `&lt;team&gt;-&lt;number&gt;` uppercased plus `: ` (with the `frtns-28-pr-gate` → `FRTNS-28: ` example) and a missing/wrong prefix (including one inherited from an existing defective title) is fixed, never preserved; `github` or special prefix must NOT carry a `TEAM-N:` prefix. The sentinels and the "`Release` keyword is required, capitalized exactly as shown" line are untouched.
+
+2. **`.../skills/pr:create/SKILL.md`** — Phase 1 step 2's three-bullet branch-convention list replaced with one line linking the branch grammar in `../shared-rules/references/pr-title-grammar.md`; the ordered provider-detection sub-steps (step 3) kept intact. Phase 3's Title self-check paragraph reduced to one sentence pointing at the rubric, keeping the skill-specific timing (immediately before Phase 5) and the Phase 1 provider cross-link.
+
+3. **`.../skills/pr:update/SKILL.md`** — Same two edits: Phase 3 step 2 bullets → one grammar-link line (provider detection kept); Phase 5's Title self-check paragraph → one sentence pointing at the rubric, keeping the timing clause (before Phase 7's `gh pr edit`). The "restore the convention when the existing title lacked the prefix" clause was dropped as instructed — the rubric's "inherited from an existing defective title" wording now covers it. Phase 6's internal references to "the Phase 5 Title self-check" still resolve.
+
+4. **`.../skills/pr:review/SKILL.md`** — Only the three described trims, no reflow/renumbering: (a) reviewComment body-template preamble now says findings end with the rule code "rendered per [§2.5](#25-rule-codes) (single, shared, and no-code forms as defined there)" instead of re-explaining all forms; (b) inlineComments usage note keeps "1-2 sentences, severity emoji first, end with rule code per §2.5" and drops the rendered example; (c) the Include-list bullet keeps the field-attachment info (every finding line + every `inlineComments.body`) and drops the re-explained link/merged/omit forms. Anchor `#25-rule-codes` verified against the actual heading `### 2.5 Rule Codes` (already used in-file). §2.5 itself untouched.
+
+5. **`.../skills/pr:answer/SKILL.md`** — Review Body Update paragraph's copied triple (single/shared link forms + bare-code fallback + lowercase-fragment rationale) deleted; it now says "rendered exactly per the [`pr:review` skill's §2.5](../pr:review/SKILL.md#25-rule-codes)" with "Do not read agent files" kept. The Reply-section spot already linked §2.5 without copying the forms, so it stays as its one cross-file link. The final `## Reference formatting` paragraph untouched.
+
+6. **`.../skills/run/SKILL.md`** — Step 2 "Auto-Create PR": the CRITICAL/FORBIDDEN paragraph, the two per-step "NEVER gh pr edit/create" repeats, and the 5-bullet format check (which restated pr-body-grammar ordering/magic-word rules) replaced with calm intent: creation/updates go through `Skill(autopilot:pr-create)`/`Skill(autopilot:pr-update)` which own the grammar; never fall back to raw `gh` even on skill failure — surface it; format check now just compares the body against [`pr-body-grammar.md`](../shared-rules/references/pr-body-grammar.md), re-runs pr:update once, then reports and continues.
+
+## Verification
+
+- `bunx prettier@3.8.3 --write` on all six files — all "unchanged" (no formatting drift introduced).
+- `bun run validate` from the repo root — exit 0, all 40 checks OK (includes per-skill link resolution and the rules-sync checks).
+- Guard greps: "capitalized exactly as shown" appears in no `SKILL.md`; the `**Release Notes:**` guard phrase remains only in `pr-body-grammar.md`; all three "Reference formatting" paragraphs intact.
+
+## Judgment calls
+
+- **Rubric placement**: put `#### Title self-check` after the Branch Name Format section (it references branch-derived providers) rather than after the title-format sections.
+- **pr:answer Reply section left as-is**: the task said it "restates the triple twice", but on reading, the Reply paragraph only *links* §2.5 without copying the forms — already the desired end state — so only Review Body Update was trimmed. The Input-resolution `RULES_DOC_URL` note ("plain text, bare code, no link") was kept: it's fallback behavior for an absent input, not a rendering-form restatement, and wasn't in scope.
+- **pr:review inlineComments example dropped** (the `🚧 No idempotency check … [CHECK-BUG-002](…)` render) since it re-rendered the §2.5 single form; the emoji-first/1-2-sentence/field-placement info §2.5 lacks was kept.
+- **run Step 2 kept its numbered skeleton** (PR-exists check, `--autopilot`/`--release-notes` flags, error handling, "report and continue" tail) — that's operational logic, not grammar restatement; only the grammar-owning prose moved to the pointer.
+- Note: `git status` shows many other modified files from parallel agents on this shared branch; I touched only my six files and did not commit or stage anything.</result>
+<usage><subagent_tokens>121011</subagent_tokens><tool_uses>24</tool_uses><duration_ms>234426</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>ae47343f349bd6660</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-dust-devil-pictograph/dc3eb34f-6473-4070-ac05-77b1d02d3206/tasks/ae47343f349bd6660.output</output-file>
+<status>completed</status>
+<summary>Agent "WP-D: peer-CLI block + task subjects" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>All four tasks are complete. Prettier reports all five files unchanged (already conformant), `bun run validate` passes 40/40, and the guard tests covering my files pass.
+
+## Edited files
+
+**`/Users/tony_vi/.warp/worktrees/code-assistants/dust-devil-pictograph/claude-plugins/autopilot/skills/shared-rules/references/peer-cli-delegation.md`**
+Replaced the PLACEHOLDER between the byte-exact `&lt;!-- peer-cli:start --&gt;` / `&lt;!-- peer-cli:end --&gt;` sentinels with the caller-neutral block: colleague-not-authority framing, a Delegation paragraph (self-contained prompt composition, current-working-directory expectation, capture/summarize, resume offer), a Following-up paragraph (AskUserQuestion after every command, settings-inherit rule on resume, restate model/mode), the four shared critical-evaluation bullets plus the "identify yourself as Claude / peer discussion" disagreement protocol, and the shared Error-handling bullets ending with the stdin pitfall carrying the sync-guarded phrase "zero bytes of stdout, zero CPU, process hangs". It states explicitly that the invoking skill supplies the CLI name, exec command, resume syntax, and flag table.
+
+**`/Users/tony_vi/.warp/worktrees/code-assistants/dust-devil-pictograph/claude-plugins/autopilot/skills/ask:codex/SKILL.md`**
+Frontmatter untouched. Intro now names the CLI, points at the block via `../shared-rules/references/peer-cli-delegation.md`, and retains the "Do NOT use for: git/PR workflows" guard as a sentence. Input, the numbered Running-a-Task mechanics (models, effort, sandbox flags, `--skip-git-repo-check`, `2&gt;/dev/null`, resume pipe syntax), and the Quick Reference table are kept; steps 5/7/8 now defer to the block's inherit rule, stdin guard, and reporting/resume-offer loop while keeping the exact `codex exec ... &lt;/dev/null 2&gt;/dev/null` example. The removed Following Up / Critical Evaluation / Error Handling sections are replaced by a "Codex Specifics for the Shared Rules" section listing the caller-supplied pieces: version check, high-impact flags, and the verbatim disagreement-resume command. "zero bytes of stdout" is gone; the final Reference formatting paragraph is untouched.
+
+**`/Users/tony_vi/.warp/worktrees/code-assistants/dust-devil-pictograph/claude-plugins/autopilot/skills/ask:gemini/SKILL.md`**
+Mirror treatment: intro + read directive + do-not-use guard; kept the gemini-specific mechanics (`-p` non-interactive rule, approval modes, `-s` sandbox pairing, JSON `.response`/`jq` output handling, `gemini -r "latest"` resume) and Quick Reference table; added "Gemini Specifics for the Shared Rules" (version check, high-impact flags, disagreement-resume command). Deleted the HTML "keep the two in sync" comment (which also removed the only link to ask:codex's now-deleted Critical Evaluation heading, so no dangling anchor). "zero bytes of stdout" removed; Reference formatting paragraph untouched.
+
+**`/Users/tony_vi/.warp/worktrees/code-assistants/dust-devil-pictograph/claude-plugins/autopilot/skills/plan/references/pipeline.md`**
+Deleted all six bare "Set task N … to `in_progress`/`completed`" lines — each duplicated the callers' general protocol (in_progress at phase start, completed at phase end) with the phase headings marking the boundaries. The one load-bearing occurrence (the skip path, which completes with a note and jumps to Finalize) was rephrased by subject: "mark the Review-and-score task `completed` noting the skip". Scoring/review content untouched.
+
+**`/Users/tony_vi/.warp/worktrees/code-assistants/dust-devil-pictograph/claude-plugins/autopilot/skills/linear:run/SKILL.md`**
+Deleted both index-translation tables. The pipeline mapping became one sentence ("The pipeline's phases track this skill's plan tasks by subject: its Draft-plan phase is the Establish-plan task…"), and the delivery mapping became "`run` numbers its delivery tasks differently; track them by subject — where its chain sets the Commit-changes, Create-PR, or Monitor-PR task, use this skill's task of the same name." Nothing else in the file changed.
+
+## Judgment calls
+
+1. **Kept pipeline.md's "(task N)" heading suffixes.** The anchor `#review-and-score-task-4` is linked from `expert-review.md` and `input-detection.md` — both outside my allowed set — and run/SKILL.md's untouchable prose also cites those numbers, so renaming headings would break resolvable-link and consistency guarantees I cannot repair.
+2. **Dropped both When-to-Use sections entirely** — the bullets were the generic pattern with only the CLI name swapped and are fully covered by each frontmatter description; the non-generic "Do NOT use for" guard was folded into each intro paragraph so no behavior is lost.
+3. **Kept `-C &lt;DIR&gt;` / `--include-directories` in the skills** and wrote the block's working-directory expectation generically ("run it from the repository the task concerns; reach for the invoking skill's directory flags only when the task lives elsewhere").
+
+## Findings
+
+- `bun test src/sharedRulesInvocation.test.ts` has **one pre-existing failure outside my scope**: `pr:update` still carries the askuserquestion-contract phrase ("Copy the full preview string literally into every option"). `pr:update/SKILL.md` is not among my assigned files (it belongs to another phase of #535), so I left it. All checks touching my five files pass, including sharedBlockSync (peer-cli canonical), linkResolution (719 pass), and validate-plugins (40 OK).
+- The worktree contains many other in-flight modifications from parallel #535 work; I did not touch or revert any of them, and per instructions nothing was committed or staged.</result>
+<usage><subagent_tokens>96667</subagent_tokens><tool_uses>28</tool_uses><duration_ms>329327</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a71344a6383197dfd</task-id>
+<tool-use-id>toolu_01U2v7FXXKM2VWaZWWUkBCEL</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-dust-devil-pictograph/dc3eb34f-6473-4070-ac05-77b1d02d3206/tasks/a71344a6383197dfd.output</output-file>
+<status>completed</status>
+<summary>Agent "WP-E: pr:review catalog split" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>Done. Issue #535 finding 1 is implemented: §2.3 of pr:review is now a per-family index with rule bodies moved verbatim into 16 progressive-disclosure reference files.
+
+## What was done
+
+**Edited:** `/Users/tony_vi/.warp/worktrees/code-assistants/dust-devil-pictograph/claude-plugins/autopilot/skills/pr:review/SKILL.md` — §2.3 shrank from ~630 to ~190 lines (diff: 111 insertions, 551 deletions). Each family keeps its heading, its full applicability/anti-double-reporting intro paragraph, one index line per rule (`&lt;a id="CHECK-XXX-NNN"&gt;&lt;/a&gt;**CODE** (severity) — title`), and a "Rule details: read references/checks-&lt;family&gt;.md before applying this family" line. A new dispatch paragraph at the top of §2.3 tells the reviewer to read only the family files whose applicability condition holds per the §1.5 Context Map; failing families are applied from the index alone (skipped). §2.4/§2.5 and all other sections untouched.
+
+**Created** 16 files under `claude-plugins/autopilot/skills/pr:review/references/` (family — rule count):
+
+- checks-correctness-bugs.md — 5, checks-security.md — 7, checks-testing.md — 9, checks-complexity-readability.md — 9, checks-platform-standards.md — 3, checks-architecture-patterns.md — 9, checks-ai-code-smells.md — 7, checks-common-sense.md — 6, checks-surface-correctness.md — 4, checks-surface-naming-structure.md — 3, checks-pr-hygiene.md — 10, checks-logging.md — 6, checks-documentation.md — 5, checks-repository-standards.md — 4, checks-repository-principles.md — 1, checks-service-standards.md — 4. **Total: 92.**
+
+pr:answer/SKILL.md needed no change — it links only `#25-rule-codes`, which stays.
+
+## Invariant verification
+
+- `&lt;a id="CHECK-` count in SKILL.md: **92 before → 92 after** (script-asserted; ids/casing unchanged, no rule codes/severities altered).
+- Rule bodies: **0** full rule headings remain in SKILL.md; **92** in references files, no duplicates (script-asserted uniqueness). All 45 `Example:` and every `Skip:` block landed in exactly one family file.
+- `rules_doc_url` input default is the one canonical copy" phrase and the reference-formatting.md paragraph intact.
+- Gates: `bunx prettier@3.8.3 --write` (all files clean), `bun run validate` (40 checks OK), `bun test src/rulesDocUrlSync.test.ts src/linkResolution.test.ts` (783 pass, 0 fail), plus full action suite (1285 pass, 0 fail). bun.lock untouched.
+
+## Judgment calls
+
+1. **Split was done mechanically by script** (parse anchors/headings, move verbatim, reassemble) rather than by hand, so bodies are byte-identical moves.
+2. **In-body relative anchors rewritten** in moved bodies: `](#…)` → `](../SKILL.md#…)` (affects CHECK-PR-010, CHECK-DOC-005, CHECK-PRINCIPLE-001). Required — a bare `#anchor` inside a references file would fail linkResolution and mislead readers; content otherwise untouched.
+3. **Anchors NOT duplicated** into references files — SKILL.md is the sole anchor home per the hard rule; reference files identify rules by their bold heading line.
+4. **CHECK-CPLX-002** has no fixed severity in its heading (stack-dependent threshold); its index line reads `(blocker; threshold by stack)` — the only non-literal severity label.
+5. **Family intros stay in SKILL.md in full** (they carry cross-family anti-double-reporting rules and the RFC verbatim-quote requirement, which must be always-loaded); each references file opens with a one-line header naming the family and a condensed applicability sentence plus a link back to §2.3.
+6. Git status shows other modified skills (`issue:create`, `pr:update`, `shared-rules`) from parallel tasks on this branch — untouched by me. Nothing was committed, per instructions.</result>
+<usage><subagent_tokens>104255</subagent_tokens><tool_uses>21</tool_uses><duration_ms>287896</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>ab0ed4c1b2b9fa38c</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-dust-devil-pictograph/dc3eb34f-6473-4070-ac05-77b1d02d3206/tasks/ab0ed4c1b2b9fa38c.output</output-file>
+<status>completed</status>
+<summary>Agent "WP-G: worked-example extraction" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>All green. Final report:
+
+## Files changed
+
+- `/Users/tony_vi/.warp/worktrees/code-assistants/dust-devil-pictograph/claude-plugins/autopilot/skills/issue:create/SKILL.md` — Examples section slimmed to one inline example + pointer line
+- `/Users/tony_vi/.warp/worktrees/code-assistants/dust-devil-pictograph/claude-plugins/autopilot/skills/issue:create/references/examples.md` — new, holds the moved full examples
+- `/Users/tony_vi/.warp/worktrees/code-assistants/dust-devil-pictograph/claude-plugins/autopilot/skills/pr:update/SKILL.md` — same treatment
+- `/Users/tony_vi/.warp/worktrees/code-assistants/dust-devil-pictograph/claude-plugins/autopilot/skills/pr:update/references/examples.md` — new
+
+## What stayed inline
+
+- **issue:create**: "Solution with ASCII diagram via ascii-schemas" (the pre-existing abbreviated one — it was the target style and covers the ascii-schemas edge). Augmented per spec: dialog parameters (`question`/`header`/`options`/`multiSelect`) shown once, options listed as labels only pointing at Phase 7 for descriptions, preview once with the note "(every option carries this same full preview string)". Dropped its "Example 3:" numbering since siblings moved.
+- **pr:update**: "Basic update after new commits (abbreviated for readability)" — most representative because it exercises both dialogs (Phase 4 context prompt + Phase 6 four-option review). Same abbreviation pattern; preview shown once as a fenced block.
+
+## What moved (verbatim)
+
+- **issue:create → references/examples.md**: Examples 1 (no-args prompt), 2 (title hint + related work), 4 (zero labels), 5 (duplicate detected — user cancels). Headings preserved verbatim, including the original "Example 4"/"Example 5" numbering. Same-file phase anchors inside moved prose re-pointed to `../SKILL.md#phase-…` (Phases 3, 6, 7, 8).
+- **pr:update → references/examples.md**: all three full examples ("Basic update after new commits", "Update with release notes added", "Update with non-meaningful changes only"), including the `---` separator between the last two. These contain no relative links, so no depth fixes were needed.
+
+Each reference file opens with a one-line header naming the parent skill and linking `../SKILL.md`.
+
+## Judgment calls
+
+- No phase text in either skill linked to `#examples` or per-example anchors (verified by grep across skills/docs/rfc), so the only link fixes needed were the phase anchors inside issue:create's moved examples.
+- The guarded phrase "Copy the full preview string literally into every option" appears in neither SKILL.md nor either new examples.md (grep-verified); the old inline note "abbreviated for readability — every option carries the FULL string" was replaced with the prescribed wording.
+- issue:create's trailing "reference-formatting" paragraph untouched; the pointer line sits between the inline example and that paragraph.
+- Git status shows parallel edits on this branch (ascii-schemas, pr:review, shared-rules, branch:create) — not mine, untouched.
+
+## Verification
+
+- `bunx prettier@3.8.3 --write` on all four files: unchanged (already clean).
+- `bun run validate` from repo root: 40 checks OK.
+- `bun test src/linkResolution.test.ts` (the anchors guard): 776 pass, 0 fail — all new `./references/examples.md` links and re-pointed `../SKILL.md#phase-…` anchors resolve.</result>
+<usage><subagent_tokens>89533</subagent_tokens><tool_uses>19</tool_uses><duration_ms>260902</duration_ms></usage>
+</task-notification>

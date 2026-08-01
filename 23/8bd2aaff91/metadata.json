@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "238bd2aaff91",
+  "strategy": "manual-commit",
+  "branch": "issue-535-gen5-context-rules",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "claude-plugins/autopilot/skills/ascii-schemas/SKILL.md",
+    "claude-plugins/autopilot/skills/branch:create/SKILL.md",
+    "claude-plugins/autopilot/skills/issue:create/SKILL.md",
+    "claude-plugins/autopilot/skills/pr:review/SKILL.md",
+    "claude-plugins/autopilot/skills/pr:update/SKILL.md",
+    "claude-plugins/autopilot/skills/shared-rules/MAINTAINING.md",
+    "claude-plugins/autopilot/skills/shared-rules/SKILL.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/23/8bd2aaff91/0/metadata.json",
+      "transcript": "/23/8bd2aaff91/0/full.jsonl",
+      "compact_transcript": "/23/8bd2aaff91/0/transcript.jsonl",
+      "content_hash": "/23/8bd2aaff91/0/content_hash.txt",
+      "prompt": "/23/8bd2aaff91/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 138,
+    "cache_creation_tokens": 384038,
+    "cache_read_tokens": 18803188,
+    "output_tokens": 130359,
+    "api_call_count": 73
+  }
+}
