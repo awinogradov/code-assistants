@@ -219,5 +219,3 @@ Read [`askuserquestion-format.md`](../shared-rules/references/askuserquestion-fo
 - [`references/branch-blocks.md`](references/branch-blocks.md) — the `## Pre-Implementation` bodies and the mechanics that execute them
 
 When you write the plan file, apply the reference-formatting rules in [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (RFC-0001, read it first) to every reference it contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
-
-**Reference self-check (MANDATORY):** after composing the output, re-read it against [`reference-formatting.md`](../shared-rules/references/reference-formatting.md). A bare commit SHA, a bare tracker id outside a magic-word line, or an unlinked mention of a file that exists in the repo is a violation — fix it before emitting.

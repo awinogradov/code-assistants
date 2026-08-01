@@ -152,7 +152,7 @@ When `NEEDS_REVERDICT` is `true`, decide from the LIVE unresolved bot-thread sta
 
 ### Review Body Update
 
-Only provide `updatedReviewComment` if `updatedVerdict` is non-null. Follow the same format as the original review body (see the pr:review skill for format rules) — including `CHECK-` rule codes rendered exactly as in the [`pr:review` skill's §2.5](../pr:review/SKILL.md#25-rule-codes): when `RULES_DOC_URL` is set, as markdown links whose fragment is the rule code lowercased — GitHub renders the `<a id>` anchors as lowercase ids, per §2.5 — (single: `[CHECK-BUG-002](<RULES_DOC_URL>#check-bug-002)`; shared: `[[CHECK-BUG-002](<RULES_DOC_URL>#check-bug-002), [CHECK-AI-002](<RULES_DOC_URL>#check-ai-002)]`); when it is absent, as the bare code in plain text (single: `CHECK-BUG-002`; shared: `CHECK-BUG-002, CHECK-AI-002`). Do not read agent files.
+Only provide `updatedReviewComment` if `updatedVerdict` is non-null. Follow the same format as the original review body (see the pr:review skill for format rules) — including `CHECK-` rule codes rendered exactly per the [`pr:review` skill's §2.5](../pr:review/SKILL.md#25-rule-codes). Do not read agent files.
 
 ---
 
@@ -193,5 +193,3 @@ Only provide `updatedReviewComment` if `updatedVerdict` is non-null. Follow the 
 ## Reference formatting
 
 Before writing any output that mentions a file, standard, section, commit, or issue, read [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (RFC-0001) and apply it verbatim — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
-
-**Reference self-check (MANDATORY):** after composing the output, re-read it against [`reference-formatting.md`](../shared-rules/references/reference-formatting.md). A bare commit SHA, a bare tracker id outside a magic-word line, or an unlinked mention of a file that exists in the repo is a violation — fix it before emitting.

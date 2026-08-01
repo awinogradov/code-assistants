@@ -60,10 +60,7 @@ Uncommitted-change handling is done in [Phase 0](#phase-0-preflight-check) by `p
 
 0. Parse `$ARGUMENTS`: if it contains `--autopilot`, set `autopilotMode = true` and remove the flag before further parsing. Otherwise `autopilotMode = false`.
 1. Get current branch name with `git branch --show-current`
-2. Validate branch name follows convention:
-   - GitHub: `issue-<number>-<short-description>` (e.g., `issue-123-add-feature`)
-   - Linear: `<team>-<number>-<short-description>` (e.g., `eng-123-add-auth`)
-   - Special prefix: `<hotfix|trivial|maintenance|proposal|security>-<short-description>` (e.g., `hotfix-memory-leak-editor`, `security-tainted-format-string`)
+2. Validate the branch name against the branch grammar in [`pr-title-grammar.md`](../shared-rules/references/pr-title-grammar.md)
 3. Determine the provider and issue reference from the branch, checking **in this order** (so `issue-` and the special prefixes are matched before the generic Linear pattern):
    - **GitHub** — matches `^issue-([0-9]+)-`: extract the number (e.g., `123`); `provider = github`; link as `Closes #123`.
    - **Special prefix** — starts with `hotfix-`/`trivial-`/`maintenance-`/`proposal-`/`security-`: uppercase it for the PR title prefix (e.g., `HOTFIX:`). For a `security-` branch, emit NO `Closes #` — record the code-scanning alert reference instead (see [Phase 4](#phase-4-generate-pr-description)).
@@ -102,7 +99,7 @@ If the agent reports breaking changes, tell the user: "Breaking changes detected
 
 Read [`pr-title-grammar.md`](../shared-rules/references/pr-title-grammar.md) and generate a title that conforms to it. Beyond the grammar, the title must describe business value or user impact, be understandable by someone on their first day, and avoid implementation details and unexplained jargon.
 
-**Title self-check (MANDATORY):** re-verify the drafted title against the [Phase 1](#phase-1-validate-current-state) provider immediately before [Phase 5](#phase-5-create-pull-request). If `provider = linear`, the title MUST start with the branch's `<team>-<number>` uppercased plus `: ` (branch `frtns-28-pr-gate` → title starts with `FRTNS-28: `); if the prefix is missing or names a different id, fix the title now. If `provider = github` or a special prefix, the title MUST NOT start with a `TEAM-N:` ticket prefix. A rule stated only here demonstrably gets dropped when the title is composed from commit context — this check is the gate, exactly like the reference-formatting self-check in [Phase 4](#phase-4-generate-pr-description) is for the body.
+**Title self-check (MANDATORY):** immediately before [Phase 5](#phase-5-create-pull-request), run the Title self-check from [`pr-title-grammar.md`](../shared-rules/references/pr-title-grammar.md) against the [Phase 1](#phase-1-validate-current-state) provider.
 
 ## Phase 4: Generate PR Description
 
@@ -308,5 +305,3 @@ Meaningful changes detected (`feat:` commits). The section is added without aski
 ```
 
 ---
-
-**Reference self-check (MANDATORY):** after composing the output, re-read it against [`reference-formatting.md`](../shared-rules/references/reference-formatting.md). A bare commit SHA, a bare tracker id outside a magic-word line, or an unlinked mention of a file that exists in the repo is a violation — fix it before emitting.

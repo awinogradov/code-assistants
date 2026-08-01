@@ -144,6 +144,8 @@ These rules govern references — when you point the reader at a real file, stan
 
 Backticks suppress GitHub autolinking: a commit SHA or issue/PR number inside a code span renders as dead text — that is why a backticked SHA was un-clickable in a prior review. Never wrap a SHA or issue/PR number in backticks; link it, or leave it bare so GitHub auto-links it.
 
+Self-check (MANDATORY): after composing the output, re-read it against these rules. A bare commit SHA, a bare tracker id outside a magic-word line, or an unlinked mention of a file that exists in the repo is a violation — fix it before emitting.
+
 Write the most helpful, readable output you can: plain, direct prose; every reference resolvable; explain the "why", not the obvious "what".
 
 <!-- ref-format:end -->

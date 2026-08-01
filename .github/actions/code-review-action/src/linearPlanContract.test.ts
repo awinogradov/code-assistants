@@ -143,9 +143,11 @@ describe("linear plan contract", () => {
 
   test("linear:run uses the shared planning pipeline for its fresh-plan path", () => {
     expect(linearRun).toContain("[pipeline.md](../plan/references/pipeline.md)");
-    expect(linearRun).toContain('task 4 ("Establish plan")');
-    expect(linearRun).toContain('task 5 ("Validate plan")');
-    expect(linearRun).toContain('task 6 ("Finalize plan")');
+    // Pipeline phases map to this skill's tasks by subject, not by index —
+    // index-based references broke whenever either side inserted a phase.
+    expect(linearRun).toContain("Establish-plan task");
+    expect(linearRun).toContain("Validate-plan task");
+    expect(linearRun).toContain("Finalize-plan task");
   });
 
   test.each(requiredSections)("linear:run consumes `### %s` from the stored plan", (name) => {

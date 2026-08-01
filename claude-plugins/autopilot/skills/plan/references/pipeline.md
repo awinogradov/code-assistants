@@ -8,8 +8,6 @@ Resolve the three stack values from [stack-deltas.md](stack-deltas.md) wherever 
 
 ## Draft plan (task 3)
 
-Set task 3 ("Draft plan") to `in_progress`.
-
 Assemble a complete draft before review and scoring, so both operate on a concrete artifact instead of an imagined one. Leave `Score:` as a placeholder — the review step fills it.
 
 Draft the smallest reliable solution that satisfies the steelmanned intent: reuse what the Context Map already shows over adding, and prefer the option with the fewest moving parts that still holds. Every step must trace to that intent — no unrequested abstraction, no configurability nobody asked for, no error handling for states that cannot occur, and no opportunistic refactor of adjacent code. Where a simpler option was rejected because it would not hold, say so in a clause rather than leaving the larger design unexplained. Minimality is a drafting constraint, not only a scoring one: review revises the draft it is handed, and no revision budget reliably strips scope a draft has already committed to — a pass spent arguing scope back down is a pass not spent on correctness.
@@ -52,17 +50,13 @@ Once every step above is done and verified:
 
 The template is prose because the plan file is what the reader approves — see the **Plan file is output, not instructions** rule in the calling skill. Both callers replace step 2 with their own machinery: `plan` asks in its post-implementation handoff phase, `run` runs the automated chain in [`run/SKILL.md`](../../run/SKILL.md) instead of asking.
 
-Set task 3 to `completed`.
-
 ## Review and score (task 4)
-
-Set task 4 ("Review and score") to `in_progress`.
 
 Expert review and scoring are **one step**. Reviewers already return per-dimension scores, so a second self-graded rubric adds a loop without adding information.
 
 **Expert review is an enhancement, never a gate.** It improves the plan and records the panel's assessment for the plan's readers; no caller blocks, loops, or refuses to proceed on the score.
 
-**`plan` and `linear:plan` are the only callers that may skip this step.** Each runs the review only when the user passed `--experts-review` (stripped by the mode-flags pre-step in [input-detection.md](input-detection.md#mode-flags)) — `plan` because its approval gate puts a human in front of the finished plan either way, and `linear:plan` because the teammate reading the stored ticket is that human, and the recorded skip tells them the plan is unreviewed. The `run` family — `run`, `run-primed`, and `linear:run`'s fresh-plan path — runs the step unconditionally, because no human re-reads its plans, so for those callers the skip path is unreachable. When the review step was skipped: set task 4 to `completed` noting the skip, and finalize with the skipped `Score:` line from [Finalize](#finalize-task-5).
+**`plan` and `linear:plan` are the only callers that may skip this step.** Each runs the review only when the user passed `--experts-review` (stripped by the mode-flags pre-step in [input-detection.md](input-detection.md#mode-flags)) — `plan` because its approval gate puts a human in front of the finished plan either way, and `linear:plan` because the teammate reading the stored ticket is that human, and the recorded skip tells them the plan is unreviewed. The `run` family — `run`, `run-primed`, and `linear:run`'s fresh-plan path — runs the step unconditionally, because no human re-reads its plans, so for those callers the skip path is unreachable. When the review step was skipped: mark the Review-and-score task `completed` noting the skip, and finalize with the skipped `Score:` line from [Finalize](#finalize-task-5).
 
 Select experts from your stack's expert table — always the Pre-mortem Analyst, then 2-3 more by task scope. Launch them **in parallel** (single message, multiple Agent tool calls):
 
@@ -109,11 +103,7 @@ Aggregate what survives:
 
 Do not include raw expert JSON in the plan output.
 
-Set task 4 to `completed`.
-
 ## Finalize (task 5)
-
-Set task 5 ("Finalize plan") to `in_progress`.
 
 Apply the aggregated findings and score to the draft, then write the plan file, replacing the `Score:` placeholder with a line that records the panel's assessment:
 
@@ -132,5 +122,3 @@ The line is deliberately a single literal: only `plan` and `linear:plan` can ski
 Naming the weakest dimension costs half a line and tells a later reader where the plan is soft — the aggregate alone says how good the panel thought the plan was, not what to double-check when executing it.
 
 Apply the reference-formatting rules (RFC-0001, inlined at the end of the calling skill) to every reference the plan contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
-
-Set task 5 to `completed`.

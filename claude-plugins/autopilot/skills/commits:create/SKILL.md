@@ -53,38 +53,7 @@ The rules below govern two dialogs, and both MUST follow them:
 
 A generated commit message is never presented for approval on the success path; [Commit Message Validation](#commit-message-validation) is what gates it.
 
-1. **`question` is FIXED TEXT** — use the EXACT string specified. NEVER add commit messages, file names, diffs, metadata, or any other content to the question field.
-2. **`header` is FIXED TEXT** — use the EXACT string specified.
-3. **`label` values are EXACT** — use the exact text specified (e.g., "Reword", "Cancel"). No abbreviations, no paraphrasing, no creative alternatives.
-4. **`description` values are EXACT** — use the exact text specified. No rewording.
-5. **ALL options are REQUIRED** — include every option listed. NEVER omit "Cancel".
-6. **`preview` belongs to the failure dialog only** — the failing commit message goes ONLY in `preview`, and NEVER in `question`, `label`, or `description`. All of that dialog's options carry identical preview text, since the user is choosing an action, not content. The strategy prompt takes no `preview`.
-7. **SUBSTITUTE every placeholder in `preview`** — the template uses `<commit message>` as a placeholder. Before invoking AskUserQuestion, replace it with the full failing message (title + body, literal `\n` escape sequences for line breaks). NEVER pass the literal string `<commit message>`, nor the shorthand `"..."`, `"<same>"`, or any placeholder.
-
-### WRONG — message in the question field, no preview, missing Cancel
-
-```
-AskUserQuestion({
-  question: "feat(auth): add JWT refresh endpoint\n\nsubject-case failed. Reword it?",
-  header: "Fix message",
-  options: [
-    { label: "Yes", description: "Type a new one" }
-  ]
-})
-```
-
-### CORRECT
-
-```
-AskUserQuestion({
-  question: "The generated commit message still fails validation. Choose an action.",
-  header: "Invalid message",
-  options: [
-    { label: "Reword", description: "Provide a corrected commit message", preview: "feat(auth): add JWT refresh endpoint\n\n- Added /auth/refresh endpoint\n\nFails: subject-case — the subject must be all lowercase" },
-    { label: "Cancel", description: "Abort commit creation", preview: "feat(auth): add JWT refresh endpoint\n\n- Added /auth/refresh endpoint\n\nFails: subject-case — the subject must be all lowercase" }
-  ]
-})
-```
+Read [`askuserquestion-contract.md`](../shared-rules/references/askuserquestion-contract.md) and apply it to both dialogs. In this skill, `preview` belongs to the [validation failure dialog](#validation-failure-dialog) only — the strategy prompt is a plain choice and takes no `preview`.
 
 ## Phase 0: Preflight Check
 
@@ -146,7 +115,7 @@ Use the agent's analysis to decide the commit flow:
    - The concrete modifications made (what files, functions, values, or behaviors changed)
 3. Generate commit message following the format below — the title must name the specific thing that changed, and the body must list the concrete modifications
 4. **WHAT-not-WHY validation**: Check the generated title against the WHY signal words and vague signal words listed in the WHAT-not-WHY Rule section below. If the title contains any of those words followed by abstract goals (not technical specifics), or contains the words "review", "feedback", "comments", or "suggestions", regenerate the title using only concrete technical details from the diff. Repeat up to 3 times. If the title still fails, hand it to the [validation failure dialog](#validation-failure-dialog) with the failing check named — do not commit it.
-5. Validate the composed candidate message with [Commit Message Validation](#commit-message-validation) — the full inline floor (length, `subject-case`, and the other checkable commitlint rules) plus commitlint when installed. On any violation, regenerate and re-validate (≤3 attempts); do not commit a message that still fails.
+5. Validate the composed candidate message with [Commit Message Validation](#commit-message-validation) — every checkable rule from the config plus commitlint when installed. On any violation, regenerate and re-validate (≤3 attempts); do not commit a message that still fails.
 6. Run `git commit -m "<message>"`. There is no confirmation step: the message is derived from a diff the user just produced, and steps 4–5 are the gate that stands in for reading it. Continue to [Phase 5](#phase-5-update-pr).
 
 ### Grouped Commit Flow
@@ -175,7 +144,7 @@ For each category that has files:
 2. `git add <category files>`
 3. `git diff --staged` — read the diff and identify what specifically changed (files, functions, values, behaviors)
 4. Generate commit message for this category
-5. Validate this category's composed candidate message with [Commit Message Validation](#commit-message-validation) — the full inline floor plus commitlint when installed. On any violation, regenerate and re-validate (≤3 attempts) before moving to the next category; a message that still fails must not be committed.
+5. Validate this category's composed candidate message with [Commit Message Validation](#commit-message-validation) — every checkable rule from the config plus commitlint when installed. On any violation, regenerate and re-validate (≤3 attempts) before moving to the next category; a message that still fails must not be committed.
 
 After analyzing all categories, `git reset HEAD` to unstage everything.
 
@@ -219,7 +188,7 @@ The body is required for `feat`, `fix`, and `refactor` commits. It may be omitte
 
 ### Rules
 
-- Title: lowercase, no period, imperative mood. The subject (text after `type(scope): `) MUST be all lowercase — camelCase identifiers are not allowed (`subject-case`) — MUST NOT exceed 50 characters, and the whole header line (`type(scope): subject`) MUST NOT exceed 100 characters. Enforced by commitlint (`subject-case` / `subject-max-length` / `header-max-length`) and CI, and by the skill itself via [Commit Message Validation](#commit-message-validation) before every commit
+- Title: lowercase, no period, imperative mood, subject ≤ 50 characters — camelCase identifiers are not allowed in the subject. Enforced by commitlint and CI, and by the skill itself via [Commit Message Validation](#commit-message-validation) before every commit
 - Title must name the specific thing that changed, not just the action
 - Body required for `feat`, `fix`, and `refactor`. Body bullet points list concrete modifications
 - Never use GitHub issue numbers or PR references in commit messages (issue linking happens on the PR via magic words)
@@ -270,19 +239,9 @@ The title must "contain the answer" — a reader should understand what changed 
 
 ### Commit Message Validation
 
-Run this on every fully-composed candidate message (title + optional body) BEFORE `git commit` — in both the Single and Grouped flows and in autopilot mode. It is the gate that guarantees a valid commit even when the husky `commit-msg` hook is absent (a fresh worktree that has not run `bun install` has no active hook, so nothing else catches a bad message). It mirrors the rules in [commitlint.config.mjs](../../../../commitlint.config.mjs) — that file is the source of truth; keep this list in sync with it. Run the shell snippets under `LC_ALL=C.UTF-8` so length and case folding are stable.
+Run this on every fully-composed candidate message (title + optional body) BEFORE `git commit` — in both the Single and Grouped flows and in autopilot mode. It is the gate that guarantees a valid commit even when the husky `commit-msg` hook is absent (a fresh worktree that has not run `bun install` has no active hook, so nothing else catches a bad message).
 
-Extract `type`, `subject` (the text after `type(scope): `), and `body` from the candidate message.
-
-**Inline floor (ALWAYS runs — no dependencies; the real gate in fresh worktrees).** Each check maps to a commitlint rule; the first miss is a violation:
-
-- `subject-max-length` / `header-max-length` — subject ≤ 50 (`printf '%s' "<subject>" | wc -m`), full header ≤ 100 (`printf '%s' "<title>" | wc -m`).
-- `subject-case` (lower-case) — the subject must equal its lowercased form: `printf '%s' "<subject>" | tr '[:upper:]' '[:lower:]'` must be byte-identical to `<subject>`. Any difference means an uppercase letter is present (e.g. a camelCase identifier like `localeForEmail`). This is an ASCII approximation; when commitlint runs below it is authoritative for non-ASCII.
-- `subject-full-stop` — the subject must not end with `.`.
-- `no-issue-id-in-subject` — the subject must not match `[A-Za-z]+-[0-9]+`.
-- `body-required-for-types` — if `type` is `feat`, `fix`, or `refactor`, `body` must be non-empty.
-- `no-ai-coauthored-by` — the raw message must not contain a `Co-authored-by:` trailer naming Claude, ChatGPT, Copilot, Codex, Devin, or Cursor.
-- `type-enum` / `type-case` — `type` must be one of the lowercase types listed under [Types](#types).
+**Read the config (ALWAYS runs — no dependencies; the real gate in fresh worktrees).** Read [commitlint.config.mjs](../../../../commitlint.config.mjs) — that file is the contract. Extract `type`, `subject` (the text after `type(scope): `), and `body` from the candidate message, then check them against every rule the config declares that is checkable by inspection (lengths, case, forbidden patterns, required bodies, allowed types). The first miss is a violation. Run any shell checks under `LC_ALL=C.UTF-8` so length and case folding are stable.
 
 **Full commitlint (best-effort — only when installed).** If the binary is present (`[ -x node_modules/.bin/commitlint ]`), also run the same command the husky hook uses:
 
@@ -290,11 +249,11 @@ Extract `type`, `subject` (the text after `type(scope): `), and `body` from the 
 printf '%s\n' "<full message>" | bunx --no -- commitlint
 ```
 
-Treat any reported problem as a violation. Gating on the binary's existence avoids an accidental network install in a bare worktree. If it is absent, skip this step silently — the inline floor already ran and is the gate.
+Treat any reported problem as a violation. Gating on the binary's existence avoids an accidental network install in a bare worktree. If it is absent, skip this step silently — the read-and-check step already ran and is the gate.
 
 **On any violation** — regenerate the message to fix the specific rule, then re-run the whole validation. Do NOT string-lowercase a subject to satisfy `subject-case` (that mangles identifiers, e.g. `localeForEmail` → `localeforemail`); instead rephrase the subject to avoid the mixed-case token (hyphenate or use plain words), or name the exact identifier in the backticked body — then re-confirm the subject still describes the change. Shorten to fix length. Retry up to 3 times.
 
-**Success = the whole inline floor passes** (plus commitlint when it ran), not just one rule. NEVER `git commit` a message that still fails. After 3 failed attempts:
+**Success = every checkable declared rule passes** (plus commitlint when it ran), not just one rule. NEVER `git commit` a message that still fails. After 3 failed attempts:
 
 - Interactive mode — open the [validation failure dialog](#validation-failure-dialog) below.
 - Autopilot mode — abort loudly with the failing rule(s); leave the index/staged state untouched and create no partial commit.
@@ -425,5 +384,3 @@ In autopilot mode the same failure aborts loudly instead, leaving the staged sta
 ## Reference formatting
 
 Before writing any output that mentions a file, standard, section, commit, or issue, read [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (RFC-0001) and apply it verbatim — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
-
-**Reference self-check (MANDATORY):** after composing the output, re-read it against [`reference-formatting.md`](../shared-rules/references/reference-formatting.md). A bare commit SHA, a bare tracker id outside a magic-word line, or an unlinked mention of a file that exists in the repo is a violation — fix it before emitting.

@@ -955,7 +955,7 @@ Map `severity` to its emoji when rendering in [Phase 3](#phase-3-submit-review):
 
 **reviewComment body template (ONLY when there are findings):**
 
-Every blocker, suggestion, and nitpick line ends with the rule code rendered per [§2.5](#25-rule-codes) (e.g. `[CHECK-BUG-002](<RULES_DOC_URL>#check-bug-002)`). If two checks flagged the same `(path, line)`, render the merged form `[[CHECK-BUG-002](<RULES_DOC_URL>#check-bug-002), [CHECK-AI-002](<RULES_DOC_URL>#check-ai-002)]`. Build the links yourself from `RULES_DOC_URL`. When a finding has no rule code, omit the suffix entirely.
+Every blocker, suggestion, and nitpick line ends with its rule code rendered per [§2.5](#25-rule-codes) (single, shared, and no-code forms as defined there).
 
 ```markdown
 [1 factual sentence: what this PR changes — no quality judgment]
@@ -985,7 +985,7 @@ Add inline comments for issues with specific code locations:
 - **🙋‍♂️ Suggestion** - Add if location is specific
 - **💡 Nitpicks** - Optional, can be in summary only
 
-Each inline comment: 1-2 sentences, start with severity emoji, end with the rule code rendered per [§2.5](#25-rule-codes) (e.g. `🚧 No idempotency check — retries will duplicate charges [CHECK-BUG-002](<RULES_DOC_URL>#check-bug-002)`).
+Each inline comment: 1-2 sentences, start with severity emoji, end with the rule code rendered per [§2.5](#25-rule-codes).
 
 ### Code suggestions
 
@@ -1007,7 +1007,7 @@ Add an optional `suggestion` to an inline comment when the fix is concrete and m
 - ALWAYS full paths for all file references, rendered per **File and doc links** (e.g. `[src/services/payment/processor.ts:66](<pr-blob-url>/src/services/payment/processor.ts#L66)`, NOT `processor.ts:66`)
 - Direct, confident language
 - Clear verdict (rationale only when requesting changes)
-- Rule code rendered per [§2.5](#25-rule-codes) (`[<CODE>](<RULES_DOC_URL>#<code>)` with the fragment lowercased, or merged `[[<CODE1>](<RULES_DOC_URL>#<code1>), [<CODE2>](<RULES_DOC_URL>#<code2>)]` for a shared location) on every finding line (blocker, suggestion, nitpick) and every `inlineComments.body`; omit the suffix entirely when no rule code is available
+- Rule code rendered per [§2.5](#25-rule-codes) on every finding line (blocker, suggestion, nitpick) and every `inlineComments.body`
 - File, section, doc, commit, and issue references follow the reference-formatting rules in [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (read it first) — build the links per **File and doc links** above. Exception: an inline comment is already anchored to its file and line by GitHub, so keep its location as a backticked full path (e.g. `src/services/payment/processor.ts:66`); apply the linking rules to the review-body prose and to any cross-file or out-of-diff reference inside inline bodies
 
 ### Exclude
@@ -1023,5 +1023,3 @@ Add an optional `suggestion` to an inline comment when the fix is concrete and m
 - Hedging words: "should", "could", "might"
 - Duplicate content between reviewComment and inlineComments
 - Empty sections with "None", "N/A", or similar placeholders
-
-**Reference self-check (MANDATORY):** after composing the output, re-read it against [`reference-formatting.md`](../shared-rules/references/reference-formatting.md). A bare commit SHA, a bare tracker id outside a magic-word line, or an unlinked mention of a file that exists in the repo is a violation — fix it before emitting.

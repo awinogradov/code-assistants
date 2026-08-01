@@ -191,13 +191,7 @@ Set task 6 to `in_progress`. Freeze the required stored sections as the executio
 
 Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft, review and score, finalize — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md). Use the Common Instructions and plan-file header rule from [`run`](../run/SKILL.md#common-instructions).
 
-The pipeline names `run`'s tasks 3–5. Map them to this skill's plan tasks:
-
-| Pipeline says               | Use here                  |
-| --------------------------- | ------------------------- |
-| task 3 ("Draft plan")       | task 4 ("Establish plan") |
-| task 4 ("Review and score") | task 5 ("Validate plan")  |
-| task 5 ("Finalize plan")    | task 6 ("Finalize plan")  |
+The pipeline's phases track this skill's plan tasks by subject: its Draft-plan phase is the Establish-plan task, its Review-and-score phase the Validate-plan task, and its Finalize phase the Finalize-plan task.
 
 The resulting harness plan is the execution plan for this run only. Do not store it on the Linear issue.
 
@@ -216,18 +210,10 @@ Follow [`run`'s Phase 4](../run/SKILL.md#phase-4-embed-branch-creation-and-the-a
 
 After implementation, both modes use the same commit, push, pull-request, and monitoring chain.
 
-**Substitute the delivery task numbers:**
-
-| `run` says                | Use here                  |
-| ------------------------- | ------------------------- |
-| task 6 ("Commit changes") | task 7 ("Commit changes") |
-| task 7 ("Create PR")      | task 8 ("Create PR")      |
-| task 8 ("Monitor PR")     | task 9 ("Monitor PR")     |
+`run` numbers its delivery tasks differently; track them by subject — where its chain sets the Commit-changes, Create-PR, or Monitor-PR task, use this skill's task of the same name.
 
 Those phases are otherwise referenced, never copied. Two long prompts restating the same chain would drift the first time one side changed, and `run` already sets this precedent by referencing `plan` for input resolution and Common Instructions.
 
 ## Reference formatting
 
 Before writing any output that mentions a file, standard, section, commit, or issue, read [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (RFC-0001) and apply it verbatim — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
-
-**Reference self-check (MANDATORY):** after composing the output, re-read it against [`reference-formatting.md`](../shared-rules/references/reference-formatting.md). A bare commit SHA, a bare tracker id outside a magic-word line, or an unlinked mention of a file that exists in the repo is a violation — fix it before emitting.

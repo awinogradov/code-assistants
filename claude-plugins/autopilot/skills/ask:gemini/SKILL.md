@@ -12,14 +12,7 @@ allowed-tools:
 
 # Ask Gemini
 
-Delegate a task to the Google Gemini CLI and report the result. Gemini runs as a peer model — its output is evaluated critically, never accepted blindly.
-
-## When to Use
-
-- The user asks to run Gemini (`gemini -p`, `gemini --resume`) or references the Gemini CLI.
-- The user wants a second model's analysis, refactor, or automated edit of the code.
-
-Do NOT use for: git/PR workflows (use the other autopilot skills) or tasks that do not involve the Gemini CLI.
+Delegate a task to the Google Gemini CLI and report the result. Gemini runs as a peer model: read [`peer-cli-delegation.md`](../shared-rules/references/peer-cli-delegation.md) and apply it throughout — it owns the delegation mechanics, the follow-up loop, the critical evaluation of Gemini output, and the error-handling protocol, while this file supplies the CLI name, the exec command, the resume syntax, and the flag table. Do NOT use for: git/PR workflows (use the other autopilot skills) or tasks that do not involve the Gemini CLI.
 
 ## Input
 
@@ -38,11 +31,10 @@ Parse `$ARGUMENTS` for an optional task description and optional `--model` / `--
    - `-o, --output-format <text|json>`
    - `-p, --prompt "your prompt here"` (forces non-interactive mode)
 4. Always run non-interactively with `-p`; a bare positional prompt starts an interactive REPL in a TTY.
-5. Resume: continue a prior session with `gemini -r "latest" "your prompt here"` (or `gemini -r "<session-id>" "your prompt here"`). The resumed session inherits the original model and settings — pass no model flag unless the user explicitly requests a change.
+5. Resume: continue a prior session with `gemini -r "latest" "your prompt here"` (or `gemini -r "<session-id>" "your prompt here"`); per the shared block's inherit rule, pass no model flag unless the user explicitly requests a change.
 6. **IMPORTANT (clean output)**: in `text` mode Gemini prints only the response to stdout. For a machine-parseable result use `--output-format json` and read the `.response` field with `jq`. Pass `--debug` only when troubleshooting; append `2>/dev/null` to silence diagnostics when they would clutter scripted output.
-7. **IMPORTANT (stdin)**: `gemini` reads stdin and appends it to the `-p` prompt. When stdin is not a TTY but also not closed (background tasks, hooks, scripts), Gemini blocks forever waiting for input — append `</dev/null`, e.g. `gemini -p "prompt" </dev/null 2>/dev/null`. Symptom of getting this wrong: zero bytes of stdout, zero CPU, process hangs.
-8. Run the command, capture stdout (filtered as appropriate), and summarize the outcome for the user.
-9. After Gemini completes, tell the user: "You can resume this Gemini session at any time by saying 'gemini resume' or asking me to continue with additional analysis or changes."
+7. **IMPORTANT (stdin)**: `gemini` reads stdin and appends it to the `-p` prompt — apply the shared block's stdin guard, e.g. `gemini -p "prompt" </dev/null 2>/dev/null`.
+8. Run the command and follow the shared block's reporting and resume-offer loop; the user resumes by saying "gemini resume".
 
 ### Quick Reference
 
@@ -55,37 +47,18 @@ Parse `$ARGUMENTS` for an optional task description and optional `--model` / `--
 | Machine-readable output      | match task needs        | `--output-format json -p "..."`, then parse `.response` (`jq`) |
 | Resume recent session        | inherited from original | `gemini -r "latest" "prompt"` (no model flag)                  |
 
-## Following Up
+## Gemini Specifics for the Shared Rules
 
-- After every `gemini` command, use `AskUserQuestion` to confirm next steps, collect clarifications, or decide whether to resume.
-- When resuming, pass the new prompt positionally: `gemini -r "latest" "new prompt"`. The resumed session reuses the original model and approval mode.
-- Restate the chosen model and approval mode when proposing follow-up actions.
+The shared block leaves these caller-supplied:
 
-## Critical Evaluation of Gemini Output
-
-<!-- The model-agnostic peer-evaluation guidance below (the four bullets and the colleague framing) is shared with [ask:codex](../ask:codex/SKILL.md#critical-evaluation-of-codex-output); keep the two in sync. -->
-
-Gemini is powered by Google models with their own knowledge cutoffs and limitations. Treat Gemini as a **colleague, not an authority**.
-
-- **Trust your own knowledge** when confident. If Gemini claims something you know is wrong, push back directly.
-- **Research disagreements** with `WebSearch` or documentation before accepting Gemini's claims.
-- **Remember knowledge cutoffs** — Gemini may not know about recent releases, APIs, or changes.
-- **Don't defer blindly**, especially on model names/capabilities, recent library versions or API changes, and evolving best practices.
-
-When Gemini is wrong: state the disagreement to the user, provide evidence, and optionally resume the session to discuss — identify yourself as Claude using your actual current model name, frame it as a peer discussion (either AI could be wrong), and let the user decide on genuine ambiguity:
+- The peer CLI is **Gemini**, powered by Google models; its version check is `gemini --version`.
+- High-impact flags that need permission first: `--approval-mode yolo`, `--yolo`, `-s` with broad access, `-a`/`--all-files` on large repos.
+- Resume syntax for follow-ups and peer discussion of a disagreement:
 
 ```bash
 gemini -r "latest" "This is Claude (<your current model name>) following up. I disagree with [X] because [evidence]. What's your take?"
 ```
 
-## Error Handling
-
-- Stop and report failures whenever `gemini --version` or a `gemini -p` command exits non-zero; ask for direction before retrying.
-- Before using high-impact flags (`--approval-mode yolo`, `--yolo`, `-s` with broad access, `-a`/`--all-files` on large repos) ask permission via `AskUserQuestion` unless already granted.
-- When output includes warnings or partial results, summarize them and ask how to adjust via `AskUserQuestion`.
-
 ## Reference formatting
 
 Before writing any output that mentions a file, standard, section, commit, or issue, read [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (RFC-0001) and apply it verbatim — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
-
-**Reference self-check (MANDATORY):** after composing the output, re-read it against [`reference-formatting.md`](../shared-rules/references/reference-formatting.md). A bare commit SHA, a bare tracker id outside a magic-word line, or an unlinked mention of a file that exists in the repo is a violation — fix it before emitting.

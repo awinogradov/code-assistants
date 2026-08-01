@@ -69,15 +69,7 @@ Mirror `issue:create` so the body reflects real code, not hallucinated structure
 
 **Title:** capitalized, ≤ 80 characters, no trailing period, business-focused, NOT Conventional Commits, no prefix.
 
-**Body — section ordering is MANDATORY** (exact `## ` headings, no trailing colon, no bold). The five-section spec is canonical in [issue:create Phase 5](../issue:create/SKILL.md#phase-5-generate-body) — keep this list in sync with it. Each section has one non-overlapping job and must not repeat what another covers; length follows the content, with no fixed paragraph cap:
-
-1. `## Context` — the situation and background only: state of the world and what surfaced it now (not impact — that's Why; not the fix — that's Solution).
-2. `## What` — the deliverable / observable end state (not the how).
-3. `## Why` — user impact and motivation only; assumes Context, never restates it.
-4. `## Scope` — a bullet list with `**In scope:**` and `**Out of scope:**` sub-headings that reference What rather than re-describe it.
-5. `## Solution` — the high-level approach (how), not a restatement of the deliverable. Invoke `Skill(autopilot:ascii-schemas)` for a diagram whenever one would aid understanding — a flow, sequence, architecture, data schema, UI layout, comparison, or logical relationship; embed it verbatim in a fenced ` ```text ` block.
-
-After drafting, run the linkability pass from [issue:create Phase 5](../issue:create/SKILL.md#phase-5-generate-body) — every prose mention of a file or path that exists in the repo becomes an absolute `<repo-blob-url>` link, and every cited external source whose URL is in context becomes an inline `[title](url)` link; never invent a URL for an unlinkable mention.
+**Body:** read [`issue-body-grammar.md`](../shared-rules/references/issue-body-grammar.md) and apply it — the five-section structure, the per-section rules, and the linkability pass that runs after drafting. Links must use the absolute `<repo-blob-url>` form because the body is posted outside the repo, where relative paths do not resolve.
 
 **Original-prompt preamble (prepend last).** After the linkability pass, prepend the user's original prompt — the title hint resolved verbatim in [Phase 0](#phase-0-resolve-team-and-hint) — to the top of the body as a collapsed section, so the ticket records exactly what was asked, not only its structured interpretation. Use Linear's GraphQL collapsible fence (`+++ Section title` to open, `+++` to close), documented in the [Linear API docs](https://linear.app/developers/graphql); its content renders initially hidden. Do NOT use `<details>` HTML — Linear does not render it. Emit the block above `## Context`:
 
@@ -152,5 +144,3 @@ Output the result:
 ```
 
 When you generate the issue body, apply the reference-formatting rules in [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (RFC-0001, read it first) to every reference it contains — link files, docs, skills, agents, sections, and commit SHAs as absolute `<repo-blob-url>` URLs (the body is posted outside the repo, where relative paths do not resolve), link cited external resources to their canonical source URL, and never leave a reference as bare text.
-
-**Reference self-check (MANDATORY):** after composing the output, re-read it against [`reference-formatting.md`](../shared-rules/references/reference-formatting.md). A bare commit SHA, a bare tracker id outside a magic-word line, or an unlinked mention of a file that exists in the repo is a violation — fix it before emitting.
