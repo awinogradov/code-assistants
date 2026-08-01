@@ -52,7 +52,7 @@ The plan's own sections, demoted one level under a single anchor. The trailing m
 ```text
 ## Implementation plan
 
-Format: v1 · Score: <N>/100 · Base: <origin/main SHA> · Stored by /autopilot:linear-plan
+Format: v1 · Score: <panel verdicts> · Base: <origin/main SHA> · Stored by /autopilot:linear-plan
 
 ### Summary              <- required
 ### Implementation Steps <- required

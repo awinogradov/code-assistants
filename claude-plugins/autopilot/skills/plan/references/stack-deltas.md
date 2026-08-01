@@ -15,17 +15,12 @@ These deltas previously lived in two dedicated skills (`plan-bun`, `plan-nodejs-
 | `NodeJS+React`          | [NodeJS+React](#nodejsreact) |
 | `NodeJS+React+Tailwind` | [NodeJS+React](#nodejsreact) |
 
-When `package.json` is missing, has no `agents` field, or carries an unrecognized `agents.rules`, ask via AskUserQuestion:
+When `package.json` is missing, has no `agents` field, or carries an unrecognized `agents.rules`, ask via AskUserQuestion (header "Stack"): the stack could not be detected from `package.json` `agents.rules` — which one should planning use? The choice set is exactly the four `agents.rules` values from the routing table above, offered by name; selecting one routes to its delta set as if it had been detected:
 
-- `question`: "Could not detect tech stack from package.json agents.rules. Which stack should be used for planning?"
-- `header`: "Stack"
-- `options`: [
-  { label: "Bun", description: "Bun/NodeJS TypeScript projects (CSS Modules)" },
-  { label: "Bun+React+Tailwind", description: "Bun + React + Tailwind frontend" },
-  { label: "NodeJS+React", description: "Node.js + React (CSS Modules)" },
-  { label: "NodeJS+React+Tailwind", description: "Node.js + React + Tailwind frontend" }
-  ]
-- `multiSelect`: false
+- **Bun** — Bun/NodeJS TypeScript project (CSS Modules): use the [Bun](#bun) deltas.
+- **Bun+React+Tailwind** — Bun + React + Tailwind frontend: use the [Bun](#bun) deltas.
+- **NodeJS+React** — Node.js + React (CSS Modules): use the [NodeJS+React](#nodejsreact) deltas.
+- **NodeJS+React+Tailwind** — Node.js + React + Tailwind frontend: use the [NodeJS+React](#nodejsreact) deltas.
 
 **Formatting Note:** Read [`askuserquestion-format.md`](../../shared-rules/references/askuserquestion-format.md) and apply it before composing the `question` parameter.
 

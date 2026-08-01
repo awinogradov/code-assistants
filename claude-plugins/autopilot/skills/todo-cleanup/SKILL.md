@@ -66,9 +66,9 @@ Use the Agent tool with:
 - `description`: "Scan and analyze TODOs"
 ```
 
-The agent returns categorized results: stale (closed issues), already linked (open issues), needs link (has issue number but no @see), and unlinked (no issue reference).
+The agent returns a JSON object: `total` plus a `todos` array whose items carry `path`, `line`, `type`, `description`, an `issue` reference with its `issueState`, and a `status` of `stale` (issue closed), `linked` (open issue, no action needed), `needs-link` (has issue number but no `@see`), or `unlinked` (no issue reference).
 
-If the agent returns "No TODO or FIXME comments found in the codebase." — stop.
+If the agent returns `total: 0` — output "No TODO or FIXME comments found in the codebase." and stop.
 
 ## Phase 3: Present Findings
 

@@ -194,7 +194,7 @@ The step is opt-in for `plan` and [`linear:plan`](./16-linear-plan-skill.md): ea
 
 Each reviewer receives a **Context Map excerpt** alongside the plan text. A reviewer with no view of the repository infers file contents, and an invented finding costs more than a missing one.
 
-Each returns a schema-validated JSON verdict carrying per-dimension scores. The parent averages them into the five-dimension rubric (Alignment, Completeness, Type Safety, Testability, Simplicity; 20 points each), folds the panel's findings into the draft in a single pass, and records the actual aggregate and the weakest dimension rather than inflating either. The review is an enhancement, never a gate: there is no score threshold, no revision loop, and no caller that blocks or refuses to proceed on the number — [`linear:plan`](./16-linear-plan-skill.md) stores the plan whatever it says.
+Each returns a schema-validated JSON verdict carrying per-dimension scores on the five-dimension rubric (Alignment, Completeness, Type Safety, Testability, Simplicity; 20 points each), with the overall score derived as their sum. The parent folds the panel's findings into the draft in a single pass and records each surviving reviewer's verdict — derived score and weakest dimension — with no cross-reviewer averaging. The review is an enhancement, never a gate: there is no score threshold, no revision loop, and no caller that blocks or refuses to proceed on the number — [`linear:plan`](./16-linear-plan-skill.md) stores the plan whatever it says.
 
 Scoring used to be a separate phase running a second rubric over what the experts had already scored, with an uncapped auto-iteration loop; a later revision replaced that with a threshold-driven revision budget, and the threshold and budget were then removed entirely once review became an enhancement rather than a gate.
 
@@ -202,7 +202,7 @@ Scoring used to be a separate phase running a second rubric over what the expert
 
 Apply the aggregated findings and score to the draft, replace the `Score:` placeholder, and write the plan file, with every reference formatted per RFC-0001.
 
-The recorded line names the weakest dimension beside the aggregate — `Score: <N>/100 · weakest: <dimension>`. The aggregate alone says how good the panel thought the plan was; the weakest dimension says what to double-check when executing it, and nothing reconstructs that later.
+The recorded line names each reviewer's weakest dimension beside their score — `Score: <score> & <score> · weakest: <dimension> (<points>) & <dimension> (<points>) · findings applied`. A score alone says how good a reviewer thought the plan was; the weakest dimension says what to double-check when executing it, and nothing reconstructs that later.
 
 ## Phase 5 — Embed branch creation
 

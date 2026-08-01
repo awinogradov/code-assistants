@@ -47,25 +47,39 @@ Determine whether to recommend single or grouped commits:
 
 ## Phase 4: Output
 
-Output ONLY the structured block. No preamble or commentary:
+<!-- agent-json:start -->
 
+Output ONLY a single JSON object matching the schema below — no preamble, no surrounding code fence, no commentary. The parent parses it directly, so any extra text breaks consumption.
+
+<!-- agent-json:end -->
+
+| Field                     | Type    | Constraint                                                                                                                                |
+| ------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `totalFiles`              | integer | Staged file count                                                                                                                         |
+| `linesAdded`              | integer | Total added lines across staged files                                                                                                     |
+| `linesRemoved`            | integer | Total removed lines across staged files                                                                                                   |
+| `categories`              | object  | Category name → staged file paths, keys from [Phase 2](#phase-2-categorize-files) (e.g. `{ "impl": [...] }`); omit empty categories       |
+| `categoryCount`           | integer | Number of keys in `categories`                                                                                                            |
+| `singleCommitRecommended` | boolean | Per [Phase 3](#phase-3-assess-strategy)                                                                                                   |
+| `reason`                  | string  | The [Phase 3](#phase-3-assess-strategy) rule that decided (e.g. `"1 category"`, `"≤250 lines"`, `"multiple categories, large changeset"`) |
+| `recentCommits`           | string  | `git log --oneline -5` output, verbatim                                                                                                   |
+
+Example:
+
+```json
+{
+  "totalFiles": 3,
+  "linesAdded": 120,
+  "linesRemoved": 8,
+  "categories": {
+    "impl": ["scripts/feature.ts", "scripts/feature.types.ts"],
+    "test": ["scripts/feature.test.ts"]
+  },
+  "categoryCount": 2,
+  "singleCommitRecommended": true,
+  "reason": "≤4 files",
+  "recentCommits": "b8bb4b2 revert(code-review): restore pull_request trigger\n9a7f139 chore(repomix): refresh pack"
+}
 ```
-## Staged Changes Analysis
 
-**Total:** N files, +M/-K lines
-
-### Categories
-- impl: [file1, file2] (N files)
-- test: [file1] (N files)
-- docs: [file1, file2] (N files)
-
-### Strategy
-- categoryCount: N
-- singleCommitRecommended: true/false
-- reason: [e.g., "1 category" or "≤250 lines" or "≤4 files" or "multiple categories, large changeset"]
-
-### Recent Commit Style
-[git log --oneline -5 output, verbatim]
-```
-
-Only include categories that have files. Omit empty categories from the list.
+Emit the raw object, not the fenced form.

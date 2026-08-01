@@ -93,24 +93,15 @@ Set task 2 to `in_progress`. This phase runs before context gathering so the res
 
 Fetch the issue with `get_issue` and read its `description`. This is one fetch more than the [Phase 2](#phase-2-gather-context) fan-out would make on its own, and it is deliberate: the plan source must be chosen from a checkable artifact before implementation starts.
 
-Then resolve exactly one verdict:
+Then resolve exactly one verdict. The rows are the resolution order: evaluate them top-to-bottom and stop at the first test that fires.
 
-| Verdict              | Test                                                                                   |
-| -------------------- | -------------------------------------------------------------------------------------- |
-| **missing**          | the description contains no `## Implementation plan` line                              |
-| **version-mismatch** | the `Format:` value is absent or is not one this skill reads (currently `v1`)          |
-| **malformed**        | any of the required `###` sections is absent                                           |
-| **unverifiable**     | a numbered step in `### Implementation Steps` carries no `verify:` line                |
-| **valid**            | an anchor, a readable `Format:`, every required section, and a `verify:` on every step |
-
-Resolve in this exact order, stopping at the first that fires:
-
-1. **missing** — no `## Implementation plan` line in the description.
-2. **version-mismatch** — the `Format:` field on the line below the anchor is absent, or names a version this skill does not read.
-3. **malformed** — any required section from [the stored format](../linear:plan/SKILL.md#the-stored-plan-format) is absent. Name the specific omission in the message.
-4. **unverifiable** — a numbered step carries no `verify:` line.
-
-Anything that survives all four is **valid**.
+| Verdict              | Test                                                                                                                                                |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **missing**          | the description contains no `## Implementation plan` line                                                                                           |
+| **version-mismatch** | the `Format:` field on the line below the anchor is absent, or names a version this skill does not read (currently `v1`)                            |
+| **malformed**        | any required section from [the stored format](../linear:plan/SKILL.md#the-stored-plan-format) is absent — name the specific omission in the message |
+| **unverifiable**     | a numbered step in `### Implementation Steps` carries no `verify:` line                                                                             |
+| **valid**            | anything that survives all four rows above — an anchor, a readable `Format:`, every required section, and a `verify:` on every step                 |
 
 **The order is load-bearing.** Check the anchor and the format version _before_ the sections. A plan stored under an older template is missing sections this skill expects, so a subsection check reached first would report a perfectly good older plan as `malformed` — telling the user their ticket is corrupt when it is merely older, and inviting them to throw away a valid stored artifact. `Format:` exists precisely to keep those two cases apart.
 

@@ -75,29 +75,19 @@ Set task 2 to `in_progress`. This phase is the entire reason this skill exists a
 
 Resolve the repository root with `git rev-parse --show-toplevel`; the brief lives at `<root>/.claude/context/brief.md`, one per worktree.
 
-Then resolve exactly one verdict:
+Then resolve exactly one verdict. The rows are the resolution order: evaluate them top-to-bottom and stop at the first test that fires.
 
-| Verdict               | Test                                                                                           |
-| --------------------- | ---------------------------------------------------------------------------------------------- |
-| **missing**           | the brief does not exist at that path                                                          |
-| **malformed**         | no `Base:` line, or any of the nine fixed `##` sections absent                                 |
-| **revision-mismatch** | the recorded base does not resolve, or is not an ancestor-or-equal of `HEAD`                   |
-| **stale**             | the recorded base resolves and is contained in `HEAD`, but is not the checkout's `origin/main` |
-| **valid**             | the recorded base equals `git rev-parse origin/main` **and** is an ancestor-or-equal of `HEAD` |
+| Verdict               | Test                                                                                                                                                                                                 |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **missing**           | Read `<root>/.claude/context/brief.md` with the **`Read` tool** — the brief does not exist at that path                                                                                              |
+| **malformed**         | from that same read: no `Base:` line, or any of the nine fixed `##` sections listed in [Phase 3](#phase-3-merge-the-working-context) absent — name the specific omission in the message              |
+| **revision-mismatch** | `git cat-file -e "<base>^{commit}"` exits non-zero (the recorded revision does not resolve here), or `git merge-base --is-ancestor "<base>" HEAD` exits non-zero (this checkout does not contain it) |
+| **stale**             | `git rev-parse origin/main` prints something other than `<base>` — the recorded base resolves and is contained in `HEAD`, but is not the checkout's `origin/main`                                    |
+| **valid**             | anything that survives all four rows above — the recorded base equals `git rev-parse origin/main` **and** is an ancestor-or-equal of `HEAD`                                                          |
 
-Resolve the verdict in this exact order, stopping at the first one that fires:
+**The missing and malformed rows are file checks, and they must precede every `git` command.** Reach `git cat-file` with an empty base — a brief with no `Base:` line — and it exits non-zero, reporting `revision-mismatch` for what is actually a `malformed` brief. The section-presence check has no git equivalent at all: a brief whose base matches `origin/main` but whose `## Key types` is missing would otherwise pass as `valid`, which is precisely the case this gate exists to catch.
 
-1. **missing** — Read `<root>/.claude/context/brief.md` with the **`Read` tool**. If it is not there, the verdict is `missing`.
-2. **malformed** — from that same read, take the `Base:` line and the `##` headings. If there is no `Base:` line, or any of the nine fixed sections listed in [Phase 3](#phase-3-merge-the-working-context) is absent, the verdict is `malformed`. Name the specific omission in the message.
-3. **revision-mismatch** — `git cat-file -e "<base>^{commit}"` exits non-zero (the recorded revision does not resolve here).
-4. **revision-mismatch** — `git merge-base --is-ancestor "<base>" HEAD` exits non-zero (this checkout does not contain it).
-5. **stale** — `git rev-parse origin/main` prints something other than `<base>`.
-
-Anything that survives all five is **valid**.
-
-**Steps 1 and 2 are file checks, and they must precede every `git` command.** Reach `git cat-file` with an empty base — a brief with no `Base:` line — and it exits non-zero, reporting `revision-mismatch` for what is actually a `malformed` brief. The section-presence check has no git equivalent at all: a brief whose base matches `origin/main` but whose `## Key types` is missing would otherwise pass as `valid`, which is precisely the case this gate exists to catch.
-
-Parse both values with the `Read` tool rather than shelling out to `sed`, `grep`, or `head`, and compare the step-5 SHA against `<base>` yourself rather than with `test`. `git` and `gh` are the only commands on this skill's tool allowlist, so a text-extraction or comparison pipeline is blocked before it runs — and the gate would then fail for the wrong reason, reporting a broken skill instead of a bad brief.
+Parse both values with the `Read` tool rather than shelling out to `sed`, `grep`, or `head`, and compare the stale-row SHA against `<base>` yourself rather than with `test`. `git` and `gh` are the only commands on this skill's tool allowlist, so a text-extraction or comparison pipeline is blocked before it runs — and the gate would then fail for the wrong reason, reporting a broken skill instead of a bad brief.
 
 **Compare against `origin/main`, never `HEAD`.** [`explore`](../explore/SKILL.md#phase-4-write-the-brief) writes `Base: <origin/main SHA>` and its own [classification](../explore/SKILL.md#phase-0-classify-the-run) re-reads it against `origin/main`. Validating against `HEAD` would reject every brief written in a session whose branch had moved ahead — which is the ordinary explore session, since producing commits is the point of one — leaving the producer and the consumer in open disagreement about what "current" means. The ancestor test is the other half: it confirms the working tree actually contains the recorded revision. `git merge-base --is-ancestor` is also what keeps "an older revision of this history" distinguishable from "a different history entirely", which is why `stale` and `revision-mismatch` are separate verdicts rather than one.
 

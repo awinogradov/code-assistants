@@ -188,28 +188,11 @@ This step is `/autopilot:plan` only — see [`run/SKILL.md`](../run/SKILL.md).
 
 After every implementation step and its `verify:` line has passed, ask what to do next. This gate is `/autopilot:plan` only: `run` replaces it with the automated chain in [`run/SKILL.md`](../run/SKILL.md), which is why it lives here in the orchestrator rather than in the shared pipeline `run` also executes.
 
-**If the session produced user-facing changes** (`feat:` or `fix:` commits), use the `--release-notes` variant of the "Create PR" option below; otherwise use the plain one.
+Ask via AskUserQuestion (header "Next"): all changes are implemented and verified — what happens next? Read [`askuserquestion-format.md`](../shared-rules/references/askuserquestion-format.md) and apply it to the dialog you compose. The choices and the action each one triggers are exact; the wording is yours:
 
-Tool parameters:
-
-- `question`: "All changes implemented and verified. What's next?"
-- `header`: "Next"
-- `options`: [
-  { label: "Create commit", description: "Run /autopilot:commits-create to commit changes" },
-  { label: "Create PR", description: "Run /autopilot:pr-create --release-notes to open a PR with release notes" },
-  { label: "Done", description: "No further action needed" }
-  ]
-- `multiSelect`: false
-
-With no user-facing changes, the "Create PR" description reads `"Run /autopilot:pr-create to open a pull request"` instead.
-
-Then act on the selection:
-
-- "Create commit" — invoke `Skill(autopilot:commits-create)`
-- "Create PR" — invoke `Skill(autopilot:pr-create)` with the flags shown in the chosen option's description
-- "Done" — stop here
-
-Read [`askuserquestion-format.md`](../shared-rules/references/askuserquestion-format.md) and apply it before composing the `question` parameter.
+- **Create commit** — commit the session's changes: invoke `Skill(autopilot:commits-create)`.
+- **Create PR** — open a pull request: invoke `Skill(autopilot:pr-create)`, with `--release-notes` when the session produced user-facing changes (`feat:` or `fix:` commits) and without it otherwise.
+- **Done** — no further action needed: stop here.
 
 ## Additional Resources
 

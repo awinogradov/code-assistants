@@ -87,51 +87,45 @@ Group comments by file path and sort within each file by line number.
 
 ## Phase 4: Output
 
-Output ONLY the structured block. No preamble or commentary:
+<!-- agent-json:start -->
 
+Output ONLY a single JSON object matching the schema below — no preamble, no surrounding code fence, no commentary. The parent parses it directly, so any extra text breaks consumption.
+
+<!-- agent-json:end -->
+
+| Field         | Type           | Constraint                                                                                                                                                                                                                                                                                  |
+| ------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pr`          | integer        | PR number                                                                                                                                                                                                                                                                                   |
+| `title`       | string         | PR title                                                                                                                                                                                                                                                                                    |
+| `author`      | string         | PR author login, without `@`                                                                                                                                                                                                                                                                |
+| `reviewState` | string         | `APPROVED` \| `CHANGES_REQUESTED` \| `REVIEW_REQUIRED` \| `PENDING`                                                                                                                                                                                                                         |
+| `reviewers`   | object[]       | `{ "login": string, "state": string }` per reviewer; `[]` when none                                                                                                                                                                                                                         |
+| `comments`    | object[]       | `{ "commentId": number, "path": string, "line": number \| null, "reviewer": string, "severity": "blocker" \| "suggestion" \| "nitpick" \| "question", "summary": string }` per surviving comment, grouped by `path` and sorted by `line` per [Phase 3](#phase-3-categorize); `[]` when none |
+| `note`        | string \| null | `null` when `comments` is non-empty; `"no-comments"` when no unresolved comments were found; `"all-resolved"` when every review comment is resolved                                                                                                                                         |
+
+`commentId` is the REST review-comment `id` from the `/comments` payload — the parent replies to specific threads with it; the GraphQL `reviewThreads` query is used only to read `isResolved`/`isOutdated`, not for comment IDs. `line` is `null` for an outdated thread whose diff line moved.
+
+Example:
+
+```json
+{
+  "pr": 238,
+  "title": "Rerun review on PR description edits",
+  "author": "awinogradov",
+  "reviewState": "CHANGES_REQUESTED",
+  "reviewers": [{ "login": "symbiot-bot", "state": "CHANGES_REQUESTED" }],
+  "comments": [
+    {
+      "commentId": 2154433001,
+      "path": ".github/workflows/code-review.yml",
+      "line": 12,
+      "reviewer": "symbiot-bot",
+      "severity": "blocker",
+      "summary": "Scope cancel-in-progress to non-edited events"
+    }
+  ],
+  "note": null
+}
 ```
-## PR Review Summary
 
-**PR:** #[N] - [title]
-**Author:** @[author login]
-**Review state:** [APPROVED / CHANGES_REQUESTED / REVIEW_REQUIRED / PENDING]
-**Reviewers:** @[reviewer1] ([state]), @[reviewer2] ([state])
-
-### Blockers (N)
-- `[file]:[line]` - @[reviewer]: [comment summary] (comment_id: [id])
-
-### Suggestions (N)
-- `[file]:[line]` - @[reviewer]: [comment summary] (comment_id: [id])
-
-### Nitpicks (N)
-- `[file]:[line]` - @[reviewer]: [comment summary] (comment_id: [id])
-
-### Questions (N)
-- `[file]:[line]` - @[reviewer]: [comment summary] (comment_id: [id])
-```
-
-Include `comment_id` for each comment so the parent skill can reply to specific threads. `comment_id` is the REST review-comment `id` from the `/comments` payload — the GraphQL `reviewThreads` query is used only to read `isResolved`/`isOutdated`, not for comment IDs.
-
-If no unresolved comments found, output:
-
-```
-## PR Review Summary
-
-**PR:** #[N] - [title]
-**Author:** @[author login]
-**Review state:** [state]
-
-No unresolved review comments.
-```
-
-If all comments are resolved, output:
-
-```
-## PR Review Summary
-
-**PR:** #[N] - [title]
-**Author:** @[author login]
-**Review state:** [state]
-
-All review comments are resolved.
-```
+Emit the raw object, not the fenced form.

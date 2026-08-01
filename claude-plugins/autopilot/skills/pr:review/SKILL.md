@@ -472,37 +472,15 @@ Section names are fixed because downstream tooling keys on them — use exactly 
 }
 ```
 
-**Example: requestChanges with blockers**
+**Conditional fields:**
 
-```json
-{
-  "verdict": "requestChanges",
-  "reviewComment": "Adds retry logic to the payment webhook handler.\n\n### 🚧 Blockers\n\n1. **Missing idempotency check** - [src/webhooks/payment.ts:45](<pr-blob-url>/src/webhooks/payment.ts#L45) - Retries can cause duplicate charges [CHECK-BUG-002](<RULES_DOC_URL>#check-bug-002)\n\n### ⛔ Request Changes\n\nAdd idempotency key validation before processing payment.",
-  "inlineComments": [
-    {
-      "path": "src/webhooks/payment.ts",
-      "line": 45,
-      "body": "🚧 No idempotency check — retries will duplicate charges [CHECK-BUG-002](<RULES_DOC_URL>#check-bug-002)"
-    }
-  ]
-}
-```
+| Field           | When it applies                                                                                                                                                                  |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `startLine`     | Only for a multi-line range — `startLine` is the first line, `line` the last (see [Code suggestions](#code-suggestions))                                                         |
+| `suggestion`    | Only when a concrete, mechanical fix exists as exact replacement text (see [Code suggestions](#code-suggestions))                                                                |
+| `reviewComment` | Empty `""` only when approving with no findings ([Verdict Decision Rules](#verdict-decision-rules) rule 3); non-empty for any review with findings or a `requestChanges` verdict |
 
-**Example: approve with suggestions (non-blocking)**
-
-```json
-{
-  "verdict": "approve",
-  "reviewComment": "Points the retry policy in [docs/webhooks.md](<pr-blob-url>/docs/webhooks.md) at the new handler.\n\n### 🙋‍♂️ Suggestions\n\n- [src/webhooks/payment.ts:62](<pr-blob-url>/src/webhooks/payment.ts#L62) - Consider exponential backoff; the `retry*` helpers in [src/webhooks/config.ts](<pr-blob-url>/src/webhooks/config.ts) still assume single-attempt delivery [CHECK-ARCH-002](<RULES_DOC_URL>#check-arch-002)\n- [docs/webhooks.md:12](<pr-blob-url>/docs/webhooks.md?plain=1#L12) - Retry policy chapter still documents single-attempt delivery [CHECK-DOC-001](<RULES_DOC_URL>#check-doc-001)\n\n### 👍 Approve",
-  "inlineComments": [
-    {
-      "path": "src/webhooks/payment.ts",
-      "line": 62,
-      "body": "🙋‍♂️ Consider exponential backoff for retries [CHECK-ARCH-002](<RULES_DOC_URL>#check-arch-002)"
-    }
-  ]
-}
-```
+A non-empty body links its mentions per **File and doc links**: the summary sentence links its doc mention — "Points the retry policy in [docs/webhooks.md](<pr-blob-url>/docs/webhooks.md) at the new handler." — and mid-description prose links a no-line file mention — "the `retry*` helpers in [src/webhooks/config.ts](<pr-blob-url>/src/webhooks/config.ts) still assume single-attempt delivery" — while a glob like `*.steps.ts` stays a backticked code specimen.
 
 **reviewComment body template (ONLY when there are findings):**
 

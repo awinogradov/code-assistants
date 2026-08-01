@@ -27,7 +27,7 @@ Use Grep to find all TODO/FIXME comments based on language:
 
 Use `output_mode: "content"`, `-A: 3`, `-n: true` to capture the comment and the next 3 lines (for `@see` link detection).
 
-If no matches found, output `No TODO or FIXME comments found in the codebase.` and stop.
+If no matches found, skip to [Phase 4](#phase-4-output) and emit the empty result (`total: 0`, `todos: []`).
 
 ## Phase 2: Parse
 
@@ -72,36 +72,54 @@ Batch `gh issue view` calls where possible.
 
 ## Phase 4: Output
 
-Output ONLY the structured block. No preamble or commentary:
+<!-- agent-json:start -->
 
+Output ONLY a single JSON object matching the schema below — no preamble, no surrounding code fence, no commentary. The parent parses it directly, so any extra text breaks consumption.
+
+<!-- agent-json:end -->
+
+| Field   | Type     | Constraint                                                                                                                                                                                                                                                 |
+| ------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `total` | integer  | TODO/FIXME comments found; `0` when the scan matched nothing                                                                                                                                                                                               |
+| `todos` | object[] | `{ "path": string, "line": number, "type": "TODO" \| "FIXME", "description": string, "status": "stale" \| "linked" \| "needs-link" \| "unlinked", "issue": string \| null, "issueState": string \| null }` per comment; `[]` when the scan matched nothing |
+
+`status` follows the [Phase 3](#phase-3-analyze-issue-status) buckets: `stale` (referenced issue closed), `linked` (has `@see` and an open issue — no action needed), `needs-link` (issue referenced but no `@see`), `unlinked` (no issue reference — needs a new issue). `issue` is the GitHub number (`"#15"`) or Linear id (`"ENG-123"`); `issueState` is its state (`"open"`/`"closed"`, or the Linear status); both are `null` for `unlinked` items.
+
+Example:
+
+```json
+{
+  "total": 3,
+  "todos": [
+    {
+      "path": "src/auth/jwt.ts",
+      "line": 42,
+      "type": "TODO",
+      "description": "Implement refresh token",
+      "status": "stale",
+      "issue": "#15",
+      "issueState": "closed"
+    },
+    {
+      "path": "src/api/routes.ts",
+      "line": 95,
+      "type": "TODO",
+      "description": "Add rate limiting",
+      "status": "linked",
+      "issue": "#30",
+      "issueState": "open"
+    },
+    {
+      "path": "src/services/tts.ts",
+      "line": 88,
+      "type": "FIXME",
+      "description": "Handle timeout gracefully",
+      "status": "unlinked",
+      "issue": null,
+      "issueState": null
+    }
+  ]
+}
 ```
-## TODO/FIXME Scan Results
 
-**Total found:** N
-
-### Stale (issue closed) - N items
-- `src/auth/jwt.ts:42` - TODO: Implement refresh token (#15 - closed)
-
-### Already Linked (no action needed) - N items
-- `src/api/routes.ts:95` - TODO: Add rate limiting (@see #30 - open)
-
-### Needs Link (has issue number, missing @see) - N items
-- `src/handler.ts:30` - TODO: Refactor #33
-
-### Unlinked (needs new GitHub issue) - N items
-- `src/config/env.ts:12` - TODO: Add validation for new env vars
-- `src/services/tts.ts:88` - FIXME: Handle timeout gracefully
-```
-
-Omit empty sections. If all TODOs are linked with no issues, output:
-
-```
-## TODO/FIXME Scan Results
-
-**Total found:** N
-
-### Already Linked (no action needed) - N items
-- [items...]
-
-All TODOs are properly linked to open GitHub issues. No cleanup needed.
-```
+Emit the raw object, not the fenced form.

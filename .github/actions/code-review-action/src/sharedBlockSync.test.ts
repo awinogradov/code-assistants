@@ -65,12 +65,16 @@ const retainedCopies: { block: string; file: string; unescapeBackticks?: boolean
   { block: "reference-formatting.md", file: releasePrompt, unescapeBackticks: true },
   // Structured-output agents: each declares its own `tools`, and expert-review declares [].
   ...[
+    "analyze-pr-commits.md",
+    "analyze-staged-changes.md",
     "digest-branch-diff.md",
     "digest-repo-standards.md",
     "expert-review.md",
+    "fetch-pr-reviews.md",
     "resolve-alert-context.md",
     "resolve-assignees.md",
     "resolve-issue-context.md",
+    "scan-and-analyze-todos.md",
     "search-codebase-todos.md",
   ].map((name) => ({ block: "agent-json-output.md", file: join(agentsDir, name) })),
 ];

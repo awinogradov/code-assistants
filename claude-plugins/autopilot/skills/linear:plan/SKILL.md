@@ -126,7 +126,7 @@ The plan's own sections, demoted one level under a single `## Implementation pla
 ```text
 ## Implementation plan
 
-Format: v1 · Score: <N>/100 · Base: <origin/main SHA> · Stored by /autopilot:linear-plan
+Format: v1 · Score: <panel verdicts> · Base: <origin/main SHA> · Stored by /autopilot:linear-plan
 
 ### Summary              <- required
 ### Implementation Steps <- required
@@ -173,7 +173,7 @@ Format: v1 · Score: <score> · Base: <sha> · Stored by /autopilot:linear-plan
 
 Fill rules:
 
-- `<score>` — `N/100` from the review step, or the literal `skipped` when the review was skipped, matching the two header variants above.
+- `<score>` — the per-reviewer verdicts segment from the review step's recorded `Score:` line (e.g. `87 & 92 · weakest: testability (15) & simplicity (18) · findings applied`), or the literal `skipped` when the review was skipped, matching the two header variants above.
 - `<sha>` — the full SHA exactly as `git rev-parse origin/main` printed it; never abbreviate or reconstruct it.
 - Each section placeholder — that section's body from the finalized plan file, demoted headings included, adjusted only as far as the Linear-safe markdown rules below require.
 
@@ -227,7 +227,7 @@ Set task 6 to `completed` and output:
 
 ```
 ✓ Plan stored on <LINEAR-ID> — <url>
-  Score: <N>/100 · Base: <sha>
+  Score: <panel verdicts> · Base: <sha>
 
 Next step:
 - Run /autopilot:linear-run <LINEAR-ID> to execute it
