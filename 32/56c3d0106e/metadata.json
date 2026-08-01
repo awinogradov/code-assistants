@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "3256c3d0106e",
+  "strategy": "manual-commit",
+  "branch": "issue-535-gen5-context-rules",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "claude-plugins/autopilot/agents/resolve-issue-context.md",
+    "claude-plugins/autopilot/skills/branch:create/references/self-assign.md",
+    "claude-plugins/autopilot/skills/commits:create/SKILL.md",
+    "claude-plugins/autopilot/skills/pr:monitor/SKILL.md",
+    "claude-plugins/autopilot/skills/pr:review/SKILL.md",
+    "claude-plugins/autopilot/skills/preflight-check/SKILL.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/32/56c3d0106e/0/metadata.json",
+      "transcript": "/32/56c3d0106e/0/full.jsonl",
+      "compact_transcript": "/32/56c3d0106e/0/transcript.jsonl",
+      "content_hash": "/32/56c3d0106e/0/content_hash.txt",
+      "prompt": "/32/56c3d0106e/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 150,
+    "cache_creation_tokens": 400850,
+    "cache_read_tokens": 21285399,
+    "output_tokens": 137830,
+    "api_call_count": 79
+  }
+}
