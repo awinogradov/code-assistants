@@ -846,3 +846,46 @@ Example: `Score: 87 &amp; 92 · weakest: testability (15) &amp; simplicity (18) 
 - The branch carries pre-existing modifications to other files from other findings; I did not stage or commit anything.</result>
 <usage><subagent_tokens>102159</subagent_tokens><tool_uses>30</tool_uses><duration_ms>320175</duration_ms></usage>
 </task-notification>
+
+---
+
+<task-notification>
+<task-id>affde3cdaa25578d9</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-dust-devil-pictograph/dc3eb34f-6473-4070-ac05-77b1d02d3206/tasks/affde3cdaa25578d9.output</output-file>
+<status>completed</status>
+<summary>Agent "WP-M: examples + verdict tables" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>All green. Final verification summary:
+
+- `bun run validate` — 40 checks OK
+- `bun test` in code-review-action — 1316 pass, 0 fail (includes `primedBriefContract`, `linearPlanContract`, `prBodyReferenceFormatting`, `rulesDocUrlSync`, `linkResolution`)
+- `bunx prettier@3.8.3` — all three edited files formatted and check-clean
+
+## Per-file summary
+
+**`/Users/tony_vi/.warp/worktrees/code-assistants/dust-devil-pictograph/claude-plugins/autopilot/skills/pr:review/SKILL.md`** (finding 22)
+- Deleted the two full worked JSON examples built on the fictional payment-webhook PR ("requestChanges with blockers", "approve with suggestions"). Kept the schema block, the empty-approval example, and the body template untouched.
+- Added a **Conditional fields** table derived strictly from existing text: `startLine` only for a multi-line range (first line, `line` the last); `suggestion` only when a concrete, mechanical fix exists as exact replacement text (both pointing at the existing Code suggestions anchor); `reviewComment` empty `""` only for an approval with no findings (Verdict Decision Rules rule 3).
+- Nothing else changed — anchors, §2.3, §2.5, canonical-copy phrase, and Reference formatting untouched.
+
+**`/Users/tony_vi/.warp/worktrees/code-assistants/dust-devil-pictograph/claude-plugins/autopilot/skills/run-primed/SKILL.md`** (finding 24)
+- The Phase 1 table is now the ordered state machine: caption "The rows are the resolution order: evaluate them top-to-bottom and stop at the first test that fires." Each numbered item's unique content folded into its row — the `Read`-tool instruction (missing), the Phase 3 link + name-the-omission instruction (malformed), the byte-identical `git cat-file -e "&lt;base&gt;^{commit}"` and `git merge-base --is-ancestor "&lt;base&gt;" HEAD` commands (revision-mismatch, one row since both map to one verdict), `git rev-parse origin/main` (stale), and "anything that survives all four rows above" (valid). Numbered list deleted.
+- Two dangling references to the deleted list minimally reworded: "Steps 1 and 2 are file checks" → "The missing and malformed rows are file checks"; "the step-5 SHA" → "the stale-row SHA". The four stop-message bullets (`- missing — ...` etc.) untouched.
+
+**`/Users/tony_vi/.warp/worktrees/code-assistants/dust-devil-pictograph/claude-plugins/autopilot/skills/linear:run/SKILL.md`** (finding 24)
+- Same treatment: table caption states top-to-bottom/first-match evaluation; folded in the list's unique details ("on the line below the anchor" for version-mismatch, the stored-format link + name-the-omission for malformed, "anything that survives all four rows above" for valid); deleted the numbered restatement. "**The order is load-bearing.**" paragraph kept verbatim as the rationale directly under the table. The verdict→mode table and the four fresh-plan diagnostic bullets untouched.
+
+## primedBriefContract.test.ts
+
+**No changes needed.** It pins the surviving strings, not the deleted prose: `**&lt;verdict&gt;**` names (still in the table), the `- &lt;verdict&gt; — ...` message bullets containing `/autopilot:run` (untouched), and the `Source | Section` table rows keyed on `Brief` (my verdict table's first cells are `**missing**` etc., no key collision).
+
+## Judgment calls
+
+1. **A one-sentence linked-mention demonstration survives in pr:review.** `prBodyReferenceFormatting.test.ts` (outside my editable file list) pins two exact strings that existed only inside the deleted "approve with suggestions" example — `[docs/webhooks.md](&lt;pr-blob-url&gt;/docs/webhooks.md)` and `[src/webhooks/config.ts](&lt;pr-blob-url&gt;/src/webhooks/config.ts)` — a guard added deliberately after fortune-os PR 116 to keep a worked linked-mention example present. Since I could not edit that test, I preserved its purpose in one compact sentence after the field table (summary-sentence doc link, no-line prose file link, glob stays a backticked code specimen) instead of a full JSON example. The three full fictional-PR objects are gone; this is the minimal remnant the guard test enforces.
+2. **Merged run-primed's two revision-mismatch list steps into one table row** joined with "or" (in original order: `cat-file` then `merge-base`), since the table is one row per verdict; both commands are byte-identical.
+3. **Caption over an "Order" column** in both files — the finding allowed either; the caption keeps rows narrow and avoids colliding with the test helpers that key on `cells[1]`.
+
+The other modified files in `git status` are pre-existing edits from earlier work on this branch; I touched only my three skill files, and nothing was committed.</result>
+<usage><subagent_tokens>112874</subagent_tokens><tool_uses>22</tool_uses><duration_ms>337474</duration_ms></usage>
+</task-notification>
