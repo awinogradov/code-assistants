@@ -115,9 +115,9 @@ The classifier matches **top-to-bottom**: the alert row is checked first because
 
 ## Phase 1 — Gather context
 
-`Skill(autopilot:gather-context)` runs the fan-out described above and returns the Context Map: issue or alert context, related TODOs, relevant files, patterns to mirror, key types, test conventions, in-flight changes, applicable standards, resolved stack deltas, git state, and the snapshot `outputId`.
+`Skill(autopilot:gather-context)` runs the fan-out described above and returns the Context Map: issue or alert context, related TODOs, relevant files, patterns to mirror, key types, test conventions, in-flight changes, applicable standards, resolved stack deltas, git state, and the selected snapshot source.
 
-The snapshot prefers the committed `.repomix/pack.xml` via `attach_packed_output`, falling back to a live `pack_codebase` — see [Committed Repomix pack](./09-repomix-pack.md).
+The snapshot follows the shared ordered source chain: a committed graphify knowledge graph when the repository carries one, otherwise the committed `.repomix/pack.xml` via `attach_packed_output` (falling back to a live `pack_codebase`), otherwise plain Grep/Glob/Read — see [Committed Repomix pack](./09-repomix-pack.md).
 
 A resolver returning `unresolved` with a non-null `resolveError` is fatal: the skill surfaces the error and stops rather than proceeding against a misfetched target. A _digest_ failure is not fatal — it is recorded and planning continues, because a plan without a standards digest is degraded, not wrong.
 

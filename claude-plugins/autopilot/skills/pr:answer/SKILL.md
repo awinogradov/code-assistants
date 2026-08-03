@@ -7,6 +7,8 @@ allowed-tools:
   - Glob
   - Grep
   - Bash(gh *)
+  - Bash(command -v graphify)
+  - Bash(graphify *)
   - MCP(repomix:*)
   - MCP(context7:*)
   - MCP(Ref:*)
@@ -54,10 +56,10 @@ gh pr diff <PR_NUMBER> -R <REPO>
 
 Launch 2 calls **in parallel** to load codebase context and review history:
 
-Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the snapshot-acquisition recipe; this skill passes the review-scoped `includePatterns` shown below.
+Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the ordered context-acquisition chain; this skill passes the review-scoped `includePatterns` (repomix tier only) shown below.
 
 ```
-Acquire codebase snapshot: follow the shared repomix-snapshot recipe,
+Acquire codebase context: follow the shared repomix-snapshot chain,
   passing `includePatterns`: ".claude/**, **.md, **.yml, .github/**"
 
 Agent 1 (fetch-pr-reviews):
@@ -67,9 +69,9 @@ Agent 1 (fetch-pr-reviews):
   - `description`: "Fetch PR reviews"
 ```
 
-After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response. Use the review data from `fetch-pr-reviews` to understand the full review history, including REVIEWER-specific reviews and comments.
+After all calls complete, store the selected context source (and its `outputId` when the repomix tier was selected). Use the review data from `fetch-pr-reviews` to understand the full review history, including REVIEWER-specific reviews and comments.
 
-**Read the pack, don't dump it.** Pull only targeted context via `grep_repomix_output` / sliced `read_repomix_output`; never read the whole pack. Most comment replies need no codebase lookup at all — skip the snapshot reads entirely unless the comment points you at specific other code to verify.
+**Read the pack, don't dump it.** Pull only targeted context via the selected source's read contract (`graphify` queries, or `grep_repomix_output` / sliced `read_repomix_output`); never read the whole pack. Most comment replies need no codebase lookup at all — skip the context reads entirely unless the comment points you at specific other code to verify.
 
 ### 1.3 Extended Context
 

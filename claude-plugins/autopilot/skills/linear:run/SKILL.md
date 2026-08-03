@@ -20,6 +20,8 @@ allowed-tools:
   - MCP(Ref:*)
   - MCP(exa:*)
   - MCP(perplexity:*)
+  - Bash(command -v graphify)
+  - Bash(graphify *)
   - MCP(repomix:*)
   - AskUserQuestion
   - Skill(autopilot:gather-context)
@@ -148,7 +150,7 @@ Skill(autopilot:gather-context)
 
 Pass the detected input type, the Linear issue id, repository, repository root, the matched tracker's Linear team, and the raw task text as the task summary. Omit `Scope` — the default `task` scope is right here.
 
-Nothing in the fan-out is gated off. A stored plan records what to do, not what the repository looks like; a fresh plan needs the full Context Map as its drafting input. In both modes the standards digest, branch diff, TODO search, and a freshly attached snapshot still run. A recorded `outputId` would be useless anyway, since it is session-scoped and dead in any later session.
+Nothing in the fan-out is gated off. A stored plan records what to do, not what the repository looks like; a fresh plan needs the full Context Map as its drafting input. In both modes the standards digest, branch diff, TODO search, and a fresh context-source acquisition still run. A recorded `outputId` would be useless anyway, since it is session-scoped and dead in any later session.
 
 Set task 3 to `completed`.
 

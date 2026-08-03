@@ -8,6 +8,8 @@ allowed-tools:
   - Grep
   - Agent
   - Bash(git *)
+  - Bash(command -v graphify)
+  - Bash(graphify *)
   - MCP(repomix:*)
 ---
 
@@ -45,7 +47,7 @@ Issue **every** call below in a **single message** so they run concurrently. Do 
 
 **Direct calls** in the same message:
 
-- **Snapshot** — follow [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md); this skill passes no `includePatterns`. Store the returned `outputId`.
+- **Snapshot** — follow the ordered source chain in [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md); this skill passes no `includePatterns`. Record the selected source, and the returned `outputId` when the repomix tier was selected.
 - **Stack** — Read `package.json` and extract `agents.rules`.
 - **Git state** — `git branch --show-current`, `git rev-parse --git-dir`, and `git rev-parse --git-common-dir` (the last two differ inside a worktree).
 
@@ -57,7 +59,7 @@ Issue **every** call below in a **single message** so they run concurrently. Do 
 
 Only now is the task's subject matter known, so this pass runs after the fan-out returns.
 
-Search the snapshot with `mcp__repomix__grep_repomix_output` for the implementations, patterns, and tests the change touches, reading specific ranges via `mcp__repomix__read_repomix_output`. The snapshot reflects the base at its last refresh, so reach for live Grep/Glob/Read **only** for working-tree code the snapshot cannot show — `digest-branch-diff` already reports what is in flight. Do not crawl the tree for anything the snapshot answers.
+Search the snapshot for the implementations, patterns, and tests the change touches, using the read contract of the selected source — `graphify` queries when the graph tier was selected, `mcp__repomix__grep_repomix_output` with ranged `mcp__repomix__read_repomix_output` when the repomix tier was, or `Grep`/`Glob`/`Read` directly when only default tools remain. A graph or pack reflects the base at its last refresh, so reach for live Grep/Glob/Read **only** for working-tree code it cannot show — `digest-branch-diff` already reports what is in flight. Do not crawl the tree for anything the selected source answers.
 
 **At `broad` scope there is no change to narrow to**, so read the snapshot breadth-first instead: the principal modules and their boundaries, the entry points, and the conventions that govern them. Fill `Relevant files` and `Patterns to mirror` at that altitude — the modules a newcomer must know and the conventions they must copy, rather than the handful a specific edit would touch.
 
@@ -82,7 +84,7 @@ Emit these sections in this order. This is the caller's entire view of the repos
 **Applicable standards** — [id + status (mark "defaulted" when inferred) + one line on why the plan must honor it; then dropped candidates; "none" when nothing matched]
 **Stack** — [agents.rules value, and the deltas it resolves to]
 **Git state** — [branch, isWorktree, isStaleMerged, baseAhead]
-**Snapshot** — [outputId, for later phases to reuse]
+**Snapshot** — [selected source: graphify graph | repomix outputId | live tools — for later phases to reuse]
 ```
 
 Two fields carry decisions the caller would otherwise recompute badly:

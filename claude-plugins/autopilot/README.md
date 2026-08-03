@@ -115,7 +115,7 @@ All user-invocable entries are skills. Skills natively accept `$ARGUMENTS` and s
 
 ### Codebase context snapshot
 
-The skills that need whole-codebase context — `/autopilot:plan`, `/autopilot:run`, `/autopilot:run-primed`, `/autopilot:linear-plan`, `/autopilot:linear-run`, `/autopilot:explore`, `/autopilot:issue-create`, `/autopilot:pr-review`, `/autopilot:pr-answer`, `/autopilot:pr-resolve` — read the committed `.repomix/pack.xml` snapshot first (via `attach_packed_output`) and fall back to a live `pack_codebase` when it is absent. `/autopilot:run-primed` re-attaches the pack rather than reusing the `outputId` recorded in its context brief, because that id is session-scoped and dead in a forked session. The snapshot is refreshed by CI on every merge to `main`; see the consumer host repo's [Committed Repomix pack](../../docs/09-repomix-pack.md) doc for details.
+The skills that need whole-codebase context — `/autopilot:plan`, `/autopilot:run`, `/autopilot:run-primed`, `/autopilot:linear-plan`, `/autopilot:linear-run`, `/autopilot:explore`, `/autopilot:issue-create`, `/autopilot:pr-review`, `/autopilot:pr-answer`, `/autopilot:pr-resolve` — acquire it through an ordered source chain: a committed [graphify](https://github.com/Graphify-Labs/graphify) knowledge graph (`graphify-out/graph.json`, queried offline) when the repository carries one, otherwise the committed `.repomix/pack.xml` snapshot (via `attach_packed_output`, falling back to a live `pack_codebase`), otherwise plain Grep/Glob/Read and `git`. `/autopilot:run-primed` re-runs the chain rather than reusing the `outputId` recorded in its context brief, because that id is session-scoped and dead in a forked session. The repomix snapshot is refreshed by CI on every merge to `main`; see the consumer host repo's [Committed Repomix pack](../../docs/09-repomix-pack.md) doc for details.
 
 ### `/autopilot:branch-create`
 
@@ -368,7 +368,7 @@ Delegate a code-analysis, refactoring, or automated-editing task to the Google G
 
 ### `/autopilot:shared-rules`
 
-The canonical home for instruction blocks several skills need — reference formatting (RFC-0001), AskUserQuestion formatting, repomix snapshot acquisition, agent structured output, Linear MCP access, and PR title/body grammar. Each block is a file under `references/`, so a consumer reads exactly the one it needs instead of carrying a copy. Mostly read by other skills rather than invoked directly; see the host repo's [shared-rules doc](../../docs/13-shared-rules-skill.md).
+The canonical home for instruction blocks several skills need — reference formatting (RFC-0001), AskUserQuestion formatting, codebase context acquisition (graphify → repomix → default tools), agent structured output, Linear MCP access, and PR title/body grammar. Each block is a file under `references/`, so a consumer reads exactly the one it needs instead of carrying a copy. Mostly read by other skills rather than invoked directly; see the host repo's [shared-rules doc](../../docs/13-shared-rules-skill.md).
 
 ```bash
 /autopilot:shared-rules                                  # List the blocks and where each is read from

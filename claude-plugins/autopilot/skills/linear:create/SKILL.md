@@ -9,6 +9,8 @@ allowed-tools:
   - Glob
   - MCP(linear:*)
   - ToolSearch
+  - Bash(command -v graphify)
+  - Bash(graphify *)
   - MCP(repomix:*)
   - MCP(context7:*)
   - MCP(Ref:*)
@@ -60,8 +62,8 @@ This workflow is not complete until [Phase 7](#phase-7-create-issue) calls the L
 
 Mirror `issue:create` so the body reflects real code, not hallucinated structure. Unlike `issue:create`, this skill deliberately omits related-issue/PR detection and the duplicate-warning check — Linear search is not wired through the MCP here, so surfacing related work is out of scope.
 
-1. Acquire the codebase snapshot once by following [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md); this skill passes no `includePatterns`. Store the `outputId`.
-2. `mcp__repomix__grep_repomix_output` for files/symbols related to the hint, then `mcp__repomix__read_repomix_output` for the matched sections only.
+1. Acquire codebase context once by following the ordered source chain in [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md); this skill passes no `includePatterns`. Record the selected source, and the `outputId` when the repomix tier was selected.
+2. Search for files/symbols related to the hint via the selected source's read contract (`graphify` queries, or `mcp__repomix__grep_repomix_output`), then read the matched sections only.
 3. Collect git context (`git log -20 --oneline`, `git status --short`).
 4. **External documentation (best-effort):** for any library/framework named in the hint, consult context7/Ref/exa/perplexity. On error or empty result, continue — never block creation on MCP availability.
 

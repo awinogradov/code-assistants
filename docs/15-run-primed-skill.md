@@ -121,7 +121,7 @@ The brief supplies the repository half, the Context Map the volatile half:
 | Brief, **unused** | `## Snapshot`, `## In-flight changes`, `## Local session state`, `## Git state`                             |
 | Context Map       | Issue / alert, Related TODOs, In-flight changes, Git state, Snapshot                                        |
 
-The brief's three volatile sections are ignored because they describe the explore session's checkout, not this one. `## Snapshot` is stable and still unused: the repomix `outputId` it records is session-scoped and dead in a forked session, so the map's freshly attached pack is what gets read.
+The brief's three volatile sections are ignored because they describe the explore session's checkout, not this one. `## Snapshot` is stable and still unused: the repomix `outputId` it records is session-scoped and dead in a forked session, so the map's freshly selected source is what gets read.
 
 `## Conventions and standards` is carried into the plan's applicable-standards record. That record doubles as the audit log of what the plan was drafted against, so it must never read `none` merely because the standards digest was skipped.
 

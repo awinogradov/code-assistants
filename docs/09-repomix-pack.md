@@ -54,10 +54,10 @@ The `.github/workflows/repomix-pack.yml` workflow regenerates the pack on every 
 
 ## How skills consume it
 
-The 6 packing skills follow a **snapshot-first with fallback** contract:
+The consuming skills follow an **ordered source chain**, defined once in the shared [`repomix-snapshot.md`](../claude-plugins/autopilot/skills/shared-rules/references/repomix-snapshot.md) block — each tier is used when it works and falls through when it does not:
 
-1. Check whether `.repomix/pack.xml` exists at the repository root.
-2. If it exists, call `mcp__repomix__attach_packed_output` with `path: <repo root>/.repomix/pack.xml` to obtain an `outputId`.
-3. If it is absent (or the attach fails), fall back to `mcp__repomix__pack_codebase` with the skill's existing arguments.
+1. **graphify knowledge graph** — when the repository commits one ([graphify](https://github.com/Graphify-Labs/graphify): `graphify-out/graph.json` at the root) and the `graphify` CLI resolves, skills query the graph offline (`graphify query|path|explain|affected`) instead of grepping a flat pack.
+2. **Repomix pack** — check whether `.repomix/pack.xml` exists at the repository root; if it exists, call `mcp__repomix__attach_packed_output` with `path: <repo root>/.repomix/pack.xml` to obtain an `outputId`, and if it is absent (or the attach fails), fall back to `mcp__repomix__pack_codebase` with the skill's existing arguments. Either path yields an `outputId` for the downstream `grep_repomix_output` / `read_repomix_output` flow.
+3. **Default tools** — with neither source available, plain Grep/Glob/Read and `git` via Bash.
 
-Either path yields an `outputId`; the downstream flow (`grep_repomix_output` / `read_repomix_output`) is identical. Because the snapshot reflects `main` at the last merge, on a feature branch it lags by the in-flight changes — acceptable, since review-time skills obtain the actual diff separately and use the pack only for surrounding context.
+Because a committed graph or pack reflects `main` at the last merge, on a feature branch it lags by the in-flight changes — acceptable, since review-time skills obtain the actual diff separately and use the snapshot only for surrounding context.
