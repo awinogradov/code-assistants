@@ -44788,6 +44788,8 @@ allowed-tools:
   - Glob
   - Grep
   - Agent
+  - Bash(command -v graphify)
+  - Bash(graphify *)
   - MCP(repomix:*)
   - Bash(git *)
   - Bash(bun run *)
@@ -44963,6 +44965,8 @@ allowed-tools:
   - Grep
   - Agent
   - Bash(git *)
+  - Bash(command -v graphify)
+  - Bash(graphify *)
   - MCP(repomix:*)
 ---
 
@@ -45000,7 +45004,7 @@ Issue **every** call below in a **single message** so they run concurrently. Do 
 
 **Direct calls** in the same message:
 
-- **Snapshot** — follow [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md); this skill passes no `includePatterns`. Store the returned `outputId`.
+- **Snapshot** — follow the ordered source chain in [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md); this skill passes no `includePatterns`. Record the selected source, and the returned `outputId` when the repomix tier was selected.
 - **Stack** — Read `package.json` and extract `agents.rules`.
 - **Git state** — `git branch --show-current`, `git rev-parse --git-dir`, and `git rev-parse --git-common-dir` (the last two differ inside a worktree).
 
@@ -45012,7 +45016,7 @@ Issue **every** call below in a **single message** so they run concurrently. Do 
 
 Only now is the task's subject matter known, so this pass runs after the fan-out returns.
 
-Search the snapshot with `mcp__repomix__grep_repomix_output` for the implementations, patterns, and tests the change touches, reading specific ranges via `mcp__repomix__read_repomix_output`. The snapshot reflects the base at its last refresh, so reach for live Grep/Glob/Read **only** for working-tree code the snapshot cannot show — `digest-branch-diff` already reports what is in flight. Do not crawl the tree for anything the snapshot answers.
+Search the snapshot for the implementations, patterns, and tests the change touches, using the read contract of the selected source — `graphify` queries when the graph tier was selected, `mcp__repomix__grep_repomix_output` with ranged `mcp__repomix__read_repomix_output` when the repomix tier was, or `Grep`/`Glob`/`Read` directly when only default tools remain. A graph or pack reflects the base at its last refresh, so reach for live Grep/Glob/Read **only** for working-tree code it cannot show — `digest-branch-diff` already reports what is in flight. Do not crawl the tree for anything the selected source answers.
 
 **At `broad` scope there is no change to narrow to**, so read the snapshot breadth-first instead: the principal modules and their boundaries, the entry points, and the conventions that govern them. Fill `Relevant files` and `Patterns to mirror` at that altitude — the modules a newcomer must know and the conventions they must copy, rather than the handful a specific edit would touch.
 
@@ -45037,7 +45041,7 @@ Emit these sections in this order. This is the caller's entire view of the repos
 **Applicable standards** — [id + status (mark "defaulted" when inferred) + one line on why the plan must honor it; then dropped candidates; "none" when nothing matched]
 **Stack** — [agents.rules value, and the deltas it resolves to]
 **Git state** — [branch, isWorktree, isStaleMerged, baseAhead]
-**Snapshot** — [outputId, for later phases to reuse]
+**Snapshot** — [selected source: graphify graph | repomix outputId | live tools — for later phases to reuse]
 ```
 
 Two fields carry decisions the caller would otherwise recompute badly:
@@ -45157,6 +45161,8 @@ allowed-tools:
   - MCP(Ref:*)
   - MCP(exa:*)
   - MCP(perplexity:*)
+  - Bash(command -v graphify)
+  - Bash(graphify *)
   - MCP(repomix:*)
   - AskUserQuestion
   - Skill(autopilot:ascii-schemas)
@@ -45206,9 +45212,9 @@ Every AskUserQuestion call that presents content for review (the issue preview i
 
 Mirror the codebase-packing approach used by `/autopilot:plan` so the generated body reflects real code, not hallucinated structure.
 
-1. Acquire the codebase snapshot once by following [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md). This skill reasons over the whole tree, so it passes no `includePatterns`. Store the returned `outputId`.
-2. Use `mcp__repomix__grep_repomix_output` with that `outputId` to find files/symbols related to the hint (keywords from `$ARGUMENTS`).
-3. Use `mcp__repomix__read_repomix_output` with `startLine`/`endLine` to read specific sections that grep matched. Do NOT read the full pack.
+1. Acquire codebase context once by following the ordered source chain in [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md). This skill reasons over the whole tree, so it passes no `includePatterns`. Record the selected source, and the returned `outputId` when the repomix tier was selected.
+2. Find files/symbols related to the hint (keywords from `$ARGUMENTS`) via the selected source's read contract — `graphify` queries, or `mcp__repomix__grep_repomix_output` with that `outputId`.
+3. Read only the sections the search matched — `mcp__repomix__read_repomix_output` with `startLine`/`endLine` on the repomix tier, targeted `Read` otherwise. Do NOT read the full pack.
 4. Also collect git context:
    ```bash
    git log -20 --oneline
@@ -45223,7 +45229,7 @@ Mirror the codebase-packing approach used by `/autopilot:plan` so the generated 
 
    Each MCP provides different information; use as many as the hint warrants. Feed the collected snippets into the body generated by [Phase 5](#phase-5-generate-body) (Context and Solution sections in particular).
 
-**Fallback:** if any MCP server (repomix, context7, Ref, exa, perplexity) is unavailable or returns no results, continue with whatever the remaining sources produced. Use `Grep` and `Read` directly on the repository when repomix is down. Do not block the skill on MCP availability — the generated body should still ship, just with less external context.
+**Fallback:** if any MCP server (context7, Ref, exa, perplexity) is unavailable or returns no results, continue with whatever the remaining sources produced; codebase context already degrades through the shared chain's tiers on its own. Do not block the skill on MCP availability — the generated body should still ship, just with less external context.
 
 ## Phase 2: Fetch Available Labels
 
@@ -45561,6 +45567,8 @@ allowed-tools:
   - Glob
   - MCP(linear:*)
   - ToolSearch
+  - Bash(command -v graphify)
+  - Bash(graphify *)
   - MCP(repomix:*)
   - MCP(context7:*)
   - MCP(Ref:*)
@@ -45612,8 +45620,8 @@ This workflow is not complete until [Phase 7](#phase-7-create-issue) calls the L
 
 Mirror `issue:create` so the body reflects real code, not hallucinated structure. Unlike `issue:create`, this skill deliberately omits related-issue/PR detection and the duplicate-warning check — Linear search is not wired through the MCP here, so surfacing related work is out of scope.
 
-1. Acquire the codebase snapshot once by following [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md); this skill passes no `includePatterns`. Store the `outputId`.
-2. `mcp__repomix__grep_repomix_output` for files/symbols related to the hint, then `mcp__repomix__read_repomix_output` for the matched sections only.
+1. Acquire codebase context once by following the ordered source chain in [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md); this skill passes no `includePatterns`. Record the selected source, and the `outputId` when the repomix tier was selected.
+2. Search for files/symbols related to the hint via the selected source's read contract (`graphify` queries, or `mcp__repomix__grep_repomix_output`), then read the matched sections only.
 3. Collect git context (`git log -20 --oneline`, `git status --short`).
 4. **External documentation (best-effort):** for any library/framework named in the hint, consult context7/Ref/exa/perplexity. On error or empty result, continue — never block creation on MCP availability.
 
@@ -45718,6 +45726,8 @@ allowed-tools:
   - MCP(Ref:*)
   - MCP(exa:*)
   - MCP(perplexity:*)
+  - Bash(command -v graphify)
+  - Bash(graphify *)
   - MCP(repomix:*)
   - AskUserQuestion
   - Skill(autopilot:gather-context)
@@ -45964,6 +45974,8 @@ allowed-tools:
   - MCP(Ref:*)
   - MCP(exa:*)
   - MCP(perplexity:*)
+  - Bash(command -v graphify)
+  - Bash(graphify *)
   - MCP(repomix:*)
   - AskUserQuestion
   - Skill(autopilot:gather-context)
@@ -46092,7 +46104,7 @@ Skill(autopilot:gather-context)
 
 Pass the detected input type, the Linear issue id, repository, repository root, the matched tracker's Linear team, and the raw task text as the task summary. Omit `Scope` — the default `task` scope is right here.
 
-Nothing in the fan-out is gated off. A stored plan records what to do, not what the repository looks like; a fresh plan needs the full Context Map as its drafting input. In both modes the standards digest, branch diff, TODO search, and a freshly attached snapshot still run. A recorded `outputId` would be useless anyway, since it is session-scoped and dead in any later session.
+Nothing in the fan-out is gated off. A stored plan records what to do, not what the repository looks like; a fresh plan needs the full Context Map as its drafting input. In both modes the standards digest, branch diff, TODO search, and a fresh context-source acquisition still run. A recorded `outputId` would be useless anyway, since it is session-scoped and dead in any later session.
 
 Set task 3 to `completed`.
 
@@ -49504,7 +49516,7 @@ There is no TODO search and no assignee for alert inputs.
 
 Reference for [`plan/SKILL.md`](../SKILL.md) and [`run/SKILL.md`](../../run/SKILL.md). Defined once here so the two callers cannot drift.
 
-Everything below runs **after** [`gather-context`](../../gather-context/SKILL.md) has returned the Context Map. That map is the codebase read: reason over it rather than re-reading the tree. Reach for an extra lookup only when the map is genuinely missing something the work turns on — a targeted `mcp__repomix__grep_repomix_output` against the map's `outputId`, or a live Grep/Read for working-tree code the snapshot cannot show — then fold the result back into the map.
+Everything below runs **after** [`gather-context`](../../gather-context/SKILL.md) has returned the Context Map. That map is the codebase read: reason over it rather than re-reading the tree. Reach for an extra lookup only when the map is genuinely missing something the work turns on — a targeted query against the map's snapshot source (a `graphify` query, or `mcp__repomix__grep_repomix_output` against its `outputId`), or a live Grep/Read for working-tree code the snapshot cannot show — then fold the result back into the map.
 
 Resolve the three stack values from [stack-deltas.md](stack-deltas.md) wherever a step says "your stack's delta".
 
@@ -49713,6 +49725,8 @@ allowed-tools:
   - MCP(Ref:*)
   - MCP(exa:*)
   - MCP(perplexity:*)
+  - Bash(command -v graphify)
+  - Bash(graphify *)
   - MCP(repomix:*)
   - AskUserQuestion
   - EnterPlanMode
@@ -49784,7 +49798,7 @@ Set task 2 to `in_progress`. Invoke:
 Skill(autopilot:gather-context)
 ```
 
-Pass the detected input type, issue id, repository, repository root, Linear team (when applicable), and the raw task text as the task summary. The skill runs one parallel fan-out and returns the **Context Map** — issue/alert context, related TODOs, relevant files, patterns, key types, test conventions, in-flight changes, applicable standards, resolved stack deltas, git state, and the snapshot `outputId`.
+Pass the detected input type, issue id, repository, repository root, Linear team (when applicable), and the raw task text as the task summary. The skill runs one parallel fan-out and returns the **Context Map** — issue/alert context, related TODOs, relevant files, patterns, key types, test conventions, in-flight changes, applicable standards, resolved stack deltas, git state, and the selected snapshot source.
 
 That map is this command's entire view of the repository. Every later phase reasons over it instead of re-reading the tree.
 
@@ -49912,6 +49926,8 @@ allowed-tools:
   - Glob
   - Grep
   - Bash(gh *)
+  - Bash(command -v graphify)
+  - Bash(graphify *)
   - MCP(repomix:*)
   - MCP(context7:*)
   - MCP(Ref:*)
@@ -49959,10 +49975,10 @@ gh pr diff <PR_NUMBER> -R <REPO>
 
 Launch 2 calls **in parallel** to load codebase context and review history:
 
-Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the snapshot-acquisition recipe; this skill passes the review-scoped `includePatterns` shown below.
+Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the ordered context-acquisition chain; this skill passes the review-scoped `includePatterns` (repomix tier only) shown below.
 
 ```
-Acquire codebase snapshot: follow the shared repomix-snapshot recipe,
+Acquire codebase context: follow the shared repomix-snapshot chain,
   passing `includePatterns`: ".claude/**, **.md, **.yml, .github/**"
 
 Agent 1 (fetch-pr-reviews):
@@ -49972,9 +49988,9 @@ Agent 1 (fetch-pr-reviews):
   - `description`: "Fetch PR reviews"
 ```
 
-After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response. Use the review data from `fetch-pr-reviews` to understand the full review history, including REVIEWER-specific reviews and comments.
+After all calls complete, store the selected context source (and its `outputId` when the repomix tier was selected). Use the review data from `fetch-pr-reviews` to understand the full review history, including REVIEWER-specific reviews and comments.
 
-**Read the pack, don't dump it.** Pull only targeted context via `grep_repomix_output` / sliced `read_repomix_output`; never read the whole pack. Most comment replies need no codebase lookup at all — skip the snapshot reads entirely unless the comment points you at specific other code to verify.
+**Read the pack, don't dump it.** Pull only targeted context via the selected source's read contract (`graphify` queries, or `grep_repomix_output` / sliced `read_repomix_output`); never read the whole pack. Most comment replies need no codebase lookup at all — skip the context reads entirely unless the comment points you at specific other code to verify.
 
 ### 1.3 Extended Context
 
@@ -50812,6 +50828,8 @@ allowed-tools:
   - AskUserQuestion
   - Skill(autopilot:commits-create)
   - Skill(autopilot:pr-update)
+  - Bash(command -v graphify)
+  - Bash(graphify *)
   - MCP(repomix:*)
   - MCP(context7:*)
   - MCP(Ref:*)
@@ -50887,10 +50905,10 @@ gh pr diff <PR_NUMBER>
 
 Launch 2 calls **in parallel** to load codebase context and fetch review comments:
 
-Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the snapshot-acquisition recipe; this skill passes the review-scoped `includePatterns` shown below.
+Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the ordered context-acquisition chain; this skill passes the review-scoped `includePatterns` (repomix tier only) shown below.
 
 ```
-Acquire codebase snapshot: follow the shared repomix-snapshot recipe,
+Acquire codebase context: follow the shared repomix-snapshot chain,
   passing `includePatterns`: ".claude/**, **.md, **.yml, .github/**"
 
 Agent 1 (fetch-pr-reviews):
@@ -50902,7 +50920,7 @@ Agent 1 (fetch-pr-reviews):
 
 After all calls complete:
 
-- Store the `outputId` from the snapshot acquisition (attach or pack) response — use `grep_repomix_output` and `read_repomix_output` with this ID to search and read codebase content during [Phase 3](#phase-3-address-comments-code-fixes) (code fixes)
+- Store the selected context source (and its `outputId` when the repomix tier was selected) — search and read codebase content via that source's read contract during [Phase 3](#phase-3-address-comments-code-fixes) (code fixes)
 - Store the `fetch-pr-reviews` JSON — `reviewState`, the severity-tagged `comments` (each carrying the `commentId` used for replies in [Phase 5](#phase-5-reply-to-review-threads)), and `note` — use in [Phase 2](#phase-2-present-findings-to-user)
 
 ### 1.5 Project Rules
@@ -51735,6 +51753,8 @@ allowed-tools:
   - Bash(gh *)
   - Bash(echo *)
   - MCP(github:*)
+  - Bash(command -v graphify)
+  - Bash(graphify *)
   - MCP(repomix:*)
   - MCP(context7:*)
   - MCP(Ref:*)
@@ -51794,10 +51814,10 @@ Extract the linked issue ID from PR metadata. Check in order, stop at first matc
 
 Load the remaining context in parallel — the codebase snapshot, the prior inline review threads, and (when an issue is linked) the linked-issue context plus the related TODOs / issue references in the codebase. Prior-review verdicts and summary bodies already come from the [§1.1](#11-pr-context) `gh pr view` output; the `fetch-pr-reviews` agent adds the per-line inline annotations via read-only `gh api`, returning a categorized summary (raw API output stays out of this context).
 
-Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the snapshot-acquisition recipe; this skill passes the review-scoped `includePatterns` shown below.
+Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the ordered context-acquisition chain; this skill passes the review-scoped `includePatterns` (repomix tier only) shown below.
 
 ```
-Acquire codebase snapshot: follow the shared repomix-snapshot recipe,
+Acquire codebase context: follow the shared repomix-snapshot chain,
   passing `includePatterns`: ".claude/**, **.md, **.yml, .github/**"
 
 Agent (fetch-pr-reviews):
@@ -51823,9 +51843,9 @@ If no issue number found, output: "No linked issue — skipping issue comparison
 
 If a `gh` call fails (auth/network error) inside an agent, continue with whatever context loaded — never treat a failed `fetch-pr-reviews` as "no prior findings", and skip issue comparison only when `resolve-issue-context` itself found no issue.
 
-After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response, the categorized review threads from `fetch-pr-reviews`, the issue context from `resolve-issue-context`, and the TODOs / issue references from `search-codebase-todos`. Use these plus the prior-review verdicts from [§1.1](#11-pr-context) for the round handling below.
+After all calls complete, store the selected context source (and its `outputId` when the repomix tier was selected), the categorized review threads from `fetch-pr-reviews`, the issue context from `resolve-issue-context`, and the TODOs / issue references from `search-codebase-todos`. Use these plus the prior-review verdicts from [§1.1](#11-pr-context) for the round handling below.
 
-**Read the pack, don't dump it.** The snapshot exists so you can pull _targeted_ context on demand — use `grep_repomix_output` (regex + `contextLines`) and `read_repomix_output` with a specific `startLine`/`endLine` slice. NEVER `read_repomix_output` over the whole range (that loads the entire codebase into context). When the diff is self-contained and needs no cross-file lookup (the common case), don't read the pack at all — pull cross-file context only for checks that need it (e.g. architecture reuse, duplicated logic).
+**Read the pack, don't dump it.** The context source exists so you can pull _targeted_ context on demand — via its read contract: `graphify` queries on the graph tier, or `grep_repomix_output` (regex + `contextLines`) and `read_repomix_output` with a specific `startLine`/`endLine` slice on the repomix tier. NEVER `read_repomix_output` over the whole range (that loads the entire codebase into context). When the diff is self-contained and needs no cross-file lookup (the common case), don't read the pack at all — pull cross-file context only for checks that need it (e.g. architecture reuse, duplicated logic).
 
 ### 1.3 Review Round Handling
 
@@ -52920,6 +52940,8 @@ allowed-tools:
   - MCP(Ref:*)
   - MCP(exa:*)
   - MCP(perplexity:*)
+  - Bash(command -v graphify)
+  - Bash(graphify *)
   - MCP(repomix:*)
   - AskUserQuestion
   - Skill(autopilot:gather-context)
@@ -53105,6 +53127,8 @@ allowed-tools:
   - MCP(Ref:*)
   - MCP(exa:*)
   - MCP(perplexity:*)
+  - Bash(command -v graphify)
+  - Bash(graphify *)
   - MCP(repomix:*)
   - AskUserQuestion
   - Skill(autopilot:gather-context)
@@ -53213,7 +53237,7 @@ The brief supplies the repository half, the Context Map the volatile half. The s
 | Brief, **unused** | `## Snapshot`, `## In-flight changes`, `## Local session state`, `## Git state`                             |
 | Context Map       | Issue / alert, Related TODOs, In-flight changes, Git state, Snapshot                                        |
 
-The brief's three volatile sections are ignored because they were computed in the explore session, in a different checkout — the Context Map's equivalents describe _this_ one. `## Snapshot` is stable yet also unused: the repomix `outputId` it records is session-scoped and dead in a forked session, so the map's freshly attached pack is the one to read.
+The brief's three volatile sections are ignored because they were computed in the explore session, in a different checkout — the Context Map's equivalents describe _this_ one. `## Snapshot` is stable yet also unused: the repomix `outputId` it records is session-scoped and dead in a forked session, so the map's freshly selected source is the one to read.
 
 Carry the brief's `## Conventions and standards` into the plan's applicable-standards record. That section doubles as the audit log of what the plan was drafted against, so it must never read `none` on this path merely because the digest agent was skipped.
 
@@ -53691,9 +53715,22 @@ Write the most helpful, readable output you can: plain, direct prose; every refe
 <file path="claude-plugins/autopilot/skills/shared-rules/references/repomix-snapshot.md">
 <!-- repomix-snapshot:start -->
 
-### Acquire codebase snapshot
+### Acquire codebase context
 
-Prefer the committed pack over re-packing — the refresh is merge-triggered, so the pack is current for anything already on the default branch.
+Codebase context comes from an ordered source chain. Check the tiers top-down and use the first one that works; any failure inside a tier falls through to the next rather than aborting.
+
+**Tier 1 — graphify knowledge graph.** Fires when the consuming repository carries a committed graph: `graphify-out/graph.json` exists at the repository root AND the `graphify` CLI resolves on PATH (`command -v graphify`). Read `graphify-out/GRAPH_REPORT.md` for the architecture overview, then query the graph offline — no LLM, no network:
+
+```
+graphify query "<plain-language question>" --graph graphify-out/graph.json
+graphify path "<EntityA>" "<EntityB>" --graph graphify-out/graph.json
+graphify explain "<Concept>" --graph graphify-out/graph.json
+graphify affected "<Entity>" --graph graphify-out/graph.json
+```
+
+Graph queries are whole-repo by nature; the caller's `includePatterns` does not apply to this tier.
+
+**Tier 2 — repomix pack.** Prefer the committed pack over re-packing — the refresh is merge-triggered, so the pack is current for anything already on the default branch.
 
 ```
 Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
@@ -53706,9 +53743,15 @@ Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
     - `includePatterns`: [only when the invoking skill specifies one — omit the key entirely otherwise]
 ```
 
-Store the returned `outputId`; search the snapshot with `mcp__repomix__grep_repomix_output` and read matched regions with `mcp__repomix__read_repomix_output` using `startLine`/`endLine`. Do not read the full pack.
+**`includePatterns` is caller-supplied and tier-2-only.** The fall-back pack is scoped only when the invoking skill names a pattern — the review and reply skills pass `".claude/**, **.md, **.yml, .github/**"` because they reason over configuration and prose rather than application code. A skill that needs the whole tree omits the key.
 
-**`includePatterns` is caller-supplied.** The fall-back pack is scoped only when the invoking skill names a pattern — the review and reply skills pass `".claude/**, **.md, **.yml, .github/**"` because they reason over configuration and prose rather than application code. A skill that needs the whole tree omits the key.
+**Tier 3 — default tools.** With neither a graph nor a working repomix path, use plain `Grep`/`Glob`/`Read` on the repository plus `git` via Bash. This tier is the single last resort for every consumer — a skill does not define its own fallback.
+
+**Per-tier read contract.** Record which tier was selected; what "search and read the snapshot" means downstream depends on it:
+
+- Tier 1 returns no `outputId` — answer codebase questions with further `graphify` queries and targeted `Read` of the files the graph names.
+- Tier 2 — store the returned `outputId`; search the snapshot with `mcp__repomix__grep_repomix_output` and read matched regions with `mcp__repomix__read_repomix_output` using `startLine`/`endLine`. Do not read the full pack.
+- Tier 3 — search with `Grep`/`Glob` and read only the matched files.
 
 <!-- repomix-snapshot:end -->
 </file>
@@ -53744,7 +53787,7 @@ RFC-0001 remains the binding standard for the reference-formatting block; `refer
 <file path="claude-plugins/autopilot/skills/shared-rules/SKILL.md">
 ---
 name: shared-rules
-description: Canonical home for instruction blocks shared by several autopilot skills and agents — reference formatting (RFC-0001), AskUserQuestion formatting and content-preview contract, repomix snapshot acquisition, agent structured output, issue body grammar, Linear MCP access, peer CLI delegation, and PR title/body grammar. Read the one block you need instead of carrying a copy.
+description: Canonical home for instruction blocks shared by several autopilot skills and agents — reference formatting (RFC-0001), AskUserQuestion formatting and content-preview contract, codebase context acquisition (graphify → repomix → default tools), agent structured output, issue body grammar, Linear MCP access, peer CLI delegation, and PR title/body grammar. Read the one block you need instead of carrying a copy.
 ---
 
 # Shared Rules
@@ -53770,7 +53813,7 @@ Apply the block's content **verbatim**. It is an instruction, not a summary to p
 | Reference formatting (RFC-0001)  | [reference-formatting.md](./references/reference-formatting.md)         | before writing any output that mentions a file, standard, section, commit, or issue |
 | AskUserQuestion formatting       | [askuserquestion-format.md](./references/askuserquestion-format.md)     | before composing an AskUserQuestion `question` parameter                            |
 | AskUserQuestion preview contract | [askuserquestion-contract.md](./references/askuserquestion-contract.md) | before composing a dialog that presents generated content for review                |
-| Repomix snapshot acquisition     | [repomix-snapshot.md](./references/repomix-snapshot.md)                 | before acquiring a codebase snapshot                                                |
+| Codebase context acquisition     | [repomix-snapshot.md](./references/repomix-snapshot.md)                 | before acquiring codebase context (graphify → repomix → default tools)              |
 | Agent structured output          | [agent-json-output.md](./references/agent-json-output.md)               | when an agent must return a bare JSON object to its parent                          |
 | Issue body grammar               | [issue-body-grammar.md](./references/issue-body-grammar.md)             | before generating a GitHub or Linear issue body                                     |
 | Linear MCP access                | [linear-mcp-access.md](./references/linear-mcp-access.md)               | before calling any Linear MCP tool                                                  |
@@ -56009,7 +56052,7 @@ All user-invocable entries are skills. Skills natively accept `$ARGUMENTS` and s
 
 ### Codebase context snapshot
 
-The skills that need whole-codebase context — `/autopilot:plan`, `/autopilot:run`, `/autopilot:run-primed`, `/autopilot:linear-plan`, `/autopilot:linear-run`, `/autopilot:explore`, `/autopilot:issue-create`, `/autopilot:pr-review`, `/autopilot:pr-answer`, `/autopilot:pr-resolve` — read the committed `.repomix/pack.xml` snapshot first (via `attach_packed_output`) and fall back to a live `pack_codebase` when it is absent. `/autopilot:run-primed` re-attaches the pack rather than reusing the `outputId` recorded in its context brief, because that id is session-scoped and dead in a forked session. The snapshot is refreshed by CI on every merge to `main`; see the consumer host repo's [Committed Repomix pack](../../docs/09-repomix-pack.md) doc for details.
+The skills that need whole-codebase context — `/autopilot:plan`, `/autopilot:run`, `/autopilot:run-primed`, `/autopilot:linear-plan`, `/autopilot:linear-run`, `/autopilot:explore`, `/autopilot:issue-create`, `/autopilot:pr-review`, `/autopilot:pr-answer`, `/autopilot:pr-resolve` — acquire it through an ordered source chain: a committed [graphify](https://github.com/Graphify-Labs/graphify) knowledge graph (`graphify-out/graph.json`, queried offline) when the repository carries one, otherwise the committed `.repomix/pack.xml` snapshot (via `attach_packed_output`, falling back to a live `pack_codebase`), otherwise plain Grep/Glob/Read and `git`. `/autopilot:run-primed` re-runs the chain rather than reusing the `outputId` recorded in its context brief, because that id is session-scoped and dead in a forked session. The repomix snapshot is refreshed by CI on every merge to `main`; see the consumer host repo's [Committed Repomix pack](../../docs/09-repomix-pack.md) doc for details.
 
 ### `/autopilot:branch-create`
 
@@ -56262,7 +56305,7 @@ Delegate a code-analysis, refactoring, or automated-editing task to the Google G
 
 ### `/autopilot:shared-rules`
 
-The canonical home for instruction blocks several skills need — reference formatting (RFC-0001), AskUserQuestion formatting, repomix snapshot acquisition, agent structured output, Linear MCP access, and PR title/body grammar. Each block is a file under `references/`, so a consumer reads exactly the one it needs instead of carrying a copy. Mostly read by other skills rather than invoked directly; see the host repo's [shared-rules doc](../../docs/13-shared-rules-skill.md).
+The canonical home for instruction blocks several skills need — reference formatting (RFC-0001), AskUserQuestion formatting, codebase context acquisition (graphify → repomix → default tools), agent structured output, Linear MCP access, and PR title/body grammar. Each block is a file under `references/`, so a consumer reads exactly the one it needs instead of carrying a copy. Mostly read by other skills rather than invoked directly; see the host repo's [shared-rules doc](../../docs/13-shared-rules-skill.md).
 
 ```bash
 /autopilot:shared-rules                                  # List the blocks and where each is read from
@@ -57271,9 +57314,9 @@ The classifier matches **top-to-bottom**: the alert row is checked first because
 
 ## Phase 1 — Gather context
 
-`Skill(autopilot:gather-context)` runs the fan-out described above and returns the Context Map: issue or alert context, related TODOs, relevant files, patterns to mirror, key types, test conventions, in-flight changes, applicable standards, resolved stack deltas, git state, and the snapshot `outputId`.
+`Skill(autopilot:gather-context)` runs the fan-out described above and returns the Context Map: issue or alert context, related TODOs, relevant files, patterns to mirror, key types, test conventions, in-flight changes, applicable standards, resolved stack deltas, git state, and the selected snapshot source.
 
-The snapshot prefers the committed `.repomix/pack.xml` via `attach_packed_output`, falling back to a live `pack_codebase` — see [Committed Repomix pack](./09-repomix-pack.md).
+The snapshot follows the shared ordered source chain: a committed graphify knowledge graph when the repository carries one, otherwise the committed `.repomix/pack.xml` via `attach_packed_output` (falling back to a live `pack_codebase`), otherwise plain Grep/Glob/Read — see [Committed Repomix pack](./09-repomix-pack.md).
 
 A resolver returning `unresolved` with a non-null `resolveError` is fatal: the skill surfaces the error and stops rather than proceeding against a misfetched target. A _digest_ failure is not fatal — it is recorded and planning continues, because a plan without a standards digest is degraded, not wrong.
 
@@ -57967,13 +58010,13 @@ The `.github/workflows/repomix-pack.yml` workflow regenerates the pack on every 
 
 ## How skills consume it
 
-The 6 packing skills follow a **snapshot-first with fallback** contract:
+The consuming skills follow an **ordered source chain**, defined once in the shared [`repomix-snapshot.md`](../claude-plugins/autopilot/skills/shared-rules/references/repomix-snapshot.md) block — each tier is used when it works and falls through when it does not:
 
-1. Check whether `.repomix/pack.xml` exists at the repository root.
-2. If it exists, call `mcp__repomix__attach_packed_output` with `path: <repo root>/.repomix/pack.xml` to obtain an `outputId`.
-3. If it is absent (or the attach fails), fall back to `mcp__repomix__pack_codebase` with the skill's existing arguments.
+1. **graphify knowledge graph** — when the repository commits one ([graphify](https://github.com/Graphify-Labs/graphify): `graphify-out/graph.json` at the root) and the `graphify` CLI resolves, skills query the graph offline (`graphify query|path|explain|affected`) instead of grepping a flat pack.
+2. **Repomix pack** — check whether `.repomix/pack.xml` exists at the repository root; if it exists, call `mcp__repomix__attach_packed_output` with `path: <repo root>/.repomix/pack.xml` to obtain an `outputId`, and if it is absent (or the attach fails), fall back to `mcp__repomix__pack_codebase` with the skill's existing arguments. Either path yields an `outputId` for the downstream `grep_repomix_output` / `read_repomix_output` flow.
+3. **Default tools** — with neither source available, plain Grep/Glob/Read and `git` via Bash.
 
-Either path yields an `outputId`; the downstream flow (`grep_repomix_output` / `read_repomix_output`) is identical. Because the snapshot reflects `main` at the last merge, on a feature branch it lags by the in-flight changes — acceptable, since review-time skills obtain the actual diff separately and use the pack only for surrounding context.
+Because a committed graph or pack reflects `main` at the last merge, on a feature branch it lags by the in-flight changes — acceptable, since review-time skills obtain the actual diff separately and use the snapshot only for surrounding context.
 </file>
 
 <file path="docs/10-pdf-create-skill.md">
@@ -58369,7 +58412,7 @@ Why `Read` and not the `Skill` tool: a skill loads its whole `SKILL.md`, so ther
 | ------------------------------- | --------------------------- | ----------------------- |
 | Reference formatting (RFC-0001) | `reference-formatting.md`   | —                       |
 | AskUserQuestion formatting      | `askuserquestion-format.md` | —                       |
-| Repomix snapshot acquisition    | `repomix-snapshot.md`       | `includePatterns`       |
+| Codebase context acquisition    | `repomix-snapshot.md`       | `includePatterns`       |
 | Agent structured output         | `agent-json-output.md`      | —                       |
 | Linear MCP access               | `linear-mcp-access.md`      | the bare tool-name list |
 | PR title and branch grammar     | `pr-title-grammar.md`       | —                       |
@@ -58524,7 +58567,7 @@ One brief per worktree, at `.claude/context/brief.md`. It is ignored by both git
 │  Conventions and standards   rfc / docs / principles       │
 │  Key types                   interfaces, schemas           │
 │  Test and verify             the exact commands to run     │
-│  Snapshot                    repomix outputId              │
+│  Snapshot                    selected source               │
 ├────────────────────────────────────────────────────────────┤
 │  Volatile — rewritten on every invocation                  │
 ├────────────────────────────────────────────────────────────┤
@@ -58708,7 +58751,7 @@ The brief supplies the repository half, the Context Map the volatile half:
 | Brief, **unused** | `## Snapshot`, `## In-flight changes`, `## Local session state`, `## Git state`                             |
 | Context Map       | Issue / alert, Related TODOs, In-flight changes, Git state, Snapshot                                        |
 
-The brief's three volatile sections are ignored because they describe the explore session's checkout, not this one. `## Snapshot` is stable and still unused: the repomix `outputId` it records is session-scoped and dead in a forked session, so the map's freshly attached pack is what gets read.
+The brief's three volatile sections are ignored because they describe the explore session's checkout, not this one. `## Snapshot` is stable and still unused: the repomix `outputId` it records is session-scoped and dead in a forked session, so the map's freshly selected source is what gets read.
 
 `## Conventions and standards` is carried into the plan's applicable-standards record. That record doubles as the audit log of what the plan was drafted against, so it must never read `none` merely because the standards digest was skipped.
 
@@ -63777,25 +63820,25 @@ See the [plugin README](./claude-plugins/autopilot/README.md#installation) for s
 
 The `docs/` guides are numbered chapters in reading order — start at chapter 1 and read on, or jump to the chapter you need.
 
-| #   | Document                                                                          | What it covers                                                                                      |
-| --- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| 1   | [Workspace structure](./docs/01-workspace-structure.md)                           | where new actions, packages, and apps go, and how they wire into Turbo                              |
-| 2   | [`agents` field spec](./docs/02-agents-field.md)                                  | how skills detect a repository's tech stack from `package.json`                                     |
-| 3   | [Review run-summary footer](./docs/03-code-review-run-summary.md)                 | how `code-review-action` surfaces per-run metrics in a footer, plus the rare rotating review tip    |
-| 4   | [Inline suggestions and AI-agent prompts](./docs/04-code-review-suggestions.md)   | one-click GitHub suggestion blocks and a "Prompt for AI agents" block on each inline finding        |
-| 5   | [Plan and run skills](./docs/05-plan-run-skills.md)                               | how the `plan` and `run` skills go from task to reviewed plan to merged PR, with ASCII diagrams     |
-| 6   | [`release` field spec](./docs/06-release-field.md)                                | how `release-action` picks the right artifacts for npm packages, GitHub Actions, and plugins        |
-| 7   | [Release auto-merge flow](./docs/07-release-automerge.md)                         | the event-driven action that merges approved, all-green release PRs and propagates downstream       |
-| 8   | [Upstream sync](./docs/08-upstream-sync.md)                                       | the one-action `upstream-sync` aggregator and the thin `upstream.yml` consumers run, per-kind       |
-| 9   | [Committed Repomix pack](./docs/09-repomix-pack.md)                               | the `.repomix/pack.xml` snapshot, its merge-triggered refresh, and the snapshot-first contract      |
-| 10  | [The `pdf:create` skill](./docs/10-pdf-create-skill.md)                           | the portable `@react-pdf/renderer` pipeline that renders a themed PDF, decoupled from the workspace |
-| 11  | [Linear tracker support](./docs/11-linear-tracker.md)                             | how `agents.trackers` opts a project into Linear and other issue trackers behind one JSON contract  |
-| 12  | [Code review repository standards](./docs/12-code-review-repository-standards.md) | how the review enforces a consumer repo's `rfc/`, `docs/`, and `principles/` with status severity   |
-| 13  | [The `shared-rules` skill](./docs/13-shared-rules-skill.md)                       | the single home for instruction blocks several skills need, and how a consumer reads one at runtime |
-| 14  | [The `explore` skill](./docs/14-explore-skill.md)                                 | the third on-ramp: prime a durable context brief, then take surgical fixes one at a time            |
-| 15  | [The `run-primed` skill](./docs/15-run-primed-skill.md)                           | the strict run path for a primed session: validate the brief against the checkout, or stop loudly   |
-| 16  | [The `linear:plan` skill](./docs/16-linear-plan-skill.md)                         | storing a scored plan on a Linear ticket so it outlives the session that drafted it                 |
-| 17  | [The `linear:run` skill](./docs/17-linear-run-skill.md)                           | executing a stored Linear plan verbatim: validate the format, or refuse and name the fix            |
+| #   | Document                                                                          | What it covers                                                                                       |
+| --- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| 1   | [Workspace structure](./docs/01-workspace-structure.md)                           | where new actions, packages, and apps go, and how they wire into Turbo                               |
+| 2   | [`agents` field spec](./docs/02-agents-field.md)                                  | how skills detect a repository's tech stack from `package.json`                                      |
+| 3   | [Review run-summary footer](./docs/03-code-review-run-summary.md)                 | how `code-review-action` surfaces per-run metrics in a footer, plus the rare rotating review tip     |
+| 4   | [Inline suggestions and AI-agent prompts](./docs/04-code-review-suggestions.md)   | one-click GitHub suggestion blocks and a "Prompt for AI agents" block on each inline finding         |
+| 5   | [Plan and run skills](./docs/05-plan-run-skills.md)                               | how the `plan` and `run` skills go from task to reviewed plan to merged PR, with ASCII diagrams      |
+| 6   | [`release` field spec](./docs/06-release-field.md)                                | how `release-action` picks the right artifacts for npm packages, GitHub Actions, and plugins         |
+| 7   | [Release auto-merge flow](./docs/07-release-automerge.md)                         | the event-driven action that merges approved, all-green release PRs and propagates downstream        |
+| 8   | [Upstream sync](./docs/08-upstream-sync.md)                                       | the one-action `upstream-sync` aggregator and the thin `upstream.yml` consumers run, per-kind        |
+| 9   | [Committed Repomix pack](./docs/09-repomix-pack.md)                               | the `.repomix/pack.xml` snapshot, its merge-triggered refresh, and the ordered source-chain contract |
+| 10  | [The `pdf:create` skill](./docs/10-pdf-create-skill.md)                           | the portable `@react-pdf/renderer` pipeline that renders a themed PDF, decoupled from the workspace  |
+| 11  | [Linear tracker support](./docs/11-linear-tracker.md)                             | how `agents.trackers` opts a project into Linear and other issue trackers behind one JSON contract   |
+| 12  | [Code review repository standards](./docs/12-code-review-repository-standards.md) | how the review enforces a consumer repo's `rfc/`, `docs/`, and `principles/` with status severity    |
+| 13  | [The `shared-rules` skill](./docs/13-shared-rules-skill.md)                       | the single home for instruction blocks several skills need, and how a consumer reads one at runtime  |
+| 14  | [The `explore` skill](./docs/14-explore-skill.md)                                 | the third on-ramp: prime a durable context brief, then take surgical fixes one at a time             |
+| 15  | [The `run-primed` skill](./docs/15-run-primed-skill.md)                           | the strict run path for a primed session: validate the brief against the checkout, or stop loudly    |
+| 16  | [The `linear:plan` skill](./docs/16-linear-plan-skill.md)                         | storing a scored plan on a Linear ticket so it outlives the session that drafted it                  |
+| 17  | [The `linear:run` skill](./docs/17-linear-run-skill.md)                           | executing a stored Linear plan verbatim: validate the format, or refuse and name the fix             |
 
 **Standards.**
 
