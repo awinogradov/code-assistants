@@ -13,6 +13,8 @@ allowed-tools:
   - AskUserQuestion
   - Skill(autopilot:commits-create)
   - Skill(autopilot:pr-update)
+  - Bash(command -v graphify)
+  - Bash(graphify *)
   - MCP(repomix:*)
   - MCP(context7:*)
   - MCP(Ref:*)
@@ -88,10 +90,10 @@ gh pr diff <PR_NUMBER>
 
 Launch 2 calls **in parallel** to load codebase context and fetch review comments:
 
-Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the snapshot-acquisition recipe; this skill passes the review-scoped `includePatterns` shown below.
+Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the ordered context-acquisition chain; this skill passes the review-scoped `includePatterns` (repomix tier only) shown below.
 
 ```
-Acquire codebase snapshot: follow the shared repomix-snapshot recipe,
+Acquire codebase context: follow the shared repomix-snapshot chain,
   passing `includePatterns`: ".claude/**, **.md, **.yml, .github/**"
 
 Agent 1 (fetch-pr-reviews):
@@ -103,7 +105,7 @@ Agent 1 (fetch-pr-reviews):
 
 After all calls complete:
 
-- Store the `outputId` from the snapshot acquisition (attach or pack) response — use `grep_repomix_output` and `read_repomix_output` with this ID to search and read codebase content during [Phase 3](#phase-3-address-comments-code-fixes) (code fixes)
+- Store the selected context source (and its `outputId` when the repomix tier was selected) — search and read codebase content via that source's read contract during [Phase 3](#phase-3-address-comments-code-fixes) (code fixes)
 - Store the `fetch-pr-reviews` JSON — `reviewState`, the severity-tagged `comments` (each carrying the `commentId` used for replies in [Phase 5](#phase-5-reply-to-review-threads)), and `note` — use in [Phase 2](#phase-2-present-findings-to-user)
 
 ### 1.5 Project Rules

@@ -10,6 +10,8 @@ allowed-tools:
   - Bash(gh *)
   - Bash(echo *)
   - MCP(github:*)
+  - Bash(command -v graphify)
+  - Bash(graphify *)
   - MCP(repomix:*)
   - MCP(context7:*)
   - MCP(Ref:*)
@@ -69,10 +71,10 @@ Extract the linked issue ID from PR metadata. Check in order, stop at first matc
 
 Load the remaining context in parallel — the codebase snapshot, the prior inline review threads, and (when an issue is linked) the linked-issue context plus the related TODOs / issue references in the codebase. Prior-review verdicts and summary bodies already come from the [§1.1](#11-pr-context) `gh pr view` output; the `fetch-pr-reviews` agent adds the per-line inline annotations via read-only `gh api`, returning a categorized summary (raw API output stays out of this context).
 
-Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the snapshot-acquisition recipe; this skill passes the review-scoped `includePatterns` shown below.
+Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the ordered context-acquisition chain; this skill passes the review-scoped `includePatterns` (repomix tier only) shown below.
 
 ```
-Acquire codebase snapshot: follow the shared repomix-snapshot recipe,
+Acquire codebase context: follow the shared repomix-snapshot chain,
   passing `includePatterns`: ".claude/**, **.md, **.yml, .github/**"
 
 Agent (fetch-pr-reviews):
@@ -98,9 +100,9 @@ If no issue number found, output: "No linked issue — skipping issue comparison
 
 If a `gh` call fails (auth/network error) inside an agent, continue with whatever context loaded — never treat a failed `fetch-pr-reviews` as "no prior findings", and skip issue comparison only when `resolve-issue-context` itself found no issue.
 
-After all calls complete, store the `outputId` from the snapshot acquisition (attach or pack) response, the categorized review threads from `fetch-pr-reviews`, the issue context from `resolve-issue-context`, and the TODOs / issue references from `search-codebase-todos`. Use these plus the prior-review verdicts from [§1.1](#11-pr-context) for the round handling below.
+After all calls complete, store the selected context source (and its `outputId` when the repomix tier was selected), the categorized review threads from `fetch-pr-reviews`, the issue context from `resolve-issue-context`, and the TODOs / issue references from `search-codebase-todos`. Use these plus the prior-review verdicts from [§1.1](#11-pr-context) for the round handling below.
 
-**Read the pack, don't dump it.** The snapshot exists so you can pull _targeted_ context on demand — use `grep_repomix_output` (regex + `contextLines`) and `read_repomix_output` with a specific `startLine`/`endLine` slice. NEVER `read_repomix_output` over the whole range (that loads the entire codebase into context). When the diff is self-contained and needs no cross-file lookup (the common case), don't read the pack at all — pull cross-file context only for checks that need it (e.g. architecture reuse, duplicated logic).
+**Read the pack, don't dump it.** The context source exists so you can pull _targeted_ context on demand — via its read contract: `graphify` queries on the graph tier, or `grep_repomix_output` (regex + `contextLines`) and `read_repomix_output` with a specific `startLine`/`endLine` slice on the repomix tier. NEVER `read_repomix_output` over the whole range (that loads the entire codebase into context). When the diff is self-contained and needs no cross-file lookup (the common case), don't read the pack at all — pull cross-file context only for checks that need it (e.g. architecture reuse, duplicated logic).
 
 ### 1.3 Review Round Handling
 

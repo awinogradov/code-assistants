@@ -8,6 +8,8 @@ allowed-tools:
   - Glob
   - Grep
   - Agent
+  - Bash(command -v graphify)
+  - Bash(graphify *)
   - MCP(repomix:*)
   - Bash(git *)
   - Bash(bun run *)

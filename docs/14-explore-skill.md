@@ -122,7 +122,7 @@ One brief per worktree, at `.claude/context/brief.md`. It is ignored by both git
 │  Conventions and standards   rfc / docs / principles       │
 │  Key types                   interfaces, schemas           │
 │  Test and verify             the exact commands to run     │
-│  Snapshot                    repomix outputId              │
+│  Snapshot                    selected source               │
 ├────────────────────────────────────────────────────────────┤
 │  Volatile — rewritten on every invocation                  │
 ├────────────────────────────────────────────────────────────┤
