@@ -1,0 +1,1 @@
+/autopilot:plan we have linear-plan skill, it must move linear issue to the status "AI Ready" after plan upload. We have similar behavior in the plan skill to move issue to In Progress. --issue
