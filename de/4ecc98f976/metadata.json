@@ -1,0 +1,34 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "de4ecc98f976",
+  "strategy": "manual-commit",
+  "branch": "issue-542-entire-session-history",
+  "checkpoints_count": 3,
+  "files_touched": [
+    ".github/actions/code-review-action/src/sharedBlockSync.test.ts",
+    "claude-plugins/autopilot/README.md",
+    "claude-plugins/autopilot/agents/digest-session-history.md",
+    "claude-plugins/autopilot/skills/gather-context/SKILL.md",
+    "claude-plugins/autopilot/skills/linear:run/SKILL.md",
+    "claude-plugins/autopilot/skills/plan/SKILL.md",
+    "claude-plugins/autopilot/skills/run-primed/SKILL.md",
+    "docs/05-plan-run-skills.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/de/4ecc98f976/0/metadata.json",
+      "transcript": "/de/4ecc98f976/0/full.jsonl",
+      "compact_transcript": "/de/4ecc98f976/0/transcript.jsonl",
+      "content_hash": "/de/4ecc98f976/0/content_hash.txt",
+      "prompt": "/de/4ecc98f976/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 11745,
+    "cache_creation_tokens": 431683,
+    "cache_read_tokens": 49350174,
+    "output_tokens": 155171,
+    "api_call_count": 173
+  }
+}
