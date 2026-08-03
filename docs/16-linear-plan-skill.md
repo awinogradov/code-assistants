@@ -108,6 +108,11 @@ Linear's editor accepts most Markdown on input ([editor reference](https://linea
                         ▼
               ┌───────────────────────┐
               │  save_issue           │
+              └───────────┬───────────┘
+                          │ ⑥
+                          ▼
+              ┌───────────────────────┐
+              │  state → "AI Ready"   │
               └───────────────────────┘
 ```
 
@@ -118,6 +123,7 @@ Linear's editor accepts most Markdown on input ([editor reference](https://linea
 - ③ No anchor — a first store. The prior description moves into a `+++ Original task +++` collapsible. An **empty** description skips the wrapper entirely rather than storing an empty collapsible.
 - ④ Abort rather than write if the preserved prefix changed. Silently reformatting somebody's ticket body is the one unrecoverable failure here.
 - ⑤ On any rejected or failed write, the plan is emitted to the transcript so the work is recoverable by hand.
+- ⑥ After a successful write, the issue moves to the "AI Ready" state — resolved via `list_issue_statuses`, written with `save_issue`, best-effort: a team without that state or a failed state write is reported as `issue not moved — <reason>` and never fails the store.
 
 Anchoring on `## Implementation plan` rather than on the collapsible is what makes a re-store idempotent: the wrapper is created once and never stacked, because the second store matches the anchor and never reaches the wrapping branch.
 
@@ -147,11 +153,11 @@ The plan is stored automatically the moment the shared review pipeline finishes 
 
 ## Where to look in the code
 
-| File                                                                           | Role                                                   |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------ |
-| `claude-plugins/autopilot/skills/linear:plan/SKILL.md`                         | The skill: gate, pipeline by reference, anchored store |
-| `claude-plugins/autopilot/skills/linear:run/SKILL.md`                          | The reader that consumes the stored format             |
-| `claude-plugins/autopilot/skills/plan/SKILL.md`                                | Input resolution and Common Instructions               |
-| `claude-plugins/autopilot/skills/plan/references/pipeline.md`                  | The shared draft-review-finalize pipeline it executes  |
-| `claude-plugins/autopilot/skills/shared-rules/references/linear-mcp-access.md` | How `get_issue` and `save_issue` are resolved          |
-| `.github/actions/code-review-action/src/linearPlanContract.test.ts`            | The producer/consumer guard                            |
+| File                                                                           | Role                                                                  |
+| ------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| `claude-plugins/autopilot/skills/linear:plan/SKILL.md`                         | The skill: gate, pipeline by reference, anchored store                |
+| `claude-plugins/autopilot/skills/linear:run/SKILL.md`                          | The reader that consumes the stored format                            |
+| `claude-plugins/autopilot/skills/plan/SKILL.md`                                | Input resolution and Common Instructions                              |
+| `claude-plugins/autopilot/skills/plan/references/pipeline.md`                  | The shared draft-review-finalize pipeline it executes                 |
+| `claude-plugins/autopilot/skills/shared-rules/references/linear-mcp-access.md` | How `get_issue`, `list_issue_statuses`, and `save_issue` are resolved |
+| `.github/actions/code-review-action/src/linearPlanContract.test.ts`            | The producer/consumer guard                                           |
