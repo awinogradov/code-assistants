@@ -20,6 +20,8 @@ allowed-tools:
   - MCP(perplexity:*)
   - Bash(command -v graphify)
   - Bash(graphify *)
+  - Bash(command -v entire)
+  - Bash(entire *)
   - MCP(repomix:*)
   - AskUserQuestion
   - Skill(autopilot:gather-context)
@@ -126,7 +128,7 @@ The brief supplies the repository half, the Context Map the volatile half. The s
 | ----------------- | ----------------------------------------------------------------------------------------------------------- |
 | Brief             | `## Architecture map`, `## Data flow`, `## Conventions and standards`, `## Key types`, `## Test and verify` |
 | Brief, **unused** | `## Snapshot`, `## In-flight changes`, `## Local session state`, `## Git state`                             |
-| Context Map       | Issue / alert, Related TODOs, In-flight changes, Git state, Snapshot                                        |
+| Context Map       | Issue / alert, Related TODOs, In-flight changes, Git state, Snapshot, Session history                       |
 
 The brief's three volatile sections are ignored because they were computed in the explore session, in a different checkout — the Context Map's equivalents describe _this_ one. `## Snapshot` is stable yet also unused: the repomix `outputId` it records is session-scoped and dead in a forked session, so the map's freshly selected source is the one to read.
 

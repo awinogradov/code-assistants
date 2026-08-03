@@ -10,6 +10,8 @@ allowed-tools:
   - Agent
   - Bash(command -v graphify)
   - Bash(graphify *)
+  - Bash(command -v entire)
+  - Bash(entire *)
   - MCP(repomix:*)
   - Bash(git *)
   - Bash(bun run *)
@@ -144,6 +146,7 @@ Every **stable** section is written from the Context Map, and the transformation
 | Snapshot             | `## Snapshot`                                    |
 | In-flight changes    | unused — the brief recomputes it in Phase 3      |
 | Git state            | unused — the brief recomputes it in Phase 3      |
+| Session history      | unused — historical context, read at plan time   |
 | Related TODOs        | dropped — never populated for this skill's input |
 | Issue / alert        | dropped — always `none` for this skill's input   |
 

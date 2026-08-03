@@ -19,6 +19,8 @@ allowed-tools:
   - MCP(perplexity:*)
   - Bash(command -v graphify)
   - Bash(graphify *)
+  - Bash(command -v entire)
+  - Bash(entire *)
   - MCP(repomix:*)
   - AskUserQuestion
   - Skill(autopilot:gather-context)

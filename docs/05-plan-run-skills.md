@@ -72,6 +72,9 @@ Detection is free — it inspects the argument string and touches nothing. Resol
       │  ┌────────┴────────┐ ┌────────┴────────┐ ┌───────┴────────┐ │
       │  │ snapshot attach │ │ stack + git     │ │ codebase todos │ │
       │  └────────┬────────┘ └────────┬────────┘ └───────┬────────┘ │
+      │  ┌────────┴────────┐          │                  │          │
+      │  │ session history │          │                  │          │
+      │  └────────┬────────┘          │                  │          │
       └───────────┼───────────────────┼──────────────────┼──────────┘
                   └───────────────────┼──────────────────┘
                                       ▼
@@ -87,8 +90,9 @@ Detection is free — it inspects the argument string and touches nothing. Resol
 **Flow Legend:**
 
 - Every call in the box is issued in a **single message** so they run concurrently.
-- The two digest agents return bounded JSON. The full text of a README, the selected RFCs, and an unbounded `git diff` never reaches the caller's context — that isolation is the point of using agents rather than reading inline.
+- The digest agents return bounded JSON. The full text of a README, the selected RFCs, and an unbounded `git diff` never reaches the caller's context — that isolation is the point of using agents rather than reading inline.
 - The task-scoped pass runs after the fan-out, because only then is the task's subject matter known. It searches the snapshot; live tools are reserved for working-tree code the snapshot cannot show.
+- The session-history digest joins the fan-out only when the repository has [Entire](https://docs.entire.io/overview) enabled; it maps the task's files and commits to the agent sessions and checkpoints that produced them, and degrades to `none` everywhere else.
 - The Context Map is the caller's entire view of the repository. Later phases reason over it instead of re-reading the tree.
 
 ## Phase 0 — Input detection
@@ -115,7 +119,7 @@ The classifier matches **top-to-bottom**: the alert row is checked first because
 
 ## Phase 1 — Gather context
 
-`Skill(autopilot:gather-context)` runs the fan-out described above and returns the Context Map: issue or alert context, related TODOs, relevant files, patterns to mirror, key types, test conventions, in-flight changes, applicable standards, resolved stack deltas, git state, and the selected snapshot source.
+`Skill(autopilot:gather-context)` runs the fan-out described above and returns the Context Map: issue or alert context, related TODOs, relevant files, patterns to mirror, key types, test conventions, in-flight changes, session history, applicable standards, resolved stack deltas, git state, and the selected snapshot source.
 
 The snapshot follows the shared ordered source chain: a committed graphify knowledge graph when the repository carries one, otherwise the committed `.repomix/pack.xml` via `attach_packed_output` (falling back to a live `pack_codebase`), otherwise plain Grep/Glob/Read — see [Committed Repomix pack](./09-repomix-pack.md).
 

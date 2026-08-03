@@ -17,6 +17,8 @@ allowed-tools:
   - MCP(perplexity:*)
   - Bash(command -v graphify)
   - Bash(graphify *)
+  - Bash(command -v entire)
+  - Bash(entire *)
   - MCP(repomix:*)
   - AskUserQuestion
   - EnterPlanMode
@@ -88,7 +90,7 @@ Set task 2 to `in_progress`. Invoke:
 Skill(autopilot:gather-context)
 ```
 
-Pass the detected input type, issue id, repository, repository root, Linear team (when applicable), and the raw task text as the task summary. The skill runs one parallel fan-out and returns the **Context Map** — issue/alert context, related TODOs, relevant files, patterns, key types, test conventions, in-flight changes, applicable standards, resolved stack deltas, git state, and the selected snapshot source.
+Pass the detected input type, issue id, repository, repository root, Linear team (when applicable), and the raw task text as the task summary. The skill runs one parallel fan-out and returns the **Context Map** — issue/alert context, related TODOs, relevant files, patterns, key types, test conventions, in-flight changes, session history, applicable standards, resolved stack deltas, git state, and the selected snapshot source.
 
 That map is this command's entire view of the repository. Every later phase reasons over it instead of re-reading the tree.
 

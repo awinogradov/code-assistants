@@ -69,6 +69,7 @@ const retainedCopies: { block: string; file: string; unescapeBackticks?: boolean
     "analyze-staged-changes.md",
     "digest-branch-diff.md",
     "digest-repo-standards.md",
+    "digest-session-history.md",
     "expert-review.md",
     "fetch-pr-reviews.md",
     "resolve-alert-context.md",
