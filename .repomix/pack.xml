@@ -443,6 +443,7 @@ claude-plugins/
       3.0.0.md
       3.1.0.md
       4.0.0.md
+      4.1.0.md
     agents/
       analyze-pr-commits.md
       analyze-staged-changes.md
@@ -39879,7 +39880,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -41802,6 +41803,49 @@ Entire-Checkpoint: 77d4ce846534
 * **autopilot:** define agent outputs as schemas not samples ([bb1d3dc](https://github.com/awinogradov/code-assistants/commit/bb1d3dcf97685f6865948e720a239ed8bdb9116f))
 * **autopilot:** split large skill bodies into references files ([7e904b3](https://github.com/awinogradov/code-assistants/commit/7e904b37234cb33e0b8104321565dbcb01c20edd))
 * **autopilot:** state intent over prohibition lists in skills ([29f250a](https://github.com/awinogradov/code-assistants/commit/29f250a722affc1e502972d1f46ab99905ca22c6))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/4.1.0.md">
+## [4.1.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v4.0.0...autopilot@v4.1.0) (2026-08-03)
+
+## Release Notes
+
+Context gathering is smarter in 4.1.0 — skills now prefer a committed graphify knowledge graph over repomix when scanning your codebase, and planning context can now trace files and commits back to the agent sessions that created them.
+
+## ✨ What's New
+
+### Graphify Knowledge Graph Takes Priority for Codebase Context
+
+Autopilot skills now follow a clear preference order when gathering codebase context: a committed graphify knowledge graph is checked first, falling back to the repomix pack if one isn't available, and then to plain repository tools as a last resort. If your repo has a graphify graph committed, agents will use it automatically — no configuration needed. This produces richer, more structured codebase understanding compared to a flat repomix pack, which means skills like `pr:review` and `expert-review` have better raw material to work from.
+
+<details><summary>Related issues</summary>
+
+- [#540: Prefer a graphify knowledge graph over repomix when gathering codebase context](https://github.com/awinogradov/code-assistants/issues/540)
+- [#502: Stored Linear plans are not checked for moved file paths](https://github.com/awinogradov/code-assistants/issues/502)
+</details>
+
+### Session History Wired Into Planning Context
+
+When [Entire](https://github.com/awinogradov/code-assistants) is available in your environment, the Context Map produced during planning now links each task's relevant files and commits to the agent sessions that originally produced them. This closes a visibility gap where prior agent work — what was decided, what was changed — wasn't surfaced when picking up a task. Agents can now see not just *what* exists in the codebase, but *which session* put it there and why.
+
+<details><summary>Related issues</summary>
+
+- [#542: Connect commits and code to agent sessions via Entire in context gathering](https://github.com/awinogradov/code-assistants/issues/542)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #542 | [#543](https://github.com/awinogradov/code-assistants/pull/543) | @awinogradov |
+| #502 | [#541](https://github.com/awinogradov/code-assistants/pull/541) | @awinogradov |
+| #540 | [#541](https://github.com/awinogradov/code-assistants/pull/541) | @awinogradov |
+
+### Features
+
+* **gather-context:** add entire session-history digest ([ca09bfa](https://github.com/awinogradov/code-assistants/commit/ca09bfa4e86161b164566a7fab1b0c7fd5b07ebd))
+* **shared-rules:** order context sources graphify first ([df52f28](https://github.com/awinogradov/code-assistants/commit/df52f28d2a83aaa19dbe02f982de22740fcaeff7))
 </file>
 
 <file path="claude-plugins/autopilot/agents/analyze-pr-commits.md">
@@ -54222,6 +54266,46 @@ Before writing any output that mentions a file, standard, section, commit, or is
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [4.1.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v4.0.0...autopilot@v4.1.0) (2026-08-03)
+
+## Release Notes
+
+Context gathering is smarter in 4.1.0 — skills now prefer a committed graphify knowledge graph over repomix when scanning your codebase, and planning context can now trace files and commits back to the agent sessions that created them.
+
+## ✨ What's New
+
+### Graphify Knowledge Graph Takes Priority for Codebase Context
+
+Autopilot skills now follow a clear preference order when gathering codebase context: a committed graphify knowledge graph is checked first, falling back to the repomix pack if one isn't available, and then to plain repository tools as a last resort. If your repo has a graphify graph committed, agents will use it automatically — no configuration needed. This produces richer, more structured codebase understanding compared to a flat repomix pack, which means skills like `pr:review` and `expert-review` have better raw material to work from.
+
+<details><summary>Related issues</summary>
+
+- [#540: Prefer a graphify knowledge graph over repomix when gathering codebase context](https://github.com/awinogradov/code-assistants/issues/540)
+- [#502: Stored Linear plans are not checked for moved file paths](https://github.com/awinogradov/code-assistants/issues/502)
+</details>
+
+### Session History Wired Into Planning Context
+
+When [Entire](https://github.com/awinogradov/code-assistants) is available in your environment, the Context Map produced during planning now links each task's relevant files and commits to the agent sessions that originally produced them. This closes a visibility gap where prior agent work — what was decided, what was changed — wasn't surfaced when picking up a task. Agents can now see not just *what* exists in the codebase, but *which session* put it there and why.
+
+<details><summary>Related issues</summary>
+
+- [#542: Connect commits and code to agent sessions via Entire in context gathering](https://github.com/awinogradov/code-assistants/issues/542)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #542 | [#543](https://github.com/awinogradov/code-assistants/pull/543) | @awinogradov |
+| #502 | [#541](https://github.com/awinogradov/code-assistants/pull/541) | @awinogradov |
+| #540 | [#541](https://github.com/awinogradov/code-assistants/pull/541) | @awinogradov |
+
+### Features
+
+* **gather-context:** add entire session-history digest ([ca09bfa](https://github.com/awinogradov/code-assistants/commit/ca09bfa4e86161b164566a7fab1b0c7fd5b07ebd))
+* **shared-rules:** order context sources graphify first ([df52f28](https://github.com/awinogradov/code-assistants/commit/df52f28d2a83aaa19dbe02f982de22740fcaeff7))
 ## [4.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v3.1.0...autopilot@v4.0.0) (2026-08-01)
 
 ## Release Notes
@@ -56106,14 +56190,14 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
   "release": {
     "type": "claude-plugin"
   },
-  "version": "4.0.0"
+  "version": "4.1.0"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v4.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v4.1.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -56603,7 +56687,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-4.0.0
+4.1.0
 </file>
 
 <file path="docs/01-workspace-structure.md">
