@@ -10,6 +10,8 @@ allowed-tools:
   - Bash(git *)
   - Bash(command -v graphify)
   - Bash(graphify *)
+  - Bash(command -v entire)
+  - Bash(entire *)
   - MCP(repomix:*)
 ---
 
@@ -37,19 +39,22 @@ Issue **every** call below in a **single message** so they run concurrently. Do 
 
 **Sub-agents** (each returns a bounded JSON object — see the agent's own output schema):
 
-| Agent                                                            | When                       | Prompt                                                                                |
-| ---------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------- |
-| [`digest-repo-standards`](../../agents/digest-repo-standards.md) | Except `Scope: primed`     | `Repository root: [path]. Task summary: [summary].`                                   |
-| [`digest-branch-diff`](../../agents/digest-branch-diff.md)       | Always                     | `Repository root: [path]. Base ref: origin/main.`                                     |
-| [`resolve-issue-context`](../../agents/resolve-issue-context.md) | Issue inputs               | Per that agent's Input section; pass `Auto-assign current user: true` for GitHub only |
-| [`resolve-alert-context`](../../agents/resolve-alert-context.md) | `code-scanning-alert` only | `Fetch alert context. Alert number: [n]. Repository: [owner/repo].`                   |
-| [`search-codebase-todos`](../../agents/search-codebase-todos.md) | Issue inputs               | `Search for TODOs. Input type: [type]. Issue ID: [id].`                               |
+| Agent                                                              | When                       | Prompt                                                                                                     |
+| ------------------------------------------------------------------ | -------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| [`digest-repo-standards`](../../agents/digest-repo-standards.md)   | Except `Scope: primed`     | `Repository root: [path]. Task summary: [summary].`                                                        |
+| [`digest-branch-diff`](../../agents/digest-branch-diff.md)         | Always                     | `Repository root: [path]. Base ref: origin/main.`                                                          |
+| [`resolve-issue-context`](../../agents/resolve-issue-context.md)   | Issue inputs               | Per that agent's Input section; pass `Auto-assign current user: true` for GitHub only                      |
+| [`resolve-alert-context`](../../agents/resolve-alert-context.md)   | `code-scanning-alert` only | `Fetch alert context. Alert number: [n]. Repository: [owner/repo].`                                        |
+| [`search-codebase-todos`](../../agents/search-codebase-todos.md)   | Issue inputs               | `Search for TODOs. Input type: [type]. Issue ID: [id].`                                                    |
+| [`digest-session-history`](../../agents/digest-session-history.md) | Entire enabled (see below) | `Repository root: [path]. Task summary: [summary]. Relevant files: [paths the task text names, when any].` |
 
 **Direct calls** in the same message:
 
 - **Snapshot** — follow the ordered source chain in [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md); this skill passes no `includePatterns`. Record the selected source, and the returned `outputId` when the repomix tier was selected.
 - **Stack** — Read `package.json` and extract `agents.rules`.
 - **Git state** — `git branch --show-current`, `git rev-parse --git-dir`, and `git rev-parse --git-common-dir` (the last two differ inside a worktree).
+
+**Entire enabled** means `.entire/settings.json` at the repository root exists and carries `"enabled": true` — check it with the Read tool before the fan-out, so repositories without [Entire](https://docs.entire.io/overview) never pay the agent spawn. The agent re-verifies the CLI itself and degrades to a `digestError` result on missing binary or auth; like every digest, that failure is recorded, never fatal.
 
 `digest-repo-standards` is the one agent `Scope: primed` skips: that caller holds a validated brief whose conventions came from this same digest on this same revision, so re-running it is duplicate cost rather than fresh information. `digest-branch-diff` still runs at every scope — `isStaleMerged` and `baseAhead` describe the checkout in front of you, which a brief written elsewhere cannot know.
 
@@ -81,6 +86,7 @@ Emit these sections in this order. This is the caller's entire view of the repos
 **Key types** — [interfaces, types, Zod schemas in play]
 **Test conventions** — [how this area is tested; fixtures that apply]
 **In-flight changes** — [from digest-branch-diff: summary, and isStaleMerged / baseAhead when relevant]
+**Session history** — [from digest-session-history: commit/file → session/checkpoint links; "none" when Entire is unavailable or nothing matched]
 **Applicable standards** — [id + status (mark "defaulted" when inferred) + one line on why the plan must honor it; then dropped candidates; "none" when nothing matched]
 **Stack** — [agents.rules value, and the deltas it resolves to]
 **Git state** — [branch, isWorktree, isStaleMerged, baseAhead]

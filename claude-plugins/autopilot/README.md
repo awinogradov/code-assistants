@@ -394,7 +394,7 @@ Specialized review sub-agents launched in parallel by the `pr:review` skill. Eac
 | `pr:review:surface-testing`     | haiku  | Missing tests, flaky indicators, placeholders           |
 | `pr:review:surface-naming`      | haiku  | Duplication, file naming, directory placement           |
 
-### Helper sub-agents (9 agents)
+### Helper sub-agents (10 agents)
 
 Context-isolating workers invoked by other skills to keep the parent conversation small. Each returns a structured summary only.
 
@@ -402,6 +402,7 @@ Context-isolating workers invoked by other skills to keep the parent conversatio
 | ------------------------ | ------- | -------------------------------------- | -------------------------------------------------------------------------------------------- |
 | `analyze-pr-commits`     | sonnet  | `pr:create`, `pr:update`               | Summarize branch commits, diff, and linked issue for PR context                              |
 | `analyze-staged-changes` | haiku   | `commits:create`                       | Categorize staged files and recommend a commit strategy                                      |
+| `digest-session-history` | haiku   | `plan`, `run`, `explore`               | Map task files and commits to the Entire sessions and checkpoints that produced them         |
 | `expert-review`          | inherit | `plan`, `plan-*`                       | Score an implementation plan as a domain expert                                              |
 | `fetch-pr-reviews`       | sonnet  | `pr:answer`, `pr:resolve`, `pr:review` | Fetch, filter, and categorize PR review comments by severity                                 |
 | `resolve-alert-context`  | sonnet  | `plan`, `run`                          | Fetch GitHub code-scanning alert context via the code-scanning API                           |
@@ -422,7 +423,7 @@ Validate git working state before branching, committing, or opening a PR. Mode-a
 
 Acquire all planning context in one parallel fan-out and emit a Context Map. Invoked automatically by `/autopilot:plan` and `/autopilot:run` after they detect the input type, and by `/autopilot:explore`.
 
-The fan-out issues every context call in a single message — the repo-standards and branch-diff digest agents, issue or alert resolution, the TODO search, the codebase snapshot, stack detection, and git state — then runs one snapshot pass and returns the Context Map. Sub-agents return bounded JSON, so the full text of a README, the selected RFCs, and an unbounded `git diff` never reaches the calling skill's context.
+The fan-out issues every context call in a single message — the repo-standards and branch-diff digest agents, the session-history digest when Entire is enabled, issue or alert resolution, the TODO search, the codebase snapshot, stack detection, and git state — then runs one snapshot pass and returns the Context Map. Sub-agents return bounded JSON, so the full text of a README, the selected RFCs, and an unbounded `git diff` never reaches the calling skill's context.
 
 An optional `Scope` input selects how that pass reads the snapshot: `task` (the default, used by `plan` and `run`) narrows to what the change touches, `broad` maps the repository breadth-first for `/autopilot:explore`, and `primed` reads only the gaps a validated brief leaves for `/autopilot:run-primed`. The emitted Context Map has the same sections at every scope. `primed` is the one value that also gates off a fan-out agent — the repo-standards digest, whose output the brief already carries.
 

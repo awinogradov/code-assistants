@@ -22,6 +22,8 @@ allowed-tools:
   - MCP(perplexity:*)
   - Bash(command -v graphify)
   - Bash(graphify *)
+  - Bash(command -v entire)
+  - Bash(entire *)
   - MCP(repomix:*)
   - AskUserQuestion
   - Skill(autopilot:gather-context)
@@ -168,11 +170,11 @@ Complete tasks 4–6 in order according to the mode selected in [Phase 1](#phase
 
 Set task 4 to `in_progress`. Merge the stored plan with the Context Map using this fixed split:
 
-| Source                  | Section                                                      |
-| ----------------------- | ------------------------------------------------------------ |
-| Stored plan             | `### Summary`, `### Implementation Steps`, `### Files`       |
-| Stored plan, **unused** | `### Pre-Implementation`, `### Post-Implementation`          |
-| Context Map             | Issue, Related TODOs, In-flight changes, Git state, Snapshot |
+| Source                  | Section                                                                       |
+| ----------------------- | ----------------------------------------------------------------------------- |
+| Stored plan             | `### Summary`, `### Implementation Steps`, `### Files`                        |
+| Stored plan, **unused** | `### Pre-Implementation`, `### Post-Implementation`                           |
+| Context Map             | Issue, Related TODOs, In-flight changes, Git state, Snapshot, Session history |
 
 The two unused sections are read past deliberately. They describe a branch and a post-implementation chain, and this skill supplies both from `run` — the branch because it must be created in _this_ checkout, and the chain because `run` owns it. Consuming a stored copy would mean executing a branch step written for a tree that no longer exists. Set task 4 to `completed`.
 
