@@ -1,0 +1,26 @@
+/autopilot:plan We have an integration for plan skills to use repomix. Want to add support to use graphiphy also. Check the repo https://github.com/Graphify-Labs/graphify and integration example https://github.com/wefortis/fortune-os/pull/502. It must be ordered check, like:
+- check graphify — use it if exists, if not continue
+- check repomix — use if if exists, if not continue
+- use default Grep and Bash tools --issue
+
+---
+
+/autopilot:pr-monitor
+
+---
+
+<task-notification>
+<task-id>b87gf0zpf</task-id>
+<summary>Monitor event: "PR #541 review decision and CI status"</summary>
+<event>state=OPEN decision=REVIEW_REQUIRED fails= pending=1</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>b87gf0zpf</task-id>
+<summary>Monitor event: "PR #541 review decision and CI status"</summary>
+<event>state=OPEN decision=CHANGES_REQUESTED fails= pending=0</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>

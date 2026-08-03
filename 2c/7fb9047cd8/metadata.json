@@ -1,0 +1,43 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "2c7fb9047cd8",
+  "strategy": "manual-commit",
+  "branch": "issue-540-graphify-context-chain",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "README.md",
+    "claude-plugins/autopilot/README.md",
+    "claude-plugins/autopilot/skills/gather-context/SKILL.md",
+    "claude-plugins/autopilot/skills/issue:create/SKILL.md",
+    "claude-plugins/autopilot/skills/linear:create/SKILL.md",
+    "claude-plugins/autopilot/skills/linear:run/SKILL.md",
+    "claude-plugins/autopilot/skills/plan/SKILL.md",
+    "claude-plugins/autopilot/skills/plan/references/pipeline.md",
+    "claude-plugins/autopilot/skills/pr:answer/SKILL.md",
+    "claude-plugins/autopilot/skills/pr:resolve/SKILL.md",
+    "claude-plugins/autopilot/skills/pr:review/SKILL.md",
+    "claude-plugins/autopilot/skills/run-primed/SKILL.md",
+    "claude-plugins/autopilot/skills/shared-rules/SKILL.md",
+    "claude-plugins/autopilot/skills/shared-rules/references/repomix-snapshot.md",
+    "docs/05-plan-run-skills.md",
+    "docs/09-repomix-pack.md",
+    "docs/13-shared-rules-skill.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/2c/7fb9047cd8/0/metadata.json",
+      "transcript": "/2c/7fb9047cd8/0/full.jsonl",
+      "compact_transcript": "/2c/7fb9047cd8/0/transcript.jsonl",
+      "content_hash": "/2c/7fb9047cd8/0/content_hash.txt",
+      "prompt": "/2c/7fb9047cd8/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 11593,
+    "cache_creation_tokens": 292012,
+    "cache_read_tokens": 19012201,
+    "output_tokens": 89540,
+    "api_call_count": 93
+  }
+}
