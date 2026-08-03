@@ -1,0 +1,115 @@
+/autopilot:plan we have linear-plan skill, it must move linear issue to the status "AI Ready" after plan upload. We have similar behavior in the plan skill to move issue to In Progress. --issue
+
+---
+
+<task-notification>
+<task-id>a122adfb7aa88d5fe</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-swift-nicho/6cd2d269-a40c-49d7-b127-aa7328237e25/tasks/a122adfb7aa88d5fe.output</output-file>
+<status>completed</status>
+<summary>Agent "Digest repo standards" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>```json
+{
+  "conventions": [
+    {
+      "source": "CLAUDE.md",
+      "rule": "docs/ is organized as numbered chapters (NN-topic.md) in reading order matching the README table — docs/11-linear-tracker.md keeps its chapter-11 slot and README description in sync with any content change"
+    },
+    {
+      "source": "CLAUDE.md",
+      "rule": "No ad-hoc planning — draft the implementation plan via Skill(autopilot:plan); no raw git commit/branch/PR creation outside the autopilot:* skills"
+    },
+    {
+      "source": "CLAUDE.md",
+      "rule": "Do not over-engineer — only make directly requested changes, no unrequested configurability or abstractions for single-use logic"
+    },
+    {
+      "source": "docs/11-linear-tracker.md",
+      "rule": "The existing pattern to mirror: branch:create --start moves a Linear ticket to \"In Progress\" (best-effort) via the Linear MCP list_issue_statuses + save_issue tools; a status-transition addition should follow this same best-effort, MCP-tool-pair shape"
+    },
+    {
+      "source": "docs/11-linear-tracker.md",
+      "rule": "Every issue read/write flows through the resolve-issue-context agent (provider-agnostic JSON: source, issueId, title, status, labels, assignee, description, comments) or the write-path skills named in this chapter (branch:create, pr:create, pr:update, linear:create) — only these and the input-detection rows are provider-aware; new provider-aware logic belongs in that same seam, not scattered into generic pipeline code"
+    },
+    {
+      "source": "docs/11-linear-tracker.md",
+      "rule": "Ticket-state transitions are documented in the \"TODO links and issue state\" section (currently: In Progress at branch:create --start, Done only via GitHub↔Linear integration on merge) — an added \"AI Ready\" transition after plan-storage must be documented here alongside the existing transitions, in the same section"
+    },
+    {
+      "source": "docs/11-linear-tracker.md",
+      "rule": "Linear issue references in prose must use a markdown link to the plain issue URL (e.g. `[ENG-123](https://linear.app/&lt;workspace&gt;/issue/ENG-123)`), never a bare tracker ID — ties into RFC-0001"
+    }
+  ],
+  "standards": [
+    {
+      "id": "RFC-0001",
+      "title": "Reference formatting &amp; readability",
+      "status": "Accepted",
+      "path": "rfc/0001-reference-formatting.md",
+      "defaulted": false,
+      "why": "The plan edits a SKILL.md (which must inline the RFC-0001 block verbatim per referenceFormattingSync) and docs/11-linear-tracker.md, both of which contain skill/doc/section links and Linear issue-URL references governed by this RFC"
+    }
+  ],
+  "dropped": [],
+  "principles": [],
+  "digestError": null
+}
+```</result>
+<usage><subagent_tokens>44663</subagent_tokens><tool_uses>16</tool_uses><duration_ms>78226</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a958766530bb42c4a</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-swift-nicho/6cd2d269-a40c-49d7-b127-aa7328237e25/tasks/a958766530bb42c4a.output</output-file>
+<status>completed</status>
+<summary>Agent "Digest session history" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>```json
+{
+  "available": true,
+  "sessions": [
+    {
+      "sessionId": "dc3eb34f-6473-4070-ac05-77b1d02d3206",
+      "checkpointId": "fd41e303d761",
+      "commit": "3f369ed",
+      "summary": "Deduped shared instruction blocks across 30+ skills including linear:plan/SKILL.md, linear:run/SKILL.md, branch:create/SKILL.md, and plan/SKILL.md"
+    },
+    {
+      "sessionId": "a0f2285c-709e-4de2-9866-569a01e1e104",
+      "checkpointId": "c075cb6e8585",
+      "commit": "94d91b8",
+      "summary": "Documented the linear:plan and linear:run skill pair, establishing the expected behaviors for workflow integration"
+    },
+    {
+      "sessionId": "dc3eb34f-6473-4070-ac05-77b1d02d3206",
+      "checkpointId": "238bd2aaff91",
+      "commit": "7e904b3",
+      "summary": "Split large skill bodies into references files for branch:create/SKILL.md and other skills (pattern to mirror for linear:plan)"
+    },
+    {
+      "sessionId": "1061db32-1e7c-4feb-b2cc-965da9094b07",
+      "checkpointId": "cf5c4ffecd06",
+      "commit": "2e9d752",
+      "summary": "Added collapsible prompt storage to linear:create skill, establishing the pattern of storing content in issue descriptions"
+    },
+    {
+      "sessionId": "cc073965-93be-40b3-93c5-5be8fbecc0d7",
+      "checkpointId": "c18dc2d77d21",
+      "commit": "df52f28",
+      "summary": "Reordered context sources graphify-first across linear:run/SKILL.md, plan/SKILL.md, and other automation skills"
+    }
+  ],
+  "dropped": 0,
+  "digestError": null
+}
+```</result>
+<usage><subagent_tokens>29824</subagent_tokens><tool_uses>28</tool_uses><duration_ms>123244</duration_ms></usage>
+</task-notification>
+
+---
+
+/autopilot:pr-monitor
