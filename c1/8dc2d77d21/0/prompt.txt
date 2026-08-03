@@ -1,0 +1,19 @@
+<task-notification>
+<task-id>blro4nlst</task-id>
+<summary>Monitor event: "PR #541 re-review and CI after fix push"</summary>
+<event>state=OPEN decision=CHANGES_REQUESTED fails= pending=1 newreviews=</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>blro4nlst</task-id>
+<summary>Monitor event: "PR #541 re-review and CI after fix push"</summary>
+<event>state=OPEN decision=APPROVED fails= pending=0 newreviews=APPROVED</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+I see not fixed suggestions
