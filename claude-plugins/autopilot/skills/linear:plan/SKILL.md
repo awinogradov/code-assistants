@@ -54,7 +54,7 @@ Identical to the `plan` skill — see [its Input resolution section](../plan/SKI
 
 This workflow is not complete until [Phase 4](#phase-4-store-the-plan-on-the-issue) either writes the plan to the issue or reports why the write failed. Producing a scored plan is not completion — an unstored plan is the problem this skill exists to solve.
 
-**Linear MCP access:** Read [`linear-mcp-access.md`](../shared-rules/references/linear-mcp-access.md) and apply its tool-resolution rule, using the bare tool names `get_issue` and `save_issue`.
+**Linear MCP access:** Read [`linear-mcp-access.md`](../shared-rules/references/linear-mcp-access.md) and apply its tool-resolution rule, using the bare tool names `get_issue`, `list_issue_statuses`, and `save_issue`.
 
 ## Task Progress Protocol
 
@@ -227,6 +227,8 @@ Because the anchor is matched rather than the wrapper, re-storing on the same is
 
 5. **On any failed or rejected write**, emit the full plan text into the transcript before reporting the failure, so the work is recoverable by hand.
 
+6. **Move the issue to "AI Ready"** — best-effort, never blocks the store, and runs only after step 4's write succeeded: a failed or refused write performs no transition. The transition is the board's hand-off signal that the ticket is planned and execution-ready. Resolve the target state id with the Linear MCP `list_issue_statuses` tool for the issue's team, then call the Linear MCP `save_issue` tool with `{ "id": "<LINEAR-ID>", "state": "<AI Ready state>" }` — tool resolution per the [Completion Requirement](#completion-requirement) Linear MCP access note. On success, emit `✓ Ticket <LINEAR-ID> moved to AI Ready`; when the team has no "AI Ready" state or the state write fails, emit `issue not moved — <reason>`. Always continue — but the emitted line MUST reach the output block below, never only intermediate text.
+
 Set task 6 to `completed` and output:
 
 ```
@@ -237,7 +239,7 @@ Next step:
 - Run /autopilot:linear-run <LINEAR-ID> to execute it
 ```
 
-When the review step was skipped, the `Score:` segment reads `skipped` here exactly as in the stored header.
+When the review step was skipped, the `Score:` segment reads `skipped` here exactly as in the stored header. Add the step 6 outcome line after the `Score:` line — `✓ Ticket <LINEAR-ID> moved to AI Ready` on success, or the `issue not moved — <reason>` line on failure — so a skipped transition is visible in the final output, not just mid-run.
 
 ## Reference formatting
 
