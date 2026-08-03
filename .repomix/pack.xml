@@ -134,6 +134,7 @@ The content is organized as follows:
         4.0.0.md
         4.0.1.md
         5.0.0.md
+        5.1.0.md
       src/
         github/
           githubReview.test.ts
@@ -5991,6 +5992,39 @@ Entire-Checkpoint: 77d4ce846534
 
 * **autopilot:** dedupe shared instruction blocks across skills ([3f369ed](https://github.com/awinogradov/code-assistants/commit/3f369edcc032e056bf70b5c54087ff7abcedb7e9))
 * **autopilot:** define agent outputs as schemas not samples ([bb1d3dc](https://github.com/awinogradov/code-assistants/commit/bb1d3dcf97685f6865948e720a239ed8bdb9116f))
+</file>
+
+<file path=".github/actions/code-review-action/.release_notes/5.1.0.md">
+## [5.1.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v5.0.0...code-review-action@v5.1.0) (2026-08-03)
+
+## Release Notes
+
+The AI reviewer's context gathering now includes full agent session history when Entire is available, giving the reviewer richer background on how the code it's examining came to be.
+
+## ✨ What's New
+
+### Session History in Review Context
+
+When [Entire](https://entire.app) is connected to your environment, the Context Map that the AI reviewer builds before analysing a PR now includes the agent sessions that produced the relevant files and commits. Previously the reviewer could see the diff and surrounding code; now it can also trace *how* that code was written — which agent sessions touched which files and generated which commits — giving it meaningful background when it evaluates design decisions or flags potential issues.
+
+No configuration changes are needed if Entire is already set up. If it isn't available, context gathering works exactly as before.
+
+<details><summary>Related issues</summary>
+
+- [#542: Connect commits and code to agent sessions via Entire in context gathering](https://github.com/awinogradov/code-assistants/issues/542)
+- [#543: Connect commits and code to agent sessions via Entire in context gathering](https://github.com/awinogradov/code-assistants/pull/543)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #542 | [#543](https://github.com/awinogradov/code-assistants/pull/543) | @awinogradov |
+
+### Features
+
+* **gather-context:** add entire session-history digest ([ca09bfa](https://github.com/awinogradov/code-assistants/commit/ca09bfa4e86161b164566a7fab1b0c7fd5b07ebd))
 </file>
 
 <file path=".github/actions/code-review-action/src/github/githubReview.test.ts">
@@ -14920,6 +14954,36 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [5.1.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v5.0.0...code-review-action@v5.1.0) (2026-08-03)
+
+## Release Notes
+
+The AI reviewer's context gathering now includes full agent session history when Entire is available, giving the reviewer richer background on how the code it's examining came to be.
+
+## ✨ What's New
+
+### Session History in Review Context
+
+When [Entire](https://entire.app) is connected to your environment, the Context Map that the AI reviewer builds before analysing a PR now includes the agent sessions that produced the relevant files and commits. Previously the reviewer could see the diff and surrounding code; now it can also trace *how* that code was written — which agent sessions touched which files and generated which commits — giving it meaningful background when it evaluates design decisions or flags potential issues.
+
+No configuration changes are needed if Entire is already set up. If it isn't available, context gathering works exactly as before.
+
+<details><summary>Related issues</summary>
+
+- [#542: Connect commits and code to agent sessions via Entire in context gathering](https://github.com/awinogradov/code-assistants/issues/542)
+- [#543: Connect commits and code to agent sessions via Entire in context gathering](https://github.com/awinogradov/code-assistants/pull/543)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #542 | [#543](https://github.com/awinogradov/code-assistants/pull/543) | @awinogradov |
+
+### Features
+
+* **gather-context:** add entire session-history digest ([ca09bfa](https://github.com/awinogradov/code-assistants/commit/ca09bfa4e86161b164566a7fab1b0c7fd5b07ebd))
 ## [5.0.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v4.0.1...code-review-action@v5.0.0) (2026-08-01)
 
 ## Release Notes
@@ -16496,7 +16560,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/package.json">
 {
   "name": "@code-assistants/code-review-action",
-  "version": "5.0.0",
+  "version": "5.1.0",
   "description": "Composite GitHub Action that runs AI code review on pull requests via Claude Code.",
   "private": true,
   "type": "module",
@@ -16532,7 +16596,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/README.md">
 # Code review action
 
-[![GitHub Release](https://img.shields.io/badge/release-v5.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v5.1.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that runs AI code review on pull requests using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Has two modes:
@@ -16716,7 +16780,7 @@ uses: awinogradov/code-assistants/.github/actions/code-review-action@v1
 </file>
 
 <file path=".github/actions/code-review-action/version">
-5.0.0
+5.1.0
 </file>
 
 <file path=".github/actions/code-review-cost-monitor/.release_notes/0.1.0.md">
