@@ -1,0 +1,27 @@
+<task-notification>
+<task-id>b46ez0cf4</task-id>
+<summary>Monitor event: "PR #541 re-review after suggestion fixes"</summary>
+<event>state=OPEN decision=APPROVED fails= pending=1 newreviews=</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>b46ez0cf4</task-id>
+<summary>Monitor event: "PR #541 re-review after suggestion fixes"</summary>
+<event>state=OPEN decision=APPROVED fails= pending=0 newreviews=</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+merge it and switch fresh main
+
+---
+
+Perfect. Now I want to add entireio support to use it in context gathering and connect commits, code, etc with agents sessions. Check the docs https://docs.entire.io/guides/sessions/inspect-sessions-in-cli. Deep analyze and add entireio usage if available. --issue
+
+---
+
+continue
