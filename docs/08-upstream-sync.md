@@ -14,13 +14,14 @@ every consumer automatically, with no consumer workflow edit.
 
 ## Sync kinds
 
-| Kind           | Files synced into the consumer                                                                                                                                                                                             | Maintenance branch              | Action                                                                |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------- |
-| `agents-rules` | `rules/<stack>.md` → `CLAUDE.md`                                                                                                                                                                                           | `maintenance-sync-agents-rules` | [`agents-rules-sync`](../.github/actions/agents-rules-sync/README.md) |
-| `code-review`  | `.github/workflows/code-review.yml`, `.github/workflows/code-review-cost-monitor.yml`                                                                                                                                      | `maintenance-sync-code-review`  | [`code-review-sync`](../.github/actions/code-review-sync/README.md)   |
-| `repomix`      | `.github/workflows/repomix-pack.yml`, `repomix.config.json`                                                                                                                                                                | `maintenance-sync-repomix`      | [`repomix-sync`](../.github/actions/repomix-sync/README.md)           |
-| `release`      | `.github/workflows/release-create.yml`, `release-publish.yml`, `release-automerge.yml`                                                                                                                                     | `maintenance-sync-release`      | [`release-sync`](../.github/actions/release-sync/README.md)           |
-| `contributing` | `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, `SECURITY.md`, `.github/workflows/contributing.yml`, `.github/workflows/auto-label.yml`, `.github/workflows/licenses.yml`, `.github/workflows/validate-actions.yml` | `maintenance-sync-contributing` | [`contributing-sync`](../.github/actions/contributing-sync/README.md) |
+| Kind           | Files synced into the consumer                                                                                                                                                           | Maintenance branch              | Action                                                                |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------- |
+| `agents-rules` | `rules/<stack>.md` → `CLAUDE.md`                                                                                                                                                         | `maintenance-sync-agents-rules` | [`agents-rules-sync`](../.github/actions/agents-rules-sync/README.md) |
+| `code-review`  | `.github/workflows/code-review.yml`, `.github/workflows/code-review-cost-monitor.yml`                                                                                                    | `maintenance-sync-code-review`  | [`code-review-sync`](../.github/actions/code-review-sync/README.md)   |
+| `repomix`      | `.github/workflows/repomix-pack.yml`, `repomix.config.json`                                                                                                                              | `maintenance-sync-repomix`      | [`repomix-sync`](../.github/actions/repomix-sync/README.md)           |
+| `release`      | `.github/workflows/release-create.yml`, `release-publish.yml`, `release-automerge.yml`                                                                                                   | `maintenance-sync-release`      | [`release-sync`](../.github/actions/release-sync/README.md)           |
+| `licenses`     | `.github/workflows/licenses.yml`                                                                                                                                                         | `maintenance-sync-licenses`     | [`licenses-sync`](../.github/actions/licenses-sync/README.md)         |
+| `contributing` | `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, `SECURITY.md`, `.github/workflows/contributing.yml`, `.github/workflows/auto-label.yml`, `.github/workflows/validate-actions.yml` | `maintenance-sync-contributing` | [`contributing-sync`](../.github/actions/contributing-sync/README.md) |
 
 Each kind delegates to its `*-sync` action, which delegates the diff and PR mechanics to
 [`files-sync`](../.github/actions/files-sync/README.md). The action directories these synced
@@ -49,7 +50,7 @@ job, one `upstream-sync@main` step.
 
 - **Opt-out:** every kind defaults to `true`. Disable a kind with `<kind>: false` in the step's
   `with:` block. Booleans are strings — use `true` / `false`, not YAML's `yes` / `on`.
-- **Serial, single job:** the five kinds run as steps on one runner. Each is API-only and fast,
+- **Serial, single job:** the six kinds run as steps on one runner. Each is API-only and fast,
   so the run finishes well within the workflow timeout.
 - **Failure isolation:** each kind runs with `continue-on-error`, and a final step fails the job
   if any _enabled_ kind failed, naming the failed kinds in a `::error::` annotation. A disabled
@@ -75,6 +76,7 @@ AFTER: upstream.yml = 1 thin job (same name, same cron)
     ├─ code-review-sync   │ each step: continue-on-error
     ├─ repomix-sync       ├─→ files-sync → 1 maintenance PR / kind
     ├─ release-sync       │
+    ├─ licenses-sync      │
     ├─ contributing-sync  ┘
     └─ aggregate outcomes → fail job if any enabled kind failed
 ```

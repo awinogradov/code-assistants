@@ -1,6 +1,6 @@
 # Upstream sync
 
-Composite GitHub Action that aggregates the five upstream maintenance syncs behind a single
+Composite GitHub Action that aggregates the six upstream maintenance syncs behind a single
 action. Every consumer runs one job instead of one job per kind. Each kind is opt-out: it runs
 by default and is disabled by setting its input to `false`. The kinds are:
 
@@ -8,7 +8,8 @@ by default and is disabled by setting its input to `false`. The kinds are:
 - `code-review` → [`code-review-sync`](../code-review-sync/README.md) — sync the AI code-review workflow.
 - `repomix` → [`repomix-sync`](../repomix-sync/README.md) — sync the `repomix-pack` workflow and `repomix.config.json`.
 - `release` → [`release-sync`](../release-sync/README.md) — sync the release pipeline workflows (create, publish, auto-merge).
-- `contributing` → [`contributing-sync`](../contributing-sync/README.md) — sync `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, `SECURITY.md`, and the contributing + auto-label workflows.
+- `licenses` → [`licenses-sync`](../licenses-sync/README.md) — sync the licenses workflow.
+- `contributing` → [`contributing-sync`](../contributing-sync/README.md) — sync `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, `SECURITY.md`, and the contributing, auto-label, and validate-actions workflows.
 
 Each kind is a gated step that delegates to its child `*-sync` action, which in turn delegates the
 diff and PR mechanics to [`files-sync`](../files-sync/README.md). New sync kinds added upstream
@@ -57,6 +58,7 @@ jobs:
 | `code-review`  | no       | `true`                | When `true`, sync the AI code-review workflow. Set to `false` to opt out.                                                                                                                        |
 | `repomix`      | no       | `true`                | When `true`, sync the repomix-pack workflow and `repomix.config.json`. Set to `false` to opt out.                                                                                                |
 | `release`      | no       | `true`                | When `true`, sync the release pipeline workflows. Set to `false` to opt out.                                                                                                                     |
+| `licenses`     | no       | `true`                | When `true`, sync the licenses workflow. Set to `false` to opt out.                                                                                                                              |
 | `contributing` | no       | `true`                | When `true`, sync the contributing artefacts and workflows. Set to `false` to opt out.                                                                                                           |
 
 The kind inputs are booleans expressed as strings — use `true` / `false`, not YAML's `yes` / `on`
@@ -84,7 +86,7 @@ The `repomix` kind additionally requires the `bot_token` identity to be a **bypa
 
 ## Behavior
 
-- Runs the five child syncs as steps in a single job, each gated by its `<kind>` input (`if: inputs['<kind>'] == 'true'`). A disabled kind is skipped.
+- Runs the six child syncs as steps in a single job, each gated by its `<kind>` input (`if: inputs['<kind>'] == 'true'`). A disabled kind is skipped.
 - Each enabled kind delegates to its `*-sync` action, which opens or force-updates exactly one PR on its fixed `maintenance-sync-<kind>` branch. Branch names, titles, and commit messages are owned by the child actions and are not configurable here.
 - Steps run serially (one job, one runner). Each child is API-only, so the run completes well within the workflow's timeout.
 - Failure isolation: every kind runs with `continue-on-error: true`, and a final aggregation step fails the job if any **enabled** kind failed. A skipped (disabled) kind never fails the job. The `::error::sync failed for: <kinds>` annotation names every kind that failed.

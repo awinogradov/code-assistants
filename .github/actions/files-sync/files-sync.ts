@@ -22,7 +22,10 @@ import { createOctokit } from '@code-assistants/actions-core/createOctokit';
 
 import { resolveBotIdentity } from './src/botIdentity.ts';
 import { computeChanges } from './src/changeDetector.ts';
-import { createSyncPullRequest } from './src/createSyncPullRequest.ts';
+import {
+  closeStaleSyncPullRequest,
+  createSyncPullRequest,
+} from './src/createSyncPullRequest.ts';
 import {
   isSymlinkEntry,
   parseFilesInput,
@@ -156,7 +159,17 @@ async function main(): Promise<void> {
   });
 
   if (changes.length === 0) {
-    core.info('No file differences detected. Skipping PR creation.');
+    const closed = await closeStaleSyncPullRequest({
+      octokit,
+      destRepo: env.destRepo,
+      base: env.base,
+      branch: env.branch,
+    });
+    if (closed === null) {
+      core.info('No file differences detected. Skipping PR creation.');
+    } else {
+      core.notice(`Closed obsolete sync pull request: ${closed.htmlUrl}`);
+    }
     core.setOutput('changed-files', '');
     core.setOutput('pr-number', '');
     core.setOutput('pr-url', '');
