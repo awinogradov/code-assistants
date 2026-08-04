@@ -7,6 +7,6 @@
     }
   },
   "ignore": {
-    "customPatterns": [".repomix/**"]
+    "customPatterns": [".repomix/**", "graphify-out/**"]
   }
 }

@@ -82,6 +82,8 @@ See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/a
 
 - Delegates to `files-sync` with a fixed sync list — `.github/workflows/repomix-pack.yml` and
   `repomix.config.json` — sourced from `source-repo` at `source-ref`.
+- The synced config excludes both `.repomix/**` and `graphify-out/**`, so repositories that
+  commit a graphify knowledge graph do not duplicate it inside the Repomix snapshot.
 - The PR is opened on the fixed branch `maintenance-sync-repomix` with the title
   `MAINTENANCE: Sync repomix pack from upstream` and the commit message
   `chore: sync repomix pack from upstream`. These values are not configurable so the action

@@ -47,7 +47,7 @@ The `.github/workflows/repomix-pack.yml` workflow regenerates the pack on every 
 `repomix.config.json` at the repo root pins the output for a clean, reviewable diff:
 
 - `output.filePath: ".repomix/pack.xml"` and `output.style: "xml"` — fixed location and format.
-- `ignore.customPatterns: [".repomix/**"]` — excludes the pack itself, so each run does not re-pack the previously committed snapshot (which would cause recursive bloat and a perpetually-dirty diff).
+- `ignore.customPatterns: [".repomix/**", "graphify-out/**"]` — excludes the pack itself and any committed graphify knowledge graph, avoiding both recursive pack growth and duplication of the graph artifact in the flat snapshot.
 - `output.git.sortByChanges: false` — Repomix defaults this to `true`, ordering files by git-change frequency, which shifts on every merge and produces noise unrelated to actual code changes.
 
 `node_modules/`, `dist/`, `.turbo/`, and `coverage/` are excluded automatically because Repomix honors `.gitignore` and its built-in default patterns.
