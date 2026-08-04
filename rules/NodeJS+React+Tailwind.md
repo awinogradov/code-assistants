@@ -53,7 +53,7 @@ Before making any changes:
 ### 2.1 Technology Stack
 
 - Full-stack React + Node.js with Express
-- TypeScript 6.x, React 19, Vite
+- TypeScript, React, Vite — inspect the repository's package manifests, scripts, and docs for exact versions and compiler/tooling roles
 - npm or pnpm for package management
 - Tailwind CSS for styling
 - shadcn/ui + Radix UI for components
@@ -398,7 +398,7 @@ Prefer the project-registered MCP servers declared in the repo's own `.mcp.json`
 
 When `graphify-out/graph.json` exists, use the committed knowledge graph before broad source browsing:
 
-- Read `graphify-out/GRAPH_REPORT.md` first for the architecture overview.
-- Query the graph offline with `graphify query "<question>" --graph graphify-out/graph.json`, `graphify path "<A>" "<B>" --graph graphify-out/graph.json`, and `graphify explain "<concept>" --graph graphify-out/graph.json`.
+- For codebase questions, run `graphify query "<question>"` first. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts.
 - Use `graphify-out/wiki/index.md` for broad navigation when it exists.
+- Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review or when targeted queries do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

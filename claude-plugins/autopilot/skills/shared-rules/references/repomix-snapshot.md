@@ -4,16 +4,15 @@
 
 Codebase context comes from an ordered source chain. Check the tiers top-down and use the first one that works; any failure inside a tier falls through to the next rather than aborting.
 
-**Tier 1 — graphify knowledge graph.** Fires when the consuming repository carries a committed graph: `graphify-out/graph.json` exists at the repository root AND the `graphify` CLI resolves on PATH (`command -v graphify`). Read `graphify-out/GRAPH_REPORT.md` for the architecture overview, then query the graph offline — no LLM, no network:
+**Tier 1 — graphify knowledge graph.** Fires when the consuming repository carries a committed graph: `graphify-out/graph.json` exists at the repository root AND the `graphify` CLI resolves on PATH (`command -v graphify`). For natural-language codebase questions, query the graph first — no LLM, no network:
 
 ```
-graphify query "<plain-language question>" --graph graphify-out/graph.json
-graphify path "<EntityA>" "<EntityB>" --graph graphify-out/graph.json
-graphify explain "<Concept>" --graph graphify-out/graph.json
-graphify affected "<Entity>" --graph graphify-out/graph.json
+graphify query "<plain-language question>"
+graphify path "<EntityA>" "<EntityB>"
+graphify explain "<Concept>"
 ```
 
-Graph queries are whole-repo by nature; the caller's `includePatterns` does not apply to this tier.
+Graph queries are whole-repo by nature; the caller's `includePatterns` does not apply to this tier. Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review or when targeted queries do not surface enough context.
 
 **Tier 2 — repomix pack.** Prefer the committed pack over re-packing — the refresh is merge-triggered, so the pack is current for anything already on the default branch.
 
