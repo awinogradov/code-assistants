@@ -2,6 +2,39 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [2.1.0](https://github.com/awinogradov/code-assistants/compare/files-sync-action@v2.0.3...files-sync-action@v2.1.0) (2026-08-04)
+
+## Release Notes
+
+The license audit workflow is now its own dedicated sync component, making it possible to enable or disable license synchronization independently of contributor-facing documents.
+
+## ✨ What's New
+
+### Standalone License Sync Action
+
+The `.github/workflows/licenses.yml` file is no longer bundled inside the `contributing-sync` action. It now has its own dedicated `licenses-sync` action with an independent lifecycle. This separation reflects what the license audit workflow actually is — CI/policy infrastructure — rather than a contributor-facing document like `CONTRIBUTING.md`. Teams can now opt in or out of license synchronization without touching their contributing-doc setup.
+
+A new `licenses` switch has been added to the `upstream-sync` action. It defaults to `true`, so existing consumers continue to receive the license workflow automatically with no changes required on their end. Set `licenses: false` to opt out.
+
+### Stale PR Reconciliation
+
+When a sync kind's declared file set no longer differs from the destination (for example, after migrating licenses out of `contributing-sync`), the action now closes any open pull request that was previously opened for that sync kind. This prevents a lingering `maintenance-sync-contributing` PR from keeping an obsolete license-only diff open and mergeable after migration.
+
+<details><summary>Related issues</summary>
+
+- [#551: MAINTENANCE: Split license workflow sync](https://github.com/awinogradov/code-assistants/pull/551)
+</details>
+
+## ⚙️ Configuration Required
+
+### `licenses` Switch on `upstream-sync`
+
+A new optional `licenses` input is available on the `upstream-sync` action. It controls whether the license audit workflow is synchronized. The default is `true` (enabled), so no action is required to maintain current behavior. If your team manages the license workflow independently or does not want it synced, set `licenses: false` in your `upstream-sync` step.
+
+
+### Features
+
+* **sync:** split licenses into standalone kind ([4d6435f](https://github.com/awinogradov/code-assistants/commit/4d6435f38691d0ebfc57c2c980523e676fc2943a))
 ## [2.0.3](https://github.com/awinogradov/code-assistants/compare/files-sync-action@v2.0.2...files-sync-action@v2.0.3) (2026-07-13)
 
 ## Release Notes
