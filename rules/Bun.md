@@ -271,3 +271,12 @@ Prefer the project-registered MCP servers declared in the repo's own `.mcp.json`
 ## 17. Code Review
 
 - All rules from CLAUDE.md must be applied to the code review
+
+## 18. Graphify
+
+When `graphify-out/graph.json` exists, use the committed knowledge graph before broad source browsing:
+
+- Read `graphify-out/GRAPH_REPORT.md` first for the architecture overview.
+- Query the graph offline with `graphify query "<question>" --graph graphify-out/graph.json`, `graphify path "<A>" "<B>" --graph graphify-out/graph.json`, and `graphify explain "<concept>" --graph graphify-out/graph.json`.
+- Use `graphify-out/wiki/index.md` for broad navigation when it exists.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
