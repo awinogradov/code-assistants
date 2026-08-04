@@ -444,6 +444,7 @@ claude-plugins/
       3.1.0.md
       4.0.0.md
       4.1.0.md
+      4.2.0.md
     agents/
       analyze-pr-commits.md
       analyze-staged-changes.md
@@ -39880,7 +39881,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "4.1.0",
+  "version": "4.2.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -41846,6 +41847,37 @@ When [Entire](https://github.com/awinogradov/code-assistants) is available in yo
 
 * **gather-context:** add entire session-history digest ([ca09bfa](https://github.com/awinogradov/code-assistants/commit/ca09bfa4e86161b164566a7fab1b0c7fd5b07ebd))
 * **shared-rules:** order context sources graphify first ([df52f28](https://github.com/awinogradov/code-assistants/commit/df52f28d2a83aaa19dbe02f982de22740fcaeff7))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/4.2.0.md">
+## [4.2.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v4.1.0...autopilot@v4.2.0) (2026-08-04)
+
+## Release Notes
+
+Linear tickets are now automatically moved to "AI Ready" status when a plan is stored, keeping your boards up to date without manual transitions.
+
+## ✨ What's New
+
+### Automatic "AI Ready" Status After Planning
+
+When `/autopilot:linear-plan` stores a plan on a Linear ticket, that ticket now automatically transitions to the "AI Ready" status. Previously, teams had to remember to move tickets manually after planning — now the board reflects execution readiness the moment planning completes.
+
+<details><summary>Related issues</summary>
+
+- [#546: Move Linear issue to AI Ready after linear-plan stores the plan](https://github.com/awinogradov/code-assistants/issues/546)
+- [#547: Move Linear issues to AI Ready when a plan is stored](https://github.com/awinogradov/code-assistants/pull/547)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #546 | [#547](https://github.com/awinogradov/code-assistants/pull/547) | @awinogradov |
+
+### Features
+
+* **autopilot:** move ticket to ai ready after plan store ([f5750b0](https://github.com/awinogradov/code-assistants/commit/f5750b08a989b4280cef06eeefebea70e537313b))
 </file>
 
 <file path="claude-plugins/autopilot/agents/analyze-pr-commits.md">
@@ -54268,6 +54300,34 @@ Before writing any output that mentions a file, standard, section, commit, or is
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [4.2.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v4.1.0...autopilot@v4.2.0) (2026-08-04)
+
+## Release Notes
+
+Linear tickets are now automatically moved to "AI Ready" status when a plan is stored, keeping your boards up to date without manual transitions.
+
+## ✨ What's New
+
+### Automatic "AI Ready" Status After Planning
+
+When `/autopilot:linear-plan` stores a plan on a Linear ticket, that ticket now automatically transitions to the "AI Ready" status. Previously, teams had to remember to move tickets manually after planning — now the board reflects execution readiness the moment planning completes.
+
+<details><summary>Related issues</summary>
+
+- [#546: Move Linear issue to AI Ready after linear-plan stores the plan](https://github.com/awinogradov/code-assistants/issues/546)
+- [#547: Move Linear issues to AI Ready when a plan is stored](https://github.com/awinogradov/code-assistants/pull/547)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #546 | [#547](https://github.com/awinogradov/code-assistants/pull/547) | @awinogradov |
+
+### Features
+
+* **autopilot:** move ticket to ai ready after plan store ([f5750b0](https://github.com/awinogradov/code-assistants/commit/f5750b08a989b4280cef06eeefebea70e537313b))
 ## [4.1.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v4.0.0...autopilot@v4.1.0) (2026-08-03)
 
 ## Release Notes
@@ -56192,14 +56252,14 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
   "release": {
     "type": "claude-plugin"
   },
-  "version": "4.1.0"
+  "version": "4.2.0"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v4.1.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v4.2.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -56689,7 +56749,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-4.1.0
+4.2.0
 </file>
 
 <file path="docs/01-workspace-structure.md">
