@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [4.2.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v4.1.0...autopilot@v4.2.0) (2026-08-04)
+
+## Release Notes
+
+Linear tickets that have a plan stored via `/autopilot:linear-plan` now automatically advance to **AI Ready** status, keeping your boards accurate without manual triage.
+
+## ✨ What's New
+
+### Automatic "AI Ready" Status After Planning
+
+When `/autopilot:linear-plan` stores a plan on a Linear ticket, that ticket now moves to the **AI Ready** status automatically. Previously, someone on the team had to remember to move the ticket manually after planning completed — boards could sit out of sync, making it hard to tell at a glance which tickets were genuinely ready for AI-assisted execution. Now the status update happens as part of the plan-store step itself, so your board reflects reality as soon as the plan lands.
+
+<details><summary>Related issues</summary>
+
+- [#546: Move Linear issue to AI Ready after linear-plan stores the plan](https://github.com/awinogradov/code-assistants/issues/546)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #546 | [#547](https://github.com/awinogradov/code-assistants/pull/547) | @awinogradov |
+
+### Features
+
+* **autopilot:** move ticket to ai ready after plan store ([f5750b0](https://github.com/awinogradov/code-assistants/commit/f5750b08a989b4280cef06eeefebea70e537313b))
 ## [4.1.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v4.0.0...autopilot@v4.1.0) (2026-08-03)
 
 ## Release Notes
