@@ -45973,7 +45973,7 @@ Identical to the `plan` skill — see [its Input resolution section](../plan/SKI
 
 This workflow is not complete until [Phase 4](#phase-4-store-the-plan-on-the-issue) either writes the plan to the issue or reports why the write failed. Producing a scored plan is not completion — an unstored plan is the problem this skill exists to solve.
 
-**Linear MCP access:** Read [`linear-mcp-access.md`](../shared-rules/references/linear-mcp-access.md) and apply its tool-resolution rule, using the bare tool names `get_issue` and `save_issue`.
+**Linear MCP access:** Read [`linear-mcp-access.md`](../shared-rules/references/linear-mcp-access.md) and apply its tool-resolution rule, using the bare tool names `get_issue`, `list_issue_statuses`, and `save_issue`.
 
 ## Task Progress Protocol
 
@@ -46146,6 +46146,8 @@ Because the anchor is matched rather than the wrapper, re-storing on the same is
 
 5. **On any failed or rejected write**, emit the full plan text into the transcript before reporting the failure, so the work is recoverable by hand.
 
+6. **Move the issue to "AI Ready"** — best-effort, never blocks the store, and runs only after step 4's write succeeded: a failed or refused write performs no transition. The transition is the board's hand-off signal that the ticket is planned and execution-ready. Resolve the target state id with the Linear MCP `list_issue_statuses` tool for the issue's team, then call the Linear MCP `save_issue` tool with `{ "id": "<LINEAR-ID>", "state": "<AI Ready state>" }` — tool resolution per the [Completion Requirement](#completion-requirement) Linear MCP access note. On success, emit `✓ Ticket <LINEAR-ID> moved to AI Ready`; when the team has no "AI Ready" state or the state write fails, emit `issue not moved — <reason>`. Always continue — but the emitted line MUST reach the output block below, never only intermediate text.
+
 Set task 6 to `completed` and output:
 
 ```
@@ -46156,7 +46158,7 @@ Next step:
 - Run /autopilot:linear-run <LINEAR-ID> to execute it
 ```
 
-When the review step was skipped, the `Score:` segment reads `skipped` here exactly as in the stored header.
+When the review step was skipped, the `Score:` segment reads `skipped` here exactly as in the stored header. Add the step 6 outcome line after the `Score:` line — `✓ Ticket <LINEAR-ID> moved to AI Ready` on success, or the `issue not moved — <reason>` line on failure — so a skipped transition is visible in the final output, not just mid-run.
 
 ## Reference formatting
 
@@ -58572,7 +58574,7 @@ The shared CI gates accept both conventions: the branch-name and semantic-PR-tit
 ## TODO links and issue state
 
 - **TODO cleanup** — [`todo-cleanup`](../claude-plugins/autopilot/skills/todo-cleanup/SKILL.md) and the [`scan-and-analyze-todos`](../claude-plugins/autopilot/agents/scan-and-analyze-todos.md) agent recognise Linear ids (`TEAM-123`) and `@see https://linear.app/...` links: a ticket in `Done` or `Canceled` marks the TODO stale, and unlinked TODOs become Linear tickets (via `save_issue`) on a linear-tracked project.
-- **Issue state** — `branch:create --start` moves a ticket to "In Progress" (see [Branches and pull requests](#branches-and-pull-requests)). The [`plan`](../claude-plugins/autopilot/skills/plan/SKILL.md) and [`run`](../claude-plugins/autopilot/skills/run/SKILL.md) skills pass `--start` automatically for a `linear-issue` input, so the ticket transitions to "In Progress" at branch creation the moment work starts — the analog of GitHub auto-assignment. A ticket returns to Done on merge only when the [GitHub↔Linear integration](https://linear.app/docs/github) is configured, since autopilot expresses the intent through the PR's `Closes <linear-issue-url>` magic word rather than writing the state directly.
+- **Issue state** — [`linear:plan`](../claude-plugins/autopilot/skills/linear:plan/SKILL.md) moves a ticket to "AI Ready" (best-effort, via the same `list_issue_statuses` + `save_issue` pair) after storing a plan in its description, marking it execution-ready for [`linear:run`](../claude-plugins/autopilot/skills/linear:run/SKILL.md); a team without an "AI Ready" state gets a reported skip, never a failed store. `branch:create --start` moves a ticket to "In Progress" (see [Branches and pull requests](#branches-and-pull-requests)). The [`plan`](../claude-plugins/autopilot/skills/plan/SKILL.md) and [`run`](../claude-plugins/autopilot/skills/run/SKILL.md) skills pass `--start` automatically for a `linear-issue` input, so the ticket transitions to "In Progress" at branch creation the moment work starts — the analog of GitHub auto-assignment. A ticket returns to Done on merge only when the [GitHub↔Linear integration](https://linear.app/docs/github) is configured, since autopilot expresses the intent through the PR's `Closes <linear-issue-url>` magic word rather than writing the state directly.
 </file>
 
 <file path="docs/12-code-review-repository-standards.md">
@@ -59162,6 +59164,11 @@ Linear's editor accepts most Markdown on input ([editor reference](https://linea
                         ▼
               ┌───────────────────────┐
               │  save_issue           │
+              └───────────┬───────────┘
+                          │ ⑥
+                          ▼
+              ┌───────────────────────┐
+              │  state → "AI Ready"   │
               └───────────────────────┘
 ```
 
@@ -59172,6 +59179,7 @@ Linear's editor accepts most Markdown on input ([editor reference](https://linea
 - ③ No anchor — a first store. The prior description moves into a `+++ Original task +++` collapsible. An **empty** description skips the wrapper entirely rather than storing an empty collapsible.
 - ④ Abort rather than write if the preserved prefix changed. Silently reformatting somebody's ticket body is the one unrecoverable failure here.
 - ⑤ On any rejected or failed write, the plan is emitted to the transcript so the work is recoverable by hand.
+- ⑥ After a successful write, the issue moves to the "AI Ready" state — resolved via `list_issue_statuses`, written with `save_issue`, best-effort: a team without that state or a failed state write is reported as `issue not moved — <reason>` and never fails the store.
 
 Anchoring on `## Implementation plan` rather than on the collapsible is what makes a re-store idempotent: the wrapper is created once and never stacked, because the second store matches the anchor and never reaches the wrapping branch.
 
@@ -59201,14 +59209,14 @@ The plan is stored automatically the moment the shared review pipeline finishes 
 
 ## Where to look in the code
 
-| File                                                                           | Role                                                   |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------ |
-| `claude-plugins/autopilot/skills/linear:plan/SKILL.md`                         | The skill: gate, pipeline by reference, anchored store |
-| `claude-plugins/autopilot/skills/linear:run/SKILL.md`                          | The reader that consumes the stored format             |
-| `claude-plugins/autopilot/skills/plan/SKILL.md`                                | Input resolution and Common Instructions               |
-| `claude-plugins/autopilot/skills/plan/references/pipeline.md`                  | The shared draft-review-finalize pipeline it executes  |
-| `claude-plugins/autopilot/skills/shared-rules/references/linear-mcp-access.md` | How `get_issue` and `save_issue` are resolved          |
-| `.github/actions/code-review-action/src/linearPlanContract.test.ts`            | The producer/consumer guard                            |
+| File                                                                           | Role                                                                  |
+| ------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| `claude-plugins/autopilot/skills/linear:plan/SKILL.md`                         | The skill: gate, pipeline by reference, anchored store                |
+| `claude-plugins/autopilot/skills/linear:run/SKILL.md`                          | The reader that consumes the stored format                            |
+| `claude-plugins/autopilot/skills/plan/SKILL.md`                                | Input resolution and Common Instructions                              |
+| `claude-plugins/autopilot/skills/plan/references/pipeline.md`                  | The shared draft-review-finalize pipeline it executes                 |
+| `claude-plugins/autopilot/skills/shared-rules/references/linear-mcp-access.md` | How `get_issue`, `list_issue_statuses`, and `save_issue` are resolved |
+| `.github/actions/code-review-action/src/linearPlanContract.test.ts`            | The producer/consumer guard                                           |
 </file>
 
 <file path="docs/17-linear-run-skill.md">
