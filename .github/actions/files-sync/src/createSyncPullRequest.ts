@@ -31,6 +31,44 @@ export interface SyncPullRequest {
   htmlUrl: string;
 }
 
+interface CloseStaleArgs {
+  octokit: Octokit;
+  destRepo: { owner: string; name: string };
+  base: string;
+  branch: string;
+}
+
+/** Close an obsolete sync PR after its declared file set becomes clean. */
+export async function closeStaleSyncPullRequest({
+  octokit,
+  destRepo,
+  base,
+  branch,
+}: CloseStaleArgs): Promise<SyncPullRequest | null> {
+  const { owner, name: repo } = destRepo;
+  const existing = await octokit.rest.pulls.list({
+    owner,
+    repo,
+    state: 'open',
+    head: `${owner}:${branch}`,
+    base,
+  });
+  const open = existing.data[0];
+
+  if (open === undefined) {
+    return null;
+  }
+
+  await octokit.rest.pulls.update({
+    owner,
+    repo,
+    pull_number: open.number,
+    state: 'closed',
+  });
+
+  return { number: open.number, htmlUrl: open.html_url };
+}
+
 export async function createSyncPullRequest({
   octokit,
   destRepo,

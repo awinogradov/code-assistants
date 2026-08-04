@@ -1,5 +1,5 @@
 name: Upstream sync
-description: Aggregate the five upstream maintenance syncs (agent rules, code-review, repomix, release, contributing) behind one action. Every kind runs by default; set a kind to false to opt out.
+description: Aggregate the six upstream maintenance syncs (agent rules, code-review, repomix, release, licenses, contributing) behind one action. Every kind runs by default; set a kind to false to opt out.
 
 inputs:
   bot_token:
@@ -26,8 +26,12 @@ inputs:
     description: Sync the release pipeline workflows (create, publish, auto-merge). Default on; set to `false` to opt out.
     required: false
     default: "true"
+  licenses:
+    description: Sync the licenses workflow. Default on; set to `false` to opt out.
+    required: false
+    default: "true"
   contributing:
-    description: Sync CONTRIBUTING.md, CODE_OF_CONDUCT.md, LICENSE.md, SECURITY.md, and the contributing + auto-label workflows. Default on; set to `false` to opt out.
+    description: Sync CONTRIBUTING.md, CODE_OF_CONDUCT.md, LICENSE.md, SECURITY.md, and the contributing, auto-label, and validate-actions workflows. Default on; set to `false` to opt out.
     required: false
     default: "true"
 
@@ -70,6 +74,15 @@ runs:
         bot_token: ${{ inputs.bot_token }}
         bot_username: ${{ inputs.bot_username }}
 
+    - name: Sync licenses workflow
+      id: licenses
+      if: inputs['licenses'] == 'true'
+      continue-on-error: true
+      uses: awinogradov/code-assistants/.github/actions/licenses-sync@main
+      with:
+        bot_token: ${{ inputs.bot_token }}
+        bot_username: ${{ inputs.bot_username }}
+
     - name: Sync contributing files
       id: contributing
       if: inputs['contributing'] == 'true'
@@ -87,12 +100,14 @@ runs:
         CODE_REVIEW: ${{ steps['code-review'].outcome }}
         REPOMIX: ${{ steps['repomix'].outcome }}
         RELEASE: ${{ steps['release'].outcome }}
+        LICENSES: ${{ steps['licenses'].outcome }}
         CONTRIBUTING: ${{ steps['contributing'].outcome }}
       run: |
         set -euo pipefail
         failed=""
         for kv in "agents-rules:$AGENTS_RULES" "code-review:$CODE_REVIEW" \
-                  "repomix:$REPOMIX" "release:$RELEASE" "contributing:$CONTRIBUTING"; do
+                  "repomix:$REPOMIX" "release:$RELEASE" "licenses:$LICENSES" \
+                  "contributing:$CONTRIBUTING"; do
           outcome="${kv##*:}"
           if [ "$outcome" = "failure" ] || [ "$outcome" = "cancelled" ]; then
             failed="$failed ${kv%%:*}"

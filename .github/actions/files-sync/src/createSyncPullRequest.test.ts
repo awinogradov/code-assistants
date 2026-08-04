@@ -4,7 +4,7 @@ import type { Octokit } from '@octokit/rest';
 
 import type { BotIdentity } from './botIdentity.ts';
 import type { FileChange } from './changeDetector.ts';
-import { createSyncPullRequest } from './createSyncPullRequest.ts';
+import { closeStaleSyncPullRequest, createSyncPullRequest } from './createSyncPullRequest.ts';
 
 interface MockOverrides {
   listOpenPrs?: () => Promise<{ data: Array<{ number: number; html_url: string }> }>;
@@ -13,8 +13,9 @@ interface MockOverrides {
     owner: string;
     repo: string;
     pull_number: number;
-    title: string;
-    body: string;
+    title?: string;
+    body?: string;
+    state?: 'closed';
   }) => Promise<{ data: unknown }>;
   createCommit?: (args: {
     author: BotIdentity;
@@ -146,5 +147,48 @@ describe('createSyncPullRequest', () => {
     });
 
     await expect(createSyncPullRequest({ octokit, ...baseArgs })).rejects.toThrow(/^boom$/);
+  });
+});
+
+describe('closeStaleSyncPullRequest', () => {
+  test('closes an existing sync PR when declared files have no differences', async () => {
+    let captured: unknown;
+    const octokit = makeOctokit({
+      listOpenPrs: async () => ({
+        data: [{ number: 7, html_url: 'https://github.com/owner/repo/pull/7' }],
+      }),
+      updatePr: async (args) => {
+        captured = args;
+        return { data: {} };
+      },
+    });
+
+    const closed = await closeStaleSyncPullRequest({
+      octokit,
+      destRepo: baseArgs.destRepo,
+      base: baseArgs.base,
+      branch: baseArgs.branch,
+    });
+
+    expect(closed).toEqual({ number: 7, htmlUrl: 'https://github.com/owner/repo/pull/7' });
+    expect(captured).toEqual({
+      owner: 'owner',
+      repo: 'repo',
+      pull_number: 7,
+      state: 'closed',
+    });
+  });
+
+  test('is a no-op when no sync PR is open', async () => {
+    const octokit = makeOctokit();
+
+    const closed = await closeStaleSyncPullRequest({
+      octokit,
+      destRepo: baseArgs.destRepo,
+      base: baseArgs.base,
+      branch: baseArgs.branch,
+    });
+
+    expect(closed).toBeNull();
   });
 });

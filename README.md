@@ -50,10 +50,11 @@ The `docs/` guides are numbered chapters in reading order — start at chapter 1
 ## GitHub Actions
 
 - [`files-sync`](./.github/actions/files-sync/README.md) — sync declared files from upstream repos and open one PR with the differences
-- [`upstream-sync`](./.github/actions/upstream-sync/README.md) — aggregate the five upstream maintenance syncs behind one action; every kind on by default, opt out per kind
+- [`upstream-sync`](./.github/actions/upstream-sync/README.md) — aggregate the six upstream maintenance syncs behind one action; every kind on by default, opt out per kind
 - [`agents-rules-sync`](./.github/actions/agents-rules-sync/README.md) — sync the stack-appropriate `rules/<stack>.md` into `CLAUDE.md` based on `package.json` `agents.rules`
 - [`contributing-check`](./.github/actions/contributing-check/README.md) — validate branch name, commit messages, and PR title against `CONTRIBUTING.md`
 - [`contributing-sync`](./.github/actions/contributing-sync/README.md) — sync `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, `SECURITY.md`, and the contributing workflow from upstream
+- [`licenses-sync`](./.github/actions/licenses-sync/README.md) — sync the canonical licenses workflow from upstream in its own opt-out maintenance kind
 - [`ban-patterns`](./.github/actions/ban-patterns/README.md) — fail the job when forbidden regex patterns match files in the working tree
 - [`licenses-audit`](./.github/actions/licenses-audit/README.md) — detect the consumer's package manager (pnpm/npm/bun) and regenerate the license report on dependency-changing PRs, auto-commit drift on same-repo PRs, and fail fork PRs that ship stale license data
 - [`release-action`](./.github/actions/release-action/README.md) — conventional-commit-driven release pipeline for npm packages, GitHub Actions, and Claude plugins; supports a custom Anthropic host (gateway/proxy) via `anthropic_base_url`
