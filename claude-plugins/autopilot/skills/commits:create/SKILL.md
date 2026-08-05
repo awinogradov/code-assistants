@@ -217,7 +217,7 @@ Pass = yes, yes, no. The binding conventions and examples are in [CONTRIBUTING.m
 
 Run this on every fully-composed candidate message (title + optional body) BEFORE `git commit` — in both the Single and Grouped flows and in autopilot mode. It is the gate that guarantees a valid commit even when the husky `commit-msg` hook is absent (a fresh worktree that has not run `bun install` has no active hook, so nothing else catches a bad message).
 
-**Read the config (ALWAYS runs — no dependencies; the real gate in fresh worktrees).** Read [commitlint.config.mjs](../../../../commitlint.config.mjs) — that file is the contract. Extract `type`, `subject` (the text after `type(scope): `), and `body` from the candidate message, then check them against every rule the config declares that is checkable by inspection (lengths, case, forbidden patterns, required bodies, allowed types). The first miss is a violation. Run any shell checks under `LC_ALL=C.UTF-8` so length and case folding are stable.
+**Read the config (ALWAYS runs — no dependencies; the real gate in fresh worktrees).** Read [commitlint.config.ts](../../../../commitlint.config.ts) — that file is the contract. Extract `type`, `subject` (the text after `type(scope): `), and `body` from the candidate message, then check them against every rule the config declares that is checkable by inspection (lengths, case, forbidden patterns, required bodies, allowed types). The first miss is a violation. Run any shell checks under `LC_ALL=C.UTF-8` so length and case folding are stable.
 
 **Full commitlint (best-effort — only when installed).** If the binary is present (`[ -x node_modules/.bin/commitlint ]`), also run the same command the husky hook uses:
 

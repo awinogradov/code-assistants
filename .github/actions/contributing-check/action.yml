@@ -30,7 +30,7 @@ runs:
       if: ${{ github.event.pull_request.user.login != 'dependabot[bot]' }}
       uses: wagoid/commitlint-github-action@v6
       with:
-        configFile: ./commitlint.config.mjs
+        configFile: ./commitlint.config.ts
         failOnWarnings: false
 
     - name: Validate PR title (semantic)
