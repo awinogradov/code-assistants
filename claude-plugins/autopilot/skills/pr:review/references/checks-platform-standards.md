@@ -6,7 +6,7 @@ Full rule bodies for the **Platform Standards** family of [pr:review §2.3](../S
 
 GitHub issue references (`#123`, `Closes #123`) must NOT appear in commit messages. The PR description handles issue linking via magic words.
 
-- Platform ref: `commitlint.config.mjs` custom rule `no-issue-id`.
+- Platform ref: `commitlint.config.ts` custom rule `no-issue-id`.
 
 **CHECK-PLAT-002: Lint or type suppression comment (@ts-ignore / @ts-expect-error / eslint-disable)** — Severity: blocker
 
