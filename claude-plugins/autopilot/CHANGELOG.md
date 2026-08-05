@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [4.2.2](https://github.com/awinogradov/code-assistants/compare/autopilot@v4.2.1...autopilot@v4.2.2) (2026-08-05)
+
+## Release Notes
+
+The last JavaScript configuration file in the repository is now authored in TypeScript, completing a consistency pass across all human-authored config files.
+
+## 📚 Documentation & Settings Updates
+
+### Commitlint Configuration Migrated to TypeScript
+
+The repository's commit-message linting config (`commitlint.config.mjs`) has been renamed to `commitlint.config.ts` and converted to TypeScript. The rule table and all three custom plugin rules are unchanged — only the language and import style changed. Every reference to the old filename has been updated across the contributing check action, its documentation, and the two autopilot skill files that point to this config as their source of truth for commit-message rules.
+
+No new tools or dependencies are involved: `@commitlint/load` already ships a `jiti`-based TypeScript loader, so the config is auto-discovered without any `--config` flag. Locally verified that a malformed commit message is still rejected by the `body-required-for-types` rule and a valid one still passes.
+
+<details><summary>Related issues</summary>
+
+- [#555: Author all configuration files in TypeScript](https://github.com/awinogradov/code-assistants/issues/555)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #555 | [#556](https://github.com/awinogradov/code-assistants/pull/556) | @awinogradov |
+
+### Refactoring
+
+* **config:** author commitlint config in typescript ([8f09b29](https://github.com/awinogradov/code-assistants/commit/8f09b29ce60999c1448defc06a09795eec33e7e7))
 ## [4.2.1](https://github.com/awinogradov/code-assistants/compare/autopilot@v4.2.0...autopilot@v4.2.1) (2026-08-04)
 
 ## Release Notes
