@@ -698,7 +698,7 @@ scripts/
 .nvmrc
 .prettierignore
 CODE_OF_CONDUCT.md
-commitlint.config.mjs
+commitlint.config.ts
 CONTRIBUTING.md
 LICENSE.md
 LICENSES.md
@@ -19554,7 +19554,7 @@ runs:
       if: ${{ github.event.pull_request.user.login != 'dependabot[bot]' }}
       uses: wagoid/commitlint-github-action@v6
       with:
-        configFile: ./commitlint.config.mjs
+        configFile: ./commitlint.config.ts
         failOnWarnings: false
 
     - name: Validate PR title (semantic)
@@ -19660,7 +19660,7 @@ Dependabot-authored PRs (author `dependabot[bot]`) skip every step — their mac
 
 1. **Branch name** — [`deepakputhraya/action-branch-name@v1.0.0`](https://github.com/deepakputhraya/action-branch-name) enforces the regex `^(issue-\d+-[a-z0-9]+(-[a-z0-9]+)*|[a-z][a-z0-9]*-\d+-[a-z0-9]+(-[a-z0-9]+)*|(hotfix|trivial|maintenance|proposal|security)-[a-z0-9]+(-[a-z0-9]+)*|release-([a-z0-9]+(-[a-z0-9]+)*-)?\d+\.\d+\.\d+)$` — the GitHub `issue-<n>-<slug>` form, the Linear `<team>-<n>-<slug>` form, the special prefixes, and release branches — with `min_length: 5`, `max_length: 100`, and `ignore: main,master`. This matches the CONTRIBUTING.md `Branches` section.
 2. **Checkout** — `actions/checkout@v4` with `fetch-depth: 0` so commitlint can resolve the full PR commit range.
-3. **Commit messages** — [`wagoid/commitlint-github-action@v6`](https://github.com/wagoid/commitlint-github-action) runs against `./commitlint.config.mjs` with `failOnWarnings: false`. Level-1 (warning) rules — `body-max-line-length` and `footer-max-line-length` — are surfaced as warnings but do not block merge. Level-2 (error) rules — including the custom `body-required-for-types`, `no-issue-id-in-subject`, and `no-ai-coauthored-by` — block merge.
+3. **Commit messages** — [`wagoid/commitlint-github-action@v6`](https://github.com/wagoid/commitlint-github-action) runs against `./commitlint.config.ts` with `failOnWarnings: false`. Level-1 (warning) rules — `body-max-line-length` and `footer-max-line-length` — are surfaced as warnings but do not block merge. Level-2 (error) rules — including the custom `body-required-for-types`, `no-issue-id-in-subject`, and `no-ai-coauthored-by` — block merge.
 4. **PR title (semantic)** — [`amannn/action-semantic-pull-request@v6`](https://github.com/amannn/action-semantic-pull-request) accepts the special prefixes (`HOTFIX`, `TRIVIAL`, `MAINTENANCE`, `PROPOSAL`, `SECURITY`, `Release`), the Linear ticket-id prefix via the `[A-Z][A-Z0-9]*-\d+` type pattern (e.g. `ENG-123: …` on Linear-tracked repos), and any capitalized business-style title via the `[A-Z]\w*` type pattern. Titles ending in a period are rejected with a CONTRIBUTING.md cross-reference.
 5. **PR title length** — Inline bash check fails the job if the PR title exceeds 120 characters. The title is read via the `PR_TITLE` env var (not shell-interpolated) to avoid command injection from a hostile title.
 
@@ -44853,7 +44853,7 @@ Pass = yes, yes, no. The binding conventions and examples are in [CONTRIBUTING.m
 
 Run this on every fully-composed candidate message (title + optional body) BEFORE `git commit` — in both the Single and Grouped flows and in autopilot mode. It is the gate that guarantees a valid commit even when the husky `commit-msg` hook is absent (a fresh worktree that has not run `bun install` has no active hook, so nothing else catches a bad message).
 
-**Read the config (ALWAYS runs — no dependencies; the real gate in fresh worktrees).** Read [commitlint.config.mjs](../../../../commitlint.config.mjs) — that file is the contract. Extract `type`, `subject` (the text after `type(scope): `), and `body` from the candidate message, then check them against every rule the config declares that is checkable by inspection (lengths, case, forbidden patterns, required bodies, allowed types). The first miss is a violation. Run any shell checks under `LC_ALL=C.UTF-8` so length and case folding are stable.
+**Read the config (ALWAYS runs — no dependencies; the real gate in fresh worktrees).** Read [commitlint.config.ts](../../../../commitlint.config.ts) — that file is the contract. Extract `type`, `subject` (the text after `type(scope): `), and `body` from the candidate message, then check them against every rule the config declares that is checkable by inspection (lengths, case, forbidden patterns, required bodies, allowed types). The first miss is a violation. Run any shell checks under `LC_ALL=C.UTF-8` so length and case folding are stable.
 
 **Full commitlint (best-effort — only when installed).** If the binary is present (`[ -x node_modules/.bin/commitlint ]`), also run the same command the husky hook uses:
 
@@ -52040,7 +52040,7 @@ Full rule bodies for the **Platform Standards** family of [pr:review §2.3](../S
 
 GitHub issue references (`#123`, `Closes #123`) must NOT appear in commit messages. The PR description handles issue linking via magic words.
 
-- Platform ref: `commitlint.config.mjs` custom rule `no-issue-id`.
+- Platform ref: `commitlint.config.ts` custom rule `no-issue-id`.
 
 **CHECK-PLAT-002: Lint or type suppression comment (@ts-ignore / @ts-expect-error / eslint-disable)** — Severity: blocker
 
@@ -63320,16 +63320,16 @@ Contributor Covenant is stewarded by the Organization for Ethical Source and lic
 For answers to common questions about Contributor Covenant, see the FAQ at [https://www.contributor-covenant.org/faq](https://www.contributor-covenant.org/faq). Translations are provided at [https://www.contributor-covenant.org/translations](https://www.contributor-covenant.org/translations). Additional enforcement and community guideline resources can be found at [https://www.contributor-covenant.org/resources](https://www.contributor-covenant.org/resources). The enforcement ladder was inspired by the work of [Mozilla’s code of conduct team](https://github.com/mozilla/inclusion).
 </file>
 
-<file path="commitlint.config.mjs">
+<file path="commitlint.config.ts">
 /**
  * Commitlint configuration.
  *
  * Enforced locally by the husky `commit-msg` hook and in CI by
  * `wagoid/commitlint-github-action`. See CONTRIBUTING.md `Commits` section.
- *
- * @type {import("@commitlint/types").UserConfig}
  */
-const config = {
+import type { UserConfig } from "@commitlint/types";
+
+const config: UserConfig = {
   extends: ["@commitlint/config-conventional"],
   rules: {
     "type-enum": [
@@ -63682,7 +63682,7 @@ fix(validator): handle null and empty-string inputs
 ```
 
 > [!IMPORTANT]
-> Enforced locally by [`commitlint`](./commitlint.config.mjs) on the `commit-msg` hook and in CI by [`wagoid/commitlint-github-action`](https://github.com/wagoid/commitlint-github-action). Invalid commits block PR merge.
+> Enforced locally by [`commitlint`](./commitlint.config.ts) on the `commit-msg` hook and in CI by [`wagoid/commitlint-github-action`](https://github.com/wagoid/commitlint-github-action). Invalid commits block PR merge.
 
 #### Atomic Commits
 
