@@ -1,1 +1,1 @@
-rules/Bun.md
+AGENTS.md
