@@ -11,7 +11,7 @@ inputs:
       Git author/committer login for the sync commits. Defaults to `github-actions[bot]` when unset. Pass the `vars.BOT_USERNAME` repository variable to attribute commits to a dedicated bot identity.
     required: false
   agents-rules:
-    description: Sync the stack-appropriate rules file into `CLAUDE.md`. Default on; set to `false` to opt out.
+    description: Sync the stack-appropriate rules file into `AGENTS.md`, with `CLAUDE.md` as a symlink to it. Default on; set to `false` to opt out.
     required: false
     default: "true"
   code-review:

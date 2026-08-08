@@ -126,7 +126,7 @@ async function validateHeadingSync(heading: string): Promise<string | null> {
 
 /**
  * The rules/<stack>.md files carry duplicated sections that ship downstream as
- * each consumer's CLAUDE.md. Verify every synced section exists in each file and
+ * each consumer's AGENTS.md. Verify every synced section exists in each file and
  * is byte-identical across them so the copies cannot drift.
  */
 async function validateRulesSectionSync(): Promise<string | null> {

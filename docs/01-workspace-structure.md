@@ -18,9 +18,10 @@ code-assistants/
 ├── claude-plugins/       # Claude Code plugins
 ├── docs/                 # repository docs (you are here)
 ├── packages/             # shared TypeScript libraries (workspace members)
-├── rules/                # stack-specific rule sets surfaced via CLAUDE.md
+├── rules/                # stack-specific rule sets surfaced via AGENTS.md
 ├── scripts/              # repo-root scripts
-├── CLAUDE.md             # symlink → rules/Bun.md
+├── AGENTS.md             # symlink → rules/Bun.md
+├── CLAUDE.md             # symlink → AGENTS.md
 ├── package.json          # root manifest, defines `workspaces` and `agents`
 └── turbo.json            # task graph (typecheck, test, clean)
 ```
@@ -42,7 +43,7 @@ Directory contents:
 - `tsconfig.json` — includes `src/**/*.ts`
 - `src/` — all source code (helpers, tests, and entry files)
 - `README.md`
-- Optional: `docs/`, `CLAUDE.md`, `AGENTS.md` (see [Per-member docs and agent files](#per-member-docs-and-agent-files))
+- Optional: `docs/`, `AGENTS.md`, `CLAUDE.md` (see [Per-member docs and agent files](#per-member-docs-and-agent-files))
 - Optional: tool config files with a `.ts`/`.mjs` extension (e.g., `vitest.config.ts`) — configs live at the root, not under `src/`
 
 **Target rule:** every `.ts` source file (entries, helpers, tests) should live under `src/`. Tool config files keyed by extension (`*.config.ts`, `*.config.mjs`) are exempt and remain at the root. Today two actions still have a root entry file (`files-sync.ts`, `agents-rules-sync.ts`) invoked directly by `action.yml` — that is the current state for source code, not a violation; see [Current vs. target](#current-vs-target).
@@ -86,8 +87,8 @@ packages/<name>/
 ├── tsconfig.json
 ├── README.md             # optional
 ├── docs/                 # optional (see Per-member docs and agent files)
-├── CLAUDE.md             # optional
 ├── AGENTS.md             # optional
+├── CLAUDE.md             # optional
 └── src/
     └── <module>.ts       # one file per exported module
 ```
@@ -171,7 +172,7 @@ Every TypeScript workspace member (actions and packages) declares its scripts in
 | Script      | Required?                            | Command (today)              | Notes                                                                                                                                                                                                                                    |
 | ----------- | ------------------------------------ | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `typecheck` | Yes                                  | `tsc --noEmit`               | Runs in Turbo's `typecheck` task. Always present in TS members.                                                                                                                                                                          |
-| `test`      | Yes for actions, opt-in for packages | `bun test`                   | Bun's runner handles unit, integration, and e2e tests in the same invocation — test files live alongside source under `src/` per [CLAUDE.md §3.1](../rules/Bun.md#31-file-organization). Add this script only when the member has tests. |
+| `test`      | Yes for actions, opt-in for packages | `bun test`                   | Bun's runner handles unit, integration, and e2e tests in the same invocation — test files live alongside source under `src/` per [AGENTS.md §3.1](../rules/Bun.md#31-file-organization). Add this script only when the member has tests. |
 | `clean`     | Yes                                  | `rm -rf node_modules .turbo` | Removes per-member install and Turbo caches.                                                                                                                                                                                             |
 | `build`     | Optional                             | (none today)                 | Add only when the member produces a compiled output. Today every member runs TypeScript directly via Bun (`bun <entry>.ts`), so no build step is needed.                                                                                 |
 
@@ -204,12 +205,12 @@ The globs are root-relative because Turbo resolves plain `inputs` against the pa
 Any action or package directory (TypeScript action, YAML composite action, or package) MAY include:
 
 - `docs/` — a member-scoped docs directory for material too specific or too long for the README
-- `CLAUDE.md` — agent rules that apply only inside that member's directory (Claude Code loads these in addition to the repo-root `CLAUDE.md`)
-- `AGENTS.md` — optional, same scope as `CLAUDE.md` but consumed by other agent tooling
+- `AGENTS.md` — agent rules that apply only inside that member's directory, loaded in addition to the repo-root `AGENTS.md`
+- `CLAUDE.md` — optional, same scope as `AGENTS.md` but read by Claude Code; a symlink to the member's `AGENTS.md` keeps the two from drifting
 
 None of these are required. Use them when a member has enough surface area to need it; for small members a `README.md` alone is fine.
 
-### CLAUDE.md [§3.1](../rules/Bun.md#31-file-organization) file organization
+### AGENTS.md [§3.1](../rules/Bun.md#31-file-organization) file organization
 
 ```
 foo.ts          # single module: a file, no directory
@@ -220,7 +221,7 @@ foo/            # multiple modules: a directory, no index.ts barrel
 └── foo.types.ts
 ```
 
-These rules are inherited from CLAUDE.md (a symlink to `rules/Bun.md`); not duplicated here.
+These rules are inherited from `AGENTS.md` (a symlink to `rules/Bun.md`); not duplicated here.
 
 ### Registering a new member
 

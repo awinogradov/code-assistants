@@ -51,7 +51,7 @@ The `docs/` guides are numbered chapters in reading order — start at chapter 1
 
 - [`files-sync`](./.github/actions/files-sync/README.md) — sync declared files from upstream repos and open one PR with the differences
 - [`upstream-sync`](./.github/actions/upstream-sync/README.md) — aggregate the six upstream maintenance syncs behind one action; every kind on by default, opt out per kind
-- [`agents-rules-sync`](./.github/actions/agents-rules-sync/README.md) — sync the stack-appropriate `rules/<stack>.md` into `CLAUDE.md` based on `package.json` `agents.rules`
+- [`agents-rules-sync`](./.github/actions/agents-rules-sync/README.md) — sync the stack-appropriate `rules/<stack>.md` into `AGENTS.md` (with `CLAUDE.md` as a symlink to it) based on `package.json` `agents.rules`
 - [`contributing-check`](./.github/actions/contributing-check/README.md) — validate branch name, commit messages, and PR title against `CONTRIBUTING.md`
 - [`contributing-sync`](./.github/actions/contributing-sync/README.md) — sync `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, `SECURITY.md`, and the contributing workflow from upstream
 - [`licenses-sync`](./.github/actions/licenses-sync/README.md) — sync the canonical licenses workflow from upstream in its own opt-out maintenance kind
