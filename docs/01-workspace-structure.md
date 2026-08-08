@@ -15,6 +15,7 @@ code-assistants/
 ├── .github/
 │   ├── actions/          # composite GitHub Actions (workspace members + YAML-only)
 │   └── workflows/
+├── agent-skills/         # generated portable Agent Skills layout (see docs/18)
 ├── claude-plugins/       # Claude Code plugins
 ├── docs/                 # repository docs (you are here)
 ├── packages/             # shared TypeScript libraries (workspace members)
@@ -50,15 +51,16 @@ Directory contents:
 
 Worked examples:
 
-| Action                                                         | Layout              | Entry invoked from `action.yml`                    |
-| -------------------------------------------------------------- | ------------------- | -------------------------------------------------- |
-| [`files-sync`](../.github/actions/files-sync/)                 | root entry + `src/` | `${{ github.action_path }}/files-sync.ts`          |
-| [`agents-rules-sync`](../.github/actions/agents-rules-sync/)   | root entry + `src/` | `${{ github.action_path }}/agents-rules-sync.ts`   |
-| [`release-action`](../.github/actions/release-action/)         | `src/`-only         | `${{ github.action_path }}/src/<entry>.ts`         |
-| [`release-automerge`](../.github/actions/release-automerge/)   | `src/`-only         | `${{ github.action_path }}/src/automerge.ts`       |
-| [`code-review-action`](../.github/actions/code-review-action/) | `src/`-only         | `${{ github.action_path }}/src/<entry>.ts`         |
-| [`auto-label`](../.github/actions/auto-label/)                 | `src/`-only         | `${{ github.action_path }}/src/autoLabel.ts`       |
-| [`validate-actions`](../.github/actions/validate-actions/)     | `src/`-only         | `${{ github.action_path }}/src/validateActions.ts` |
+| Action                                                         | Layout              | Entry invoked from `action.yml`                       |
+| -------------------------------------------------------------- | ------------------- | ----------------------------------------------------- |
+| [`files-sync`](../.github/actions/files-sync/)                 | root entry + `src/` | `${{ github.action_path }}/files-sync.ts`             |
+| [`agents-rules-sync`](../.github/actions/agents-rules-sync/)   | root entry + `src/` | `${{ github.action_path }}/agents-rules-sync.ts`      |
+| [`agents-skills-sync`](../.github/actions/agents-skills-sync/) | `src/`-only         | `${{ github.action_path }}/src/agents-skills-sync.ts` |
+| [`release-action`](../.github/actions/release-action/)         | `src/`-only         | `${{ github.action_path }}/src/<entry>.ts`            |
+| [`release-automerge`](../.github/actions/release-automerge/)   | `src/`-only         | `${{ github.action_path }}/src/automerge.ts`          |
+| [`code-review-action`](../.github/actions/code-review-action/) | `src/`-only         | `${{ github.action_path }}/src/<entry>.ts`            |
+| [`auto-label`](../.github/actions/auto-label/)                 | `src/`-only         | `${{ github.action_path }}/src/autoLabel.ts`          |
+| [`validate-actions`](../.github/actions/validate-actions/)     | `src/`-only         | `${{ github.action_path }}/src/validateActions.ts`    |
 
 Required `package.json` scripts: see [Workspace scripts](#workspace-scripts).
 
