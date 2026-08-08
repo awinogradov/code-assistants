@@ -1,0 +1,65 @@
+name: Agents skills sync
+description: Sync the portable autopilot Agent Skills layout from an upstream repository into the current repository's .agents/skills/ directory.
+
+inputs:
+  bot_token:
+    description: |
+      PAT (classic with `repo`, or fine-grained with `contents: write` + `pull-requests: write` on this repo) or GitHub App installation token. The workflow's default `GITHUB_TOKEN` is not supported — it cannot create pull requests when the repo/org has "Allow GitHub Actions to create and approve pull requests" disabled, and the resulting 403 is opaque. See README for setup.
+    required: true
+  bot_username:
+    description: |
+      Git author/committer login for the sync commit. Defaults to `github-actions[bot]` when unset. Pass the `vars.BOT_USERNAME` repository variable to attribute commits to a dedicated bot identity.
+    required: false
+  source-repo:
+    description: Source repository in `owner/name` form that hosts the `agent-skills/` layout.
+    required: false
+    default: awinogradov/code-assistants
+  source-ref:
+    description: Branch, tag, or SHA to read the source layout from. Defaults to the source repository's default branch.
+    required: false
+    default: ""
+
+outputs:
+  changed-files:
+    description: Newline-separated list of destination paths that were updated. Empty when no changes were detected.
+    value: ${{ steps.sync.outputs.changed-files }}
+  pr-number:
+    description: Number of the opened or reused PR. Empty when no changes were detected.
+    value: ${{ steps.sync.outputs.pr-number }}
+  pr-url:
+    description: HTML URL of the opened or reused PR. Empty when no changes were detected.
+    value: ${{ steps.sync.outputs.pr-url }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: 1.x
+
+    - name: Install workspace dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: bun install --frozen-lockfile --filter @code-assistants/agents-skills-sync-action
+
+    - name: Resolve files list from the agent-skills layout
+      id: resolve
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.bot_token }}
+        INPUT_SOURCE_REPO: ${{ inputs.source-repo }}
+        INPUT_SOURCE_REF: ${{ inputs.source-ref }}
+      run: bun "${{ github.action_path }}/src/agents-skills-sync.ts"
+
+    - name: Sync via files-sync
+      id: sync
+      uses: awinogradov/code-assistants/.github/actions/files-sync@main
+      with:
+        files: ${{ steps.resolve.outputs.files }}
+        bot_token: ${{ inputs.bot_token }}
+        bot_username: ${{ inputs.bot_username }}
+        branch: maintenance-sync-agent-skills
+        title: "MAINTENANCE: Sync agent skills from upstream"
+        body: Automated portable Agent Skills sync from upstream.
+        commit-message: "chore: sync agent skills from upstream"
