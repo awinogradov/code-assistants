@@ -1,18 +1,20 @@
 ---
 name: preflight-check
-description: Validate git working state before committing, branching, or opening a PR. Detects wrong branch, stale merged branches, uncommitted changes, and out-of-date main.
+description: Validate git working state before committing, branching, or opening a PR. Detects wrong branch, invalid branch names, stale merged branches, uncommitted changes, and out-of-date main.
 user-invocable: false
 allowed-tools:
   - Bash(git *)
+  - Read
   - AskUserQuestion
 ---
 
 Validate the git working environment before proceeding. This skill checks the current branch state, detects stale or merged branches, and — depending on mode — either prepares `main` for a new plan/branch or warns against committing/opening a PR directly on `main`.
 
-The skill protects two invariants; the phases below implement them:
+The skill protects three invariants; the phases below implement them:
 
 1. Never create a branch from a stale branch or a `main` that is behind its remote.
 2. Never commit or open a PR on `main` without the user explicitly acknowledging it.
+3. Never commit on a branch whose name violates the naming convention without the user explicitly acknowledging it — a violation caught at commit time costs a rename; caught on an open PR it costs the PR.
 
 ## Context
 
@@ -60,6 +62,15 @@ If the two values differ, the session is running inside a **git worktree**. Stor
 - Otherwise, go to [Phase 2](#phase-2-on-feature-branch).
 
 ## Phase 2: On Feature Branch
+
+### Check branch name format (commits mode only)
+
+If mode is `commits`, read the canonical branch-name regex from [`pr-title-grammar.md`](../shared-rules/references/pr-title-grammar.md) and match `currentBranch` against it. `plan` and `branch` modes skip this check — they run before the working branch exists, including on harness-created worktree branches — and `pr` mode skips it because `pr-create` validates the branch itself in its Phase 1 (one owner per gate, no double prompt).
+
+If the name does not match, ask (header "Branch name"): branch `<currentBranch>` does not follow the naming convention and would fail the contributing-check CI once a PR is open, where the only fix is a fresh branch and a fresh PR — how to proceed?
+
+- **Continue anyway** — commit on this branch at the user's explicit request: continue to the merged-branch check below.
+- **Cancel** — stop so the branch can be fixed while no PR exists and the rename is still free: output "Commit cancelled. Branch <currentBranch> does not follow the naming convention — re-create it with /autopilot:branch-create (uncommitted changes follow the checkout) or rename it with git branch -m, then retry." and abort.
 
 ### Check working tree (pr mode only)
 

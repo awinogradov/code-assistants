@@ -134,7 +134,7 @@ Some changes don't require an issue (see [Special PR Prefixes](#special-pr-prefi
 - ✅ `security-tainted-format-string`
 
 > [!IMPORTANT]
-> Enforced locally by the `pre-push` git hook and in CI by [`deepakputhraya/action-branch-name`](https://github.com/deepakputhraya/action-branch-name). Invalid branch names block PR merge.
+> Enforced before creation by the `/autopilot:branch-create` command and at commit time by the autopilot preflight check — both validate against the [canonical regex](claude-plugins/autopilot/skills/shared-rules/references/pr-title-grammar.md) so violations surface while a rename is still free. Later gates: the `pre-push` git hook locally and [`deepakputhraya/action-branch-name`](https://github.com/deepakputhraya/action-branch-name) in CI. Invalid branch names block PR merge, and an open PR's head branch cannot be renamed — the PR must be re-created.
 
 > [!TIP]
 > Use the `/autopilot:branch-create` slash command to generate a branch name.

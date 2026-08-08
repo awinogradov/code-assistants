@@ -212,6 +212,8 @@ Only proceed to [Phase 6](#phase-6-execute) after user selects "Create branch". 
 
 ## Phase 6: Execute
 
+**Validate the branch name (MANDATORY, before any git command):** read the canonical branch-name regex from [`pr-title-grammar.md`](../shared-rules/references/pr-title-grammar.md) and match the fully constructed `<branch-name>` against it, including the 100-character limit. The name must be exactly what the earlier phases constructed — never decorate it with extra path segments or prefixes (`feature/issue-123-slug` is invalid; the convention contains no `/`). On mismatch, regenerate the slug once via the [Phase 3](#phase-3-generate-branch-slug) rules and re-validate; if the name still fails, stop with an error naming the rejected name and the expected formats — the branch is NOT created. This gate is the last line before `git checkout -b`: a name that fails here in seconds would otherwise fail the contributing-check CI on an opened PR, where the only fix is a fresh branch and a fresh PR.
+
 1. **Fetch latest remote and create branch from origin/main:**
 
    ```bash
