@@ -9,15 +9,18 @@
  * across workspace boundaries because the YAML payload — not the TS type — is the
  * contract between the two actions.
  *
+ * `AGENTS.md` is the regular file carrying the rules body and `CLAUDE.md` is a
+ * symlink to it, so the vendor-neutral name is the source of truth and every
+ * consumer gets both without opting in.
+ *
  * @example
  *   const entries = buildSyncEntries({
  *     sourceRepo: 'awinogradov/code-assistants',
  *     rules: 'Bun',
  *     sourceRef: '',
- *     agentsMd: true,
  *   });
- *   // → [{ repo, source: 'rules/Bun.md', dest: 'CLAUDE.md' },
- *   //    { symlink: 'CLAUDE.md', dest: 'AGENTS.md' }]
+ *   // → [{ repo, source: 'rules/Bun.md', dest: 'AGENTS.md' },
+ *   //    { symlink: 'AGENTS.md', dest: 'CLAUDE.md' }]
  */
 
 interface ContentSyncEntry {
@@ -38,32 +41,26 @@ interface BuildArgs {
   sourceRepo: string;
   rules: string;
   sourceRef: string;
-  agentsMd: boolean;
 }
 
 export function buildSyncEntries({
   sourceRepo,
   rules,
   sourceRef,
-  agentsMd,
 }: BuildArgs): SyncEntry[] {
   const content: ContentSyncEntry = {
     repo: sourceRepo,
     source: `rules/${rules}.md`,
-    dest: 'CLAUDE.md',
+    dest: 'AGENTS.md',
   };
 
   if (sourceRef !== '') {
     content.ref = sourceRef;
   }
 
-  if (!agentsMd) {
-    return [content];
-  }
-
   const symlink: SymlinkSyncEntry = {
-    symlink: 'CLAUDE.md',
-    dest: 'AGENTS.md',
+    symlink: 'AGENTS.md',
+    dest: 'CLAUDE.md',
   };
 
   return [content, symlink];

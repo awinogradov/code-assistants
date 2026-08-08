@@ -2,8 +2,8 @@
  * Entry point for the agents-rules-sync composite action.
  *
  * Reads the current repository's `package.json` via the GitHub contents API,
- * validates the `agents.rules` field, and emits a single- or two-entry YAML
- * `files` list as a step output that the downstream `files-sync` step consumes.
+ * validates the `agents.rules` field, and emits a two-entry YAML `files` list as
+ * a step output that the downstream `files-sync` step consumes.
  */
 
 import * as core from '@actions/core';
@@ -21,7 +21,6 @@ interface Env {
   destRepo: { owner: string; name: string };
   sourceRepo: string;
   sourceRef: string;
-  agentsMd: boolean;
   base: string;
 }
 
@@ -50,33 +49,12 @@ function requiredToken(): string {
   return value;
 }
 
-function parseBooleanInput(name: string, fallback: boolean): boolean {
-  const value = process.env[name];
-
-  if (value === undefined || value === '') {
-    return fallback;
-  }
-
-  if (value === 'true') {
-    return true;
-  }
-
-  if (value === 'false') {
-    return false;
-  }
-
-  throw new Error(
-    `Invalid boolean for ${name}: expected "true" or "false", got "${value}"`,
-  );
-}
-
 function readEnv(): Env {
   const token = requiredToken();
   const destRepoRaw = required('DEST_REPO');
   const sourceRepo = required('INPUT_SOURCE_REPO');
   const base = required('INPUT_BASE');
   const sourceRef = process.env.INPUT_SOURCE_REF ?? '';
-  const agentsMd = parseBooleanInput('INPUT_AGENTS_MD', false);
 
   const [owner, name] = destRepoRaw.split('/');
 
@@ -89,7 +67,6 @@ function readEnv(): Env {
     destRepo: { owner, name },
     sourceRepo,
     sourceRef,
-    agentsMd,
     base,
   };
 }
@@ -119,7 +96,6 @@ async function main(): Promise<void> {
     sourceRepo: env.sourceRepo,
     rules,
     sourceRef: env.sourceRef,
-    agentsMd: env.agentsMd,
   });
 
   const filesYaml = stringifyYaml(entries);
@@ -128,22 +104,18 @@ async function main(): Promise<void> {
     .map((tracker) => (tracker.type === 'linear' ? `linear:${tracker.keys.join('/')}` : tracker.type))
     .join(', ');
 
-  core.info(`Resolved agents.rules=${rules}; syncing rules/${rules}.md → CLAUDE.md from ${env.sourceRepo}`);
+  core.info(`Resolved agents.rules=${rules}; syncing rules/${rules}.md → AGENTS.md from ${env.sourceRepo}`);
   core.info(`Validated agents.trackers: ${trackerSummary}`);
-  if (env.agentsMd) {
-    core.info('Also publishing AGENTS.md as a symlink to CLAUDE.md.');
-  }
+  core.info('Publishing CLAUDE.md as a symlink to AGENTS.md.');
   core.setOutput('files', filesYaml);
 
   const summaryLines = [
     '### Agents rules sync',
     '',
-    `Resolved \`agents.rules=${rules}\` → syncing \`rules/${rules}.md\` to \`CLAUDE.md\` from ${env.sourceRepo}.`,
+    `Resolved \`agents.rules=${rules}\` → syncing \`rules/${rules}.md\` to \`AGENTS.md\` from ${env.sourceRepo}.`,
+    'Published `CLAUDE.md` as a symlink to `AGENTS.md`.',
+    '',
   ];
-  if (env.agentsMd) {
-    summaryLines.push('Also published `AGENTS.md` as a symlink to `CLAUDE.md`.');
-  }
-  summaryLines.push('');
   await core.summary.addRaw(summaryLines.join('\n')).write();
 }
 
