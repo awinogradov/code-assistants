@@ -7,6 +7,10 @@
  * strip execute bits. Symlink entries are written as Git mode `120000` blobs whose body
  * is the symlink target string.
  *
+ * Content entries also compare the destination's Git mode, not just its bytes: the
+ * Contents API resolves a symlink to its target, so a destination that must become a
+ * regular file can read back byte-equal to the source. See {@link destIsSymlink}.
+ *
  * @example
  *   const changes = await computeChanges({ octokit, entries, destRepo, baseRef: 'main' });
  */
@@ -112,7 +116,11 @@ async function detectContentChange({
   });
 
   if (destContent === sourceContent) {
-    return null;
+    const isSymlink = await destIsSymlink({ octokit, entry, destRepo, baseRef });
+
+    if (!isSymlink) {
+      return null;
+    }
   }
 
   const mode = await resolveSourceMode({
@@ -125,6 +133,41 @@ async function detectContentChange({
   });
 
   return { path: entry.dest, content: sourceContent, mode };
+}
+
+interface DestIsSymlinkArgs extends Omit<DetectArgs, 'entry' | 'treeCache'> {
+  entry: ContentEntry;
+}
+
+/**
+ * Whether a content entry's destination is currently a Git symlink.
+ *
+ * Byte equality alone cannot answer this. `fetchRawContent` reads the destination
+ * through the Contents API, which follows a symlink server-side and returns the
+ * target's bytes — so a destination that must be replaced by a regular file reads
+ * back identical to the source and would be skipped as unchanged, leaving the link
+ * in place forever. That is exactly what an inverted `AGENTS.md`/`CLAUDE.md` pair
+ * produces: the old symlink survives while the new one points back at it, and the
+ * two files reference each other with no regular file left in the cycle.
+ *
+ * The Git tree mode is the one signal the Contents API cannot mask, so consult it
+ * before concluding that equal bytes mean no work.
+ */
+async function destIsSymlink({
+  octokit,
+  entry,
+  destRepo,
+  baseRef,
+}: DestIsSymlinkArgs): Promise<boolean> {
+  const existing = await fetchTreePathEntry({
+    octokit,
+    owner: destRepo.owner,
+    repo: destRepo.name,
+    ref: baseRef,
+    path: entry.dest,
+  });
+
+  return existing?.mode === symlinkMode;
 }
 
 interface DetectSymlinkArgs extends Omit<DetectArgs, 'entry'> {
