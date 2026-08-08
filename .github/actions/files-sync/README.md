@@ -37,15 +37,15 @@ jobs:
               dest: CONTRIBUTING.md
             - repo: awinogradov/code-assistants
               source: rules/Bun.md
-              dest: CLAUDE.md
+              dest: AGENTS.md
 ```
 
 Symlink entries write a Git symlink at `dest` instead of copying a file:
 
 ```yaml
 files: |
-  - symlink: CLAUDE.md
-    dest: AGENTS.md
+  - symlink: AGENTS.md
+    dest: CLAUDE.md
 ```
 
 ## Inputs
