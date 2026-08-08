@@ -4,8 +4,8 @@
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that syncs the stack-appropriate agent rules file from an upstream
-repository into the current repository's `CLAUDE.md` and opens a single pull request with
-the difference.
+repository into the current repository's `AGENTS.md` — with `CLAUDE.md` published as a Git
+symlink to it — and opens a single pull request with the difference.
 
 The action reads the consumer's `agents.rules` field (see
 [docs/02-agents-field.md](../../../docs/02-agents-field.md)), builds the corresponding source path
@@ -35,7 +35,6 @@ jobs:
         with:
           bot_token: ${{ secrets.BOT_TOKEN }}
           bot_username: ${{ vars.BOT_USERNAME }}
-          # agents-md: true  # also publish AGENTS.md → CLAUDE.md symlink
 ```
 
 The consumer repository must declare an `agents.rules` field in its root `package.json`:
@@ -59,7 +58,6 @@ Accepted values: `Bun`, `Bun+React+Tailwind`, `NodeJS+React`, `NodeJS+React+Tail
 | `bot_username` | no       | `github-actions[bot]`         | Git author/committer login for the sync commit. Pass `${{ vars.BOT_USERNAME }}`. The PR itself is opened by the `bot_token` owner.                                                               |
 | `source-repo`  | no       | `awinogradov/code-assistants` | Source repository in `owner/name` form that hosts the `rules/<stack>.md` files.                                                                                                                  |
 | `source-ref`   | no       | _(empty)_                     | Branch, tag, or SHA to read the source rules file from. Empty → source repository default branch.                                                                                                |
-| `agents-md`    | no       | `false`                       | When `true`, also publish `AGENTS.md` as a Git symlink to `CLAUDE.md`. See [Behavior](#behavior).                                                                                                |
 
 PR-shaping inputs (branch, title, body, commit message) are fixed by design — see
 [Behavior](#behavior).
@@ -90,20 +88,21 @@ See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/a
 
 - Resolves the consumer's `agents.rules` value from its root `package.json` on the default
   branch.
-- Delegates to `files-sync` with a single entry: `repo: <source-repo>`,
-  `source: rules/<value>.md`, `dest: CLAUDE.md`.
-- When `agents-md: true`, also delegates a second [symlink entry](../files-sync/README.md#symlink-entry)
-  to `files-sync`, publishing `AGENTS.md` in the consumer repo as a Git symlink (mode `120000`)
-  pointing at `CLAUDE.md`. Both entries land in the same PR; default behavior is unchanged so
-  existing v1 consumers need no action.
+- Delegates to `files-sync` with two entries, always: a content entry (`repo: <source-repo>`,
+  `source: rules/<value>.md`, `dest: AGENTS.md`) and a
+  [symlink entry](../files-sync/README.md#symlink-entry) publishing `CLAUDE.md` as a Git symlink
+  (mode `120000`) pointing at `AGENTS.md`. Both land in the same commit and PR, so the pair is
+  never half-applied. `AGENTS.md` is the vendor-neutral name the wider agent ecosystem reads, which
+  is why it holds the rules body rather than the link.
 - The PR is opened on the fixed branch `maintenance-sync-agents-rules` with the title
   `MAINTENANCE: Sync agent rules from upstream` and the commit message
   `chore: sync agent rules from upstream`. These values are not configurable so the action
   cannot collide with `files-sync`'s default branch and so every consumer gets the same
   one-line setup.
 - The head branch is force-updated on every run (inherited from `files-sync`); local edits
-  to `CLAUDE.md` will be overwritten when the upstream rules file changes.
-- If `CLAUDE.md` already matches `rules/<value>.md`, no PR is created.
+  to `AGENTS.md` will be overwritten when the upstream rules file changes.
+- If `AGENTS.md` already matches `rules/<value>.md` and `CLAUDE.md` already symlinks to it,
+  no PR is created.
 - If `package.json` is missing, malformed, or lacks `agents.rules` (or its value is
   unrecognized), the action fails with a link to `docs/02-agents-field.md` and the list of
   accepted values.

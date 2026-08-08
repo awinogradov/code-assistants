@@ -6,17 +6,20 @@ const baseArgs = {
   sourceRepo: 'awinogradov/code-assistants',
   rules: 'Bun',
   sourceRef: '',
-  agentsMd: false,
 };
 
 describe('buildSyncEntries', () => {
-  test('returns a single content entry by default (legacy v1 shape)', () => {
+  test('always returns the content entry plus the CLAUDE.md symlink', () => {
     const entries = buildSyncEntries(baseArgs);
 
     expect(entries).toEqual([
       {
         repo: 'awinogradov/code-assistants',
         source: 'rules/Bun.md',
+        dest: 'AGENTS.md',
+      },
+      {
+        symlink: 'AGENTS.md',
         dest: 'CLAUDE.md',
       },
     ]);
@@ -34,34 +37,18 @@ describe('buildSyncEntries', () => {
     expect(entries[0]).toMatchObject({ ref: 'v1.2.3' });
   });
 
-  test('appends the symlink entry when agentsMd is true', () => {
-    const entries = buildSyncEntries({ ...baseArgs, agentsMd: true });
-
-    expect(entries).toEqual([
-      {
-        repo: 'awinogradov/code-assistants',
-        source: 'rules/Bun.md',
-        dest: 'CLAUDE.md',
-      },
-      {
-        symlink: 'CLAUDE.md',
-        dest: 'AGENTS.md',
-      },
-    ]);
-  });
-
   test('symlink entry carries no extra fields', () => {
-    const entries = buildSyncEntries({ ...baseArgs, agentsMd: true });
+    const entries = buildSyncEntries(baseArgs);
     const symlinkEntry = entries[1]!;
 
     expect(Object.keys(symlinkEntry).sort()).toEqual(['dest', 'symlink']);
   });
 
   test('preserves content-then-symlink order', () => {
-    const entries = buildSyncEntries({ ...baseArgs, agentsMd: true, sourceRef: 'main' });
+    const entries = buildSyncEntries({ ...baseArgs, sourceRef: 'main' });
 
-    expect(entries[0]).toMatchObject({ source: 'rules/Bun.md' });
-    expect(entries[1]).toMatchObject({ symlink: 'CLAUDE.md' });
+    expect(entries[0]).toMatchObject({ dest: 'AGENTS.md' });
+    expect(entries[1]).toMatchObject({ symlink: 'AGENTS.md' });
   });
 
   test('honors the rules value in the content source path', () => {
