@@ -111,6 +111,18 @@ release-<version>
 - No short description required
 - Created automatically by release workflows
 
+**Canonical regex:**
+
+All four formats compress into one executable pattern — kept byte-identical to the `regex` input of the [contributing-check CI action](https://github.com/awinogradov/code-assistants/blob/main/.github/actions/contributing-check/action.yml) by the `branchGrammarSync` guard test, so skills and CI validate the same shape:
+
+```text
+^(issue-\d+-[a-z0-9]+(-[a-z0-9]+)*|[a-z][a-z0-9]*-\d+-[a-z0-9]+(-[a-z0-9]+)*|(hotfix|trivial|maintenance|proposal|security)-[a-z0-9]+(-[a-z0-9]+)*|release-([a-z0-9]+(-[a-z0-9]+)*-)?\d+\.\d+\.\d+)$
+```
+
+- Length bounds: 5–100 characters (aim for under 60)
+- The regex is shape-only: a Linear-shaped name still requires a matching `linear` tracker key per the gating above, which no regex can express
+- A name that fails this pattern must never be created: `branch-create` validates the constructed name before `git checkout -b`, and `preflight-check` blocks commits from a non-conforming branch
+
 **Valid branch examples:**
 
 - `issue-123-add-password-reset`
