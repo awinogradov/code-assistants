@@ -18,7 +18,7 @@ import { join } from "node:path";
  *
  * Returns `[]` for a directory that cannot be read, so a guard listing an optional source
  * directory (`rfc/` in a repo that has none) degrades to "nothing to check" instead of
- * throwing. Bundled dependencies are skipped: the `pdf:create` skill vendors a `renderer/`
+ * throwing. Bundled dependencies are skipped: the `pdf-create` skill vendors a `renderer/`
  * whose package READMEs carry package-relative links that do not resolve in this tree.
  */
 export async function walkMarkdown(dir: string): Promise<string[]> {

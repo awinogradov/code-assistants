@@ -41,7 +41,7 @@ The alternative was a heuristic inside `run`: notice that the session looks prim
 
 This table is the single home for the comparison; [chapter 16](./16-linear-plan-skill.md) and [chapter 17](./17-linear-run-skill.md) point here rather than keeping copies that would drift.
 
-`run-primed` is `run` with one phase replaced. Everything from the draft onward — pipeline, expert review, branch, commit, PR, monitor — is the same machinery, referenced rather than restated. The two Linear entries replace a different half: `linear:plan` stops after storing its plan, and `linear:run` picks that plan up later instead of drafting one.
+`run-primed` is `run` with one phase replaced. Everything from the draft onward — pipeline, expert review, branch, commit, PR, monitor — is the same machinery, referenced rather than restated. The two Linear entries replace a different half: `linear-plan` stops after storing its plan, and `linear-run` picks that plan up later instead of drafting one.
 
 ## At a glance
 

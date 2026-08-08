@@ -8,7 +8,7 @@ Detection is pure string matching — it performs **no I/O**. That is why the is
 
 Parse and strip `--experts-review` from the arguments before anything else, including the create-issue pre-step below. Its presence enables the expert review step for this invocation; when it is absent, [the pipeline](pipeline.md#review-and-score-task-4) skips that step. The flag is a mode toggle, not input: once stripped it never reaches the detection table, and it files nothing.
 
-`plan` and [`linear:plan`](../../linear:plan/SKILL.md) are the only skills that parse this flag. The `run` family — `run`, `run-primed`, and `linear:run` — never does: its review is always-on by design; see the conditionality rule in [pipeline.md](pipeline.md#review-and-score-task-4).
+`plan` and [`linear-plan`](../../linear-plan/SKILL.md) are the only skills that parse this flag. The `run` family — `run`, `run-primed`, and `linear-run` — never does: its review is always-on by design; see the conditionality rule in [pipeline.md](pipeline.md#review-and-score-task-4).
 
 ## Create-issue flags (`plan` only)
 
@@ -27,9 +27,9 @@ Run this pre-step **before** the detection table. It lets a free-form descriptio
 
 4. **Cancellation** — if the create skill did not emit its success line (the user chose "Cancel", or it stopped on one of its own guards), stop: there is no issue to plan against.
 
-5. **Capture the identifier** from the create skill's exact final output line (these strings mirror [issue:create](../../issue:create/SKILL.md) and [linear:create](../../linear:create/SKILL.md) — if either is reworded, update this capture):
-   - `issue:create` prints `✓ Created issue: <url>`. The number is the last path segment (e.g. `.../issues/445` ⇒ `445`). Input type `github-issue`, id `#<N>`.
-   - `linear:create` prints `✓ Created Linear issue: <identifier> — <url>`. Take `<identifier>`. Input type `linear-issue`, id `<KEY-N>`, team = the matched `linear` tracker's `team`.
+5. **Capture the identifier** from the create skill's exact final output line (these strings mirror [issue-create](../../issue-create/SKILL.md) and [linear-create](../../linear-create/SKILL.md) — if either is reworded, update this capture):
+   - `issue-create` prints `✓ Created issue: <url>`. The number is the last path segment (e.g. `.../issues/445` ⇒ `445`). Input type `github-issue`, id `#<N>`.
+   - `linear-create` prints `✓ Created Linear issue: <identifier> — <url>`. Take `<identifier>`. Input type `linear-issue`, id `<KEY-N>`, team = the matched `linear` tracker's `team`.
 
 6. **Continue with the captured identifier.** Pin the type and id and do **not** run the detection table — the flag already determined the type. The subsequent `resolve-issue-context` fetch is the positive verification of the captured id: if it returns unresolved, surface the error and stop, never proceed against a fabricated id.
 

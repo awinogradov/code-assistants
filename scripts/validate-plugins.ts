@@ -6,7 +6,6 @@ import {
   agentFrontmatterSchema,
   marketplaceSchema,
   pluginManifestSchema,
-  portableSkillFrontmatterSchema,
   skillFrontmatterSchema,
 } from "./schemas";
 
@@ -14,7 +13,6 @@ type Target =
   | { kind: "marketplace"; path: string }
   | { kind: "plugin-manifest"; path: string }
   | { kind: "skill"; path: string }
-  | { kind: "portable-skill"; path: string }
   | { kind: "agent"; path: string };
 
 function classify(path: string): Target | null {
@@ -23,9 +21,6 @@ function classify(path: string): Target | null {
   }
   if (path.includes("/.claude-plugin/plugin.json")) {
     return { kind: "plugin-manifest", path };
-  }
-  if (/^agent-skills\/[^/]+\/SKILL\.md$/.test(path)) {
-    return { kind: "portable-skill", path };
   }
   if (/\/skills\/[^/]+\/SKILL\.md$/.test(path)) {
     return { kind: "skill", path };
@@ -42,7 +37,6 @@ async function discoverAll(): Promise<Target[]> {
     "claude-plugins/*/.claude-plugin/plugin.json",
     "claude-plugins/*/skills/*/SKILL.md",
     "claude-plugins/*/agents/*.md",
-    "agent-skills/*/SKILL.md",
   ];
   const out: Target[] = [];
   for (const pattern of patterns) {
@@ -101,8 +95,6 @@ async function validateTarget(t: Target): Promise<string | null> {
       return validateJson(t.path, pluginManifestSchema);
     case "skill":
       return validateFrontmatter(t.path, skillFrontmatterSchema);
-    case "portable-skill":
-      return validateFrontmatter(t.path, portableSkillFrontmatterSchema);
     case "agent":
       return validateFrontmatter(t.path, agentFrontmatterSchema);
   }

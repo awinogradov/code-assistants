@@ -159,9 +159,9 @@ Output the PR URL. Set task 7 to `completed`.
 
 #### Step 3: Monitor PR
 
-Set task 8 ("Monitor PR") to `in_progress`. Invoke `Skill(autopilot:pr-monitor)` in foreground mode (do NOT use the Agent tool with run_in_background). It polls for review status, invokes pr:resolve interactively if changes are requested, and waits for approval or merge.
+Set task 8 ("Monitor PR") to `in_progress`. Invoke `Skill(autopilot:pr-monitor)` in foreground mode (do NOT use the Agent tool with run_in_background). It polls for review status, invokes pr-resolve interactively if changes are requested, and waits for approval or merge.
 
-**Autopilot override for pr:resolve:** when pr:monitor invokes pr:resolve and it presents the review-action gate via AskUserQuestion, auto-select "Address all". Replies post without prompting.
+**Autopilot override for pr-resolve:** when pr-monitor invokes pr-resolve and it presents the review-action gate via AskUserQuestion, auto-select "Address all". Replies post without prompting.
 
 #### Completion
 

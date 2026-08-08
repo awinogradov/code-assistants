@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const kebab = /^[a-z0-9]+(?:[-:][a-z0-9]+)*$/;
+const kebab = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const semver = /^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/;
 
 export const marketplaceSchema = z.object({
@@ -34,8 +34,9 @@ export const pluginManifestSchema = z.object({
   repository: z.string().min(1).optional(),
 });
 
-// Skill/agent name slugs allow `:` separators (e.g. `pr:review`).
-const skillName = z.string().regex(kebab, "name must be kebab-case (`:` allowed as separator)");
+// Skill/agent names are portable Agent Skills names: dash-only kebab-case, no
+// `:` — the source layout is consumed verbatim by non-Claude CLIs (RFC-0002).
+const skillName = z.string().regex(kebab, "name must be dash-only kebab-case (no `:`)");
 
 export const skillFrontmatterSchema = z.object({
   name: skillName,
@@ -44,15 +45,6 @@ export const skillFrontmatterSchema = z.object({
   "allowed-tools": z.array(z.string().min(1)).optional(),
   model: z.string().optional(),
 });
-
-// Portable Agent Skills entries (agent-skills/) target Codex/Kimi-style
-// consumers: no `:` in names, and no Claude-only keys may survive the export.
-export const portableSkillFrontmatterSchema = z
-  .object({
-    name: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "portable name must be kebab-case without `:`"),
-    description: z.string().min(1),
-  })
-  .strict();
 
 export const agentFrontmatterSchema = z.object({
   name: skillName,

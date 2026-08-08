@@ -21,7 +21,7 @@ The invoking skill provides in the prompt:
 - **Issue number** (e.g., `42`) — for `github-issue`.
 - **Repository name** (e.g., `awinogradov/code-assistants`) — for `github-issue`.
 - **Linear ID** (e.g., `ENG-123`) and **Linear team** (e.g., `ENG`) — for `linear-issue`.
-- **Auto-assign current user** (optional, default `false`) — when the prompt contains `Auto-assign current user: true`, run [Phase 2](#phase-2-auto-assign-current-user-opt-in) and include the `**Assignee:**` line in the [Phase 3](#phase-3-output) output. Otherwise skip [Phase 2](#phase-2-auto-assign-current-user-opt-in) entirely and omit the line. Read-only callers (e.g. `pr:review`) must NOT pass the flag. Auto-assign applies to **GitHub only** in this phase; for Linear, skip [Phase 2](#phase-2-auto-assign-current-user-opt-in) and set `assignee` to `null`.
+- **Auto-assign current user** (optional, default `false`) — when the prompt contains `Auto-assign current user: true`, run [Phase 2](#phase-2-auto-assign-current-user-opt-in) and include the `**Assignee:**` line in the [Phase 3](#phase-3-output) output. Otherwise skip [Phase 2](#phase-2-auto-assign-current-user-opt-in) entirely and omit the line. Read-only callers (e.g. `pr-review`) must NOT pass the flag. Auto-assign applies to **GitHub only** in this phase; for Linear, skip [Phase 2](#phase-2-auto-assign-current-user-opt-in) and set `assignee` to `null`.
 
 ## Phase 1: Fetch Issue
 
@@ -49,7 +49,7 @@ Use the **Linear ID** from the prompt. Run the bundled GraphQL helper — it is 
 
 ## Phase 2: Auto-Assign Current User (opt-in)
 
-<!-- Canonical self-assign logic. Mirrored in [skills/branch:create/SKILL.md Phase 2](../skills/branch:create/SKILL.md#phase-2-fetch-github-issue). Keep in sync. -->
+<!-- Canonical self-assign logic. Mirrored in [skills/branch-create/SKILL.md Phase 2](../skills/branch-create/SKILL.md#phase-2-fetch-github-issue). Keep in sync. -->
 
 Run this phase ONLY when the caller's prompt contains `Auto-assign current user: true` **and** the provider is GitHub. Otherwise skip directly to [Phase 3](#phase-3-output) and omit the `**Assignee:**` line from the output.
 

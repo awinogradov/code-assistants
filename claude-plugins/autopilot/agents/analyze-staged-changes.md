@@ -1,6 +1,6 @@
 ---
 name: analyze-staged-changes
-description: Categorize staged files and assess commit strategy. Use when commits:create needs pre-computed analysis without polluting parent conversation.
+description: Categorize staged files and assess commit strategy. Use when commits-create needs pre-computed analysis without polluting parent conversation.
 tools: Bash
 model: haiku
 ---

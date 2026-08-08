@@ -1,10 +1,10 @@
-# The `linear:plan` skill
+# The `linear-plan` skill
 
 > Chapter 16 of the [repository docs](../README.md#repository-docs).
 
 How `/autopilot:linear-plan` turns a plan from a session artifact into something durable on its Linear ticket — expert-reviewed when `--experts-review` is passed, and stored unconditionally.
 
-> Source of truth: `claude-plugins/autopilot/skills/linear:plan/SKILL.md` (the skill), `…/skills/plan/references/pipeline.md` (the shared review pipeline it executes), and `…/skills/linear:create/SKILL.md` (the description this one rewrites).
+> Source of truth: `claude-plugins/autopilot/skills/linear-plan/SKILL.md` (the skill), `…/skills/plan/references/pipeline.md` (the shared review pipeline it executes), and `…/skills/linear-create/SKILL.md` (the description this one rewrites).
 
 ## The pattern this exists for
 
@@ -14,20 +14,20 @@ Every existing on-ramp writes its plan to the harness plan-mode file, which is s
 - The plan is picked up next week, by which point the session is gone.
 - The plan is executed by an orchestrator that did not draft it.
 
-In all three the plan has to live somewhere a second reader can reach, and the ticket is the obvious place: it is already the thing tracking the work. This skill puts it there. [`linear:run`](./17-linear-run-skill.md) is the other half — the reader that executes what this one stored.
+In all three the plan has to live somewhere a second reader can reach, and the ticket is the obvious place: it is already the thing tracking the work. This skill puts it there. [`linear-run`](./17-linear-run-skill.md) is the other half — the reader that executes what this one stored.
 
 ## What it does and does not do
 
-`linear:plan` is `plan` plus a durable write, minus the implementation:
+`linear-plan` is `plan` plus a durable write, minus the implementation:
 
 | Phase                      | Behaviour                                |
 | -------------------------- | ---------------------------------------- |
 | Input detection, gathering | `plan`, unchanged                        |
 | Draft, review, score       | `plan`, unchanged — the shared pipeline  |
 | Store on the ticket        | **new**                                  |
-| Implement, commit, PR      | **removed** — that is `linear:run`'s job |
+| Implement, commit, PR      | **removed** — that is `linear-run`'s job |
 
-Stopping after the store is the deliberate part. If this skill also implemented, the reader would never be needed in the same session, and the plan-on-a-ticket would be a side effect rather than the deliverable. Composed the other way round, `linear:plan` then `linear:run` gives you a durable handoff between independently triggered sessions.
+Stopping after the store is the deliberate part. If this skill also implemented, the reader would never be needed in the same session, and the plan-on-a-ticket would be a side effect rather than the deliverable. Composed the other way round, `linear-plan` then `linear-run` gives you a durable handoff between independently triggered sessions.
 
 For how this pair sits beside the other on-ramps, see the comparison in [the `run-primed` chapter](./15-run-primed-skill.md#when-to-use-which); this chapter does not restate it.
 
@@ -41,7 +41,7 @@ Three conditions stop the run, and all three are checked **before** the context 
 | The input is not a Linear issue          | a description, GitHub issue, or alert has no ticket either     |
 | No Linear MCP tool resolves              | the write path is unavailable, so the plan could not be stored |
 
-Ordering matters for cost, not correctness. An expert review pass is the most expensive thing autopilot does; discovering afterwards that the plan has nowhere to go wastes all of it. Each message names `/autopilot:plan` as the alternative and the producer never falls through to it automatically. [`linear:run`](./17-linear-run-skill.md) has a different responsibility on the read side: an unusable stored artifact selects its fresh-plan path instead of blocking issue execution.
+Ordering matters for cost, not correctness. An expert review pass is the most expensive thing autopilot does; discovering afterwards that the plan has nowhere to go wastes all of it. Each message names `/autopilot:plan` as the alternative and the producer never falls through to it automatically. [`linear-run`](./17-linear-run-skill.md) has a different responsibility on the read side: an unusable stored artifact selects its fresh-plan path instead of blocking issue execution.
 
 No preflight check runs, and none is needed: this skill creates no branch and no commit, so there is no git state to protect. What the tree looked like is recorded in the stored plan instead.
 
@@ -71,7 +71,7 @@ The three metadata fields each earn their place:
 - **`Score:`** records what the plan actually achieved, so a later reader can weigh it.
 - **`Base:`** records the tree the plan was drafted against. It is information, not a gate — see [why drift does not block](./17-linear-run-skill.md#drift-is-reported-not-enforced).
 
-The annotated list above is the contract; what the store actually writes is a literal **emission template** the skill carries beside it — the exact stored block with `<angle-bracket>` placeholders for the score (or the literal `skipped`), the base SHA, and each section body. Only placeholders are filled; every other byte — anchor, header line, headings, order, blank-line layout — is emitted verbatim, and the `<- required` / `<- caller-owned` annotations never reach a ticket. That removes the failure mode where each store re-derives the markdown from prose and submits a structurally different description that the reader then rejects as unusable. The first-store `+++ Original task +++` cut is a literal emission form too — the same collapsible shape as `linear:create`'s original-prompt preamble, with the prior description inserted byte-identical and treated as opaque rather than rewritten into the canonical forms below.
+The annotated list above is the contract; what the store actually writes is a literal **emission template** the skill carries beside it — the exact stored block with `<angle-bracket>` placeholders for the score (or the literal `skipped`), the base SHA, and each section body. Only placeholders are filled; every other byte — anchor, header line, headings, order, blank-line layout — is emitted verbatim, and the `<- required` / `<- caller-owned` annotations never reach a ticket. That removes the failure mode where each store re-derives the markdown from prose and submits a structurally different description that the reader then rejects as unusable. The first-store `+++ Original task +++` cut is a literal emission form too — the same collapsible shape as `linear-create`'s original-prompt preamble, with the prior description inserted byte-identical and treated as opaque rather than rewritten into the canonical forms below.
 
 ### Linear-safe markdown
 
@@ -127,7 +127,7 @@ Linear's editor accepts most Markdown on input ([editor reference](https://linea
 
 Anchoring on `## Implementation plan` rather than on the collapsible is what makes a re-store idempotent: the wrapper is created once and never stacked, because the second store matches the anchor and never reaches the wrapping branch.
 
-Linear renders `+++ Section title` … `+++` as an initially-hidden section, and `<details>` HTML does not render at all, so the fence is the only option. A description written by [`linear:create`](../claude-plugins/autopilot/skills/linear:create/SKILL.md) already opens with its own `+++ Original prompt +++` fence, so wrapping nests one inside the other.
+Linear renders `+++ Section title` … `+++` as an initially-hidden section, and `<details>` HTML does not render at all, so the fence is the only option. A description written by [`linear-create`](../claude-plugins/autopilot/skills/linear-create/SKILL.md) already opens with its own `+++ Original prompt +++` fence, so wrapping nests one inside the other.
 
 **All three store cases were observed rather than assumed.** Linear's [GraphQL markdown documentation](https://linear.app/developers/graphql) describes the fence without saying whether it nests, so the behaviour was exercised against a real ticket:
 
@@ -147,7 +147,7 @@ The plan is stored automatically the moment the shared review pipeline finishes 
 
 ## How this is guarded
 
-`linear:plan` and `linear:run` are prompt files with no import between them, so a renamed stored section would break the reader with nothing failing in between. `linearPlanContract.test.ts` closes that gap the way [`primedBriefContract.test.ts`](./15-run-primed-skill.md#how-this-is-guarded) does for the explore pair: it extracts the section names and their markers from this skill's own template and asserts the reader consumes exactly the required subset and none of the caller-owned ones. It also pins the format version across both sides, asserts the reader maps every verdict to stored-plan or fresh-plan behavior, asserts the fallback never dispatches the producer or overwrites Linear, and asserts `pipeline.md` states no scoring threshold or revision budget — the review is an enhancement, and a re-introduced gate would silently start losing plans. The [emission template](#the-stored-plan-format) is pinned the same way: it must open with the anchor and placeholder header line, list every contract section in order, leak no `<-` annotation, and carry none of the author forms Linear normalizes away.
+`linear-plan` and `linear-run` are prompt files with no import between them, so a renamed stored section would break the reader with nothing failing in between. `linearPlanContract.test.ts` closes that gap the way [`primedBriefContract.test.ts`](./15-run-primed-skill.md#how-this-is-guarded) does for the explore pair: it extracts the section names and their markers from this skill's own template and asserts the reader consumes exactly the required subset and none of the caller-owned ones. It also pins the format version across both sides, asserts the reader maps every verdict to stored-plan or fresh-plan behavior, asserts the fallback never dispatches the producer or overwrites Linear, and asserts `pipeline.md` states no scoring threshold or revision budget — the review is an enhancement, and a re-introduced gate would silently start losing plans. The [emission template](#the-stored-plan-format) is pinned the same way: it must open with the anchor and placeholder header line, list every contract section in order, leak no `<-` annotation, and carry none of the author forms Linear normalizes away.
 
 **What no test can show:** that Linear renders the stored description the way this chapter says. That is settled by a dry run on a real ticket, recorded on the pull request, because no `linear` tracker is configured in this repository and neither skill can execute here. Nothing under `.github/workflows/` runs `bun test` either, so the guard gates locally and in review rather than in CI.
 
@@ -155,8 +155,8 @@ The plan is stored automatically the moment the shared review pipeline finishes 
 
 | File                                                                           | Role                                                                  |
 | ------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
-| `claude-plugins/autopilot/skills/linear:plan/SKILL.md`                         | The skill: gate, pipeline by reference, anchored store                |
-| `claude-plugins/autopilot/skills/linear:run/SKILL.md`                          | The reader that consumes the stored format                            |
+| `claude-plugins/autopilot/skills/linear-plan/SKILL.md`                         | The skill: gate, pipeline by reference, anchored store                |
+| `claude-plugins/autopilot/skills/linear-run/SKILL.md`                          | The reader that consumes the stored format                            |
 | `claude-plugins/autopilot/skills/plan/SKILL.md`                                | Input resolution and Common Instructions                              |
 | `claude-plugins/autopilot/skills/plan/references/pipeline.md`                  | The shared draft-review-finalize pipeline it executes                 |
 | `claude-plugins/autopilot/skills/shared-rules/references/linear-mcp-access.md` | How `get_issue`, `list_issue_statuses`, and `save_issue` are resolved |

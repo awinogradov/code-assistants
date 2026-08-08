@@ -80,9 +80,9 @@ inputs:
     required: false
     default: "600"
   rules_doc_url:
-    description: "Canonical GitHub blob URL of the pr:review SKILL.md. The review/answer skills use it to build CHECK-* rule links. Override only when the skill lives in a fork."
+    description: "Canonical GitHub blob URL of the pr-review SKILL.md. The review/answer skills use it to build CHECK-* rule links. Override only when the skill lives in a fork."
     required: false
-    default: "https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/pr%3Areview/SKILL.md"
+    default: "https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/pr-review/SKILL.md"
   review_prompt:
     description: "Leading slash command / prompt for review mode. The action appends the runtime arguments block (REPO, PR_NUMBER, REVIEWER, PR_AUTHOR, RULES_DOC_URL) after this value, so a custom prompt still receives them. Override to run a different review skill without forking the action."
     required: false

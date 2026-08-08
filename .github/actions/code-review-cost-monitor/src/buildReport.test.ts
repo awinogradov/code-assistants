@@ -81,7 +81,7 @@ describe("buildAttributionPrompt()", () => {
 
     expect(prompt).toContain("median cost per run (USD): 0.3 -> 0.5 (threshold 25)");
     expect(prompt).toContain("since 2026-06-01");
-    expect(prompt).toContain("pr:review/SKILL.md");
+    expect(prompt).toContain("pr-review/SKILL.md");
     expect(prompt).toContain("untrusted data");
   });
 });

@@ -1,8 +1,8 @@
 /**
  * Guards that the output-generating autopilot skills explicitly instruct the model to
- * apply the reference-formatting rules (RFC-0001): pr:create and pr:update (PR
- * bodies, issue #279) plus plan, gather-context, run, and issue:create
- * (plan files, Context Maps, and issue bodies, issue #334), and pr:review (review verdict bodies —
+ * apply the reference-formatting rules (RFC-0001): pr-create and pr-update (PR
+ * bodies, issue #279) plus plan, gather-context, run, and issue-create
+ * (plan files, Context Maps, and issue bodies, issue #334), and pr-review (review verdict bodies —
  * wefortis/fortune-os PR 93 review 4619732611 cited files and standards as backticked
  * dead text). Inlining the rules alone never made the generators apply them, so generated
  * output escaped the standard; this asserts the apply-instruction itself survives.
@@ -35,7 +35,7 @@ const sharedReferences = join(skillsDir, "shared-rules/references");
 // generation phase. Reword it only alongside this test.
 const applyInstruction = "reference-formatting rules in [`reference-formatting.md`]";
 
-const skills = ["pr:create", "pr:update", "plan", "gather-context", "run", "issue:create", "linear:create", "pr:review"];
+const skills = ["pr-create", "pr-update", "plan", "gather-context", "run", "issue-create", "linear-create", "pr-review"];
 
 describe("output reference-formatting wiring", () => {
   test.each(skills)("%s instructs the body generator to apply RFC-0001", async (skill) => {
@@ -46,11 +46,11 @@ describe("output reference-formatting wiring", () => {
 
 // Issue #387: bare Linear ids in generated output are dead text on GitHub. The PR-body
 // skills must prescribe the plain issue URL on magic-word lines (the form Linear's
-// parser and GitHub's autolinker both accept), pr:review must link the ticket it
+// parser and GitHub's autolinker both accept), pr-review must link the ticket it
 // cites, and the producing agent contracts must expose the issue `url` the skills
 // build those links from. Presence-guards in the style of the wiring test above.
 describe("linear issue linking (issue #387)", () => {
-  const prBodySkills = ["pr:create", "pr:update"];
+  const prBodySkills = ["pr-create", "pr-update"];
 
   // The magic-word grammar itself moved into the shared block (issue #479), so it is
   // asserted once at its canonical home rather than twice in the consuming skills —
@@ -72,8 +72,8 @@ describe("linear issue linking (issue #387)", () => {
     expect(content).toContain("self-check the drafted body");
   });
 
-  test("pr:review cites the linked ticket as a link built from the issue url", async () => {
-    const content = await readFile(join(skillsDir, "pr:review", "SKILL.md"), "utf8");
+  test("pr-review cites the linked ticket as a link built from the issue url", async () => {
+    const content = await readFile(join(skillsDir, "pr-review", "SKILL.md"), "utf8");
     expect(content).toContain("cite it as a markdown link built from");
   });
 
@@ -93,7 +93,7 @@ describe("linear issue linking (issue #387)", () => {
 // headRefOid — valid for fork PRs too, whose head commits stay reachable in the base
 // repo via refs/pull/N/head.
 describe("review body file links", () => {
-  const reviewSkill = join(skillsDir, "pr:review", "SKILL.md");
+  const reviewSkill = join(skillsDir, "pr-review", "SKILL.md");
 
   test("defines the PR blob base from the reviewed head commit", async () => {
     const content = await readFile(reviewSkill, "utf8");

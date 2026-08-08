@@ -47,7 +47,7 @@ const acknowledgementPatterns = [
 
 /**
  * True when the comment explicitly asks the bot to look at the PR again — used
- * to gate the expensive verdict re-evaluation in `pr:answer` so plain replies
+ * to gate the expensive verdict re-evaluation in `pr-answer` so plain replies
  * skip it. Shares {@link reReviewKeywords} with the acknowledgement check.
  */
 export function requestsReReview(body: string): boolean {
@@ -106,7 +106,7 @@ export interface ReverdictArming {
  * True when a PR-author comment should arm the verdict re-evaluation even
  * without an explicit "re-review" phrase: the bot is currently blocking and the
  * author signals the finding is addressed (e.g. "Added the section"). The
- * classifier only arms the pass — `pr:answer` still decides the verdict from the
+ * classifier only arms the pass — `pr-answer` still decides the verdict from the
  * live unresolved-thread state, not from the comment's claim (issue #275).
  */
 export function authorAcknowledgesWhileBlocking({
@@ -172,7 +172,7 @@ if (import.meta.main) {
 
   await setOutput("ack_only", String(ackOnly));
 
-  // Gate pr:answer's verdict re-evaluation: re-review when the comment asks for
+  // Gate pr-answer's verdict re-evaluation: re-review when the comment asks for
   // it explicitly, or when the PR author says a blocker is addressed while the
   // bot is still blocking — so plain chit-chat skips the expensive pass but a
   // resolved-blocker claim can lift the block (issue #275).

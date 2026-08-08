@@ -143,7 +143,7 @@ describe("authorAcknowledgesWhileBlocking", () => {
 
   test("arms even when the claim is negated — the model, not the classifier, gates the verdict", () => {
     // "I haven't fixed this yet" contains the token "fixed"; the classifier cannot
-    // parse negation, so it arms the pass and pr:answer judges the live thread state.
+    // parse negation, so it arms the pass and pr-answer judges the live thread state.
     expect(authorAcknowledgesWhileBlocking({ ...arming, body: "I haven't fixed this yet" })).toBe(
       true,
     );

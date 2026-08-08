@@ -39,14 +39,14 @@ Issue **every** call below in a **single message** so they run concurrently. Do 
 
 **Sub-agents** (each returns a bounded JSON object — see the agent's own output schema):
 
-| Agent                                                              | When                       | Prompt                                                                                                     |
-| ------------------------------------------------------------------ | -------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| [`digest-repo-standards`](../../agents/digest-repo-standards.md)   | Except `Scope: primed`     | `Repository root: [path]. Task summary: [summary].`                                                        |
-| [`digest-branch-diff`](../../agents/digest-branch-diff.md)         | Always                     | `Repository root: [path]. Base ref: origin/main.`                                                          |
-| [`resolve-issue-context`](../../agents/resolve-issue-context.md)   | Issue inputs               | Per that agent's Input section; pass `Auto-assign current user: true` for GitHub only                      |
-| [`resolve-alert-context`](../../agents/resolve-alert-context.md)   | `code-scanning-alert` only | `Fetch alert context. Alert number: [n]. Repository: [owner/repo].`                                        |
-| [`search-codebase-todos`](../../agents/search-codebase-todos.md)   | Issue inputs               | `Search for TODOs. Input type: [type]. Issue ID: [id].`                                                    |
-| [`digest-session-history`](../../agents/digest-session-history.md) | Entire enabled (see below) | `Repository root: [path]. Task summary: [summary]. Relevant files: [paths the task text names, when any].` |
+| Agent                                                                                                                                          | When                       | Prompt                                                                                                     |
+| ---------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| [`digest-repo-standards`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/digest-repo-standards.md)   | Except `Scope: primed`     | `Repository root: [path]. Task summary: [summary].`                                                        |
+| [`digest-branch-diff`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/digest-branch-diff.md)         | Always                     | `Repository root: [path]. Base ref: origin/main.`                                                          |
+| [`resolve-issue-context`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/resolve-issue-context.md)   | Issue inputs               | Per that agent's Input section; pass `Auto-assign current user: true` for GitHub only                      |
+| [`resolve-alert-context`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/resolve-alert-context.md)   | `code-scanning-alert` only | `Fetch alert context. Alert number: [n]. Repository: [owner/repo].`                                        |
+| [`search-codebase-todos`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/search-codebase-todos.md)   | Issue inputs               | `Search for TODOs. Input type: [type]. Issue ID: [id].`                                                    |
+| [`digest-session-history`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/digest-session-history.md) | Entire enabled (see below) | `Repository root: [path]. Task summary: [summary]. Relevant files: [paths the task text names, when any].` |
 
 **Direct calls** in the same message:
 

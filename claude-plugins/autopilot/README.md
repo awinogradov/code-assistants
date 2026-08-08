@@ -48,7 +48,7 @@ After installation, restart Claude Code.
 
 ### Use with Codex, Kimi, and other CLIs
 
-The plugin's skills and agents also ship as a portable Agent Skills layout under [`agent-skills/`](../../agent-skills/README.md), generated from this plugin as the source of truth. Copy the skill directories into your CLI's skills directory (`~/.codex/skills/` for Codex CLI; a configured skills directory for Kimi Code CLI), or let the [`agents-skills-sync`](../../.github/actions/agents-skills-sync/README.md) action publish them into your repository's `.agents/skills/` automatically. A `/autopilot:x` slash command corresponds to the exported skill `autopilot-x`. See [Agent skills export](../../docs/18-agent-skills-export.md) for the pipeline and the few Claude Code-only exclusions.
+The `skills/` directory IS the portable Agent Skills layout ([RFC-0002](../../rfc/0002-portable-skills-layout.md)) — no generated copy, no transform. Copy skill directories straight into your CLI's skills directory (`~/.codex/skills/` for Codex CLI; a configured skills directory for Kimi Code CLI), or let the [`agents-skills-sync`](../../.github/actions/agents-skills-sync/README.md) action publish them verbatim into your repository's `.agents/skills/`. A `/autopilot:x` slash command corresponds to the skill `x` — the namespace comes from the plugin at runtime. See [Portable single-source skills](../../docs/18-agent-skills-export.md) for details and the Claude Code-only mechanics in `plan` and `run-primed`.
 
 ## Structure
 
@@ -70,42 +70,32 @@ code-assistants/
         │   ├── fetch-pr-reviews.md
         │   ├── resolve-alert-context.md
         │   ├── resolve-assignees.md
+        │   ├── digest-session-history.md
         │   ├── resolve-issue-context.md
         │   ├── scan-and-analyze-todos.md
-        │   ├── search-codebase-todos.md
-        │   ├── pr:review:ai-smells.md
-        │   ├── pr:review:architecture.md
-        │   ├── pr:review:common-sense.md
-        │   ├── pr:review:complexity.md
-        │   ├── pr:review:correctness.md
-        │   ├── pr:review:pr-hygiene.md
-        │   ├── pr:review:standards.md
-        │   ├── pr:review:surface-correctness.md
-        │   ├── pr:review:surface-naming.md
-        │   ├── pr:review:surface-testing.md
-        │   └── pr:review:testing.md
+        │   └── search-codebase-todos.md
         └── skills/                 # Skills
             ├── ascii-schemas/
-            ├── branch:create/
-            ├── commits:create/
-            ├── commits:restructure/
-            ├── dependabot:resolve/
+            ├── branch-create/
+            ├── commits-create/
+            ├── commits-restructure/
+            ├── dependabot-resolve/
             ├── explore/
             ├── gather-context/
-            ├── issue:create/
-            ├── issue:run/
-            ├── linear:create/
-            ├── linear:plan/
-            ├── linear:run/
-            ├── pdf:create/             # bundles a self-contained Node renderer/ sub-project
+            ├── issue-create/
+            ├── issue-run/
+            ├── linear-create/
+            ├── linear-plan/
+            ├── linear-run/
+            ├── pdf-create/             # bundles a self-contained Node renderer/ sub-project
             ├── plan/                   # bundles references/ loaded on demand
-            ├── pr:answer/
-            ├── pr:create/
-            ├── pr:monitor/
-            ├── pr:resolve/
-            ├── pr:review/
-            ├── pr:update/
-            ├── pr:validate/
+            ├── pr-answer/
+            ├── pr-create/
+            ├── pr-monitor/
+            ├── pr-resolve/
+            ├── pr-review/
+            ├── pr-update/
+            ├── pr-validate/
             ├── preflight-check/
             ├── run/
             ├── run-primed/
@@ -256,7 +246,7 @@ Create a Linear issue with the same five-section body as `/autopilot:issue-creat
 
 ### `/autopilot:linear-plan`
 
-Same as `/autopilot:plan`, but stores the finished plan in its Linear ticket's description so it outlives the session — then stops, without implementing. See [the linear:plan skill](../../docs/16-linear-plan-skill.md) for the stored format.
+Same as `/autopilot:plan`, but stores the finished plan in its Linear ticket's description so it outlives the session — then stops, without implementing. See [the linear-plan skill](../../docs/16-linear-plan-skill.md) for the stored format.
 
 **Precondition:** a `linear` tracker in `package.json` `agents.trackers`, a Linear issue as the argument, and a reachable Linear MCP server. All three are checked before the expensive planning pass, and each names `/autopilot:plan` as the alternative. Storing is unconditional — expert review runs only when `--experts-review` is passed (as in `/autopilot:plan`), and the stored header records the score, or `Score: skipped` without the flag, as information for the ticket's reader, never as a gate.
 
@@ -267,7 +257,7 @@ Same as `/autopilot:plan`, but stores the finished plan in its Linear ticket's d
 
 ### `/autopilot:linear-run`
 
-Same as `/autopilot:run`, but first checks the Linear ticket for a durable plan. A valid stored plan is executed verbatim; when no executable stored plan is available, the skill drafts and reviews a fresh plan before continuing autonomously. See [the linear:run skill](../../docs/17-linear-run-skill.md) for the two-mode contract.
+Same as `/autopilot:run`, but first checks the Linear ticket for a durable plan. A valid stored plan is executed verbatim; when no executable stored plan is available, the skill drafts and reviews a fresh plan before continuing autonomously. See [the linear-run skill](../../docs/17-linear-run-skill.md) for the two-mode contract.
 
 **Precondition:** only a Linear ticket is required. Missing, unreadable, malformed, or unverifiable stored-plan data selects the fresh-plan path instead of rejecting the issue. The fallback never invokes `/autopilot:linear-plan` or rewrites the ticket description.
 
@@ -342,7 +332,7 @@ Generate ASCII schemas, diagrams, and UI wireframes using Unicode box-drawing ch
 
 ### `/autopilot:pdf-create`
 
-Generate a beautiful, brand-themed, multi-page PDF — report, research doc, six-pager, or playbook — from structured content, using a bundled `@react-pdf/renderer` pipeline (direct rendering, no headless browser). Optionally themed by a Google `design.md`. The skill is self-contained and portable: copy its folder into `~/.claude/skills/` to use it without the plugin (requires a local Node runtime). See the [pdf:create skill doc](../../docs/10-pdf-create-skill.md).
+Generate a beautiful, brand-themed, multi-page PDF — report, research doc, six-pager, or playbook — from structured content, using a bundled `@react-pdf/renderer` pipeline (direct rendering, no headless browser). Optionally themed by a Google `design.md`. The skill is self-contained and portable: copy its folder into `~/.claude/skills/` to use it without the plugin (requires a local Node runtime). See the [pdf-create skill doc](../../docs/10-pdf-create-skill.md).
 
 ```bash
 /autopilot:pdf-create "quarterly report from these notes"                 # Default theme
@@ -380,40 +370,24 @@ The canonical home for instruction blocks several skills need — reference form
 
 ## Agents
 
-### `pr:review:*` (11 agents)
-
-Specialized review sub-agents launched in parallel by the `pr:review` skill. Each owns one review category with its own model declaration. The main skill aggregates findings from all agents into a unified review.
-
-| Agent                           | Model  | Focus                                                   |
-| ------------------------------- | ------ | ------------------------------------------------------- |
-| `pr:review:correctness`         | sonnet | Logic errors, async bugs, serialization                 |
-| `pr:review:testing`             | sonnet | Mock quality, coverage gaps, test structure             |
-| `pr:review:complexity`          | haiku  | Function length, nesting, naming, comments              |
-| `pr:review:standards`           | haiku  | Lint suppression, commit conventions, validation libs   |
-| `pr:review:architecture`        | sonnet | Code reuse, coupling, pattern consistency               |
-| `pr:review:ai-smells`           | sonnet | Over-engineering, unnecessary wrappers, verbose logging |
-| `pr:review:common-sense`        | sonnet | Constants, operational concerns, error messages         |
-| `pr:review:pr-hygiene`          | sonnet | Diff/description match, atomicity, commit structure     |
-| `pr:review:surface-correctness` | haiku  | Unreachable code, datetime, broad catches               |
-| `pr:review:surface-testing`     | haiku  | Missing tests, flaky indicators, placeholders           |
-| `pr:review:surface-naming`      | haiku  | Duplication, file naming, directory placement           |
-
-### Helper sub-agents (10 agents)
+### Helper sub-agents (12 agents)
 
 Context-isolating workers invoked by other skills to keep the parent conversation small. Each returns a structured summary only.
 
 | Agent                    | Model   | Used by                                | Purpose                                                                                      |
 | ------------------------ | ------- | -------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `analyze-pr-commits`     | sonnet  | `pr:create`, `pr:update`               | Summarize branch commits, diff, and linked issue for PR context                              |
-| `analyze-staged-changes` | haiku   | `commits:create`                       | Categorize staged files and recommend a commit strategy                                      |
+| `analyze-pr-commits`     | sonnet  | `pr-create`, `pr-update`               | Summarize branch commits, diff, and linked issue for PR context                              |
+| `digest-branch-diff`     | haiku   | `gather-context`                       | Summarize a branch's commits and diff against main; detect a stale-merged branch             |
+| `digest-repo-standards`  | sonnet  | `gather-context`                       | Digest the repo's README, docs/, rfc/, and principles/ into a bounded standards summary      |
+| `analyze-staged-changes` | haiku   | `commits-create`                       | Categorize staged files and recommend a commit strategy                                      |
 | `digest-session-history` | haiku   | `plan`, `run`, `explore`               | Map task files and commits to the Entire sessions and checkpoints that produced them         |
 | `expert-review`          | inherit | `plan`, `plan-*`                       | Score an implementation plan as a domain expert                                              |
-| `fetch-pr-reviews`       | sonnet  | `pr:answer`, `pr:resolve`, `pr:review` | Fetch, filter, and categorize PR review comments by severity                                 |
+| `fetch-pr-reviews`       | sonnet  | `pr-answer`, `pr-resolve`, `pr-review` | Fetch, filter, and categorize PR review comments by severity                                 |
 | `resolve-alert-context`  | sonnet  | `plan`, `run`                          | Fetch GitHub code-scanning alert context via the code-scanning API                           |
-| `resolve-assignees`      | sonnet  | `linear:create`                        | Resolve candidate assignees from CODEOWNERS and Linear team members, current user first      |
-| `resolve-issue-context`  | sonnet  | `plan`, `run`, `pr:review`             | Fetch GitHub/Linear issue context; optionally auto-assign current user (idempotent) via `gh` |
+| `resolve-assignees`      | sonnet  | `linear-create`                        | Resolve candidate assignees from CODEOWNERS and Linear team members, current user first      |
+| `resolve-issue-context`  | sonnet  | `plan`, `run`, `pr-review`             | Fetch GitHub/Linear issue context; optionally auto-assign current user (idempotent) via `gh` |
 | `scan-and-analyze-todos` | sonnet  | `todo-cleanup`                         | Scan codebase for TODOs and check linked GitHub issue statuses                               |
-| `search-codebase-todos`  | haiku   | `plan`, `run`, `pr:review`             | Search the codebase for TODOs and references to a specific issue                             |
+| `search-codebase-todos`  | haiku   | `plan`, `run`, `pr-review`             | Search the codebase for TODOs and references to a specific issue                             |
 
 ## Internal Skills (not in slash menu)
 

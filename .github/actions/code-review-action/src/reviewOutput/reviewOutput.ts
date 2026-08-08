@@ -101,7 +101,7 @@ export function repairOverEscapedWhitespace(text: string): string {
 /**
  * Lowercase the URL fragment of every `CHECK-*` rule link.
  *
- * GitHub rewrites the `<a id="CHECK-…">` anchors in the rendered pr:review
+ * GitHub rewrites the `<a id="CHECK-…">` anchors in the rendered pr-review
  * SKILL.md to lowercase `user-content-…` ids, and URL-fragment lookup is
  * case-sensitive — an uppercase `#CHECK-…` fragment lands at the top of the
  * file instead of the rule. The skills prescribe lowercase fragments; this
