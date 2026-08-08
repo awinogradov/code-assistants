@@ -32,6 +32,7 @@ Files are named `NNNN-short-slug.md`, where `NNNN` is the zero-padded four-digit
 
 ## Index
 
-| RFC      | Title                                                                | Status   |
-| -------- | -------------------------------------------------------------------- | -------- |
-| RFC-0001 | [Reference formatting & readability](./0001-reference-formatting.md) | Accepted |
+| RFC      | Title                                                                    | Status   |
+| -------- | ------------------------------------------------------------------------ | -------- |
+| RFC-0001 | [Reference formatting & readability](./0001-reference-formatting.md)     | Accepted |
+| RFC-0002 | [Portable single-source skills layout](./0002-portable-skills-layout.md) | Accepted |
