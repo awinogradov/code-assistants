@@ -392,7 +392,7 @@ Prefer the project-registered MCP servers declared in the repo's own `.mcp.json`
 
 ## 17. Code Review
 
-- All rules from CLAUDE.md must be applied to the code review
+- All rules from AGENTS.md must be applied to the code review
 
 ## 18. Graphify
 

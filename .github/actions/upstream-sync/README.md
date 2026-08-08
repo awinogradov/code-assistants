@@ -4,7 +4,7 @@ Composite GitHub Action that aggregates the six upstream maintenance syncs behin
 action. Every consumer runs one job instead of one job per kind. Each kind is opt-out: it runs
 by default and is disabled by setting its input to `false`. The kinds are:
 
-- `agents-rules` → [`agents-rules-sync`](../agents-rules-sync/README.md) — sync the stack-appropriate `rules/<stack>.md` into `CLAUDE.md`.
+- `agents-rules` → [`agents-rules-sync`](../agents-rules-sync/README.md) — sync the stack-appropriate `rules/<stack>.md` into `AGENTS.md`, with `CLAUDE.md` as a symlink to it.
 - `code-review` → [`code-review-sync`](../code-review-sync/README.md) — sync the AI code-review workflow.
 - `repomix` → [`repomix-sync`](../repomix-sync/README.md) — sync the `repomix-pack` workflow and `repomix.config.json`.
 - `release` → [`release-sync`](../release-sync/README.md) — sync the release pipeline workflows (create, publish, auto-merge).
@@ -54,7 +54,7 @@ jobs:
 | -------------- | -------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `bot_token`    | yes      | —                     | PAT or GitHub App installation token with `contents: write` + `pull-requests: write` on this repo. The workflow's default `GITHUB_TOKEN` is **not** supported — see [Permissions](#permissions). |
 | `bot_username` | no       | `github-actions[bot]` | Git author/committer login for the sync commits. Pass `${{ vars.BOT_USERNAME }}`. The PRs are opened by the `bot_token` owner.                                                                   |
-| `agents-rules` | no       | `true`                | When `true`, sync the stack-appropriate rules file into `CLAUDE.md`. Set to `false` to opt out.                                                                                                  |
+| `agents-rules` | no       | `true`                | When `true`, sync the stack-appropriate rules file into `AGENTS.md` and publish `CLAUDE.md` as a symlink to it. Set to `false` to opt out.                                                       |
 | `code-review`  | no       | `true`                | When `true`, sync the AI code-review workflow. Set to `false` to opt out.                                                                                                                        |
 | `repomix`      | no       | `true`                | When `true`, sync the repomix-pack workflow and `repomix.config.json`. Set to `false` to opt out.                                                                                                |
 | `release`      | no       | `true`                | When `true`, sync the release pipeline workflows. Set to `false` to opt out.                                                                                                                     |

@@ -618,7 +618,7 @@ Closes #400
 
 ## Code Standards
 
-See [`CLAUDE.md`](./CLAUDE.md) for the full coding-standards matrix, and the Documentation section of [`README.md`](./README.md) for project-specific docs.
+See [`AGENTS.md`](./AGENTS.md) for the full coding-standards matrix, and the Documentation section of [`README.md`](./README.md) for project-specific docs.
 
 ### TODO Comments
 
