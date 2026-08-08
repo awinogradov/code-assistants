@@ -69,7 +69,7 @@ Invoke the `analyze-staged-changes` sub-agent to categorize staged files, assess
 
 ```
 Use the Agent tool with:
-- `subagent_type`: "autopilot:analyze-staged-changes"
+- `subagent_type`: "autopilot-analyze-staged-changes"
 - `prompt`: "Analyze staged changes in the current repository."
 - `description`: "Analyze staged changes"
 ```

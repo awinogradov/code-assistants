@@ -21,6 +21,15 @@ const pluginRootPrefix = "claude-plugins/autopilot";
 /** `Skill(autopilot:x)` invocation tokens, with any surrounding backticks. */
 const skillTokenPattern = /`?Skill\(autopilot:([a-z0-9:-]+)\)`?/g;
 
+/**
+ * Quoted or backticked pre-export ids — subagent_type strings like
+ * `"autopilot:analyze-pr-commits"` and prose mentions like `` `autopilot:run` ``.
+ * Slash-command forms (`/autopilot:x`) are deliberately left: the generated
+ * README documents that mapping, and the slash prompt does not exist outside
+ * Claude Code anyway.
+ */
+const scopedNamePattern = /(["`])autopilot:([a-z0-9:-]+)\1/g;
+
 /** Inline markdown link targets: `](...)`. */
 const linkPattern = /\]\(([^()\s]+)\)/g;
 
@@ -88,7 +97,9 @@ function rewriteHref(href: string, sourceRelPath: string, ctx: RewriteContext): 
  * link is relocated to its exported sibling or to the plugin source on GitHub.
  */
 export function rewriteBody(body: string, sourceRelPath: string, ctx: RewriteContext): string {
-  const withTokens = body.replace(skillTokenPattern, (_match, name: string) => `\`${toPortableSlug(name)}\``);
+  const withTokens = body
+    .replace(skillTokenPattern, (_match, name: string) => `\`${toPortableSlug(name)}\``)
+    .replace(scopedNamePattern, (_match, quote: string, name: string) => `${quote}${toPortableSlug(name)}${quote}`);
   return withTokens.replace(linkPattern, (match, href: string) => {
     const rewritten = rewriteHref(href, sourceRelPath, ctx);
     return rewritten === href ? match : `](${rewritten})`;

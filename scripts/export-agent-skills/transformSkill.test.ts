@@ -68,6 +68,21 @@ describe("rewriteBody", () => {
     expect(rewriteBody(body, "skills/run/SKILL.md", ctx)).toBe(body);
   });
 
+  test("rewrites quoted subagent ids to the exported skill name", () => {
+    const out = rewriteBody('- `subagent_type`: "autopilot:analyze-pr-commits"', "skills/pr:create/SKILL.md", ctx);
+    expect(out).toBe('- `subagent_type`: "autopilot-analyze-pr-commits"');
+  });
+
+  test("rewrites backticked pre-export skill ids in prose", () => {
+    const out = rewriteBody("hand it to `autopilot:run` afterwards", "skills/issue:run/SKILL.md", ctx);
+    expect(out).toBe("hand it to `autopilot-run` afterwards");
+  });
+
+  test("leaves slash-command mentions untouched", () => {
+    const body = "Use /autopilot:pr-create to open it.";
+    expect(rewriteBody(body, "skills/run/SKILL.md", ctx)).toBe(body);
+  });
+
   test("rewrites Skill() invocation tokens, backticked or not", () => {
     expect(rewriteBody("invoke `Skill(autopilot:commits-create)` now", "skills/run/SKILL.md", ctx)).toBe(
       "invoke `autopilot-commits-create` now",

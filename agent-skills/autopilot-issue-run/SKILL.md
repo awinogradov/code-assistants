@@ -8,12 +8,12 @@ description: >-
 
 # Run Autopilot on an Issue
 
-Pick one of the repository's recent open issues and hand it to `autopilot:run`, which drives the full pipeline (plan → implement → commit → PR → monitor). This is the discovery counterpart to `issue:create`: `issue:create` files an issue, `issue:run` starts work on one — without leaving the slash prompt to look up a number.
+Pick one of the repository's recent open issues and hand it to `autopilot-run`, which drives the full pipeline (plan → implement → commit → PR → monitor). This is the discovery counterpart to `issue:create`: `issue:create` files an issue, `issue:run` starts work on one — without leaving the slash prompt to look up a number.
 
 ## When to Use
 
 - When you want to start work but first need to browse the repository's open issues
-- When you already know the issue number and want a shortcut straight into `autopilot:run`
+- When you already know the issue number and want a shortcut straight into `autopilot-run`
 
 ## Input
 
@@ -93,11 +93,11 @@ Resolve the selection to an issue identifier (a GitHub number or a Linear id):
 - A listed issue choice — use its identifier.
 - The enter-a-different-number choice (shown only in the single-issue case) or the auto-provided free-text "Other" — read the entered value, strip a leading `#`, and take the leading integer. If it is not a positive integer, re-prompt once; if it still fails, report the invalid input and stop.
 
-Existence and open/closed state are not checked here — `autopilot:run` owns issue resolution, so a syntactically valid number is handed off as-is.
+Existence and open/closed state are not checked here — `autopilot-run` owns issue resolution, so a syntactically valid number is handed off as-is.
 
 ## Phase 3: Hand Off to Autopilot
 
-Invoke `autopilot-run` with the resolved identifier as its argument (a bare integer like `142`, or a Linear id like `ENG-123`). `autopilot:run` owns everything downstream — issue resolution, planning, branch creation, implementation, commit, PR, and monitoring. This skill makes no further changes after the hand-off.
+Invoke `autopilot-run` with the resolved identifier as its argument (a bare integer like `142`, or a Linear id like `ENG-123`). `autopilot-run` owns everything downstream — issue resolution, planning, branch creation, implementation, commit, PR, and monitoring. This skill makes no further changes after the hand-off.
 
 ## Reference formatting
 

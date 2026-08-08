@@ -98,7 +98,7 @@ Launch the `resolve-assignees` agent to gather candidates — CODEOWNERS plus th
 
 ```
 Use the Agent tool with:
-- `subagent_type`: "autopilot:resolve-assignees"
+- `subagent_type`: "autopilot-resolve-assignees"
 - `prompt`: "Resolve assignee candidates. Repository: [owner/repo]. Linear team: [team]."
 - `description`: "Resolve assignees"
 ```

@@ -72,7 +72,7 @@ Invoke the `analyze-pr-commits` sub-agent to gather commit history, diff summary
 
 ```
 Use the Agent tool with:
-- `subagent_type`: "autopilot:analyze-pr-commits"
+- `subagent_type`: "autopilot-analyze-pr-commits"
 - `prompt`: "Analyze commits for PR. Base: [base branch from Phase 1]. Branch: [branch name]. Provider: [github or linear]. Issue number: [GitHub number, Linear id, or none]. Repository: [owner/repo]. Fetch issue: [true if a GitHub or Linear issue branch, false if special prefix]."
 - `description`: "Analyze PR commits"
 ```

@@ -48,7 +48,7 @@ Invoke the `scan-and-analyze-todos` sub-agent to scan the codebase for TODO/FIXM
 
 ```
 Use the Agent tool with:
-- `subagent_type`: "autopilot:scan-and-analyze-todos"
+- `subagent_type`: "autopilot-scan-and-analyze-todos"
 - `prompt`: "Scan for TODOs. Language: [language from Phase 1]. Repository: [owner/repo from Phase 1]. Provider: [github or linear]."
 - `description`: "Scan and analyze TODOs"
 ```

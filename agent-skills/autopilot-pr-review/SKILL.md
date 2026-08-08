@@ -65,19 +65,19 @@ Acquire codebase context: follow the shared repomix-snapshot chain,
 
 Agent (fetch-pr-reviews):
   Use the Agent tool with:
-  - `subagent_type`: "autopilot:fetch-pr-reviews"
+  - `subagent_type`: "autopilot-fetch-pr-reviews"
   - `prompt`: "Fetch reviews for PR #[PR_NUMBER]. Repo: <REPO>. Author: <PR_AUTHOR>."
   - `description`: "Fetch PR review threads"
 
 Agent (resolve-issue-context) — only if linked issue found:
   Use the Agent tool with:
-  - `subagent_type`: "autopilot:resolve-issue-context"
+  - `subagent_type`: "autopilot-resolve-issue-context"
   - `prompt`: "Fetch issue context. Issue number: [N]. Repository: <REPO>."
   - `description`: "Resolve issue context"
 
 Agent (search-codebase-todos) — only if linked issue found:
   Use the Agent tool with:
-  - `subagent_type`: "autopilot:search-codebase-todos"
+  - `subagent_type`: "autopilot-search-codebase-todos"
   - `prompt`: "Search for TODOs. Issue number: [N]."
   - `description`: "Search codebase TODOs and issue references"
 ```
