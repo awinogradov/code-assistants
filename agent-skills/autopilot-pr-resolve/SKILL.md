@@ -81,7 +81,7 @@ Acquire codebase context: follow the shared repomix-snapshot chain,
 
 Agent 1 (fetch-pr-reviews):
   Use the Agent tool with:
-  - `subagent_type`: "autopilot:fetch-pr-reviews"
+  - `subagent_type`: "autopilot-fetch-pr-reviews"
   - `prompt`: "Fetch reviews for PR #<PR_NUMBER>. Repo: <OWNER>/<REPO>. Author: <AUTHOR_LOGIN>."
   - `description`: "Fetch PR reviews"
 ```
