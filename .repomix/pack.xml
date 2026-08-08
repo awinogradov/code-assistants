@@ -1199,15 +1199,15 @@ Previously, a single transient GitHub 5xx response during the upstream sync woul
 <file path=".github/actions/agents-rules-sync/docs/sync-flow.md">
 # Sync flow
 
-End-to-end data flow for [`agents-rules-sync`](../README.md), including how it composes with [`files-sync`](../../files-sync/README.md) and what changes when the [`agents-md`](../README.md#inputs) input is enabled.
+End-to-end data flow for [`agents-rules-sync`](../README.md), including how it composes with [`files-sync`](../../files-sync/README.md) to publish `AGENTS.md` and its `CLAUDE.md` symlink.
 
 ## Diagram
 
 ```
 ┌───────────────────────┐  ① reads pkg   ┌──────────────────────────────┐
 │ Consumer repo         │───────────────▶│ Action: agents-rules-sync    │
-│ package.json          │                │ inputs.agents-md = true      │
-│ { agents.rules: Bun } │                │ resolve step (Bun)           │
+│ package.json          │                │ resolve step (Bun)           │
+│ { agents.rules: Bun } │                │                              │
 └───────────────────────┘                └──────────────┬───────────────┘
                                                         │ ② emit YAML
                                                         ▼
@@ -1215,9 +1215,9 @@ End-to-end data flow for [`agents-rules-sync`](../README.md), including how it c
                                   │ files YAML payload (2 entries)   │
                                   │ - repo: awinogradov/...           │
                                   │   source: rules/Bun.md           │
-                                  │   dest: CLAUDE.md                │
-                                  │ - symlink: CLAUDE.md             │
                                   │   dest: AGENTS.md                │
+                                  │ - symlink: AGENTS.md             │
+                                  │   dest: CLAUDE.md                │
                                   └──────────────┬───────────────────┘
                                                  │ ③ stringifyYaml
                                                  ▼
@@ -1233,9 +1233,10 @@ End-to-end data flow for [`agents-rules-sync`](../README.md), including how it c
        │ fetchRawContent(src)     │                    │ fetchTreeEntries(dest@ref)   │
        │ fetchRawContent(dest)    │                    │ if mode == 120000:           │
        │ if differ → FileChange   │                    │   getBlob → decode target    │
-       │ mode = source tree mode  │                    │   skip if target matches     │
-       │   (default 100644)       │                    │ else → FileChange            │
-       │                          │                    │ mode = 120000                │
+       │ if equal → check dest    │                    │   skip if target matches     │
+       │   mode; 120000 → change  │                    │ else → FileChange            │
+       │ mode = source tree mode  │                    │ mode = 120000                │
+       │   (default 100644)       │                    │                              │
        └─────────────┬────────────┘                    └─────────────┬────────────────┘
                      │ ⑤                                             │ ⑤
                      └──────────────────────┬────────────────────────┘
@@ -1251,50 +1252,53 @@ End-to-end data flow for [`agents-rules-sync`](../README.md), including how it c
 **Flow legend**
 
 - ① [`agents-rules-sync.ts`](../agents-rules-sync.ts) fetches the consumer's root `package.json` from the default branch via the Contents API and validates `agents.rules` with Zod ([`resolvePackageAgentsRules.ts`](../src/resolvePackageAgentsRules.ts)).
-- ② [`buildSyncEntries`](../src/buildSyncEntries.ts) constructs the `files` YAML — one entry by default, two entries when `agents-md: true`. Both entries are emitted atomically in the same payload so they land in the same PR.
+- ② [`buildSyncEntries`](../src/buildSyncEntries.ts) constructs the `files` YAML — always two entries, with no input to toggle. Both are emitted atomically in the same payload so they land in the same PR and the pair is never half-applied.
 - ③ The composite step output is passed verbatim to `files-sync` as its `files` input. The schema in [`parseInputs.ts`](../../files-sync/src/parseInputs.ts) is a strict union of `contentEntrySchema` and `symlinkEntrySchema`.
 - ④ [`changeDetector.ts`](../../files-sync/src/changeDetector.ts) narrows each entry. The two branches do very different I/O.
 - ⑤ Surviving `FileChange` objects funnel into the single existing Git Data API pipeline ([`createSyncPullRequest.ts`](../../files-sync/src/createSyncPullRequest.ts)). Mode `120000` is already in the tree-mode union accepted by `createTree`, so no special handling is needed at commit time.
 
-## Default behavior
+## Payload
 
-With `agents-md: false` (the default), the YAML payload is identical to the v1 shape:
-
-```yaml
-- repo: awinogradov/code-assistants
-  source: rules/Bun.md
-  dest: CLAUDE.md
-```
-
-A single content entry; downstream PR touches `CLAUDE.md` only. Existing consumers are byte-for-byte unaffected.
-
-## With `agents-md: true`
-
-The payload gains a second symlink entry:
+The payload is the same on every run — there is no input that changes its shape:
 
 ```yaml
 - repo: awinogradov/code-assistants
   source: rules/Bun.md
-  dest: CLAUDE.md
-- symlink: CLAUDE.md
   dest: AGENTS.md
+- symlink: AGENTS.md
+  dest: CLAUDE.md
 ```
 
-`files-sync` writes both `CLAUDE.md` (regular file) and `AGENTS.md` (Git symlink, mode `120000`) in the same commit and PR.
+`files-sync` writes both `AGENTS.md` (regular file, carrying the rules body) and `CLAUDE.md` (Git symlink, mode `120000`) in the same commit and PR. `AGENTS.md` holds the content because it is the name the wider agent ecosystem reads; `CLAUDE.md` is the compatibility alias.
+
+## Upgrading from the pre-inversion layout
+
+A repository synced by an earlier major has the pair the other way round — `CLAUDE.md` is the regular file, and `AGENTS.md` is either absent or a symlink pointing at it. Both cases converge in the first run after the upgrade, in one PR:
+
+- **`AGENTS.md` absent** — the content entry creates it, and the symlink entry replaces the regular `CLAUDE.md` with a link.
+- **`AGENTS.md` is a symlink** — the content branch detects the mode-`120000` destination and rewrites it as a regular file in the same commit that turns `CLAUDE.md` into the link. Without that mode check the two would end up pointing at each other; see [Why byte equality is not enough for a symlink destination](#why-byte-equality-is-not-enough-for-a-symlink-destination).
 
 ## Why the symlink path does not use the Contents API
 
 The content branch uses `fetchRawContent` (Contents API + `Accept: application/vnd.github.raw`) to read both source and destination bodies. That endpoint **follows symlinks server-side** when the link target is a normal file in the repo — it returns the resolved file's bytes, not the link metadata.
 
-For symlink detection that is a deal-breaker. After the first run, the consumer's `AGENTS.md → CLAUDE.md → <regular file>` chain would always look like the regular file's content via the Contents API, so we could never tell whether `AGENTS.md` is already a symlink or a stale regular file.
+For symlink detection that is a deal-breaker. After the first run, the consumer's `CLAUDE.md → AGENTS.md → <regular file>` chain would always look like the regular file's content via the Contents API, so we could never tell whether `CLAUDE.md` is already a symlink or a stale regular file.
 
 The symlink branch instead uses the **Git Trees + Blobs APIs** ([`fetchTreeEntries`](../../files-sync/src/changeDetector.ts) + `octokit.rest.git.getBlob`). The recursive tree exposes the actual mode (`120000` ↔ symlink), and the blob body of a symlink IS the link target string. This is the only reliable way to read a symlink's target from a remote repo without a local working tree.
+
+## Why byte equality is not enough for a symlink destination
+
+The same server-side symlink resolution bites the **content** branch, in the one case where a content entry's destination is currently a link. That is precisely the state a repository is in while upgrading from the pre-inversion layout: `AGENTS.md` points at `CLAUDE.md`, which holds the rules body.
+
+Read through the Contents API, that `AGENTS.md` resolves to the rules body — byte-identical to the source the entry is trying to write. Comparing bytes alone therefore concludes "no change" and leaves the link in place, while the symlink entry rewrites `CLAUDE.md` to point at `AGENTS.md`. The result is two links referencing each other with no regular file left in the cycle, and it is stable: every later run reaches the same "no change" verdict, so the sync can never repair itself.
+
+The content branch closes this by asking for the destination's **tree mode** via [`fetchTreePathEntry`](../../files-sync/src/changeDetector.ts) whenever the bytes match, and emitting the rewrite anyway when that mode is `120000`. Tree mode is the one signal the Contents API cannot mask. The lookup runs only on the equal-bytes path, so a genuinely changed file costs nothing extra.
 
 ## Idempotency
 
 Both branches return `null` from `detectChange` when nothing needs to change:
 
-- Content entry: source and dest raw bytes are byte-equal.
+- Content entry: source and dest raw bytes are byte-equal **and** the dest is not itself a symlink.
 - Symlink entry: dest exists at `dest`, has mode `120000`, and the blob body equals the requested target.
 
 When every entry returns `null`, `computeChanges` yields an empty array, `files-sync` skips PR creation entirely, and the existing PR branch is left untouched. No empty PRs, no force-push churn.
@@ -1309,17 +1313,20 @@ const baseArgs = {
   sourceRepo: 'awinogradov/code-assistants',
   rules: 'Bun',
   sourceRef: '',
-  agentsMd: false,
 };
 
 describe('buildSyncEntries', () => {
-  test('returns a single content entry by default (legacy v1 shape)', () => {
+  test('always returns the content entry plus the CLAUDE.md symlink', () => {
     const entries = buildSyncEntries(baseArgs);
 
     expect(entries).toEqual([
       {
         repo: 'awinogradov/code-assistants',
         source: 'rules/Bun.md',
+        dest: 'AGENTS.md',
+      },
+      {
+        symlink: 'AGENTS.md',
         dest: 'CLAUDE.md',
       },
     ]);
@@ -1337,34 +1344,18 @@ describe('buildSyncEntries', () => {
     expect(entries[0]).toMatchObject({ ref: 'v1.2.3' });
   });
 
-  test('appends the symlink entry when agentsMd is true', () => {
-    const entries = buildSyncEntries({ ...baseArgs, agentsMd: true });
-
-    expect(entries).toEqual([
-      {
-        repo: 'awinogradov/code-assistants',
-        source: 'rules/Bun.md',
-        dest: 'CLAUDE.md',
-      },
-      {
-        symlink: 'CLAUDE.md',
-        dest: 'AGENTS.md',
-      },
-    ]);
-  });
-
   test('symlink entry carries no extra fields', () => {
-    const entries = buildSyncEntries({ ...baseArgs, agentsMd: true });
+    const entries = buildSyncEntries(baseArgs);
     const symlinkEntry = entries[1]!;
 
     expect(Object.keys(symlinkEntry).sort()).toEqual(['dest', 'symlink']);
   });
 
   test('preserves content-then-symlink order', () => {
-    const entries = buildSyncEntries({ ...baseArgs, agentsMd: true, sourceRef: 'main' });
+    const entries = buildSyncEntries({ ...baseArgs, sourceRef: 'main' });
 
-    expect(entries[0]).toMatchObject({ source: 'rules/Bun.md' });
-    expect(entries[1]).toMatchObject({ symlink: 'CLAUDE.md' });
+    expect(entries[0]).toMatchObject({ dest: 'AGENTS.md' });
+    expect(entries[1]).toMatchObject({ symlink: 'AGENTS.md' });
   });
 
   test('honors the rules value in the content source path', () => {
@@ -1387,15 +1378,18 @@ describe('buildSyncEntries', () => {
  * across workspace boundaries because the YAML payload — not the TS type — is the
  * contract between the two actions.
  *
+ * `AGENTS.md` is the regular file carrying the rules body and `CLAUDE.md` is a
+ * symlink to it, so the vendor-neutral name is the source of truth and every
+ * consumer gets both without opting in.
+ *
  * @example
  *   const entries = buildSyncEntries({
  *     sourceRepo: 'awinogradov/code-assistants',
  *     rules: 'Bun',
  *     sourceRef: '',
- *     agentsMd: true,
  *   });
- *   // → [{ repo, source: 'rules/Bun.md', dest: 'CLAUDE.md' },
- *   //    { symlink: 'CLAUDE.md', dest: 'AGENTS.md' }]
+ *   // → [{ repo, source: 'rules/Bun.md', dest: 'AGENTS.md' },
+ *   //    { symlink: 'AGENTS.md', dest: 'CLAUDE.md' }]
  */
 
 interface ContentSyncEntry {
@@ -1416,32 +1410,26 @@ interface BuildArgs {
   sourceRepo: string;
   rules: string;
   sourceRef: string;
-  agentsMd: boolean;
 }
 
 export function buildSyncEntries({
   sourceRepo,
   rules,
   sourceRef,
-  agentsMd,
 }: BuildArgs): SyncEntry[] {
   const content: ContentSyncEntry = {
     repo: sourceRepo,
     source: `rules/${rules}.md`,
-    dest: 'CLAUDE.md',
+    dest: 'AGENTS.md',
   };
 
   if (sourceRef !== '') {
     content.ref = sourceRef;
   }
 
-  if (!agentsMd) {
-    return [content];
-  }
-
   const symlink: SymlinkSyncEntry = {
-    symlink: 'CLAUDE.md',
-    dest: 'AGENTS.md',
+    symlink: 'AGENTS.md',
+    dest: 'CLAUDE.md',
   };
 
   return [content, symlink];
@@ -1861,7 +1849,7 @@ function addInstructions(): string {
 
 <file path=".github/actions/agents-rules-sync/action.yml">
 name: Agents rules sync
-description: Sync the stack-appropriate agent rules file from an upstream repository into the current repository's CLAUDE.md.
+description: Sync the stack-appropriate agent rules file from an upstream repository into the current repository's AGENTS.md, with CLAUDE.md as a symlink to it.
 
 inputs:
   bot_token:
@@ -1880,10 +1868,6 @@ inputs:
     description: Branch, tag, or SHA to read the source rules file from. Defaults to the source repository's default branch.
     required: false
     default: ""
-  agents-md:
-    description: When `true`, also publish `AGENTS.md` in the consumer repo as a Git symlink to `CLAUDE.md` so OpenAI/agents-compatible tooling shares the same rules file. Defaults to `false`; existing consumers are unaffected.
-    required: false
-    default: "false"
 
 outputs:
   changed-files:
@@ -1917,7 +1901,6 @@ runs:
         DEST_REPO: ${{ github.repository }}
         INPUT_SOURCE_REPO: ${{ inputs.source-repo }}
         INPUT_SOURCE_REF: ${{ inputs.source-ref }}
-        INPUT_AGENTS_MD: ${{ inputs.agents-md }}
         INPUT_BASE: ${{ github.event.repository.default_branch }}
       run: bun "${{ github.action_path }}/agents-rules-sync.ts"
 
@@ -1939,8 +1922,8 @@ runs:
  * Entry point for the agents-rules-sync composite action.
  *
  * Reads the current repository's `package.json` via the GitHub contents API,
- * validates the `agents.rules` field, and emits a single- or two-entry YAML
- * `files` list as a step output that the downstream `files-sync` step consumes.
+ * validates the `agents.rules` field, and emits a two-entry YAML `files` list as
+ * a step output that the downstream `files-sync` step consumes.
  */
 
 import * as core from '@actions/core';
@@ -1958,7 +1941,6 @@ interface Env {
   destRepo: { owner: string; name: string };
   sourceRepo: string;
   sourceRef: string;
-  agentsMd: boolean;
   base: string;
 }
 
@@ -1987,33 +1969,12 @@ function requiredToken(): string {
   return value;
 }
 
-function parseBooleanInput(name: string, fallback: boolean): boolean {
-  const value = process.env[name];
-
-  if (value === undefined || value === '') {
-    return fallback;
-  }
-
-  if (value === 'true') {
-    return true;
-  }
-
-  if (value === 'false') {
-    return false;
-  }
-
-  throw new Error(
-    `Invalid boolean for ${name}: expected "true" or "false", got "${value}"`,
-  );
-}
-
 function readEnv(): Env {
   const token = requiredToken();
   const destRepoRaw = required('DEST_REPO');
   const sourceRepo = required('INPUT_SOURCE_REPO');
   const base = required('INPUT_BASE');
   const sourceRef = process.env.INPUT_SOURCE_REF ?? '';
-  const agentsMd = parseBooleanInput('INPUT_AGENTS_MD', false);
 
   const [owner, name] = destRepoRaw.split('/');
 
@@ -2026,7 +1987,6 @@ function readEnv(): Env {
     destRepo: { owner, name },
     sourceRepo,
     sourceRef,
-    agentsMd,
     base,
   };
 }
@@ -2056,7 +2016,6 @@ async function main(): Promise<void> {
     sourceRepo: env.sourceRepo,
     rules,
     sourceRef: env.sourceRef,
-    agentsMd: env.agentsMd,
   });
 
   const filesYaml = stringifyYaml(entries);
@@ -2065,22 +2024,18 @@ async function main(): Promise<void> {
     .map((tracker) => (tracker.type === 'linear' ? `linear:${tracker.keys.join('/')}` : tracker.type))
     .join(', ');
 
-  core.info(`Resolved agents.rules=${rules}; syncing rules/${rules}.md → CLAUDE.md from ${env.sourceRepo}`);
+  core.info(`Resolved agents.rules=${rules}; syncing rules/${rules}.md → AGENTS.md from ${env.sourceRepo}`);
   core.info(`Validated agents.trackers: ${trackerSummary}`);
-  if (env.agentsMd) {
-    core.info('Also publishing AGENTS.md as a symlink to CLAUDE.md.');
-  }
+  core.info('Publishing CLAUDE.md as a symlink to AGENTS.md.');
   core.setOutput('files', filesYaml);
 
   const summaryLines = [
     '### Agents rules sync',
     '',
-    `Resolved \`agents.rules=${rules}\` → syncing \`rules/${rules}.md\` to \`CLAUDE.md\` from ${env.sourceRepo}.`,
+    `Resolved \`agents.rules=${rules}\` → syncing \`rules/${rules}.md\` to \`AGENTS.md\` from ${env.sourceRepo}.`,
+    'Published `CLAUDE.md` as a symlink to `AGENTS.md`.',
+    '',
   ];
-  if (env.agentsMd) {
-    summaryLines.push('Also published `AGENTS.md` as a symlink to `CLAUDE.md`.');
-  }
-  summaryLines.push('');
   await core.summary.addRaw(summaryLines.join('\n')).write();
 }
 
@@ -2474,8 +2429,8 @@ If you're currently using a pinned version tag, you can continue using it withou
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that syncs the stack-appropriate agent rules file from an upstream
-repository into the current repository's `CLAUDE.md` and opens a single pull request with
-the difference.
+repository into the current repository's `AGENTS.md` — with `CLAUDE.md` published as a Git
+symlink to it — and opens a single pull request with the difference.
 
 The action reads the consumer's `agents.rules` field (see
 [docs/02-agents-field.md](../../../docs/02-agents-field.md)), builds the corresponding source path
@@ -2505,7 +2460,6 @@ jobs:
         with:
           bot_token: ${{ secrets.BOT_TOKEN }}
           bot_username: ${{ vars.BOT_USERNAME }}
-          # agents-md: true  # also publish AGENTS.md → CLAUDE.md symlink
 ```
 
 The consumer repository must declare an `agents.rules` field in its root `package.json`:
@@ -2529,7 +2483,6 @@ Accepted values: `Bun`, `Bun+React+Tailwind`, `NodeJS+React`, `NodeJS+React+Tail
 | `bot_username` | no       | `github-actions[bot]`         | Git author/committer login for the sync commit. Pass `${{ vars.BOT_USERNAME }}`. The PR itself is opened by the `bot_token` owner.                                                               |
 | `source-repo`  | no       | `awinogradov/code-assistants` | Source repository in `owner/name` form that hosts the `rules/<stack>.md` files.                                                                                                                  |
 | `source-ref`   | no       | _(empty)_                     | Branch, tag, or SHA to read the source rules file from. Empty → source repository default branch.                                                                                                |
-| `agents-md`    | no       | `false`                       | When `true`, also publish `AGENTS.md` as a Git symlink to `CLAUDE.md`. See [Behavior](#behavior).                                                                                                |
 
 PR-shaping inputs (branch, title, body, commit message) are fixed by design — see
 [Behavior](#behavior).
@@ -2560,20 +2513,21 @@ See GitHub's docs for [creating a fine-grained PAT](https://docs.github.com/en/a
 
 - Resolves the consumer's `agents.rules` value from its root `package.json` on the default
   branch.
-- Delegates to `files-sync` with a single entry: `repo: <source-repo>`,
-  `source: rules/<value>.md`, `dest: CLAUDE.md`.
-- When `agents-md: true`, also delegates a second [symlink entry](../files-sync/README.md#symlink-entry)
-  to `files-sync`, publishing `AGENTS.md` in the consumer repo as a Git symlink (mode `120000`)
-  pointing at `CLAUDE.md`. Both entries land in the same PR; default behavior is unchanged so
-  existing v1 consumers need no action.
+- Delegates to `files-sync` with two entries, always: a content entry (`repo: <source-repo>`,
+  `source: rules/<value>.md`, `dest: AGENTS.md`) and a
+  [symlink entry](../files-sync/README.md#symlink-entry) publishing `CLAUDE.md` as a Git symlink
+  (mode `120000`) pointing at `AGENTS.md`. Both land in the same commit and PR, so the pair is
+  never half-applied. `AGENTS.md` is the vendor-neutral name the wider agent ecosystem reads, which
+  is why it holds the rules body rather than the link.
 - The PR is opened on the fixed branch `maintenance-sync-agents-rules` with the title
   `MAINTENANCE: Sync agent rules from upstream` and the commit message
   `chore: sync agent rules from upstream`. These values are not configurable so the action
   cannot collide with `files-sync`'s default branch and so every consumer gets the same
   one-line setup.
 - The head branch is force-updated on every run (inherited from `files-sync`); local edits
-  to `CLAUDE.md` will be overwritten when the upstream rules file changes.
-- If `CLAUDE.md` already matches `rules/<value>.md`, no PR is created.
+  to `AGENTS.md` will be overwritten when the upstream rules file changes.
+- If `AGENTS.md` already matches `rules/<value>.md` and `CLAUDE.md` already symlinks to it,
+  no PR is created.
 - If `package.json` is missing, malformed, or lacks `agents.rules` (or its value is
   unrecognized), the action fails with a link to `docs/02-agents-field.md` and the list of
   accepted values.
@@ -20289,6 +20243,8 @@ interface MockOptions {
   treeEntries?: TreeEntryFixture[];
   treesBySha?: Record<string, TreeEntryFixture[]>;
   blobs?: Record<string, string>;
+  /** Raw Contents API bodies, keyed `owner/repo:path`. Absent key ⇒ HTTP 404. */
+  files?: Record<string, string>;
 }
 
 const destRepo = { owner: 'owner', name: 'repo' };
@@ -20302,8 +20258,21 @@ function makeOctokit(options: MockOptions = {}): Octokit {
   const rootTreeEntries = options.treeEntries ?? [];
   const treesBySha = options.treesBySha ?? {};
   const blobs = options.blobs ?? {};
+  const files = options.files ?? {};
 
   return {
+    request: async (
+      _route: string,
+      { owner, repo, path }: { owner: string; repo: string; path: string },
+    ) => {
+      const content = files[`${owner}/${repo}:${path}`];
+
+      if (content === undefined) {
+        throw Object.assign(new Error('Not Found'), { status: 404 });
+      }
+
+      return { data: content };
+    },
     rest: {
       repos: {
         get: async () => ({ data: { default_branch: 'main' } }),
@@ -20335,6 +20304,111 @@ function makeOctokit(options: MockOptions = {}): Octokit {
     },
   } as unknown as Octokit;
 }
+
+describe('computeChanges — content entries', () => {
+  const contentEntry: SyncEntry = {
+    repo: 'source/upstream',
+    source: 'rules/Bun.md',
+    dest: 'AGENTS.md',
+  };
+  const rulesBody = '# Bun Project Rules\n';
+  const sourceTreeEntry: TreeEntryFixture = {
+    path: 'rules/Bun.md',
+    mode: '100644',
+    sha: 'rules-blob-sha',
+  };
+
+  test('returns no change when dest is a byte-equal regular file', async () => {
+    const octokit = makeOctokit({
+      files: {
+        'source/upstream:rules/Bun.md': rulesBody,
+        'owner/repo:AGENTS.md': rulesBody,
+      },
+      treeEntries: [
+        sourceTreeEntry,
+        { path: 'AGENTS.md', mode: '100644', sha: 'dest-blob-sha' },
+      ],
+    });
+
+    const changes = await computeChanges({
+      octokit,
+      entries: [contentEntry],
+      destRepo,
+      baseRef,
+    });
+
+    expect(changes).toEqual([]);
+  });
+
+  test('emits a change when dest content differs', async () => {
+    const octokit = makeOctokit({
+      files: {
+        'source/upstream:rules/Bun.md': rulesBody,
+        'owner/repo:AGENTS.md': '# Stale rules\n',
+      },
+      treeEntries: [
+        sourceTreeEntry,
+        { path: 'AGENTS.md', mode: '100644', sha: 'dest-blob-sha' },
+      ],
+    });
+
+    const changes = await computeChanges({
+      octokit,
+      entries: [contentEntry],
+      destRepo,
+      baseRef,
+    });
+
+    expect(changes).toEqual([
+      { path: 'AGENTS.md', content: rulesBody, mode: '100644' },
+    ]);
+  });
+
+  // The Contents API follows symlinks, so a dest that is still a symlink to the old
+  // regular file reads back byte-equal to the source. Skipping it would leave the two
+  // files pointing at each other with no regular file left in the cycle.
+  test('emits a change when dest is a symlink whose resolved content matches', async () => {
+    const octokit = makeOctokit({
+      files: {
+        'source/upstream:rules/Bun.md': rulesBody,
+        'owner/repo:AGENTS.md': rulesBody,
+      },
+      treeEntries: [
+        sourceTreeEntry,
+        { path: 'AGENTS.md', mode: '120000', sha: 'symlink-blob-sha' },
+      ],
+    });
+
+    const changes = await computeChanges({
+      octokit,
+      entries: [contentEntry],
+      destRepo,
+      baseRef,
+    });
+
+    expect(changes).toEqual([
+      { path: 'AGENTS.md', content: rulesBody, mode: '100644' },
+    ]);
+  });
+
+  test('emits a change when dest does not exist', async () => {
+    const octokit = makeOctokit({
+      files: { 'source/upstream:rules/Bun.md': rulesBody },
+      treeEntries: [sourceTreeEntry],
+    });
+
+    const changes = await computeChanges({
+      octokit,
+      entries: [contentEntry],
+      destRepo,
+      baseRef,
+    });
+
+    expect(changes).toEqual([
+      { path: 'AGENTS.md', content: rulesBody, mode: '100644' },
+    ]);
+  });
+});
 
 describe('computeChanges — symlink entries', () => {
   const symlinkEntry: SyncEntry = { symlink: 'CLAUDE.md', dest: 'AGENTS.md' };
@@ -20438,6 +20512,10 @@ describe('computeChanges — symlink entries', () => {
  * the source file mode (e.g. `100755` for executables) so the sync commit does not
  * strip execute bits. Symlink entries are written as Git mode `120000` blobs whose body
  * is the symlink target string.
+ *
+ * Content entries also compare the destination's Git mode, not just its bytes: the
+ * Contents API resolves a symlink to its target, so a destination that must become a
+ * regular file can read back byte-equal to the source. See {@link destIsSymlink}.
  *
  * @example
  *   const changes = await computeChanges({ octokit, entries, destRepo, baseRef: 'main' });
@@ -20544,7 +20622,11 @@ async function detectContentChange({
   });
 
   if (destContent === sourceContent) {
-    return null;
+    const isSymlink = await destIsSymlink({ octokit, entry, destRepo, baseRef });
+
+    if (!isSymlink) {
+      return null;
+    }
   }
 
   const mode = await resolveSourceMode({
@@ -20557,6 +20639,41 @@ async function detectContentChange({
   });
 
   return { path: entry.dest, content: sourceContent, mode };
+}
+
+interface DestIsSymlinkArgs extends Omit<DetectArgs, 'entry' | 'treeCache'> {
+  entry: ContentEntry;
+}
+
+/**
+ * Whether a content entry's destination is currently a Git symlink.
+ *
+ * Byte equality alone cannot answer this. `fetchRawContent` reads the destination
+ * through the Contents API, which follows a symlink server-side and returns the
+ * target's bytes — so a destination that must be replaced by a regular file reads
+ * back identical to the source and would be skipped as unchanged, leaving the link
+ * in place forever. That is exactly what an inverted `AGENTS.md`/`CLAUDE.md` pair
+ * produces: the old symlink survives while the new one points back at it, and the
+ * two files reference each other with no regular file left in the cycle.
+ *
+ * The Git tree mode is the one signal the Contents API cannot mask, so consult it
+ * before concluding that equal bytes mean no work.
+ */
+async function destIsSymlink({
+  octokit,
+  entry,
+  destRepo,
+  baseRef,
+}: DestIsSymlinkArgs): Promise<boolean> {
+  const existing = await fetchTreePathEntry({
+    octokit,
+    owner: destRepo.owner,
+    repo: destRepo.name,
+    ref: baseRef,
+    path: entry.dest,
+  });
+
+  return existing?.mode === symlinkMode;
 }
 
 interface DetectSymlinkArgs extends Omit<DetectArgs, 'entry'> {
@@ -22147,15 +22264,15 @@ jobs:
               dest: CONTRIBUTING.md
             - repo: awinogradov/code-assistants
               source: rules/Bun.md
-              dest: CLAUDE.md
+              dest: AGENTS.md
 ```
 
 Symlink entries write a Git symlink at `dest` instead of copying a file:
 
 ```yaml
 files: |
-  - symlink: CLAUDE.md
-    dest: AGENTS.md
+  - symlink: AGENTS.md
+    dest: CLAUDE.md
 ```
 
 ## Inputs
@@ -38075,7 +38192,7 @@ inputs:
       Git author/committer login for the sync commits. Defaults to `github-actions[bot]` when unset. Pass the `vars.BOT_USERNAME` repository variable to attribute commits to a dedicated bot identity.
     required: false
   agents-rules:
-    description: Sync the stack-appropriate rules file into `CLAUDE.md`. Default on; set to `false` to opt out.
+    description: Sync the stack-appropriate rules file into `AGENTS.md`, with `CLAUDE.md` as a symlink to it. Default on; set to `false` to opt out.
     required: false
     default: "true"
   code-review:
@@ -38191,7 +38308,7 @@ Composite GitHub Action that aggregates the six upstream maintenance syncs behin
 action. Every consumer runs one job instead of one job per kind. Each kind is opt-out: it runs
 by default and is disabled by setting its input to `false`. The kinds are:
 
-- `agents-rules` → [`agents-rules-sync`](../agents-rules-sync/README.md) — sync the stack-appropriate `rules/<stack>.md` into `CLAUDE.md`.
+- `agents-rules` → [`agents-rules-sync`](../agents-rules-sync/README.md) — sync the stack-appropriate `rules/<stack>.md` into `AGENTS.md`, with `CLAUDE.md` as a symlink to it.
 - `code-review` → [`code-review-sync`](../code-review-sync/README.md) — sync the AI code-review workflow.
 - `repomix` → [`repomix-sync`](../repomix-sync/README.md) — sync the `repomix-pack` workflow and `repomix.config.json`.
 - `release` → [`release-sync`](../release-sync/README.md) — sync the release pipeline workflows (create, publish, auto-merge).
@@ -38241,7 +38358,7 @@ jobs:
 | -------------- | -------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `bot_token`    | yes      | —                     | PAT or GitHub App installation token with `contents: write` + `pull-requests: write` on this repo. The workflow's default `GITHUB_TOKEN` is **not** supported — see [Permissions](#permissions). |
 | `bot_username` | no       | `github-actions[bot]` | Git author/committer login for the sync commits. Pass `${{ vars.BOT_USERNAME }}`. The PRs are opened by the `bot_token` owner.                                                                   |
-| `agents-rules` | no       | `true`                | When `true`, sync the stack-appropriate rules file into `CLAUDE.md`. Set to `false` to opt out.                                                                                                  |
+| `agents-rules` | no       | `true`                | When `true`, sync the stack-appropriate rules file into `AGENTS.md` and publish `CLAUDE.md` as a symlink to it. Set to `false` to opt out.                                                       |
 | `code-review`  | no       | `true`                | When `true`, sync the AI code-review workflow. Set to `false` to opt out.                                                                                                                        |
 | `repomix`      | no       | `true`                | When `true`, sync the repomix-pack workflow and `repomix.config.json`. Set to `false` to opt out.                                                                                                |
 | `release`      | no       | `true`                | When `true`, sync the release pipeline workflows. Set to `false` to opt out.                                                                                                                     |
@@ -57206,9 +57323,10 @@ code-assistants/
 ├── claude-plugins/       # Claude Code plugins
 ├── docs/                 # repository docs (you are here)
 ├── packages/             # shared TypeScript libraries (workspace members)
-├── rules/                # stack-specific rule sets surfaced via CLAUDE.md
+├── rules/                # stack-specific rule sets surfaced via AGENTS.md
 ├── scripts/              # repo-root scripts
-├── CLAUDE.md             # symlink → rules/Bun.md
+├── AGENTS.md             # symlink → rules/Bun.md
+├── CLAUDE.md             # symlink → AGENTS.md
 ├── package.json          # root manifest, defines `workspaces` and `agents`
 └── turbo.json            # task graph (typecheck, test, clean)
 ```
@@ -57230,7 +57348,7 @@ Directory contents:
 - `tsconfig.json` — includes `src/**/*.ts`
 - `src/` — all source code (helpers, tests, and entry files)
 - `README.md`
-- Optional: `docs/`, `CLAUDE.md`, `AGENTS.md` (see [Per-member docs and agent files](#per-member-docs-and-agent-files))
+- Optional: `docs/`, `AGENTS.md`, `CLAUDE.md` (see [Per-member docs and agent files](#per-member-docs-and-agent-files))
 - Optional: tool config files with a `.ts`/`.mjs` extension (e.g., `vitest.config.ts`) — configs live at the root, not under `src/`
 
 **Target rule:** every `.ts` source file (entries, helpers, tests) should live under `src/`. Tool config files keyed by extension (`*.config.ts`, `*.config.mjs`) are exempt and remain at the root. Today two actions still have a root entry file (`files-sync.ts`, `agents-rules-sync.ts`) invoked directly by `action.yml` — that is the current state for source code, not a violation; see [Current vs. target](#current-vs-target).
@@ -57274,8 +57392,8 @@ packages/<name>/
 ├── tsconfig.json
 ├── README.md             # optional
 ├── docs/                 # optional (see Per-member docs and agent files)
-├── CLAUDE.md             # optional
 ├── AGENTS.md             # optional
+├── CLAUDE.md             # optional
 └── src/
     └── <module>.ts       # one file per exported module
 ```
@@ -57359,7 +57477,7 @@ Every TypeScript workspace member (actions and packages) declares its scripts in
 | Script      | Required?                            | Command (today)              | Notes                                                                                                                                                                                                                                    |
 | ----------- | ------------------------------------ | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `typecheck` | Yes                                  | `tsc --noEmit`               | Runs in Turbo's `typecheck` task. Always present in TS members.                                                                                                                                                                          |
-| `test`      | Yes for actions, opt-in for packages | `bun test`                   | Bun's runner handles unit, integration, and e2e tests in the same invocation — test files live alongside source under `src/` per [CLAUDE.md §3.1](../rules/Bun.md#31-file-organization). Add this script only when the member has tests. |
+| `test`      | Yes for actions, opt-in for packages | `bun test`                   | Bun's runner handles unit, integration, and e2e tests in the same invocation — test files live alongside source under `src/` per [AGENTS.md §3.1](../rules/Bun.md#31-file-organization). Add this script only when the member has tests. |
 | `clean`     | Yes                                  | `rm -rf node_modules .turbo` | Removes per-member install and Turbo caches.                                                                                                                                                                                             |
 | `build`     | Optional                             | (none today)                 | Add only when the member produces a compiled output. Today every member runs TypeScript directly via Bun (`bun <entry>.ts`), so no build step is needed.                                                                                 |
 
@@ -57392,12 +57510,12 @@ The globs are root-relative because Turbo resolves plain `inputs` against the pa
 Any action or package directory (TypeScript action, YAML composite action, or package) MAY include:
 
 - `docs/` — a member-scoped docs directory for material too specific or too long for the README
-- `CLAUDE.md` — agent rules that apply only inside that member's directory (Claude Code loads these in addition to the repo-root `CLAUDE.md`)
-- `AGENTS.md` — optional, same scope as `CLAUDE.md` but consumed by other agent tooling
+- `AGENTS.md` — agent rules that apply only inside that member's directory, loaded in addition to the repo-root `AGENTS.md`
+- `CLAUDE.md` — optional, same scope as `AGENTS.md` but read by Claude Code; a symlink to the member's `AGENTS.md` keeps the two from drifting
 
 None of these are required. Use them when a member has enough surface area to need it; for small members a `README.md` alone is fine.
 
-### CLAUDE.md [§3.1](../rules/Bun.md#31-file-organization) file organization
+### AGENTS.md [§3.1](../rules/Bun.md#31-file-organization) file organization
 
 ```
 foo.ts          # single module: a file, no directory
@@ -57408,7 +57526,7 @@ foo/            # multiple modules: a directory, no index.ts barrel
 └── foo.types.ts
 ```
 
-These rules are inherited from CLAUDE.md (a symlink to `rules/Bun.md`); not duplicated here.
+These rules are inherited from `AGENTS.md` (a symlink to `rules/Bun.md`); not duplicated here.
 
 ### Registering a new member
 
@@ -57470,7 +57588,7 @@ An optional `trackers` array (entries `{ type: "linear" | "github", ... }`; abse
 
 ### Workspaces
 
-Consuming skills always read the **repository-root** `package.json` to detect stack and language; workspace members are not walked. Members may declare their own `agents` field anyway, and this repository does so on every workspace member to keep stack metadata visible at every module boundary — consistent with the per-member `docs/`, `CLAUDE.md`, and `AGENTS.md` convention recorded in `docs/01-workspace-structure.md`.
+Consuming skills always read the **repository-root** `package.json` to detect stack and language; workspace members are not walked. Members may declare their own `agents` field anyway, and this repository does so on every workspace member to keep stack metadata visible at every module boundary — consistent with the per-member `docs/`, `AGENTS.md`, and `CLAUDE.md` convention recorded in [`docs/01-workspace-structure.md`](./01-workspace-structure.md).
 
 Rules for member declarations:
 
@@ -57502,7 +57620,7 @@ Identifies the tech stack and points at a matching rule set under `rules/` in th
 
 Any other value is treated as unrecognized.
 
-The resolved rules file is published to `CLAUDE.md` by default. The [`agents-rules-sync`](../.github/actions/agents-rules-sync/README.md) action can additionally expose it as `AGENTS.md` via a Git symlink — see the [`agents-md`](../.github/actions/agents-rules-sync/README.md#inputs) input (default `false`). Opt in when the repo is also worked on by OpenAI/agents-compatible tooling that reads `AGENTS.md`: the symlink keeps both ecosystems on the same rules file with a single source of truth, so the two can never drift.
+The resolved rules file is published to `AGENTS.md`, and [`agents-rules-sync`](../.github/actions/agents-rules-sync/README.md) also writes `CLAUDE.md` as a Git symlink to it. There is no input to configure: both files ship on every run. `AGENTS.md` holds the body because it is the vendor-neutral name agent tooling reads, and the symlink keeps Claude Code on the same file, so the two ecosystems share one source of truth and cannot drift.
 
 ### `language`
 
@@ -58641,7 +58759,7 @@ every consumer automatically, with no consumer workflow edit.
 
 | Kind           | Files synced into the consumer                                                                                                                                                           | Maintenance branch              | Action                                                                |
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------- |
-| `agents-rules` | `rules/<stack>.md` → `CLAUDE.md`                                                                                                                                                         | `maintenance-sync-agents-rules` | [`agents-rules-sync`](../.github/actions/agents-rules-sync/README.md) |
+| `agents-rules` | `rules/<stack>.md` → `AGENTS.md`, plus `CLAUDE.md` as a symlink to it                                                                                                                    | `maintenance-sync-agents-rules` | [`agents-rules-sync`](../.github/actions/agents-rules-sync/README.md) |
 | `code-review`  | `.github/workflows/code-review.yml`, `.github/workflows/code-review-cost-monitor.yml`                                                                                                    | `maintenance-sync-code-review`  | [`code-review-sync`](../.github/actions/code-review-sync/README.md)   |
 | `repomix`      | `.github/workflows/repomix-pack.yml`, `repomix.config.json`                                                                                                                              | `maintenance-sync-repomix`      | [`repomix-sync`](../.github/actions/repomix-sync/README.md)           |
 | `release`      | `.github/workflows/release-create.yml`, `release-publish.yml`, `release-automerge.yml`                                                                                                   | `maintenance-sync-release`      | [`release-sync`](../.github/actions/release-sync/README.md)           |
@@ -61735,7 +61853,7 @@ Prefer the project-registered MCP servers declared in the repo's own `.mcp.json`
 
 ## 17. Code Review
 
-- All rules from CLAUDE.md must be applied to the code review
+- All rules from AGENTS.md must be applied to the code review
 
 ## 18. Graphify
 
@@ -62151,7 +62269,7 @@ Prefer the project-registered MCP servers declared in the repo's own `.mcp.json`
 
 ## 17. Code Review
 
-- All rules from CLAUDE.md must be applied to the code review
+- All rules from AGENTS.md must be applied to the code review
 
 ## 18. Graphify
 
@@ -62554,7 +62672,7 @@ Prefer the project-registered MCP servers declared in the repo's own `.mcp.json`
 
 ## 17. Code Review
 
-- All rules from CLAUDE.md must be applied to the code review
+- All rules from AGENTS.md must be applied to the code review
 
 ## 18. Graphify
 
@@ -62961,7 +63079,7 @@ Prefer the project-registered MCP servers declared in the repo's own `.mcp.json`
 
 ## 17. Code Review
 
-- All rules from CLAUDE.md must be applied to the code review
+- All rules from AGENTS.md must be applied to the code review
 
 ## 18. Graphify
 
@@ -63158,7 +63276,7 @@ async function validateHeadingSync(heading: string): Promise<string | null> {
 
 /**
  * The rules/<stack>.md files carry duplicated sections that ship downstream as
- * each consumer's CLAUDE.md. Verify every synced section exists in each file and
+ * each consumer's AGENTS.md. Verify every synced section exists in each file and
  * is byte-identical across them so the copies cannot drift.
  */
 async function validateRulesSectionSync(): Promise<string | null> {
@@ -64079,7 +64197,7 @@ Closes #400
 
 ## Code Standards
 
-See [`CLAUDE.md`](./CLAUDE.md) for the full coding-standards matrix, and the Documentation section of [`README.md`](./README.md) for project-specific docs.
+See [`AGENTS.md`](./AGENTS.md) for the full coding-standards matrix, and the Documentation section of [`README.md`](./README.md) for project-specific docs.
 
 ### TODO Comments
 
@@ -64653,7 +64771,7 @@ The `docs/` guides are numbered chapters in reading order — start at chapter 1
 
 - [`files-sync`](./.github/actions/files-sync/README.md) — sync declared files from upstream repos and open one PR with the differences
 - [`upstream-sync`](./.github/actions/upstream-sync/README.md) — aggregate the six upstream maintenance syncs behind one action; every kind on by default, opt out per kind
-- [`agents-rules-sync`](./.github/actions/agents-rules-sync/README.md) — sync the stack-appropriate `rules/<stack>.md` into `CLAUDE.md` based on `package.json` `agents.rules`
+- [`agents-rules-sync`](./.github/actions/agents-rules-sync/README.md) — sync the stack-appropriate `rules/<stack>.md` into `AGENTS.md` (with `CLAUDE.md` as a symlink to it) based on `package.json` `agents.rules`
 - [`contributing-check`](./.github/actions/contributing-check/README.md) — validate branch name, commit messages, and PR title against `CONTRIBUTING.md`
 - [`contributing-sync`](./.github/actions/contributing-sync/README.md) — sync `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE.md`, `SECURITY.md`, and the contributing workflow from upstream
 - [`licenses-sync`](./.github/actions/licenses-sync/README.md) — sync the canonical licenses workflow from upstream in its own opt-out maintenance kind
