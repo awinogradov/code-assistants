@@ -21,6 +21,7 @@
   "workspaces": [
     ".github/actions/files-sync",
     ".github/actions/agents-rules-sync",
+    ".github/actions/agents-skills-sync",
     ".github/actions/release-action",
     ".github/actions/release-automerge",
     ".github/actions/code-review-action",
@@ -38,10 +39,12 @@
     "format": "prettier --write \"**/*.{md,json}\"",
     "format:check": "prettier --check \"**/*.{md,json}\"",
     "validate": "bun scripts/validate-plugins.ts",
+    "export:skills": "bun scripts/export-agent-skills/exportAgentSkills.ts",
+    "export:skills:check": "bun scripts/export-agent-skills/exportAgentSkills.ts --check",
     "licenses:audit": "bun .github/actions/licenses-audit/src/licenses-report.ts",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "lint": "bun run format:check && bun run validate && turbo run typecheck"
+    "lint": "bun run format:check && bun run validate && bun run export:skills:check && turbo run typecheck"
   },
   "devDependencies": {
     "@commitlint/cli": "21.0.1",
