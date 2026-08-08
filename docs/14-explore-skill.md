@@ -170,7 +170,7 @@ After writing the brief the skill reports what it did, notes anything in `## Git
 
 Every instruction after that is handled the same way: locate through the brief, edit, run the verify check `## Test and verify` names, report. No plan file, no expert panel, no scoring, no branch prompt, no PR chain. `EnterPlanMode`, `ExitPlanMode`, and `preflight-check` are never called — they belong to the flows this skill exists to avoid.
 
-Suppressing that machinery is half the value. A fix that costs one edit should not cost a planning pipeline. Committing or opening a pull request hands off to [`commits:create`](../claude-plugins/autopilot/skills/commits:create/SKILL.md) or [`pr:create`](../claude-plugins/autopilot/skills/pr:create/SKILL.md), which own those conventions.
+Suppressing that machinery is half the value. A fix that costs one edit should not cost a planning pipeline. Committing or opening a pull request hands off to [`commits-create`](../claude-plugins/autopilot/skills/commits-create/SKILL.md) or [`pr-create`](../claude-plugins/autopilot/skills/pr-create/SKILL.md), which own those conventions.
 
 ## Where to look in the code
 

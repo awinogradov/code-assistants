@@ -140,9 +140,9 @@ Identify task-relevant libraries from `package.json`, the issue description, and
 
 ### Repository standards
 
-The Context Map's **Applicable standards** section already carries the repo's conventions, the selected `rfc/` standards with status, dropped candidates, and any `principles/` values — read by [`digest-repo-standards`](../../agents/digest-repo-standards.md) so their full text never enters this context.
+The Context Map's **Applicable standards** section already carries the repo's conventions, the selected `rfc/` standards with status, dropped candidates, and any `principles/` values — read by [`digest-repo-standards`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/digest-repo-standards.md) so their full text never enters this context.
 
-The plan must not violate a clause of an **Accepted** RFC; a **Draft** RFC is advisory — follow it where practical and call out deliberate deviations. `principles/` values shape the approach rather than bind it; when the plan deliberately contradicts one, say so explicitly instead of leaving the conflict silent. The `pr:review` skill enforces these same standards on the resulting diff, so complying here is what stops the review blocking the change later.
+The plan must not violate a clause of an **Accepted** RFC; a **Draft** RFC is advisory — follow it where practical and call out deliberate deviations. `principles/` values shape the approach rather than bind it; when the plan deliberately contradicts one, say so explicitly instead of leaving the conflict silent. The `pr-review` skill enforces these same standards on the resulting diff, so complying here is what stops the review blocking the change later.
 
 The generated plan's `## Post-Implementation` block MUST require updating any `README.md`, `docs/*`, and `rfc/*` the change affects. When it edits the content of an **Accepted** RFC, it must also require bumping that RFC's `version` frontmatter and adding a Changelog entry (mirrors CHECK-RFC-003).
 

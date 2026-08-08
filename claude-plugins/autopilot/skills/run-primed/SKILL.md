@@ -116,7 +116,7 @@ Skill(autopilot:gather-context)
 
 Pass the detected input type, issue id, repository, repository root, Linear team (when applicable), the raw task text as the task summary, and **`Scope: primed`**.
 
-That scope resolves only what a brief cannot bake in advance: issue or alert details, the TODO search, the branch diff, git state, and a re-attached codebase snapshot. It gates off [`digest-repo-standards`](../../agents/digest-repo-standards.md), whose output the brief already carries from the same revision. See [the Scope input](../gather-context/SKILL.md#input).
+That scope resolves only what a brief cannot bake in advance: issue or alert details, the TODO search, the branch diff, git state, and a re-attached codebase snapshot. It gates off [`digest-repo-standards`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/digest-repo-standards.md), whose output the brief already carries from the same revision. See [the Scope input](../gather-context/SKILL.md#input).
 
 Set task 2 to `completed`.
 

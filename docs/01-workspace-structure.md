@@ -15,8 +15,7 @@ code-assistants/
 ├── .github/
 │   ├── actions/          # composite GitHub Actions (workspace members + YAML-only)
 │   └── workflows/
-├── agent-skills/         # generated portable Agent Skills layout (see docs/18)
-├── claude-plugins/       # Claude Code plugins
+├── claude-plugins/       # Claude Code plugins (skills are the portable single source — see docs/18)
 ├── docs/                 # repository docs (you are here)
 ├── packages/             # shared TypeScript libraries (workspace members)
 ├── rules/                # stack-specific rule sets surfaced via AGENTS.md

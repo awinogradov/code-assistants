@@ -13,11 +13,11 @@ The model decides the fix; the action renders and posts it. Both land through th
 
 ## Data flow
 
-The `pr:review` skill emits two new optional per-comment fields — `suggestion` (verbatim replacement for the anchored line(s)) and `startLine` (first line of a multi-line range). `submitReview.ts` renders the body and shapes the Octokit payload; the AI-agent prompt is built action-side from the diff hunk the action already holds, so it costs no model tokens.
+The `pr-review` skill emits two new optional per-comment fields — `suggestion` (verbatim replacement for the anchored line(s)) and `startLine` (first line of a multi-line range). `submitReview.ts` renders the body and shapes the Octokit payload; the AI-agent prompt is built action-side from the diff hunk the action already holds, so it costs no model tokens.
 
 ```
 ┌───────────────────────────┐
-│ pr:review skill (model)    │
+│ pr-review skill (model)    │
 └─────────────┬─────────────┘
               │ ① inlineComments[] JSON:
               │   { path, line, body, startLine?, suggestion? }
@@ -103,7 +103,7 @@ Two transforms keep the embedded prompt prompt-shaped rather than a verbose data
 - **Bounded context** — `<file context>` is trimmed to `agentPromptContextRadius` (6) new-file lines on each side of the finding line, a ~13-line window (fewer near a file edge). The full hunk here is the whole 20-line file; the window drops line 1 and lines 15–20. The `@@` header is kept verbatim, so its `+1,20` still describes the full hunk, not the window. A hunk already smaller than the window is left untouched.
 - **Chrome stripped** — the embedded `<comment>` drops the leading severity emoji and the trailing `[CHECK-BUG-003](…)` rule link, leaving clean instruction text; inline-code backticks (`` `items[n]` ``) are preserved. Only this embedded copy is cleaned — the human-facing finding above the suggestion keeps its emoji and rule link verbatim.
 
-The suggestion replaces the anchored line(s) verbatim, so the model must reproduce the original indentation — a stray space would silently reindent the file on apply. The `pr:review` skill enforces this; `inlineCommentBody.test.ts` asserts the rendered fence preserves it, the bounded window, and the chrome-free embedded finding.
+The suggestion replaces the anchored line(s) verbatim, so the model must reproduce the original indentation — a stray space would silently reindent the file on apply. The `pr-review` skill enforces this; `inlineCommentBody.test.ts` asserts the rendered fence preserves it, the bounded window, and the chrome-free embedded finding.
 
 ## Multi-line suggestions
 
@@ -130,4 +130,4 @@ The prose is never lost; only the one-click apply degrades when the anchor canno
 | `src/reviewOutput/inlineCommentBody.ts`              | `findHunkForLine`, `renderInlineCommentBody`, `buildReviewComments` — renders the suggestion fence + AI-agent prompt and shapes the Octokit payload                                        |
 | `src/submitReview.ts`                                | Calls `buildReviewComments(validComments, prFiles)` for the `createReview` `comments[]` array                                                                                              |
 | `action.yml`                                         | `CLAUDE_JSON_SCHEMA` permits the optional `startLine`/`suggestion` model output                                                                                                            |
-| `claude-plugins/autopilot/skills/pr:review/SKILL.md` | Tells the model when and how to emit `suggestion`/`startLine` (the "Code suggestions" section)                                                                                             |
+| `claude-plugins/autopilot/skills/pr-review/SKILL.md` | Tells the model when and how to emit `suggestion`/`startLine` (the "Code suggestions" section)                                                                                             |

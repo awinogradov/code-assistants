@@ -163,7 +163,7 @@ export function isCleanApproval(reviewBody: string, hasInlineComments: boolean):
  *
  * A clean approval gets the {@link cleanApprovalBody} line so the action never
  * posts a footer-only, stats-only comment that reads as an empty (or broken)
- * review. The pr:review skill deliberately returns an empty `reviewComment` for
+ * review. The pr-review skill deliberately returns an empty `reviewComment` for
  * this case, so the minimal line is substituted here rather than in the model
  * output.
  */

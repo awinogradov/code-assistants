@@ -2,7 +2,7 @@
 
 > Chapter 12 of the [repository docs](../README.md#repository-docs).
 
-`code-review-action` reviews every PR against the repo's `CLAUDE.md` and the generic `CHECK-*` catalog in the [pr:review skill](../claude-plugins/autopilot/skills/pr:review/SKILL.md). This chapter defines the additional, convention-based contract: when a consumer repository carries `rfc/`, `docs/`, or `principles/`, the review enforces those standards too. There is no workflow input or config key — the folders are the opt-in, and repositories without them see no change and pay no cost.
+`code-review-action` reviews every PR against the repo's `CLAUDE.md` and the generic `CHECK-*` catalog in the [pr-review skill](../claude-plugins/autopilot/skills/pr-review/SKILL.md). This chapter defines the additional, convention-based contract: when a consumer repository carries `rfc/`, `docs/`, or `principles/`, the review enforces those standards too. There is no workflow input or config key — the folders are the opt-in, and repositories without them see no change and pay no cost.
 
 ## Discovery
 

@@ -11,7 +11,7 @@ Skills used to carry these blocks inline, one copy per skill. That is why the As
 Two runtimes can read nothing, so they keep a literal copy. Both are guarded byte-identical against the canonical file by the `sharedBlockSync` test, so they are still single-sourced — only the delivery differs.
 
 - [releaseNotesPrompt.ts](../../../../.github/actions/release-action/src/releaseNotesPrompt.ts) carries the reference-formatting block. It is passed to the Anthropic API as a raw system prompt, not through the Claude Code SDK, so it has no tools at all.
-- The seven structured-output agents carry the agent JSON block. Agents declare their own tools and [expert-review](../../agents/expert-review.md) declares `tools: []`.
+- The seven structured-output agents carry the agent JSON block. Agents declare their own tools and [expert-review](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/expert-review.md) declares `tools: []`.
 
 Do not "fix" either by adding a read directive — neither can execute one.
 

@@ -1,10 +1,10 @@
-# The `pdf:create` skill
+# The `pdf-create` skill
 
 > Chapter 10 of the [repository docs](../README.md#repository-docs).
 
-`pdf:create` generates beautiful, brand-themed, multi-page PDFs — reports,
+`pdf-create` generates beautiful, brand-themed, multi-page PDFs — reports,
 research docs, six-pagers, playbooks — from structured content. It is the
-plugin's first **bundled-asset** skill: alongside its [`SKILL.md`](../claude-plugins/autopilot/skills/pdf:create/SKILL.md)
+plugin's first **bundled-asset** skill: alongside its [`SKILL.md`](../claude-plugins/autopilot/skills/pdf-create/SKILL.md)
 it ships a self-contained Node sub-project (`renderer/`) built on
 `@react-pdf/renderer` (direct rendering, no headless browser). This chapter
 documents the machinery that makes it work and stay decoupled — read it before
@@ -14,7 +14,7 @@ and formatting config.
 ## Render pipeline
 
 The skill keeps rendering out of the model's context: Claude only assembles a
-small content JSON, and a Node script ([`render.tsx`](../claude-plugins/autopilot/skills/pdf:create/renderer/render.tsx))
+small content JSON, and a Node script ([`render.tsx`](../claude-plugins/autopilot/skills/pdf-create/renderer/render.tsx))
 deterministically turns it into a themed PDF.
 
 ```text
@@ -71,9 +71,9 @@ deterministically turns it into a themed PDF.
 ## Skill layout
 
 ```text
-claude-plugins/autopilot/skills/pdf:create/
+claude-plugins/autopilot/skills/pdf-create/
 ├── SKILL.md                 # the only file the plugin validator sees
-└── renderer/                # self-contained Node project (colon-free path)
+└── renderer/                # self-contained Node project
     ├── package.json         # private, exact-pinned deps; not a workspace member
     ├── package-lock.json    # committed for deterministic installs
     ├── install-check.mjs    # idempotent on-demand installer (marker-guarded)
@@ -88,22 +88,19 @@ claude-plugins/autopilot/skills/pdf:create/
     └── test/                # node:test unit + smoke-render tests
 ```
 
-The skill folder keeps the colon (`pdf:create`) to match the other 15 colon
-skills, but the Node sub-project lives under a **colon-free `renderer/`** so
-`npm`/`node` never run from a path containing `:` (npm warns and may misparse a
-colon in a script path).
+Skill folders are dash-only kebab-case per [RFC-0002](../rfc/0002-portable-skills-layout.md), so the whole path — including the Node sub-project under `renderer/` — is safe for `npm`/`node` and for Windows checkouts (both mishandle `:` in paths).
 
 ## Portability — works without the plugin
 
 The skill is a movable, hermetic unit. To use it outside this plugin, copy the
-`pdf:create/` folder into `~/.claude/skills/`; it behaves identically.
+`pdf-create/` folder into `~/.claude/skills/`; it behaves identically.
 
-- **Self-location.** [`lib/paths.ts`](../claude-plugins/autopilot/skills/pdf:create/renderer/lib/paths.ts)
+- **Self-location.** [`lib/paths.ts`](../claude-plugins/autopilot/skills/pdf-create/renderer/lib/paths.ts)
   resolves every bundled path from `import.meta.url` — never `process.cwd()` or a
   plugin-only env var — so fonts and examples resolve wherever the folder is copied.
 - **No cross-dependencies.** The `SKILL.md` makes no `Skill(autopilot:*)` calls
   and lists no `MCP(...)` tools, so nothing breaks when the plugin is absent.
-- **On-demand install.** [`install-check.mjs`](../claude-plugins/autopilot/skills/pdf:create/renderer/install-check.mjs)
+- **On-demand install.** [`install-check.mjs`](../claude-plugins/autopilot/skills/pdf-create/renderer/install-check.mjs)
   runs `npm install --omit=dev` only when its `node_modules/.pdf-create-ok` marker
   is missing, so the first render bootstraps dependencies (~30s) and every later
   render is instant and offline-capable. The runtime dependency set is pure-JS
@@ -139,12 +136,12 @@ exclusions**:
 Two contracts, both documented and exemplified inside the renderer:
 
 - **Content JSON** — the document model Claude writes. Full schema in
-  [`references/content-schema.md`](../claude-plugins/autopilot/skills/pdf:create/renderer/references/content-schema.md),
+  [`references/content-schema.md`](../claude-plugins/autopilot/skills/pdf-create/renderer/references/content-schema.md),
   worked example in
-  [`references/examples/report.content.json`](../claude-plugins/autopilot/skills/pdf:create/renderer/references/examples/report.content.json).
+  [`references/examples/report.content.json`](../claude-plugins/autopilot/skills/pdf-create/renderer/references/examples/report.content.json).
 - **design.md** — an optional brand spec whose tokens become the theme. Format
   and token-mapping rules in
-  [`references/design-md-spec.md`](../claude-plugins/autopilot/skills/pdf:create/renderer/references/design-md-spec.md).
+  [`references/design-md-spec.md`](../claude-plugins/autopilot/skills/pdf-create/renderer/references/design-md-spec.md).
 
 ## Fonts
 

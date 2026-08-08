@@ -44,7 +44,7 @@ export const reviewTips: readonly ReviewTip[] = [
   },
   {
     id: "pr-resolve",
-    text: "The [pr:resolve skill](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/pr:resolve/SKILL.md) turns this review into fixes — run `/autopilot:pr-resolve` locally.",
+    text: "The [pr-resolve skill](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/pr-resolve/SKILL.md) turns this review into fixes — run `/autopilot:pr-resolve` locally.",
   },
   {
     id: "commit-suggestion",
@@ -64,11 +64,11 @@ export const reviewTips: readonly ReviewTip[] = [
   },
   {
     id: "pr-monitor",
-    text: "The [pr:monitor skill](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/pr:monitor/SKILL.md) babysits a PR — run `/autopilot:pr-monitor` and it fixes CI and resolves feedback until approval.",
+    text: "The [pr-monitor skill](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/pr-monitor/SKILL.md) babysits a PR — run `/autopilot:pr-monitor` and it fixes CI and resolves feedback until approval.",
   },
   {
     id: "pr-update",
-    text: "Pushed more commits? Run `/autopilot:pr-update` so the [PR title and description](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/pr:update/SKILL.md) reflect the full change set.",
+    text: "Pushed more commits? Run `/autopilot:pr-update` so the [PR title and description](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/pr-update/SKILL.md) reflect the full change set.",
   },
   {
     id: "issue-magic-words",

@@ -170,7 +170,7 @@ export function buildAttributionPrompt(
     ...reasons.map((r) => `- ${r.metric}: ${r.baseline} -> ${r.current} (threshold ${r.threshold})`),
     "",
     `Investigate what changed in the review process since ${since}:`,
-    "1. Diff claude-plugins/autopilot/skills/pr:review/SKILL.md over that range " +
+    "1. Diff claude-plugins/autopilot/skills/pr-review/SKILL.md over that range " +
       `(git log --since=${since} -- <path>, then git diff of the boundary commits): ` +
       "report the line-count delta and the CHECK-rule-count delta.",
     "2. Diff .github/actions/code-review-action over the same range and note changes " +

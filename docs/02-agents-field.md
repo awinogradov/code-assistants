@@ -6,7 +6,7 @@ Autopilot skills detect a repository's tech stack and source language by reading
 
 ## Why it exists
 
-Several Autopilot skills behave differently per stack — `/plan` delegates to a stack-specific planning skill, `/todo-cleanup` picks file globs and a verification command per language, `/pr:review` tags the review with stack context. Without a declared stack the skills fall back to an interactive prompt on every invocation. Declaring `agents` once turns that prompt into static configuration.
+Several Autopilot skills behave differently per stack — `/plan` delegates to a stack-specific planning skill, `/todo-cleanup` picks file globs and a verification command per language, `/pr-review` tags the review with stack context. Without a declared stack the skills fall back to an interactive prompt on every invocation. Declaring `agents` once turns that prompt into static configuration.
 
 ## Location
 
@@ -81,10 +81,10 @@ The matrix below lists every skill that reads `agents`, the key(s) it reads, and
 | ---------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | `/plan`          | `agents.rules`                                         | Resolves the three planning deltas from the delta table                                                                                        | `claude-plugins/autopilot/skills/plan/references/stack-deltas.md`                               |
 | `/run`           | `agents.rules`                                         | Same delta resolution as `/plan`, plus embedded post-implementation autopilot                                                                  | `claude-plugins/autopilot/skills/plan/references/stack-deltas.md`                               |
-| `/pr:review`     | `agents.rules`                                         | Tags the review with the stack identifier; falls back to `unknown` if missing                                                                  | `claude-plugins/autopilot/skills/pr:review/SKILL.md` (Phase 2.1: Detect Stack)                  |
+| `/pr-review`     | `agents.rules`                                         | Tags the review with the stack identifier; falls back to `unknown` if missing                                                                  | `claude-plugins/autopilot/skills/pr-review/SKILL.md` (Phase 2.1: Detect Stack)                  |
 | `/todo-cleanup`  | `agents.language` + `agents.rules` + `agents.trackers` | Picks file globs + comment syntax from `language`, verification command from `rules`; routes new-TODO issues to GitHub or a chosen Linear team | `claude-plugins/autopilot/skills/todo-cleanup/SKILL.md` (Phase 1: Read Repository Context)      |
-| `/linear:create` | `agents.trackers`                                      | Files a Linear issue on the configured `team`; prompts to choose when 2+ `linear` trackers exist                                               | `claude-plugins/autopilot/skills/linear:create/SKILL.md` (Phase 0: Resolve Team and Hint)       |
-| `/issue:run`     | `agents.trackers`                                      | Resolves the provider and Linear team; prompts to choose the team when 2+ `linear` trackers exist                                              | `claude-plugins/autopilot/skills/issue:run/SKILL.md` (Phase 0: Resolve Repository and Provider) |
+| `/linear-create` | `agents.trackers`                                      | Files a Linear issue on the configured `team`; prompts to choose when 2+ `linear` trackers exist                                               | `claude-plugins/autopilot/skills/linear-create/SKILL.md` (Phase 0: Resolve Team and Hint)       |
+| `/issue-run`     | `agents.trackers`                                      | Resolves the provider and Linear team; prompts to choose the team when 2+ `linear` trackers exist                                              | `claude-plugins/autopilot/skills/issue-run/SKILL.md` (Phase 0: Resolve Repository and Provider) |
 
 ### Stack → planning deltas (used by `/plan` and `/run`)
 
@@ -121,7 +121,7 @@ Implementations may use `Read`, `jq`, or `grep_repomix_output` to read the file.
 | Skill           | When detection fails                                                                                                                                  |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `/plan`, `/run` | `AskUserQuestion` with the four `rules` values as options; user's choice is used for the current invocation only — not written back to `package.json` |
-| `/pr:review`    | Stack stored as `unknown`; the review proceeds without stack-specific tagging                                                                         |
+| `/pr-review`    | Stack stored as `unknown`; the review proceeds without stack-specific tagging                                                                         |
 | `/todo-cleanup` | Skill cannot proceed without `language`; the prompt asks the user to populate the field                                                               |
 
 Fallbacks are intentionally non-destructive — no skill writes to `package.json` on its own.
@@ -179,7 +179,7 @@ To add a new stack:
 2. Add the value to the `rules` table in this document.
 3. Update the stack-mapping tables inside the consumer skills:
    - `claude-plugins/autopilot/skills/plan/references/stack-deltas.md` (routing table plus the three deltas; serves both `/plan` and `/run`)
-   - `claude-plugins/autopilot/skills/pr:review/SKILL.md`
+   - `claude-plugins/autopilot/skills/pr-review/SKILL.md`
    - `claude-plugins/autopilot/skills/todo-cleanup/SKILL.md`
 4. Add the stack's three planning deltas — example libraries, expert table, verify examples — as a new section in `stack-deltas.md`. A stack does not get its own planning skill: the pipeline is stack-agnostic, and the deltas are the only real differences.
 

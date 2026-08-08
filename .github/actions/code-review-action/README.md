@@ -67,7 +67,7 @@ The `if` condition prevents runner provisioning for non-PR issue comments. All o
 | `preflight_checks`     | no       | `true`                   | Wait for PR checks to pass before running review (review mode only).                                                                                                                                                                                                 |
 | `poll_interval`        | no       | `10`                     | Seconds between check status polls.                                                                                                                                                                                                                                  |
 | `checks_timeout`       | no       | `600`                    | Maximum seconds to wait for checks.                                                                                                                                                                                                                                  |
-| `rules_doc_url`        | no       | see `action.yml`         | Canonical blob URL of the `pr:review` SKILL.md (literal default in `action.yml`); skills build `CHECK-*` links from it. Override only for forks.                                                                                                                     |
+| `rules_doc_url`        | no       | see `action.yml`         | Canonical blob URL of the `pr-review` SKILL.md (literal default in `action.yml`); skills build `CHECK-*` links from it. Override only for forks.                                                                                                                     |
 | `review_prompt`        | no       | `/autopilot:pr-review`   | Slash command for `review` mode; override to run a different review skill. Appends runtime args (REPO, PR_NUMBER, REVIEWER, PR_AUTHOR, RULES_DOC_URL).                                                                                                               |
 | `react_prompt`         | no       | `/autopilot:pr-answer`   | Slash command for `react` mode; override to run a different reply skill. Appends runtime args (REPO, PR_NUMBER, REVIEWER, comment fields, NEEDS_REVERDICT, RULES_DOC_URL).                                                                                           |
 | `marketplaces`         | no       | —                        | Plugin marketplaces to register, one `name=source` per line. See [Installing plugins](#installing-plugins).                                                                                                                                                          |
@@ -98,9 +98,9 @@ The action invokes Claude Code with the local `claude-plugins/autopilot` plugin 
 - `/autopilot:pr-review` — review the PR diff across all dimensions in a single pass and emit a structured verdict
 - `/autopilot:pr-answer` — reply to a PR comment thread and optionally resolve / update the existing review
 
-The `pr:review` skill carries the full review rubric (all `CHECK-*` rules) inline and reviews every dimension itself in one model pass — no review sub-agents and no orchestrator fan-out.
+The `pr-review` skill carries the full review rubric (all `CHECK-*` rules) inline and reviews every dimension itself in one model pass — no review sub-agents and no orchestrator fan-out.
 
-To run a different repo's skills instead — e.g. a consumer's own `pr:review` — point `review_prompt` / `react_prompt` at them and install the plugin that provides them (see below).
+To run a different repo's skills instead — e.g. a consumer's own `pr-review` — point `review_prompt` / `react_prompt` at them and install the plugin that provides them (see below).
 
 ## Repository standards (rfc/, docs/, and principles/)
 
@@ -140,7 +140,7 @@ See [Random review tip](../../../docs/03-code-review-run-summary.md#random-revie
 
 ## Inline suggestions & AI-agent prompts
 
-Each inline finding can carry a one-click GitHub **`suggestion`** block (the author commits the fix in one click) and a collapsible **"Prompt for AI agents"** block (a ready-to-paste prompt with the finding and the surrounding diff hunk). The `pr:review` skill emits an optional `suggestion` (verbatim replacement) and `startLine` (multi-line range) per comment; `submitReview.ts` renders the suggestion fence and the deterministic agent prompt and posts them through the existing `createReview` call — adding `start_line`/`side` for multi-line ranges. The feature is always-on; no inputs configure it.
+Each inline finding can carry a one-click GitHub **`suggestion`** block (the author commits the fix in one click) and a collapsible **"Prompt for AI agents"** block (a ready-to-paste prompt with the finding and the surrounding diff hunk). The `pr-review` skill emits an optional `suggestion` (verbatim replacement) and `startLine` (multi-line range) per comment; `submitReview.ts` renders the suggestion fence and the deterministic agent prompt and posts them through the existing `createReview` call — adding `start_line`/`side` for multi-line ranges. The feature is always-on; no inputs configure it.
 
 See [Inline suggestions and AI-agent prompts](../../../docs/04-code-review-suggestions.md) for the full data flow, a rendered example, and the source map.
 

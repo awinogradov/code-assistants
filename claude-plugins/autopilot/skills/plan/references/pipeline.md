@@ -56,7 +56,7 @@ Expert review and scoring are **one step**. Reviewers already return per-dimensi
 
 **Expert review is an enhancement, never a gate.** It improves the plan and records the panel's assessment for the plan's readers; no caller blocks, loops, or refuses to proceed on the score.
 
-**`plan` and `linear:plan` are the only callers that may skip this step.** Each runs the review only when the user passed `--experts-review` (stripped by the mode-flags pre-step in [input-detection.md](input-detection.md#mode-flags)) — `plan` because its approval gate puts a human in front of the finished plan either way, and `linear:plan` because the teammate reading the stored ticket is that human, and the recorded skip tells them the plan is unreviewed. The `run` family — `run`, `run-primed`, and `linear:run`'s fresh-plan path — runs the step unconditionally, because no human re-reads its plans, so for those callers the skip path is unreachable. When the review step was skipped: mark the Review-and-score task `completed` noting the skip, and finalize with the skipped `Score:` line from [Finalize](#finalize-task-5).
+**`plan` and `linear-plan` are the only callers that may skip this step.** Each runs the review only when the user passed `--experts-review` (stripped by the mode-flags pre-step in [input-detection.md](input-detection.md#mode-flags)) — `plan` because its approval gate puts a human in front of the finished plan either way, and `linear-plan` because the teammate reading the stored ticket is that human, and the recorded skip tells them the plan is unreviewed. The `run` family — `run`, `run-primed`, and `linear-run`'s fresh-plan path — runs the step unconditionally, because no human re-reads its plans, so for those callers the skip path is unreachable. When the review step was skipped: mark the Review-and-score task `completed` noting the skip, and finalize with the skipped `Score:` line from [Finalize](#finalize-task-5).
 
 Select experts from your stack's expert table — always the Pre-mortem Analyst, then 2-3 more by task scope. Launch them **in parallel** (single message, multiple Agent tool calls):
 
@@ -87,11 +87,11 @@ Name every discard in the run — `Discarded <role>: <reason>` — and never sil
 
 Record what survives:
 
-1. **Per-reviewer verdicts.** Each reviewer's `score` is derived — the sum of its five `dimensions` values (0–20 each; the rubric lives in [the agent](../../../agents/expert-review.md) and nowhere else). When a reported `score` disagrees with its own dimensions, recompute the sum and use that. Record one verdict per surviving reviewer, in launch order: the derived score and that reviewer's weakest dimension with its points. There is no cross-reviewer averaging — verdicts side by side tell the reader more than one blended number.
+1. **Per-reviewer verdicts.** Each reviewer's `score` is derived — the sum of its five `dimensions` values (0–20 each; the rubric lives in [the agent](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/expert-review.md) and nowhere else). When a reported `score` disagrees with its own dimensions, recompute the sum and use that. Record one verdict per surviving reviewer, in launch order: the derived score and that reviewer's weakest dimension with its points. There is no cross-reviewer averaging — verdicts side by side tell the reader more than one blended number.
 
 2. **Apply the findings — once.** Fold the panel's findings into the draft in a single pass: no re-running the panel, no iterating on the verdicts, no threshold to clear. Ask via `AskUserQuestion` only when a finding hinges on a material ambiguity the Context Map cannot settle.
 
-3. **Record honestly.** Record each reviewer's actual derived score and weakest dimension in the plan; never inflate a number. The scores inform the reader — the human at `plan`'s approval gate, or the teammate reading the ticket `linear:plan` stores — it is not a gate for any caller, and every caller proceeds on whatever the numbers say.
+3. **Record honestly.** Record each reviewer's actual derived score and weakest dimension in the plan; never inflate a number. The scores inform the reader — the human at `plan`'s approval gate, or the teammate reading the ticket `linear-plan` stores — it is not a gate for any caller, and every caller proceeds on whatever the numbers say.
 
 Do not include raw expert JSON in the plan output.
 
@@ -111,7 +111,7 @@ When the review step was skipped, there are no findings to apply; replace the pl
 Score: skipped · expert review disabled (invoked without --experts-review)
 ```
 
-The line is deliberately a single literal: only `plan` and `linear:plan` can skip, so this exact line appearing in `run`, `run-primed`, or `linear:run` output is evidence of drift, not a valid state.
+The line is deliberately a single literal: only `plan` and `linear-plan` can skip, so this exact line appearing in `run`, `run-primed`, or `linear-run` output is evidence of drift, not a valid state.
 
 Naming each reviewer's weakest dimension costs half a line and tells a later reader where the plan is soft — the scores alone say how good the panel thought the plan was, not what to double-check when executing it.
 
