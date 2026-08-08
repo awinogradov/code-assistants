@@ -1,8 +1,10 @@
 # agents-skills-sync
 
-Composite GitHub Action that syncs the portable [autopilot Agent Skills layout](../../../agent-skills/README.md) from an upstream repository into the current repository's `.agents/skills/` directory — the vendor-neutral location Codex, Kimi, and other SKILL.md-compatible CLIs read.
+Composite GitHub Action that syncs the autopilot skills — the portable single-source layout under [claude-plugins/autopilot/skills/](../../../claude-plugins/autopilot/README.md) ([RFC-0002](../../../rfc/0002-portable-skills-layout.md)) — from an upstream repository into the current repository's `.agents/skills/` directory, the vendor-neutral location Codex, Kimi, and other SKILL.md-compatible CLIs read.
 
-It composes with [files-sync](../files-sync/README.md) exactly as [agents-rules-sync](../agents-rules-sync/README.md) does: a resolve step enumerates the source repository's `agent-skills/` tree via the Git Trees API and emits one content entry per file; files-sync detects changes and opens a single idempotent PR. When nothing changed, no PR is created and the existing sync branch is left untouched.
+It composes with [files-sync](../files-sync/README.md) exactly as [agents-rules-sync](../agents-rules-sync/README.md) does: a resolve step enumerates the source skills tree via the Git Trees API and emits one content entry per file — **verbatim, no content transform** — and files-sync detects changes and opens a single idempotent PR. When nothing changed, no PR is created and the existing sync branch is left untouched.
+
+**Upgrading?** See [MIGRATING.md](./MIGRATING.md).
 
 ## Usage
 
@@ -25,12 +27,12 @@ jobs:
 
 ## Inputs
 
-| Input          | Required | Default                       | Description                                                            |
-| -------------- | -------- | ----------------------------- | ---------------------------------------------------------------------- |
-| `bot_token`    | yes      | —                             | PAT or GitHub App installation token; see [Permissions](#permissions). |
-| `bot_username` | no       | `github-actions[bot]`         | Git author/committer login for the sync commit.                        |
-| `source-repo`  | no       | `awinogradov/code-assistants` | Source repository hosting the `agent-skills/` layout.                  |
-| `source-ref`   | no       | source repo's default branch  | Branch, tag, or SHA to read the layout from.                           |
+| Input          | Required | Default                       | Description                                                              |
+| -------------- | -------- | ----------------------------- | ------------------------------------------------------------------------ |
+| `bot_token`    | yes      | —                             | PAT or GitHub App installation token; see [Permissions](#permissions).   |
+| `bot_username` | no       | `github-actions[bot]`         | Git author/committer login for the sync commit.                          |
+| `source-repo`  | no       | `awinogradov/code-assistants` | Source repository hosting the `claude-plugins/autopilot/skills/` layout. |
+| `source-ref`   | no       | source repo's default branch  | Branch, tag, or SHA to read the layout from.                             |
 
 ## Outputs
 
@@ -46,5 +48,6 @@ The workflow's default `GITHUB_TOKEN` is not supported: it cannot create pull re
 
 ## Limitations
 
-- The sync writes and updates files; it does not delete a destination file whose source was removed upstream. Remove stale `.agents/skills/` entries manually (or wait for the next layout rename to overwrite them).
-- The layout currently spans ~130 files, so a first sync opens a correspondingly large PR; subsequent runs only touch changed files.
+- The sync writes and updates files; it does not delete a destination file whose source was removed upstream. Remove stale `.agents/skills/` entries manually.
+- Skills land under their plain names (`.agents/skills/pr-review/`, `.agents/skills/run/`, …) so relative cross-skill links keep resolving; if another skill set in the consumer repo uses the same names, resolve the collision manually.
+- The `plan` and `run-primed` skills rely on Claude Code plan mode and session artifacts; other CLIs can read them but not reproduce those mechanics.

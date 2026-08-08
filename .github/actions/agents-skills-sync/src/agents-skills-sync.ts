@@ -1,10 +1,11 @@
 /**
  * Entry point for the agents-skills-sync composite action.
  *
- * Enumerates the source repository's `agent-skills/` layout via the Git Trees
- * API and emits a YAML `files` list as a step output that the downstream
- * `files-sync` step consumes, landing the portable Agent Skills under the
- * consumer's `.agents/skills/`.
+ * Enumerates the source repository's authored skills layout
+ * (`claude-plugins/autopilot/skills/`) via the Git Trees API and emits a YAML
+ * `files` list as a step output that the downstream `files-sync` step
+ * consumes, landing the portable Agent Skills verbatim under the consumer's
+ * `.agents/skills/`.
  */
 
 import * as core from '@actions/core';
@@ -49,13 +50,15 @@ async function main(): Promise<void> {
   const files = await fetchSkillTree({ octokit, sourceRepo, sourceRef });
   const entries = buildSkillSyncEntries({ sourceRepo, sourceRef, files });
 
-  core.info(`Resolved ${entries.length} portable skill file(s) from ${sourceRepo} agent-skills/ → .agents/skills/`);
+  core.info(
+    `Resolved ${entries.length} portable skill file(s) from ${sourceRepo} claude-plugins/autopilot/skills/ → .agents/skills/`,
+  );
   core.setOutput('files', stringifyYaml(entries));
 
   const summaryLines = [
     '### Agents skills sync',
     '',
-    `Syncing ${entries.length} file(s) from \`${sourceRepo}\` \`agent-skills/\` to \`.agents/skills/\`.`,
+    `Syncing ${entries.length} file(s) from \`${sourceRepo}\` \`claude-plugins/autopilot/skills/\` to \`.agents/skills/\`.`,
     '',
   ];
   await core.summary.addRaw(summaryLines.join('\n')).write();
