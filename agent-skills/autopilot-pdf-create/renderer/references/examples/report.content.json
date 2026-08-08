@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "template": "report",
+  "metadata": {
+    "title": "Quarterly Business Review",
+    "subtitle": "Q2 2026 performance and outlook",
+    "authors": ["Jane Doe", "Sam Patel"],
+    "date": "Q2 2026",
+    "org": "Acme Corporation",
+    "confidentiality": "Confidential"
+  },
+  "cover": {
+    "eyebrow": "Quarterly Review",
+    "title": "Q2 2026 Business Review",
+    "subtitle": "Revenue, product, and the road to Q3",
+    "footnote": "Prepared for the Acme leadership team. Do not distribute."
+  },
+  "toc": true,
+  "sections": [
+    {
+      "id": "summary",
+      "title": "Executive Summary",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "content": [
+            { "text": "Revenue grew " },
+            { "text": "18% quarter over quarter", "bold": true },
+            { "text": ", driven by enterprise expansion and stronger retention." }
+          ]
+        },
+        {
+          "type": "callout",
+          "tone": "success",
+          "title": "On track for the annual plan",
+          "content": [{ "text": "Every top-line target for the quarter was met or exceeded." }]
+        },
+        {
+          "type": "list",
+          "ordered": false,
+          "items": [
+            [{ "text": "Net revenue retention reached 121%." }],
+            [{ "text": "Two of three product bets shipped on schedule." }],
+            [{ "text": "Gross margin improved by 3 points." }]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "performance",
+      "title": "Performance",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "content": [{ "text": "Quarterly revenue continued its upward trend across both segments." }]
+        },
+        {
+          "type": "chart",
+          "spec": {
+            "kind": "bar",
+            "series": [
+              {
+                "name": "Revenue ($M)",
+                "points": [
+                  { "x": "Q3'25", "y": 98 },
+                  { "x": "Q4'25", "y": 112 },
+                  { "x": "Q1'26", "y": 120 },
+                  { "x": "Q2'26", "y": 142 }
+                ]
+              }
+            ]
+          },
+          "caption": "Quarterly revenue, last four quarters ($M)."
+        },
+        {
+          "type": "table",
+          "columns": [
+            { "header": "Segment", "width": 0.5 },
+            { "header": "Revenue", "width": 0.25, "align": "right" },
+            { "header": "Growth", "width": 0.25, "align": "right" }
+          ],
+          "rows": [
+            [[{ "text": "Enterprise" }], [{ "text": "$96M" }], [{ "text": "+22%" }]],
+            [[{ "text": "Mid-market" }], [{ "text": "$46M" }], [{ "text": "+11%" }]]
+          ],
+          "caption": "Revenue by segment."
+        }
+      ]
+    },
+    {
+      "id": "outlook",
+      "title": "Outlook",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "content": [{ "text": "We enter Q3 with healthy pipeline coverage and a focused roadmap." }]
+        },
+        {
+          "type": "pullquote",
+          "text": "The next quarter is about turning expansion momentum into durable, profitable growth.",
+          "attribution": "Jane Doe, CEO"
+        }
+      ]
+    }
+  ],
+  "appendix": [
+    {
+      "id": "data",
+      "title": "Supporting Data",
+      "blocks": [
+        {
+          "type": "table",
+          "columns": [{ "header": "Metric" }, { "header": "Value", "align": "right" }],
+          "rows": [
+            [[{ "text": "Net revenue retention" }], [{ "text": "121%" }]],
+            [[{ "text": "Gross margin" }], [{ "text": "74%" }]],
+            [[{ "text": "Logo churn" }], [{ "text": "1.2%" }]]
+          ]
+        }
+      ]
+    }
+  ]
+}
