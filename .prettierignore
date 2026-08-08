@@ -22,3 +22,7 @@ claude-plugins/autopilot/skills/pdf:create/renderer/
 # Local context brief written by the explore skill — machine-generated and
 # git-ignored, so the root Prettier (.{md,json}) glob must not check it.
 .claude/context/
+
+# Generated portable Agent Skills layout — the export-agent-skills script owns
+# its formatting; reformatting here would drift it against export:skills:check.
+/agent-skills/

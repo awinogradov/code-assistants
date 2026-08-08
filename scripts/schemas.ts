@@ -45,6 +45,15 @@ export const skillFrontmatterSchema = z.object({
   model: z.string().optional(),
 });
 
+// Portable Agent Skills entries (agent-skills/) target Codex/Kimi-style
+// consumers: no `:` in names, and no Claude-only keys may survive the export.
+export const portableSkillFrontmatterSchema = z
+  .object({
+    name: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "portable name must be kebab-case without `:`"),
+    description: z.string().min(1),
+  })
+  .strict();
+
 export const agentFrontmatterSchema = z.object({
   name: skillName,
   description: z.string().min(1),
