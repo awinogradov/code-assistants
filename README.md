@@ -41,6 +41,7 @@ The `docs/` guides are numbered chapters in reading order — start at chapter 1
 | 15  | [The `run-primed` skill](./docs/15-run-primed-skill.md)                           | the strict run path for a primed session: validate the brief against the checkout, or stop loudly    |
 | 16  | [The `linear:plan` skill](./docs/16-linear-plan-skill.md)                         | storing a scored plan on a Linear ticket so it outlives the session that drafted it                  |
 | 17  | [The `linear:run` skill](./docs/17-linear-run-skill.md)                           | executing a stored Linear plan verbatim: validate the format, or refuse and name the fix             |
+| 18  | [Agent skills export](./docs/18-agent-skills-export.md)                           | the portable `agent-skills/` layout for Codex, Kimi, and other CLIs, and the sync that ships it      |
 
 **Standards.**
 

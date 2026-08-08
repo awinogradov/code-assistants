@@ -46,6 +46,10 @@ claude --plugin-dir .
 
 After installation, restart Claude Code.
 
+### Use with Codex, Kimi, and other CLIs
+
+The plugin's skills and agents also ship as a portable Agent Skills layout under [`agent-skills/`](../../agent-skills/README.md), generated from this plugin as the source of truth. Copy the skill directories into your CLI's skills directory (`~/.codex/skills/` for Codex CLI; a configured skills directory for Kimi Code CLI), or let the [`agents-skills-sync`](../../.github/actions/agents-skills-sync/README.md) action publish them into your repository's `.agents/skills/` automatically. A `/autopilot:x` slash command corresponds to the exported skill `autopilot-x`. See [Agent skills export](../../docs/18-agent-skills-export.md) for the pipeline and the few Claude Code-only exclusions.
+
 ## Structure
 
 ```
