@@ -28,17 +28,21 @@ function fakeOctokit(tree: TreeEntry[], options: { truncated?: boolean; defaultB
 }
 
 const tree: TreeEntry[] = [
-  { path: 'agent-skills/autopilot-run/SKILL.md', type: 'blob' },
-  { path: 'agent-skills/README.md', type: 'blob' },
-  { path: 'agent-skills/autopilot-run', type: 'tree' },
+  { path: 'claude-plugins/autopilot/skills/run/SKILL.md', type: 'blob' },
+  { path: 'claude-plugins/autopilot/skills/plan/references/pipeline.md', type: 'blob' },
+  { path: 'claude-plugins/autopilot/skills/run', type: 'tree' },
+  { path: 'claude-plugins/autopilot/agents/expert-review.md', type: 'blob' },
   { path: 'rules/Bun.md', type: 'blob' },
 ];
 
 describe('fetchSkillTree', () => {
-  test('returns sorted blob paths under agent-skills/ only', async () => {
+  test('returns sorted blob paths under the skills layout only', async () => {
     const { octokit } = fakeOctokit(tree);
     const files = await fetchSkillTree({ octokit, sourceRepo: 'o/r', sourceRef: 'main' });
-    expect(files).toEqual(['agent-skills/README.md', 'agent-skills/autopilot-run/SKILL.md']);
+    expect(files).toEqual([
+      'claude-plugins/autopilot/skills/plan/references/pipeline.md',
+      'claude-plugins/autopilot/skills/run/SKILL.md',
+    ]);
   });
 
   test('resolves the default branch when sourceRef is empty', async () => {

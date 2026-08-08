@@ -5,21 +5,24 @@ import { buildSkillSyncEntries } from './buildSkillSyncEntries.ts';
 const baseArgs = {
   sourceRepo: 'awinogradov/code-assistants',
   sourceRef: '',
-  files: ['agent-skills/README.md', 'agent-skills/autopilot-run/SKILL.md'],
+  files: [
+    'claude-plugins/autopilot/skills/run/SKILL.md',
+    'claude-plugins/autopilot/skills/shared-rules/references/repomix-snapshot.md',
+  ],
 };
 
 describe('buildSkillSyncEntries', () => {
-  test('maps each source file to its .agents/skills destination', () => {
+  test('maps each source file verbatim to its .agents/skills destination', () => {
     expect(buildSkillSyncEntries(baseArgs)).toEqual([
       {
         repo: 'awinogradov/code-assistants',
-        source: 'agent-skills/README.md',
-        dest: '.agents/skills/README.md',
+        source: 'claude-plugins/autopilot/skills/run/SKILL.md',
+        dest: '.agents/skills/run/SKILL.md',
       },
       {
         repo: 'awinogradov/code-assistants',
-        source: 'agent-skills/autopilot-run/SKILL.md',
-        dest: '.agents/skills/autopilot-run/SKILL.md',
+        source: 'claude-plugins/autopilot/skills/shared-rules/references/repomix-snapshot.md',
+        dest: '.agents/skills/shared-rules/references/repomix-snapshot.md',
       },
     ]);
   });
@@ -38,15 +41,18 @@ describe('buildSkillSyncEntries', () => {
   test('preserves nested reference paths under the skill directory', () => {
     const entries = buildSkillSyncEntries({
       ...baseArgs,
-      files: ['agent-skills/autopilot-pr-review/references/checks-security.md'],
+      files: ['claude-plugins/autopilot/skills/pr-review/references/checks-security.md'],
     });
     expect(entries[0]).toMatchObject({
-      dest: '.agents/skills/autopilot-pr-review/references/checks-security.md',
+      dest: '.agents/skills/pr-review/references/checks-security.md',
     });
   });
 
-  test('drops paths outside the agent-skills layout', () => {
-    const entries = buildSkillSyncEntries({ ...baseArgs, files: ['rules/Bun.md'] });
+  test('drops paths outside the skills layout', () => {
+    const entries = buildSkillSyncEntries({
+      ...baseArgs,
+      files: ['rules/Bun.md', 'claude-plugins/autopilot/agents/expert-review.md'],
+    });
     expect(entries).toEqual([]);
   });
 });
