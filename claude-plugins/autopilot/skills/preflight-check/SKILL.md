@@ -65,7 +65,7 @@ If the two values differ, the session is running inside a **git worktree**. Stor
 
 ### Check branch name format (commits mode only)
 
-If mode is `commits`, read the canonical branch-name regex from [`pr-title-grammar.md`](../shared-rules/references/pr-title-grammar.md) and match `currentBranch` against it. `plan` and `branch` modes skip this check — they run before the working branch exists, including on harness-created worktree branches — and `pr` mode skips it because `pr-create` validates the branch itself in its Phase 1 (one owner per gate, no double prompt).
+If mode is `commits`, read the canonical branch-name regex from [`pr-title-grammar.md`](../shared-rules/references/pr-title-grammar.md) and check `currentBranch` against it and against the length bounds beside it (5–100 characters) — an overlong name fails CI's `max_length` check just like a shape violation. `plan` and `branch` modes skip this check — they run before the working branch exists, including on harness-created worktree branches — and `pr` mode skips it because `pr-create` validates the branch itself in its Phase 1 (one owner per gate, no double prompt).
 
 If the name does not match, ask (header "Branch name"): branch `<currentBranch>` does not follow the naming convention and would fail the contributing-check CI once a PR is open, where the only fix is a fresh branch and a fresh PR — how to proceed?
 
