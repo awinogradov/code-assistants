@@ -159,6 +159,7 @@ The content is organized as follows:
           reviewOutput.ts
         actionsOutput.test.ts
         actionsOutput.ts
+        branchGrammarSync.test.ts
         classifyReaction.test.ts
         classifyReaction.ts
         expertReviewContract.test.ts
@@ -8241,6 +8242,62 @@ export async function setOutput(key: string, value: string): Promise<void> {
   const delimiter = `EOF_${randomUUID().replaceAll("-", "")}`;
   await appendFile(outputFile, `${key}<<${delimiter}\n${value}\n${delimiter}\n`);
 }
+</file>
+
+<file path=".github/actions/code-review-action/src/branchGrammarSync.test.ts">
+/**
+ * Guards the canonical branch-name regex against drift between its two encodings:
+ * the `regex` input of the contributing-check CI action and the executable pattern
+ * in the shared pr-title-grammar.md block that branch-create and preflight-check
+ * validate against before a branch is created or committed on.
+ *
+ * The CI action is the enforcement of last resort — it fires only once a PR is
+ * open, when a bad head branch can no longer be renamed and the PR must be
+ * re-created. The grammar block is what the skills check before the branch ever
+ * exists. If either encoding is edited alone, agents validate one shape and CI
+ * another, reintroducing exactly the late failure the early gates exist to
+ * prevent; this test makes such an edit fail in CI instead.
+ *
+ * Vacuous-pass defence: the extracted regex must be non-empty and above a minimum
+ * length, so a reworded `regex:` line cannot extract "" and trivially match.
+ */
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
+import { describe, expect, test } from "bun:test";
+
+const actionDir = join(import.meta.dirname, "..");
+const repoRoot = join(actionDir, "..", "..", "..");
+const contributingCheckPath = join(
+  repoRoot,
+  ".github/actions/contributing-check/action.yml",
+);
+const grammarPath = join(
+  repoRoot,
+  "claude-plugins/autopilot/skills/shared-rules/references/pr-title-grammar.md",
+);
+
+/** Shortest the real pattern can be; anything smaller means the extraction went wrong. */
+const minRegexLength = 80;
+
+/** The single-quoted value of the action's `regex:` input line; null when absent. */
+function extractCiRegex(actionYml: string): string | null {
+  return /^\s*regex:\s*'(.+)'\s*$/m.exec(actionYml)?.[1] ?? null;
+}
+
+describe("branch grammar sync", () => {
+  test("pr-title-grammar.md carries the contributing-check regex verbatim", async () => {
+    const [actionYml, grammar] = await Promise.all([
+      readFile(contributingCheckPath, "utf8"),
+      readFile(grammarPath, "utf8"),
+    ]);
+    const ciRegex = extractCiRegex(actionYml);
+    expect(ciRegex).not.toBeNull();
+    expect(ciRegex!.length).toBeGreaterThan(minRegexLength);
+    // On its own line means inside the fenced canonical-regex block, not in prose.
+    expect(grammar).toContain(`\n${ciRegex!}\n`);
+  });
+});
 </file>
 
 <file path=".github/actions/code-review-action/src/classifyReaction.test.ts">
@@ -45207,6 +45264,8 @@ Only proceed to [Phase 6](#phase-6-execute) after user selects "Create branch". 
 
 ## Phase 6: Execute
 
+**Validate the branch name (MANDATORY, before any git command):** read the canonical branch-name regex from [`pr-title-grammar.md`](../shared-rules/references/pr-title-grammar.md) and match the fully constructed `<branch-name>` against it, including the 100-character limit. The name must be exactly what the earlier phases constructed — never decorate it with extra path segments or prefixes (`feature/issue-123-slug` is invalid; the convention contains no `/`). On mismatch, regenerate the slug once via the [Phase 3](#phase-3-generate-branch-slug) rules and re-validate; if the name still fails, stop with an error naming the rejected name and the expected formats — the branch is NOT created. This gate is the last line before `git checkout -b`: a name that fails here in seconds would otherwise fail the contributing-check CI on an opened PR, where the only fix is a fresh branch and a fresh PR.
+
 1. **Fetch latest remote and create branch from origin/main:**
 
    ```bash
@@ -53992,19 +54051,21 @@ Before writing any output that mentions a file, standard, section, commit, or is
 <file path="claude-plugins/autopilot/skills/preflight-check/SKILL.md">
 ---
 name: preflight-check
-description: Validate git working state before committing, branching, or opening a PR. Detects wrong branch, stale merged branches, uncommitted changes, and out-of-date main.
+description: Validate git working state before committing, branching, or opening a PR. Detects wrong branch, invalid branch names, stale merged branches, uncommitted changes, and out-of-date main.
 user-invocable: false
 allowed-tools:
   - Bash(git *)
+  - Read
   - AskUserQuestion
 ---
 
 Validate the git working environment before proceeding. This skill checks the current branch state, detects stale or merged branches, and — depending on mode — either prepares `main` for a new plan/branch or warns against committing/opening a PR directly on `main`.
 
-The skill protects two invariants; the phases below implement them:
+The skill protects three invariants; the phases below implement them:
 
 1. Never create a branch from a stale branch or a `main` that is behind its remote.
 2. Never commit or open a PR on `main` without the user explicitly acknowledging it.
+3. Never commit on a branch whose name violates the naming convention without the user explicitly acknowledging it — a violation caught at commit time costs a rename; caught on an open PR it costs the PR.
 
 ## Context
 
@@ -54052,6 +54113,15 @@ If the two values differ, the session is running inside a **git worktree**. Stor
 - Otherwise, go to [Phase 2](#phase-2-on-feature-branch).
 
 ## Phase 2: On Feature Branch
+
+### Check branch name format (commits mode only)
+
+If mode is `commits`, read the canonical branch-name regex from [`pr-title-grammar.md`](../shared-rules/references/pr-title-grammar.md) and check `currentBranch` against it and against the length bounds beside it (5–100 characters) — an overlong name fails CI's `max_length` check just like a shape violation. `plan` and `branch` modes skip this check — they run before the working branch exists, including on harness-created worktree branches — and `pr` mode skips it because `pr-create` validates the branch itself in its Phase 1 (one owner per gate, no double prompt).
+
+If the name does not match, ask (header "Branch name"): branch `<currentBranch>` does not follow the naming convention and would fail the contributing-check CI once a PR is open, where the only fix is a fresh branch and a fresh PR — how to proceed?
+
+- **Continue anyway** — commit on this branch at the user's explicit request: continue to the merged-branch check below.
+- **Cancel** — stop so the branch can be fixed while no PR exists and the rename is still free: output "Commit cancelled. Branch <currentBranch> does not follow the naming convention — re-create it with /autopilot:branch-create (uncommitted changes follow the checkout) or rename it with git branch -m, then retry." and abort.
 
 ### Check working tree (pr mode only)
 
@@ -54878,6 +54948,18 @@ release-<version>
 - `version` is a SemVer number (e.g., `1.2.0`, `22.0.0`) — no `v` prefix
 - No short description required
 - Created automatically by release workflows
+
+**Canonical regex:**
+
+All four formats compress into one executable pattern — kept byte-identical to the `regex` input of the [contributing-check CI action](https://github.com/awinogradov/code-assistants/blob/main/.github/actions/contributing-check/action.yml) by the `branchGrammarSync` guard test, so skills and CI validate the same shape:
+
+```text
+^(issue-\d+-[a-z0-9]+(-[a-z0-9]+)*|[a-z][a-z0-9]*-\d+-[a-z0-9]+(-[a-z0-9]+)*|(hotfix|trivial|maintenance|proposal|security)-[a-z0-9]+(-[a-z0-9]+)*|release-([a-z0-9]+(-[a-z0-9]+)*-)?\d+\.\d+\.\d+)$
+```
+
+- Length bounds: 5–100 characters (aim for under 60)
+- The regex is shape-only: a Linear-shaped name still requires a matching `linear` tracker key per the gating above, which no regex can express
+- A name that fails this pattern must never be created: `branch-create` validates the constructed name before `git checkout -b`, and `preflight-check` blocks commits from a non-conforming branch
 
 **Valid branch examples:**
 
@@ -64298,7 +64380,7 @@ Some changes don't require an issue (see [Special PR Prefixes](#special-pr-prefi
 - ✅ `security-tainted-format-string`
 
 > [!IMPORTANT]
-> Enforced locally by the `pre-push` git hook and in CI by [`deepakputhraya/action-branch-name`](https://github.com/deepakputhraya/action-branch-name). Invalid branch names block PR merge.
+> Enforced before creation by the `/autopilot:branch-create` command and at commit time by the autopilot preflight check — both validate against the [canonical regex](claude-plugins/autopilot/skills/shared-rules/references/pr-title-grammar.md) so violations surface while a rename is still free. Later gates: the `pre-push` git hook locally and [`deepakputhraya/action-branch-name`](https://github.com/deepakputhraya/action-branch-name) in CI. Invalid branch names block PR merge, and an open PR's head branch cannot be renamed — the PR must be re-created.
 
 > [!TIP]
 > Use the `/autopilot:branch-create` slash command to generate a branch name.
