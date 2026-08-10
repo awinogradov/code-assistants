@@ -179,7 +179,7 @@ example/       # multiple modules: a directory, no index.ts barrel
 - Format: `// TODO: <description>` / `// FIXME: <description>` — uppercase keyword, colon + single space
 - Link every TODO/FIXME with `// @see <issue-url>` on the line immediately below — full issue URL, not a bare `#123` in the description
 - Remove the TODO and its `@see` line when the linked issue closes
-- Use `Skill(autopilot:todo-cleanup)` to create, link, and clean up TODO issues. If the autopilot plugin is not installed, follow CONTRIBUTING.md
+- Use the autopilot `todo-cleanup` skill to create, link, and clean up TODO issues; without the plugin, follow CONTRIBUTING.md
 
 ### 11.3 docs/ structure
 
@@ -226,21 +226,19 @@ example/       # multiple modules: a directory, no index.ts barrel
 
 - **MANDATORY**: `CONTRIBUTING.md` in the repository root is the binding standard for every branch, commit, PR, and issue operation — read the governing section before acting; never restate or improvise its rules
 - Governing sections: "Branches" for branch names, "Commits" for commit messages, "PR Title" and "Special PR Prefixes" for PR titles, "PR Description" and "Magic Words" for PR bodies and issue linking, "How to Contribute" for issues
-- **MANDATORY**: With the autopilot plugin installed, perform these operations only through its skills — `Skill(autopilot:branch-create)` for branches, `Skill(autopilot:commits-create)` for commits, `Skill(autopilot:pr-create)` for pull requests, `Skill(autopilot:issue-create)` for issues, `Skill(autopilot:plan)` for implementation plans — never their raw `git`/`gh`/web-UI equivalents and never ad-hoc planning; invoking the skill satisfies this section. Without the plugin, follow CONTRIBUTING.md directly
+- **MANDATORY**: With the autopilot skills installed, perform these operations only through them — `branch-create` for branches, `commits-create` for commits, `pr-create` for pull requests, `issue-create` for issues, `plan` for implementation plans — never their raw `git`/`gh`/web-UI equivalents and never ad-hoc planning; invoking the skill satisfies this section. Without the skills, follow CONTRIBUTING.md directly
 - Never bypass validation hooks with `--no-verify` — fix the violation instead
 
 ## 16. AI Assistant Workflow
 
-### 16.1 Claude Code
-
-- Use TodoWrite to track complex tasks
+- Use the built-in todo list to track complex tasks
 - Mark todos as completed immediately
 - Parallel tool execution when possible
 - Gather context before editing
 - Use sub-agents for search-heavy or parallelizable investigation to keep the main context focused
 - Use `gh` CLI for GitHub issues, PRs, comments, and Actions info
 
-### 16.2 MCP Servers
+### 16.1 MCP Servers
 
 Prefer the project-registered MCP servers declared in the repo's own `.mcp.json`. The repository README and `docs/` are the authoritative list of which servers are registered and when to reach for each — consult them before hand-rolling work a registered server handles.
 
