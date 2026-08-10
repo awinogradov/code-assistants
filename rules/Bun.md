@@ -16,11 +16,16 @@ To change it, open a pull request against the source file above.
 Before making any changes:
 
 1. Read the root `README.md` — its Documentation section lists every doc in reading order, as a Markdown table (or an equivalent linked list), each with a link and a description
-2. Inspect all file names under `docs/` and subfolders in the current repository — some files may be missing from the README
-3. Read files that appear relevant to the current task
-4. Treat `docs/` as the source of truth for project-specific conventions and follow those documents over this file when they conflict
-5. When an `rfc/` folder exists, treat its Accepted RFCs as binding versioned standards — follow them over `docs/` and this file when they conflict; see `rfc/README.md` for the convention
-6. When a `principles/` folder exists, read its `README.md` and the principles relevant to the task — they are the long-lived values that standards and reviews appeal to; follow `rfc/` and `docs/` over them for concrete rules
+2. Read the root `CONTRIBUTING.md` — the binding conventions for every branch, commit, PR, and issue operation
+3. When a `principles/` folder exists, read its `README.md` and the principles relevant to the task — they are the long-lived values that standards and reviews appeal to; follow `rfc/` and `docs/` over them for concrete rules
+4. When an `rfc/` folder exists, treat its Accepted RFCs as binding versioned standards — follow them over `docs/` and this file when they conflict; see `rfc/README.md` for the convention
+5. Inspect all file names under `docs/` and subfolders in the current repository — some files may be missing from the README — read those relevant to the current task, and treat `docs/` as the source of truth for project-specific conventions, following those documents over this file when they conflict
+6. Use the Repomix MCP server to pack the codebase into one digest and grep/read it for codebase-wide analysis instead of loading every file
+7. When `graphify-out/graph.json` exists, use the committed knowledge graph before broad source browsing:
+   - For codebase questions, run `graphify query "<question>"` first. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts.
+   - Use `graphify-out/wiki/index.md` for broad navigation when it exists.
+   - Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review or when targeted queries do not surface enough context.
+   - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
 
 ## 1. Core Principles
 
@@ -252,17 +257,7 @@ example/       # multiple modules: a directory, no index.ts barrel
 Prefer the project-registered MCP servers declared in the repo's own `.mcp.json`. The repository README and `docs/` are the authoritative list of which servers are registered and when to reach for each — consult them before hand-rolling work a registered server handles.
 
 - **Documentation servers** (context7, Ref, Exa) — look up docs for any technology, framework, or API (global/user servers, not project-registered)
-- **Repomix MCP server** — pack the codebase into one digest and grep/read it for codebase-wide analysis instead of loading every file
 
 ## 17. Code Review
 
 - All rules from AGENTS.md must be applied to the code review
-
-## 18. Graphify
-
-When `graphify-out/graph.json` exists, use the committed knowledge graph before broad source browsing:
-
-- For codebase questions, run `graphify query "<question>"` first. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts.
-- Use `graphify-out/wiki/index.md` for broad navigation when it exists.
-- Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review or when targeted queries do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
