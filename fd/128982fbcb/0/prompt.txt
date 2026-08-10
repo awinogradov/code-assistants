@@ -1,0 +1,2 @@
+Need to support monorepos, when docs/ design.md agents.md claude.md etc can be in packages/* apps/* 
+Example https://github.com/wefortis/fortune-os
