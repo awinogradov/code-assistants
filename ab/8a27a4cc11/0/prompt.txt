@@ -1,0 +1,21 @@
+deep analze rules to avoid duplicates in the same file. Compact everything as possible. Avoid duplications with @CONTRIBUTING.md
+
+---
+
+declared in readme — remove
+
+---
+
+this is js genear rules
+
+---
+
+this is js general rules
+
+---
+
+all rules important — nothing special in this one
+
+---
+
+must be in mandatory context

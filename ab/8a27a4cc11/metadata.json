@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "ab8a27a4cc11",
+  "strategy": "manual-commit",
+  "branch": "proposal-rules-drift-cleanup",
+  "checkpoints_count": 6,
+  "files_touched": [
+    "rules/Bun+React+Tailwind.md",
+    "rules/Bun.md",
+    "rules/NodeJS+React+Tailwind.md",
+    "rules/NodeJS+React.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/ab/8a27a4cc11/0/metadata.json",
+      "transcript": "/ab/8a27a4cc11/0/full.jsonl",
+      "compact_transcript": "/ab/8a27a4cc11/0/transcript.jsonl",
+      "content_hash": "/ab/8a27a4cc11/0/content_hash.txt",
+      "prompt": "/ab/8a27a4cc11/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 37,
+    "cache_creation_tokens": 53574,
+    "cache_read_tokens": 7547963,
+    "output_tokens": 28287,
+    "api_call_count": 20
+  }
+}
