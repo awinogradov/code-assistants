@@ -11,3 +11,9 @@
 ### Breaking changes
 
 - inputs token and github_token are renamed to bot_token; consumers must
+
+## From 2.1.1 to 3.0.0
+
+### Breaking changes
+
+- the rules body now lands in AGENTS.md and CLAUDE.md becomes a
