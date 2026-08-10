@@ -2,6 +2,61 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [2.1.1](https://github.com/awinogradov/code-assistants/compare/files-sync-action@v2.1.0...files-sync-action@v2.1.1) (2026-08-10)
+
+## Release Notes
+
+Symlink destination handling in the files-sync action is now correct, ensuring content entries that target a path currently stored as a Git symlink are properly rewritten rather than skipped.
+
+## 🐛 Bug Fixes
+
+### Symlink Destinations No Longer Silently Skipped
+
+Previously, if a content entry's destination path already existed in the repository as a Git symlink, the sync would skip the write entirely — leaving the target file absent and potentially creating a broken or circular reference between two symlink entries. The action now detects this situation and rewrites the destination as a regular file, so the sync completes correctly regardless of what Git object type previously lived at that path.
+
+<details><summary>Related issues</summary>
+
+- [#558: Make AGENTS.md the canonical rules file and CLAUDE.md a symlink to it](https://github.com/awinogradov/code-assistants/issues/558)
+- [#559: Publish agent rules to AGENTS.md with CLAUDE.md as a symlink](https://github.com/awinogradov/code-assistants/pull/559)
+</details>
+
+## ⚠️ Breaking Changes
+
+### `agents-rules-sync` Layout Reversed — AGENTS.md Is Now the Real File
+
+The `agents-rules-sync` companion workflow previously synced stack rules into `CLAUDE.md` and published `AGENTS.md` as a symlink pointing to it. That layout is now reversed: `AGENTS.md` is the canonical file containing the rules, and `CLAUDE.md` is a Git symlink pointing at it. If your repository relied on `CLAUDE.md` being the real file, the content will still be reachable — but the authoritative path is now `AGENTS.md`.
+
+No manual migration is needed for the file content itself; the next sync run will rewrite the destinations automatically.
+
+### `agents-md` Input Removed
+
+The `agents-md` workflow input no longer exists. Both `AGENTS.md` and the `CLAUDE.md` symlink are published on every run, so there is nothing left to toggle. Remove any `agents-md:` line from your workflow configuration before the next run to avoid an unrecognised-input warning.
+
+**Before:**
+```yaml
+- uses: awinogradov/code-assistants/.github/actions/files-sync@v2.1.0
+  with:
+    bot_token: ${{ secrets.BOT_TOKEN }}
+    agents-md: true   # remove this line
+```
+
+**After:**
+```yaml
+- uses: awinogradov/code-assistants/.github/actions/files-sync@v2.1.1
+  with:
+    bot_token: ${{ secrets.BOT_TOKEN }}
+```
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #558 | [#559](https://github.com/awinogradov/code-assistants/pull/559) | @awinogradov |
+
+### Bug Fixes
+
+* **files-sync:** rewrite symlink sync destinations ([183715a](https://github.com/awinogradov/code-assistants/commit/183715a80cfdb35a19cbd8129cede27b5c334edb))
 ## [2.1.0](https://github.com/awinogradov/code-assistants/compare/files-sync-action@v2.0.3...files-sync-action@v2.1.0) (2026-08-04)
 
 ## Release Notes
