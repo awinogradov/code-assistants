@@ -21,31 +21,27 @@ Before making any changes:
 4. When an `rfc/` folder exists, treat its Accepted RFCs as binding versioned standards — follow them over `docs/` and this file when they conflict; see `rfc/README.md` for the convention
 5. Inspect all file names under `docs/` and subfolders in the current repository — some files may be missing from the README — read those relevant to the current task, and treat `docs/` as the source of truth for project-specific conventions, following those documents over this file when they conflict
 6. When a `design.md` exists at the repository root, read it before any UI or visual work — it is the binding design and brand spec (tokens, typography, layout conventions); follow it over generic styling defaults
-7. Acquire codebase context from the first source that works, falling through to the next on any failure:
+7. Inspect `package.json` before assuming scripts or package-manager commands
+8. Acquire codebase context from the first source that works, falling through to the next on any failure:
    - **Graphify** — fires when `graphify-out/graph.json` exists and the `graphify` CLI resolves on PATH. Run `graphify query "<question>"` first; use `graphify path "<A>" "<B>"` for relationships, `graphify explain "<concept>"` for focused concepts, and `graphify-out/wiki/index.md` for broad navigation. After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
    - **Repomix** — fires when the Repomix MCP server is connected. Attach the committed `.repomix/pack.xml` when it exists, otherwise pack the codebase; grep/read the digest for codebase-wide analysis instead of loading every file.
    - **Default tools** — with neither available, search and read the repository files directly.
 
 ## 1. Core Principles
 
-- Context first: Gather complete understanding before changes
-- Pattern matching: Check existing codebase for similar implementations
+- Context first: gather complete understanding before changes; check the codebase for similar implementations to mirror
 - Progressive enhancement: Build incrementally, test frequently
 - Functional/declarative patterns; avoid classes
 - Keep dependencies minimal - prefer built-in features
-- Every line of code must be used or removed
-- The fewer lines of code the better
-- Avoid code duplication - maximize reuse
+- The fewer lines the better: every line used or removed, duplication factored into reuse
 - Do not over-engineer - only make directly requested changes. No abstractions for single-use code, no unrequested configurability, no error handling for impossible scenarios. If 200 lines could be 50, rewrite
 - Surface assumptions and ambiguities before coding; if multiple interpretations exist, present them - don't pick silently
-- Define verifiable success criteria before implementing (test, command, or observable behavior)
 - Every changed line must trace to the request - no opportunistic refactors of adjacent code or unrelated formatting
 - When deleting unused code, only remove orphans your changes created; mention pre-existing dead code instead of deleting it
 - Be consistent with existing code style
 - Write failing tests first, then write code to pass tests
 - Run tests after any code changes
 - Do not remove existing code/comments unless necessary
-- Write plan before changes, not report after
 
 ## 2. Architecture
 
@@ -84,6 +80,8 @@ example/       # multiple modules: a directory, no index.ts barrel
 
 - Always import from actual files - never barrel files
 - Import order: builtin → external → internal → parent → sibling
+- Use ES6 imports, never CommonJS require()
+- Use `bun:` protocol prefix for built-in modules
 - Client cannot import server code
 - No generic names (index.ts, init.ts) - use descriptive names
 
@@ -105,18 +103,8 @@ example/       # multiple modules: a directory, no index.ts barrel
 - Files: Components PascalCase, utilities camelCase
 - Test files: `*.test.ts` suffix
 - Named exports only - no default exports
-- IMPORTANT: camelCase for constants (not SCREAMING_SNAKE_CASE)
+- camelCase for constants (not SCREAMING_SNAKE_CASE)
 - Descriptive names with auxiliary verbs (isLoading, hasError)
-
-## 5. Development Setup
-
-- Bun 1.x (latest stable)
-- `bun install` – Install dependencies
-- `bun run` – Run script
-- `bun run lint` / `bun run lint:fix` – Linting
-- `bun run format` / `bun run format:check` – Formatting
-- `bun run typecheck` – Type checking
-- `bun test` – Run tests
 
 ## 6. Common Standards
 
@@ -137,6 +125,9 @@ example/       # multiple modules: a directory, no index.ts barrel
 - Limit nesting depth to 2 levels max
 - Limit cyclomatic complexity - few conditional branches
 - Use early returns (fail fast) instead of nested else
+- Extend Error class for custom errors with context properties
+- Await promises before returning for complete stack traces
+- Subscribe to 'error' events on EventEmitters and streams
 - Functions should be 100 lines max
 
 ### 6.2 TypeScript
@@ -157,6 +148,16 @@ example/       # multiple modules: a directory, no index.ts barrel
 - Server: `process.env.*`
 - All variables have fallback defaults
 - Use .env.example as template
+- Validate env variables at startup
+
+### 6.4 File Operations
+
+- Use `bun:fs/promises` for files < 100MB
+- Use streams for files > 100MB
+- Use `pipeline()` for stream chaining
+- Use `import.meta.dirname` for module-relative paths
+- Handle error codes: ENOENT, EACCES, etc.
+- Always close file handles in finally blocks
 
 ## 7. Client-Side Standards
 
@@ -182,7 +183,6 @@ example/       # multiple modules: a directory, no index.ts barrel
 
 - Don't useEffect to sync state - causes loops
 - Prefer derived state (useMemo) over synced state
-- Map/Set for lookups, Array only when order matters
 - Initialize text states with "", not undefined
 - Keep state in the lowest component that needs it
 - Split state into individual pieces, not entire objects
@@ -207,14 +207,7 @@ example/       # multiple modules: a directory, no index.ts barrel
 
 ### 8.1 Bun
 
-- Use ES6 imports, not CommonJS
-- Use fs/promises for file operations
-- Graceful shutdown with signal handlers
-- Validate env variables at startup
-- Use `bun:` protocol prefix for built-in modules
-- Extend Error class for custom errors with context properties
-- Await promises before returning for complete stack traces
-- Subscribe to 'error' events on EventEmitters and streams
+- Graceful shutdown with signal handlers; never call process.exit() directly
 
 ### 8.2 Storage
 
@@ -234,15 +227,6 @@ Choose ONE backend based on the project's needs. Do not mix.
 - Use atomic writes (write-to-tmp + rename) for any user-visible state file
 - Validate file contents on read with Zod schemas — never trust on-disk shape
 - Handle ENOENT/EACCES explicitly; never swallow filesystem errors
-
-### 8.3 File Operations
-
-- Use `bun:fs/promises` for files < 100MB
-- Use streams for files > 100MB
-- Use `pipeline()` for stream chaining
-- Use `import.meta.dirname` for module-relative paths
-- Handle error codes: ENOENT, EACCES, etc.
-- Always close file handles in finally blocks
 
 ## 9. API Standards
 
@@ -285,7 +269,7 @@ Choose ONE backend based on the project's needs. Do not mix.
 - Use data-testid for stable selectors
 - ES module imports require .js extensions
 - Uses Playwright under the hood, use Playwright MCP for UI tests
-- IMPORTANT: Use browser_snapshot before ANY UI work
+- Use browser_snapshot before ANY UI work
 - Never assume element types/labels without verification
 - Workflow: start dev server → browser_navigate → browser_snapshot → verify → interact
 
@@ -305,15 +289,8 @@ Choose ONE backend based on the project's needs. Do not mix.
 
 ### 11.2 Code comments
 
-- Avoid obvious comments, only when necessary
-- Avoid link to exact lines of code
-- Focus on "why" and "how to use", not "what"
-- Avoid duplicates comments — it means code must be refactored
-- Use only `TODO` (planned improvement) or `FIXME` (known defect) for deferred work — no XXX/HACK/NOTE markers
-- Format: `// TODO: <description>` / `// FIXME: <description>` — uppercase keyword, colon + single space
-- Link every TODO/FIXME with `// @see <issue-url>` on the line immediately below — full issue URL, not a bare `#123` in the description
-- Remove the TODO and its `@see` line when the linked issue closes
-- Use the autopilot `todo-cleanup` skill to create, link, and clean up TODO issues; without the plugin, follow CONTRIBUTING.md
+- Avoid obvious comments, links to exact code lines, and duplicated comments — duplication means the code needs refactoring
+- Track deferred work as issue-linked `TODO`/`FIXME` comments per CONTRIBUTING.md "TODO Comments"; use the autopilot `todo-cleanup` skill to scan, create, and link issues
 
 ### 11.3 docs/ structure
 
@@ -332,13 +309,11 @@ Choose ONE backend based on the project's needs. Do not mix.
 ## 13. Security
 
 - Validate all external input before processing
-- Never trust user data in object operations
+- Never trust user data in object operations — no untrusted input to Object.assign(), use Object.create(null) for user-provided keys
 - Use crypto.timingSafeEqual() for secret comparison
 - Never log or expose secrets, tokens, or PII (logs, error messages, API responses)
 - Use exact versions in package.json (no ^ or ~)
 - Never enable debug inspector in production
-- Never pass untrusted data to Object.assign()
-- Use Object.create(null) for user-provided keys
 - Use lockfile-based installs in CI/CD (`bun install --frozen-lockfile`)
 - Run bun audit before deploying
 - Never use eval() or Function() constructor
@@ -347,20 +322,11 @@ Choose ONE backend based on the project's needs. Do not mix.
 
 ## 14. Anti-Patterns
 
-- No CommonJS require() - use ES6 imports
-- No callback-based APIs - use Promise-based
 - No sync file operations in servers
-- No direct process.exit() - use graceful shutdown
-- No CSS Modules/CSS-in-JS - use Tailwind CSS
-- No barrel files (index.ts re-exports)
-- No unused exports - delete immediately
 - No commented-out code - delete it (recover from version control if needed)
 - No empty catch blocks - never swallow errors; rethrow or handle with context
 - No wrapper functions without added logic
-- No Array.find() for lookups - use Map/Object
-- No useEffect for state sync
 - No inline functions in loops
-- No incomplete configurations
 
 ## 15. Git Workflow
 
@@ -371,10 +337,8 @@ Choose ONE backend based on the project's needs. Do not mix.
 
 ## 16. AI Assistant Workflow
 
-- Use the built-in todo list to track complex tasks
-- Mark todos as completed immediately
+- Track complex tasks with the built-in todo list; mark items completed immediately
 - Parallel tool execution when possible
-- Gather context before editing
 - Use sub-agents for search-heavy or parallelizable investigation to keep the main context focused
 - Use `gh` CLI for GitHub issues, PRs, comments, and Actions info
 
