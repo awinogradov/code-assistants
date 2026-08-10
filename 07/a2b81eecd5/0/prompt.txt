@@ -1,0 +1,25 @@
+rebase on fresh main
+
+---
+
+/explore
+
+---
+
+Review the @rules/ . I think we need to clean up rules covered by linters. To understand that we can instruct to read the linters settings first as mandatory context. What do you think?
+
+---
+
+You are right. Lets do it and see then what to do next
+
+---
+
+e .
+
+---
+
+why rules/Bun only? All rules/* — all rules to use in consumers repos
+
+---
+
+I see 4 files in @rules/ and fixes only in 2. Why?
