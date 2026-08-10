@@ -1,0 +1,12 @@
+graphify and repomix must be in the first block with mandatory context
+
+---
+
+Structure mandatore context:
+- readme
+- contributing
+- principles
+- rfc
+- docs
+- repomix
+- graphify

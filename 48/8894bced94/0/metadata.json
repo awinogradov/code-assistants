@@ -1,0 +1,277 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_id": "488894bced94",
+  "session_id": "22bc3bd4-50cd-4aa9-9cca-8d7279b0da6f",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-10T15:49:14.042168Z",
+  "branch": "proposal-rules-drift-cleanup",
+  "checkpoints_count": 3,
+  "save_step_count": 2,
+  "files_touched": [
+    "rules/Bun+React+Tailwind.md",
+    "rules/Bun.md",
+    "rules/NodeJS+React+Tailwind.md",
+    "rules/NodeJS+React.md"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-opus-5",
+  "turn_id": "908cdd84a7ed",
+  "checkpoint_transcript_start": 1004,
+  "transcript_lines_at_start": 1004,
+  "token_usage": {
+    "input_tokens": 21,
+    "cache_creation_tokens": 24326,
+    "cache_read_tokens": 3205924,
+    "output_tokens": 13293,
+    "api_call_count": 12
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "prompt-skill-claude-code-explore-2026-08-10T10:40:23.545854Z",
+      "event_type": "prompt_invocation",
+      "skill": {
+        "name": "explore"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "prompt_slash_command",
+        "confidence": "explicit"
+      },
+      "turn_id": "2b436cd6b313",
+      "timestamp": "2026-08-10T10:40:23.545854Z",
+      "native": {
+        "command": "/explore"
+      },
+      "collapse": {
+        "target": "user_message",
+        "label": "/explore",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01H9HCzzBBouuiUonQKqnB9G",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "autopilot:gather-context"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "908cdd84a7ed",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 68,
+        "end": 69,
+        "entry_ids": [
+          "a46467f7-9ddc-4ab1-a062-f1d41f9ca30b"
+        ],
+        "tool_use_id": "toolu_01H9HCzzBBouuiUonQKqnB9G"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01H9HCzzBBouuiUonQKqnB9G"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: autopilot:gather-context",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_012wASL7vKBcVzzwF7ohAzUL",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "autopilot:ascii-schemas"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "908cdd84a7ed",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 185,
+        "end": 186,
+        "entry_ids": [
+          "61079802-188d-47aa-9f7d-a1e0e0b16dea"
+        ],
+        "tool_use_id": "toolu_012wASL7vKBcVzzwF7ohAzUL"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_012wASL7vKBcVzzwF7ohAzUL"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: autopilot:ascii-schemas",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01A5tZjM7NUpXTEsZ7nMamv7",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "autopilot:branch-create"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "908cdd84a7ed",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 760,
+        "end": 761,
+        "entry_ids": [
+          "d9c801b4-b2a6-4e3e-a866-d301dc516b25"
+        ],
+        "tool_use_id": "toolu_01A5tZjM7NUpXTEsZ7nMamv7"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01A5tZjM7NUpXTEsZ7nMamv7"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: autopilot:branch-create",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01SzpsW8BJiEGnyguLLpzkxk",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "autopilot:commits-create"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "908cdd84a7ed",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 792,
+        "end": 793,
+        "entry_ids": [
+          "39855ec6-e8ef-4519-8c85-8e7e5389a287"
+        ],
+        "tool_use_id": "toolu_01SzpsW8BJiEGnyguLLpzkxk"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01SzpsW8BJiEGnyguLLpzkxk"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: autopilot:commits-create",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01F2HbW9BvkKPSC2P4YHhTbd",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "autopilot:commits-create"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "908cdd84a7ed",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 960,
+        "end": 961,
+        "entry_ids": [
+          "05dff075-45f6-4c7a-b23c-0e58310b8957"
+        ],
+        "tool_use_id": "toolu_01F2HbW9BvkKPSC2P4YHhTbd"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01F2HbW9BvkKPSC2P4YHhTbd"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: autopilot:commits-create",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01JtiSWEZTKmUWE9e7SEkSY1",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "autopilot:commits-create"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "908cdd84a7ed",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 1070,
+        "end": 1071,
+        "entry_ids": [
+          "47bb5198-d942-4027-8346-c5539857ca63"
+        ],
+        "tool_use_id": "toolu_01JtiSWEZTKmUWE9e7SEkSY1"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01JtiSWEZTKmUWE9e7SEkSY1"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: autopilot:commits-create",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 13
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-10T15:49:14.012236Z",
+    "agent_lines": 40,
+    "agent_removed": 60,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 40,
+    "total_lines_changed": 100,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 24,
+      "agent_lines_removed": 40
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 40,
+      "agent_lines_removed": 60
+    }
+  ]
+}
