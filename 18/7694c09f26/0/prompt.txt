@@ -1,0 +1,19 @@
+/autopilot:pr-monitor
+
+---
+
+<task-notification>
+<task-id>by96m96di</task-id>
+<summary>Monitor event: "PR #573 review/CI status changes"</summary>
+<event>state=OPEN dec=REVIEW_REQUIRED fails= pending=ai-review</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>by96m96di</task-id>
+<summary>Monitor event: "PR #573 review/CI status changes"</summary>
+<event>state=OPEN dec=APPROVED fails= pending=</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
