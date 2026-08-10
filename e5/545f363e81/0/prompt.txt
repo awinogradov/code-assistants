@@ -1,0 +1,1 @@
+I see the duplicated contributing instructions. we need the only one block for all: agents, humans, any other tool
