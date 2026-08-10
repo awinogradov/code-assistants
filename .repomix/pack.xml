@@ -152,6 +152,7 @@ The content is organized as follows:
         4.0.1.md
         5.0.0.md
         5.1.0.md
+        6.0.0.md
       src/
         github/
           githubReview.test.ts
@@ -212,6 +213,7 @@ The content is organized as follows:
         0.2.0.md
         0.2.1.md
         0.2.2.md
+        1.0.0.md
       src/
         buildReport.test.ts
         buildReport.ts
@@ -228,6 +230,7 @@ The content is organized as follows:
         reportIssue.ts
       action.yml
       CHANGELOG.md
+      MIGRATING.md
       package.json
       README.md
       tsconfig.json
@@ -6870,6 +6873,74 @@ No configuration changes are needed if Entire is already set up. If it isn't ava
 ### Features
 
 * **gather-context:** add entire session-history digest ([ca09bfa](https://github.com/awinogradov/code-assistants/commit/ca09bfa4e86161b164566a7fab1b0c7fd5b07ebd))
+</file>
+
+<file path=".github/actions/code-review-action/.release_notes/6.0.0.md">
+## [6.0.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v5.1.0...code-review-action@v6.0.0) (2026-08-10)
+
+## Release Notes
+
+Skills directories have been renamed to a portable dash-only layout and branch names are now validated before creation, making this a breaking release for any integrations that reference colon-path skill directories.
+
+## ✨ What's New
+
+### Branch Name Validation Before Creation
+
+Branch names are now checked against the canonical naming convention before the branch is created and again at commit time. When the autopilot proposes an invalid branch name, it's caught and flagged immediately — while a rename is still free — instead of surfacing as a CI failure on an already-opened PR. This eliminates a class of failed review cycles where a PR had to be closed and recreated just to fix the branch name.
+
+<details><summary>Related issues</summary>
+
+- [#565: Enforce branch naming before creation so invalid branches never reach a PR](https://github.com/awinogradov/code-assistants/issues/565)
+</details>
+
+## ⚠️ Breaking Changes
+
+### Skill Directories Renamed to Dash-Only Paths
+
+The autopilot skill directories have been renamed from colon-separated paths to dash-only paths to establish a single portable layout shared by Claude and other CLIs. The slash commands you use in PRs (e.g. `/autopilot:pr-review`) are unchanged — this only affects the on-disk directory structure and any external deep links or tooling that references the old paths.
+
+**Old paths (no longer exist):**
+```
+skills/pr:review/
+skills/pr:answer/
+```
+
+**New paths:**
+```
+skills/pr-review/
+skills/pr-answer/
+```
+
+Additionally, the `agents-skills-sync` integration now syncs the plugin's skills directory verbatim to unprefixed `.agents/skills/` paths. Any previously synced `autopilot-*` directories under `.agents/skills/` need to be removed manually — they will not be cleaned up automatically.
+
+The generated `agent-skills/` layout and its export pipeline have been removed entirely. The plugin's skills directory is now the canonical portable source, per [RFC-0002](https://github.com/awinogradov/code-assistants/pull/564).
+
+**Migration steps:**
+1. Update any external links, documentation, or tooling that references `skills/pr:review/` or other colon-path directories to use the new dash-only equivalents.
+2. Manually delete any `autopilot-*` directories under `.agents/skills/` in repositories that were previously synced.
+3. Remove any references to or pipelines that consumed the `agent-skills/` generated layout.
+
+<details><summary>Related issues</summary>
+
+- [#563: Converge skill sources so Claude and other CLIs share one layout](https://github.com/awinogradov/code-assistants/issues/563)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #565 | [#566](https://github.com/awinogradov/code-assistants/pull/566) | @awinogradov |
+| #563 | [#564](https://github.com/awinogradov/code-assistants/pull/564) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **autopilot:** make skills the portable source layout
+
+### Features
+
+* **autopilot:** make skills the portable source layout ([e9859e9](https://github.com/awinogradov/code-assistants/commit/e9859e9477f3f199655f49d476b90b9a26ab6724))
+* **autopilot:** validate branch names before creation and commit ([055897c](https://github.com/awinogradov/code-assistants/commit/055897cabe194bb6b467cef2f19c46711a9302e5))
 </file>
 
 <file path=".github/actions/code-review-action/src/github/githubReview.test.ts">
@@ -15855,6 +15926,71 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [6.0.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v5.1.0...code-review-action@v6.0.0) (2026-08-10)
+
+## Release Notes
+
+Skills directories have been renamed to a portable dash-only layout and branch names are now validated before creation, making this a breaking release for any integrations that reference colon-path skill directories.
+
+## ✨ What's New
+
+### Branch Name Validation Before Creation
+
+Branch names are now checked against the canonical naming convention before the branch is created and again at commit time. When the autopilot proposes an invalid branch name, it's caught and flagged immediately — while a rename is still free — instead of surfacing as a CI failure on an already-opened PR. This eliminates a class of failed review cycles where a PR had to be closed and recreated just to fix the branch name.
+
+<details><summary>Related issues</summary>
+
+- [#565: Enforce branch naming before creation so invalid branches never reach a PR](https://github.com/awinogradov/code-assistants/issues/565)
+</details>
+
+## ⚠️ Breaking Changes
+
+### Skill Directories Renamed to Dash-Only Paths
+
+The autopilot skill directories have been renamed from colon-separated paths to dash-only paths to establish a single portable layout shared by Claude and other CLIs. The slash commands you use in PRs (e.g. `/autopilot:pr-review`) are unchanged — this only affects the on-disk directory structure and any external deep links or tooling that references the old paths.
+
+**Old paths (no longer exist):**
+```
+skills/pr:review/
+skills/pr:answer/
+```
+
+**New paths:**
+```
+skills/pr-review/
+skills/pr-answer/
+```
+
+Additionally, the `agents-skills-sync` integration now syncs the plugin's skills directory verbatim to unprefixed `.agents/skills/` paths. Any previously synced `autopilot-*` directories under `.agents/skills/` need to be removed manually — they will not be cleaned up automatically.
+
+The generated `agent-skills/` layout and its export pipeline have been removed entirely. The plugin's skills directory is now the canonical portable source, per [RFC-0002](https://github.com/awinogradov/code-assistants/pull/564).
+
+**Migration steps:**
+1. Update any external links, documentation, or tooling that references `skills/pr:review/` or other colon-path directories to use the new dash-only equivalents.
+2. Manually delete any `autopilot-*` directories under `.agents/skills/` in repositories that were previously synced.
+3. Remove any references to or pipelines that consumed the `agent-skills/` generated layout.
+
+<details><summary>Related issues</summary>
+
+- [#563: Converge skill sources so Claude and other CLIs share one layout](https://github.com/awinogradov/code-assistants/issues/563)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #565 | [#566](https://github.com/awinogradov/code-assistants/pull/566) | @awinogradov |
+| #563 | [#564](https://github.com/awinogradov/code-assistants/pull/564) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **autopilot:** make skills the portable source layout
+
+### Features
+
+* **autopilot:** make skills the portable source layout ([e9859e9](https://github.com/awinogradov/code-assistants/commit/e9859e9477f3f199655f49d476b90b9a26ab6724))
+* **autopilot:** validate branch names before creation and commit ([055897c](https://github.com/awinogradov/code-assistants/commit/055897cabe194bb6b467cef2f19c46711a9302e5))
 ## [5.1.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v5.0.0...code-review-action@v5.1.0) (2026-08-03)
 
 ## Release Notes
@@ -17456,12 +17592,18 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 ### Breaking changes
 
 - the four migrated agents emit bare JSON objects instead of markdown blocks, expert-review drops revision.rescore and derives score from its dimensions, and stored plan Score: lines record per-reviewer verdicts instead of a single average
+
+## From 5.1.0 to 6.0.0
+
+### Breaking changes
+
+- _Document migration steps here._
 </file>
 
 <file path=".github/actions/code-review-action/package.json">
 {
   "name": "@code-assistants/code-review-action",
-  "version": "5.1.0",
+  "version": "6.0.0",
   "description": "Composite GitHub Action that runs AI code review on pull requests via Claude Code.",
   "private": true,
   "type": "module",
@@ -17497,7 +17639,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/README.md">
 # Code review action
 
-[![GitHub Release](https://img.shields.io/badge/release-v5.1.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v6.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that runs AI code review on pull requests using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Has two modes:
@@ -17681,7 +17823,7 @@ uses: awinogradov/code-assistants/.github/actions/code-review-action@v1
 </file>
 
 <file path=".github/actions/code-review-action/version">
-5.1.0
+6.0.0
 </file>
 
 <file path=".github/actions/code-review-cost-monitor/.release_notes/0.1.0.md">
@@ -17889,6 +18031,47 @@ Previously, the cost monitor maintained its own separate GitHub API client, mean
 ### Bug Fixes
 
 * reuse the shared octokit client in cost monitor ([387183f](https://github.com/awinogradov/code-assistants/commit/387183fa4cbfce2ddc73d718153001a4eae9b619))
+</file>
+
+<file path=".github/actions/code-review-cost-monitor/.release_notes/1.0.0.md">
+## [1.0.0](https://github.com/awinogradov/code-assistants/compare/code-review-cost-monitor-action@v0.2.2...code-review-cost-monitor-action@v1.0.0) (2026-08-10)
+
+## Release Notes
+
+The monitor's autopilot skill directories have been renamed to a dash-only layout, making skills fully portable across Claude and other CLIs — but this requires immediate action on any existing synced paths.
+
+## ⚠️ Breaking Changes
+
+### Autopilot Skill Directories Renamed to Dash-Only Paths
+
+Skill directories previously used colon-separated names (e.g., `skills/pr:review/`). These have been renamed to dash-only equivalents (e.g., `skills/pr-review/`) to make the layout portable across Claude and other CLI tools. Slash commands themselves are unchanged, but anything that deep-links directly into the old colon-path directory structure will break.
+
+**Migration steps:**
+
+1. Update any external links, scripts, or documentation that reference colon-path skill directories to use their dash-only equivalents (e.g., `skills/pr:review/` → `skills/pr-review/`).
+2. In your repository, manually remove any previously synced `autopilot-*` directories under `.agents/skills/`. The `agents-skills-sync` step now syncs the plugin's skills directory verbatim to unprefixed `.agents/skills/` paths — old `autopilot-*` directories will not be cleaned up automatically.
+3. Remove any references to the generated `agent-skills/` directory and its export pipeline. This layout no longer exists; the plugin's skills directory is now the single portable source of truth per the new RFC-0002 standard.
+
+<details><summary>Related issues</summary>
+
+- [#563: Converge skill sources so Claude and other CLIs share one layout](https://github.com/awinogradov/code-assistants/issues/563)
+- [#564: Converge skill sources so Claude and other CLIs share one layout](https://github.com/awinogradov/code-assistants/pull/564)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #563 | [#564](https://github.com/awinogradov/code-assistants/pull/564) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **autopilot:** make skills the portable source layout
+
+### Features
+
+* **autopilot:** make skills the portable source layout ([e9859e9](https://github.com/awinogradov/code-assistants/commit/e9859e9477f3f199655f49d476b90b9a26ab6724))
 </file>
 
 <file path=".github/actions/code-review-cost-monitor/src/buildReport.test.ts">
@@ -19889,6 +20072,44 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.0.0](https://github.com/awinogradov/code-assistants/compare/code-review-cost-monitor-action@v0.2.2...code-review-cost-monitor-action@v1.0.0) (2026-08-10)
+
+## Release Notes
+
+The monitor's autopilot skill directories have been renamed to a dash-only layout, making skills fully portable across Claude and other CLIs — but this requires immediate action on any existing synced paths.
+
+## ⚠️ Breaking Changes
+
+### Autopilot Skill Directories Renamed to Dash-Only Paths
+
+Skill directories previously used colon-separated names (e.g., `skills/pr:review/`). These have been renamed to dash-only equivalents (e.g., `skills/pr-review/`) to make the layout portable across Claude and other CLI tools. Slash commands themselves are unchanged, but anything that deep-links directly into the old colon-path directory structure will break.
+
+**Migration steps:**
+
+1. Update any external links, scripts, or documentation that reference colon-path skill directories to use their dash-only equivalents (e.g., `skills/pr:review/` → `skills/pr-review/`).
+2. In your repository, manually remove any previously synced `autopilot-*` directories under `.agents/skills/`. The `agents-skills-sync` step now syncs the plugin's skills directory verbatim to unprefixed `.agents/skills/` paths — old `autopilot-*` directories will not be cleaned up automatically.
+3. Remove any references to the generated `agent-skills/` directory and its export pipeline. This layout no longer exists; the plugin's skills directory is now the single portable source of truth per the new RFC-0002 standard.
+
+<details><summary>Related issues</summary>
+
+- [#563: Converge skill sources so Claude and other CLIs share one layout](https://github.com/awinogradov/code-assistants/issues/563)
+- [#564: Converge skill sources so Claude and other CLIs share one layout](https://github.com/awinogradov/code-assistants/pull/564)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #563 | [#564](https://github.com/awinogradov/code-assistants/pull/564) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **autopilot:** make skills the portable source layout
+
+### Features
+
+* **autopilot:** make skills the portable source layout ([e9859e9](https://github.com/awinogradov/code-assistants/commit/e9859e9477f3f199655f49d476b90b9a26ab6724))
 ## [0.2.2](https://github.com/awinogradov/code-assistants/compare/code-review-cost-monitor-action@v0.2.1...code-review-cost-monitor-action@v0.2.2) (2026-07-13)
 
 ## Release Notes
@@ -20086,10 +20307,20 @@ If you're using the code-review upstream sync, the cost monitor workflow (`code-
 * **cost-monitor:** pin report annotation format ([63fdf46](https://github.com/awinogradov/code-assistants/commit/63fdf465dea478f45001f421eedf5df7aa965f9f))
 </file>
 
+<file path=".github/actions/code-review-cost-monitor/MIGRATING.md">
+# MIGRATING
+
+## From 0.2.2 to 1.0.0
+
+### Breaking changes
+
+- _Document migration steps here._
+</file>
+
 <file path=".github/actions/code-review-cost-monitor/package.json">
 {
   "name": "@code-assistants/code-review-cost-monitor-action",
-  "version": "0.2.2",
+  "version": "1.0.0",
   "description": "Composite GitHub Action that watches the code-review run-summary footers for cost regressions and opens (or updates) a deduplicated cost-report issue.",
   "private": true,
   "type": "module",
@@ -20122,7 +20353,7 @@ If you're using the code-review upstream sync, the cost monitor workflow (`code-
 <file path=".github/actions/code-review-cost-monitor/README.md">
 # Code review cost monitor
 
-[![GitHub Release](https://img.shields.io/badge/release-v0.2.2-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that watches the per-run cost of [`code-review-action`](../code-review-action/README.md) and opens (or updates) a single deduplicated cost-report issue when it regresses. The data source is the "Review run summary" footer the review action appends to every review comment — a durable, per-run record of cost, tokens, and round-trips — so the monitor needs no extra instrumentation and no time-series store.
@@ -20237,7 +20468,7 @@ GH_TOKEN=$(gh auth token) GITHUB_REPOSITORY=owner/repo \
 </file>
 
 <file path=".github/actions/code-review-cost-monitor/version">
-0.2.2
+1.0.0
 </file>
 
 <file path=".github/actions/code-review-sync/action.yml">
