@@ -43,6 +43,8 @@ Before making any changes:
 - 👤 Every changed line must trace to the request - no opportunistic refactors of adjacent code or unrelated formatting
 - 👤 When deleting unused code, only remove orphans your changes created; mention pre-existing dead code instead of deleting it
 - 👤 Be consistent with existing code style
+- 👤 Write failing tests first, then write code to pass tests
+- 👤 Run tests after any code changes
 - 👤 Do not remove existing code/comments unless necessary
 - 👤 Write plan before changes, not report after — draft it via `Skill(autopilot:plan)` (if the autopilot plugin is not installed, follow CONTRIBUTING.md)
 
@@ -53,10 +55,6 @@ Before making any changes:
 - Bun, TypeScript 6.x
 - ESLint for linting
 - Prettier for formatting
-
-### 2.2 Directory Layout
-
-- `scripts/` - Scripts
 
 ## 3. Project Structure
 
@@ -71,6 +69,8 @@ example/       # multiple modules: a directory, no index.ts barrel
 ├── example.types.ts
 └── example.module.css
 ```
+
+- 👤 Order code top-down by importance: public entry points and core domain logic first, lower-level helpers and utilities last
 
 ### 3.2 Import Rules
 
@@ -92,12 +92,7 @@ example/       # multiple modules: a directory, no index.ts barrel
 ## 5. Development Setup
 
 - Bun 1.x (latest stable)
-- `bun install` – Install dependencies
-- `bun run` – Run script
-- `bun run lint` / `bun run lint:fix` – Linting
-- `bun run format` / `bun run format:check` – Formatting
-- `bun run typecheck` – Type checking
-- `bun test` – Run tests
+- 👤 Inspect @package.json before assuming scripts or package-manager commands
 
 ## 6. Common Standards
 
@@ -128,10 +123,11 @@ example/       # multiple modules: a directory, no index.ts barrel
 - 👤 No type assertions without runtime validation (use Zod)
 - 👤 Return specific types, not generic (string → KnownCallOutcome)
 - 👤 Use type guards for narrowing
-- 👤 Use React.ComponentProps for extending props
 - 👤 Ask user for type information when `any` is unavoidable
 
-### 6.3 Bun
+## 8. Server-Side Standards
+
+### 8.1 Bun
 
 - 👤 Use ES6 imports, not CommonJS
 - 🤖 Use fs/promises for file operations (`n/prefer-promises/fs`)
@@ -155,7 +151,6 @@ example/       # multiple modules: a directory, no index.ts barrel
 
 ### 9.2 Zod
 
-- 👤 Schemas in scripts/schemas/ by domain
 - 👤 Use .merge(), .partial(), .pick(), .omit()
 - 👤 Use z.infer<> for types
 - 👤 Add custom error messages
@@ -167,7 +162,7 @@ example/       # multiple modules: a directory, no index.ts barrel
 ### 11.1 JSDoc
 
 - 👤 Every exported interface/type must have JSDoc
-- 👤 File-level JSDoc for src/config/ modules
+- 👤 File-level JSDoc for config modules
 - 👤 Use @example where usage isn't obvious
 - 👤 Use @see <link> to add links to documentation
 - 👤 Focus on "why" and "how to use", not "what"
@@ -196,11 +191,8 @@ example/       # multiple modules: a directory, no index.ts barrel
 
 - 👤 O(1) lookups: Use Object/Map, not Array.find()
 - 👤 Avoid map/reduce/for combinations
-- 👤 Pre-compute lookups, not in render
 - 👤 Memoize data transformations creating objects/arrays
-- 👤 Use React.memo with displayName for stable-prop components
 - 👤 Use factory functions for handlers with parameters
-- 👤 Profile with React DevTools before adding useMemo/useCallback
 
 ## 13. Security
 
@@ -212,7 +204,7 @@ example/       # multiple modules: a directory, no index.ts barrel
 - 👤 Never enable debug inspector in production
 - 👤 Never pass untrusted data to Object.assign()
 - 👤 Use Object.create(null) for user-provided keys
-- 👤 Use bun ci in CI/CD, not bun install
+- 👤 Use lockfile-based installs in CI/CD (`bun install --frozen-lockfile`)
 - 👤 Run bun audit before deploying
 - 🤖 Never use eval() or Function() constructor (`no-eval`)
 - 👤 Avoid dynamic require()/import() with user-controlled paths
@@ -223,14 +215,12 @@ example/       # multiple modules: a directory, no index.ts barrel
 - 👤 No callback-based APIs - use Promise-based
 - 🤖 No sync file operations in servers (`n/no-sync`)
 - 👤 No direct process.exit() - use graceful shutdown
-- 👤 No TailwindCSS/CSS-in-JS - use CSS Modules
 - 👤 No barrel files (index.ts re-exports)
 - 👤 No unused exports - delete immediately
 - 👤 No commented-out code - delete it (recover from version control if needed)
 - 👤 No empty catch blocks - never swallow errors; rethrow or handle with context
 - 👤 No wrapper functions without added logic
 - 👤 No Array.find() for lookups - use Map/Object
-- 👤 No useEffect for state sync
 - 👤 No inline functions in loops
 - 👤 No incomplete configurations
 - 👤 No raw `git commit` — use `Skill(autopilot:commits-create)`
@@ -254,6 +244,7 @@ example/       # multiple modules: a directory, no index.ts barrel
 - 👤 Mark todos as completed immediately
 - 👤 Parallel tool execution when possible
 - 👤 Gather context before editing
+- 👤 Use sub-agents for search-heavy or parallelizable investigation to keep the main context focused
 - 👤 Use `gh` CLI for GitHub issues, PRs, comments, and Actions info
 - 👤 **MANDATORY**: Commit only via `Skill(autopilot:commits-create)` — no raw `git commit`, no `git commit -m`, no `--amend`, no exceptions. If the autopilot plugin is not installed, follow CONTRIBUTING.md
 - 👤 **MANDATORY**: Create branches only via `Skill(autopilot:branch-create)` — no raw `git checkout -b`, `git branch`, or `git switch -c`. If the autopilot plugin is not installed, follow CONTRIBUTING.md

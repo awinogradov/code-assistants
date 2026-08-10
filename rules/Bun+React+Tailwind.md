@@ -338,7 +338,7 @@ Choose ONE backend based on the project's needs. Do not mix.
 - 👤 Never enable debug inspector in production
 - 👤 Never pass untrusted data to Object.assign()
 - 👤 Use Object.create(null) for user-provided keys
-- 👤 Use bun ci in CI/CD, not bun install
+- 👤 Use lockfile-based installs in CI/CD (`bun install --frozen-lockfile`)
 - 👤 Run bun audit before deploying
 - 🤖 Never use eval() or Function() constructor (`no-eval`)
 - 👤 Avoid dynamic require()/import() with user-controlled paths
