@@ -23,3 +23,7 @@ why rules/Bun only? All rules/* — all rules to use in consumers repos
 ---
 
 I see 4 files in @rules/ and fixes only in 2. Why?
+
+---
+
+ok, create proposal branch and commit this fixes, then we continue
