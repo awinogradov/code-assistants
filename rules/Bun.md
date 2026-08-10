@@ -36,7 +36,7 @@ In a monorepo, `README.md`, `llms.txt`, `docs/`, `design.md`, and `package.json`
 - Progressive enhancement: Build incrementally, test frequently
 - Functional/declarative patterns; avoid classes
 - Keep dependencies minimal - prefer built-in features
-- The fewer lines the better: every line used or removed, duplication factored into reuse
+- The fewer lines the better: every line and export used or removed, duplication factored into reuse
 - Do not over-engineer - only make directly requested changes. No abstractions for single-use code, no unrequested configurability, no error handling for impossible scenarios. If 200 lines could be 50, rewrite
 - Surface assumptions and ambiguities before coding; if multiple interpretations exist, present them - don't pick silently
 - Every changed line must trace to the request - no opportunistic refactors of adjacent code or unrelated formatting
