@@ -1,0 +1,1 @@
+now we are support not claude code only, rules must be generalized for codex, kimi, cursor, etc
