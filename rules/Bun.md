@@ -20,12 +20,10 @@ Before making any changes:
 3. When a `principles/` folder exists, read its `README.md` and the principles relevant to the task — they are the long-lived values that standards and reviews appeal to; follow `rfc/` and `docs/` over them for concrete rules
 4. When an `rfc/` folder exists, treat its Accepted RFCs as binding versioned standards — follow them over `docs/` and this file when they conflict; see `rfc/README.md` for the convention
 5. Inspect all file names under `docs/` and subfolders in the current repository — some files may be missing from the README — read those relevant to the current task, and treat `docs/` as the source of truth for project-specific conventions, following those documents over this file when they conflict
-6. Use the Repomix MCP server to pack the codebase into one digest and grep/read it for codebase-wide analysis instead of loading every file
-7. When `graphify-out/graph.json` exists, use the committed knowledge graph before broad source browsing:
-   - For codebase questions, run `graphify query "<question>"` first. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts.
-   - Use `graphify-out/wiki/index.md` for broad navigation when it exists.
-   - Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review or when targeted queries do not surface enough context.
-   - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+6. Acquire codebase context from the first source that works, falling through to the next on any failure:
+   - **Graphify** — fires when `graphify-out/graph.json` exists and the `graphify` CLI resolves on PATH. Run `graphify query "<question>"` first; use `graphify path "<A>" "<B>"` for relationships, `graphify explain "<concept>"` for focused concepts, and `graphify-out/wiki/index.md` for broad navigation. After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+   - **Repomix** — fires when the Repomix MCP server is connected. Attach the committed `.repomix/pack.xml` when it exists, otherwise pack the codebase; grep/read the digest for codebase-wide analysis instead of loading every file.
+   - **Default tools** — with neither available, search and read the repository files directly.
 
 ## 1. Core Principles
 
