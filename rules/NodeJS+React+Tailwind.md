@@ -16,13 +16,14 @@ To change it, open a pull request against the source file above.
 Before making any changes:
 
 1. Read the root `README.md` — its Documentation section lists every doc in reading order, as a Markdown table (or an equivalent linked list), each with a link and a description
-2. Read the root `CONTRIBUTING.md` — the binding conventions for every branch, commit, PR, and issue operation
-3. When a `principles/` folder exists, read its `README.md` and the principles relevant to the task — they are the long-lived values that standards and reviews appeal to; follow `rfc/` and `docs/` over them for concrete rules
-4. When an `rfc/` folder exists, treat its Accepted RFCs as binding versioned standards — follow them over `docs/` and this file when they conflict; see `rfc/README.md` for the convention
-5. Inspect all file names under `docs/` and subfolders in the current repository — some files may be missing from the README — read those relevant to the current task, and treat `docs/` as the source of truth for project-specific conventions, following those documents over this file when they conflict
-6. When a `design.md` exists at the repository root, read it before any UI or visual work — it is the binding design and brand spec (tokens, typography, layout conventions); follow it over generic styling defaults
-7. Inspect `package.json` before assuming scripts or package-manager commands
-8. Acquire codebase context from the first source that works, falling through to the next on any failure:
+2. When an `llms.txt` exists at the repository root, use it as the curated documentation index — follow its links before crawling docs manually
+3. Read the root `CONTRIBUTING.md` — the binding conventions for every branch, commit, PR, and issue operation
+4. When a `principles/` folder exists, read its `README.md` and the principles relevant to the task — they are the long-lived values that standards and reviews appeal to; follow `rfc/` and `docs/` over them for concrete rules
+5. When an `rfc/` folder exists, treat its Accepted RFCs as binding versioned standards — follow them over `docs/` and this file when they conflict; see `rfc/README.md` for the convention
+6. Inspect all file names under `docs/` and subfolders in the current repository — some files may be missing from the README — read those relevant to the current task, and treat `docs/` as the source of truth for project-specific conventions, following those documents over this file when they conflict
+7. When a `design.md` exists at the repository root, read it before any UI or visual work — it is the binding design and brand spec (tokens, typography, layout conventions); follow it over generic styling defaults
+8. Inspect `package.json` before assuming scripts or package-manager commands
+9. Acquire codebase context from the first source that works, falling through to the next on any failure:
    - **Graphify** — fires when `graphify-out/graph.json` exists and the `graphify` CLI resolves on PATH. Run `graphify query "<question>"` first; use `graphify path "<A>" "<B>"` for relationships, `graphify explain "<concept>"` for focused concepts, and `graphify-out/wiki/index.md` for broad navigation. After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
    - **Repomix** — fires when the Repomix MCP server is connected. Attach the committed `.repomix/pack.xml` when it exists, otherwise pack the codebase; grep/read the digest for codebase-wide analysis instead of loading every file.
    - **Default tools** — with neither available, search and read the repository files directly.
