@@ -1,6 +1,6 @@
 {
   "name": "@code-assistants/agents-skills-sync-action",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Composite GitHub Action that syncs the portable autopilot Agent Skills layout into .agents/skills/.",
   "private": true,
   "type": "module",
