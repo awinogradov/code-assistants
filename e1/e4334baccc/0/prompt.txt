@@ -1,0 +1,41 @@
+rebase on fresh main
+
+---
+
+/explore
+
+---
+
+Review the @rules/ . I think we need to clean up rules covered by linters. To understand that we can instruct to read the linters settings first as mandatory context. What do you think?
+
+---
+
+You are right. Lets do it and see then what to do next
+
+---
+
+e .
+
+---
+
+why rules/Bun only? All rules/* — all rules to use in consumers repos
+
+---
+
+I see 4 files in @rules/ and fixes only in 2. Why?
+
+---
+
+ok, create proposal branch and commit this fixes, then we continue
+
+---
+
+I dont understand the reason for markers of automated and manual checks. If it's automated, why we need it in rules for agents?
+
+---
+
+do 1 and 2
+
+---
+
+I see JS and TS rules in client side block, but it valid for any place: client, server, scripts, etc
