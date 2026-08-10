@@ -47,3 +47,9 @@
 ### Breaking changes
 
 - the four migrated agents emit bare JSON objects instead of markdown blocks, expert-review drops revision.rescore and derives score from its dimensions, and stored plan Score: lines record per-reviewer verdicts instead of a single average
+
+## From 4.2.2 to 5.0.0
+
+### Breaking changes
+
+- _Document migration steps here._

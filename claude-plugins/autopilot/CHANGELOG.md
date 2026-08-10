@@ -2,6 +2,98 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [5.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v4.2.2...autopilot@v5.0.0) (2026-08-10)
+
+## Release Notes
+
+Skills directories are now the single portable source shared by Claude, Codex, Kimi, and any other SKILL.md-compatible CLI — eliminating the separate generated export layer.
+
+## ✨ What's New
+
+### Portable Skills Layout — One Source for All CLIs
+
+The autopilot plugin's `skills/` directory is now the canonical source for both Claude Code slash commands and external CLI agents. Previously, a separate `agent-skills/` directory was generated and maintained as a copy for Codex, Kimi, and similar tools. That duplication is gone: the `skills/` layout follows [RFC-0002](https://github.com/awinogradov/code-assistants/blob/main/rfc/0002-portable-skills-layout.md) and works verbatim with any SKILL.md-compatible CLI. You can copy skill directories directly into `~/.codex/skills/` for Codex CLI, into your configured skills directory for Kimi Code CLI, or let the [`agents-skills-sync`](https://github.com/awinogradov/code-assistants/blob/main/.github/actions/agents-skills-sync/README.md) action publish them automatically into a repository's `.agents/skills/`. See [Portable single-source skills](https://github.com/awinogradov/code-assistants/blob/main/docs/18-agent-skills-export.md) for the full details.
+
+<details><summary>Related issues</summary>
+
+- [#561: Make autopilot skills and agents usable from Codex, Kimi, and other CLIs](https://github.com/awinogradov/code-assistants/issues/561)
+- [#563: Converge skill sources so Claude and other CLIs share one layout](https://github.com/awinogradov/code-assistants/issues/563)
+</details>
+
+### Branch Name Validation Before Creation
+
+Autopilot now validates branch names against the canonical naming convention before the branch is created and again at commit time. Violations surface immediately — while a rename is free — rather than as a CI failure on an already-opened PR. If a proposed branch name doesn't conform to the convention (including length limits enforced at the preflight gate), the workflow stops and prompts for a correction before any git objects are written.
+
+<details><summary>Related issues</summary>
+
+- [#565: Enforce branch naming before creation so invalid branches never reach a PR](https://github.com/awinogradov/code-assistants/issues/565)
+</details>
+
+## ⚠️ Breaking Changes
+
+### Skill Directory Paths Renamed to Dash-Only
+
+Skill directories under `skills/` have been renamed from colon-separated paths (e.g. `skills/pr:review/`) to dash-separated paths (e.g. `skills/pr-review/`). Slash commands like `/autopilot:pr:review` are **unchanged** — this only affects anything that references the on-disk directory paths directly, such as scripts, CI steps, or documentation links that deep-link into the `skills/` tree using the old colon form. Update any such references to use the new dash-separated names.
+
+<details><summary>Related issues</summary>
+
+- [#563: Converge skill sources so Claude and other CLIs share one layout](https://github.com/awinogradov/code-assistants/issues/563)
+</details>
+
+### `agents-skills-sync` Now Syncs to Unprefixed Paths
+
+The [`agents-skills-sync`](https://github.com/awinogradov/code-assistants/blob/main/.github/actions/agents-skills-sync/README.md) action previously published skills into `.agents/skills/` using `autopilot-*` prefixed directory names. It now syncs the plugin's `skills/` directory verbatim, so destination paths are unprefixed. Any `.agents/skills/autopilot-*` directories created by the old action need to be removed manually after upgrading — they will not be cleaned up automatically. Consult [MIGRATING.md](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/MIGRATING.md) for step-by-step instructions.
+
+<details><summary>Related issues</summary>
+
+- [#563: Converge skill sources so Claude and other CLIs share one layout](https://github.com/awinogradov/code-assistants/issues/563)
+</details>
+
+### Generated `agent-skills/` Directory Removed
+
+The `agent-skills/` directory and its export pipeline have been deleted. If any integration, script, or workflow pointed at this generated copy, it will break. The replacement is the `skills/` directory itself — see [Portable single-source skills](https://github.com/awinogradov/code-assistants/blob/main/docs/18-agent-skills-export.md) for the new layout and how to reference it.
+
+<details><summary>Related issues</summary>
+
+- [#563: Converge skill sources so Claude and other CLIs share one layout](https://github.com/awinogradov/code-assistants/issues/563)
+</details>
+
+## 📚 Documentation & Settings Updates
+
+### Agent Skills Export and Sync Guide
+
+A new guide at [`docs/18-agent-skills-export.md`](https://github.com/awinogradov/code-assistants/blob/main/docs/18-agent-skills-export.md) documents the portable skills layout, how to use the [`agents-skills-sync`](https://github.com/awinogradov/code-assistants/blob/main/.github/actions/agents-skills-sync/README.md) action, and the mechanics specific to Claude Code's `plan` and `run-primed` skills. This is the authoritative reference for teams deploying autopilot skills to non-Claude CLIs.
+
+<details><summary>Related issues</summary>
+
+- [#561: Make autopilot skills and agents usable from Codex, Kimi, and other CLIs](https://github.com/awinogradov/code-assistants/issues/561)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #565 | [#566](https://github.com/awinogradov/code-assistants/pull/566) | @awinogradov |
+| #563 | [#564](https://github.com/awinogradov/code-assistants/pull/564) | @awinogradov |
+| #561 | [#562](https://github.com/awinogradov/code-assistants/pull/562) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **autopilot:** make skills the portable source layout
+
+### Features
+
+* **autopilot:** make skills the portable source layout ([e9859e9](https://github.com/awinogradov/code-assistants/commit/e9859e9477f3f199655f49d476b90b9a26ab6724))
+* **autopilot:** validate branch names before creation and commit ([055897c](https://github.com/awinogradov/code-assistants/commit/055897cabe194bb6b467cef2f19c46711a9302e5))
+
+### Bug Fixes
+
+* **autopilot:** check branch length bounds in preflight gate ([494de04](https://github.com/awinogradov/code-assistants/commit/494de04b028ed2c7f095ec8b4a900c5e89113271))
+
+### Documentation
+
+* document agent skills export and sync ([b40c066](https://github.com/awinogradov/code-assistants/commit/b40c066bcd0a0eab6c720882c9f3a84eb8e34bcd))
 ## [4.2.2](https://github.com/awinogradov/code-assistants/compare/autopilot@v4.2.1...autopilot@v4.2.2) (2026-08-05)
 
 ## Release Notes
