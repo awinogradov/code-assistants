@@ -28,6 +28,8 @@ Before making any changes:
    - **Repomix** — fires when the Repomix MCP server is connected. Attach the committed `.repomix/pack.xml` when it exists, otherwise pack the codebase; grep/read the digest for codebase-wide analysis instead of loading every file.
    - **Default tools** — with neither available, search and read the repository files directly.
 
+In a monorepo, `README.md`, `llms.txt`, `docs/`, `design.md`, and `package.json` may also exist per workspace member (`apps/*`, `packages/*`, …). When working inside a member, apply the steps above at both levels — the member's own copies govern that member's code and take precedence over the root copies; the root copies govern repo-wide concerns.
+
 ## 1. Core Principles
 
 - Context first: gather complete understanding before changes; check the codebase for similar implementations to mirror
