@@ -1,5 +1,8 @@
 # agents-skills-sync
 
+[![GitHub Release](https://img.shields.io/badge/release-v1.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
+
 Composite GitHub Action that syncs the autopilot skills — the portable single-source layout under [claude-plugins/autopilot/skills/](../../../claude-plugins/autopilot/README.md) ([RFC-0002](../../../rfc/0002-portable-skills-layout.md)) — from an upstream repository into the current repository's `.agents/skills/` directory, the vendor-neutral location Codex, Kimi, and other SKILL.md-compatible CLIs read.
 
 It composes with [files-sync](../files-sync/README.md) exactly as [agents-rules-sync](../agents-rules-sync/README.md) does: a resolve step enumerates the source skills tree via the Git Trees API and emits one content entry per file — **verbatim, no content transform** — and files-sync detects changes and opens a single idempotent PR. When nothing changed, no PR is created and the existing sync branch is left untouched.

@@ -8,3 +8,9 @@ The action now syncs the autopilot skills **verbatim** from the single-source la
 - **Previously synced `.agents/skills/autopilot-*` directories are not auto-deleted.** The underlying [files-sync](../files-sync/README.md) action writes and updates files but never deletes; remove the old prefixed directories manually after the first sync on the new version.
 
 No workflow changes are required — inputs and outputs are unchanged.
+
+## 1.0.0
+
+### Breaking changes
+
+- _Document migration steps here._
