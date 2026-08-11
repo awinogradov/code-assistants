@@ -623,6 +623,7 @@ claude-plugins/
           checks-architecture-patterns.md
           checks-common-sense.md
           checks-complexity-readability.md
+          checks-consumer-review-rules.md
           checks-correctness-bugs.md
           checks-documentation.md
           checks-logging.md
@@ -44061,7 +44062,7 @@ Emit the raw object, not the fenced form.
 <file path="claude-plugins/autopilot/agents/digest-repo-standards.md">
 ---
 name: digest-repo-standards
-description: Read a repository's own README, docs/, rfc/, principles/, and CLAUDE.md and return a bounded standards digest. Use when planning skills need the project's conventions without loading the full documents into parent context.
+description: Read a repository's own CODE_REVIEW.md (when present) or its README, docs/, rfc/, and principles/, plus CLAUDE.md, and return a bounded standards digest. Use when planning skills need the project's conventions without loading the full documents into parent context.
 tools: Read, Glob
 model: sonnet
 ---
@@ -44082,6 +44083,23 @@ The invoking skill provides in the prompt:
 
 - **Repository root** (e.g., `/path/to/repo`) — absolute path.
 - **Task summary** (optional) — a one-line description of the planned change, used to rank which standards are relevant. When absent, select by breadth instead of match strength.
+
+## Phase 0: Consumer review rules file
+
+When a non-empty `CODE_REVIEW.md` exists at the repository root, it is the consumer's distilled standards source — the same check-first tier the [pr-review skill](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/pr-review/SKILL.md#14-project-context-read-before-reviewing) applies. Read it, skip Phase 1's README/docs discovery and Phases 2–3 entirely (still read `CLAUDE.md` per Phase 1), and emit it as the single `standards` entry with `dropped` and `principles` as empty arrays:
+
+```json
+{
+  "id": "CODE_REVIEW.md",
+  "title": "<its first H1>",
+  "status": "Accepted",
+  "path": "CODE_REVIEW.md",
+  "defaulted": false,
+  "why": "consumer-curated review rules; supersedes docs/rfc/principles discovery"
+}
+```
+
+When the file is absent (or empty), run Phases 1–3 as written.
 
 ## Phase 1: Conventions
 
@@ -53462,6 +53480,19 @@ Function accepts more than 9 total parameters or more than 6 positional, indicat
 Comments describing what the code does (obvious from the code) instead of why.
 </file>
 
+<file path="claude-plugins/autopilot/skills/pr-review/references/checks-consumer-review-rules.md">
+# Consumer Review Rules — pr-review check details
+
+Full rule bodies for the **Consumer Review Rules** family of [pr-review §2.3](../SKILL.md#23-review-checks). Applies to repositories carrying a root `CODE_REVIEW.md`.
+
+**CHECK-REVIEWFILE-001: Diff violates a rule in the consumer CODE_REVIEW.md** — Severity: as the violated rule declares (suggestion when it declares none)
+
+A change contradicts a rule in the repository's root `CODE_REVIEW.md` — the consumer's distilled, review-ready rules corpus that [§1.4](../SKILL.md#14-project-context-read-before-reviewing) read as the standards source in place of the `docs/`/`rfc/`/`principles/` discovery. Report the finding under the consumer's own rule id (e.g. `STR-2`), quote the violated rule verbatim (≤2 lines) in the detail, and render the id per [§2.5](../SKILL.md#25-rule-codes) — linked to its anchor in `CODE_REVIEW.md` at the PR head when the file carries one.
+
+- Example: `CODE_REVIEW.md` declares `LOG-1` (blocker) "Never log secrets, tokens, PII" and the diff adds a token to an info-level log call — report a blocker under `LOG-1`.
+- Skip: the rule's own text names an exception that applies; a generic `CHECK-*` check already covers the same ground — report once under the generic code and cite the consumer rule in its detail; the diff itself amends `CODE_REVIEW.md` — the file is enforced at its base-branch version per [§1.4](../SKILL.md#14-project-context-read-before-reviewing), so rule edits are reviewed as content, not enforced against their own PR.
+</file>
+
 <file path="claude-plugins/autopilot/skills/pr-review/references/checks-correctness-bugs.md">
 # Correctness & Bugs — pr-review check details
 
@@ -54008,6 +54039,7 @@ Do NOT produce the structured JSON output.
 
 Read the project's own conventions before judging the diff — you enforce them, so you must load them first (mirrors the [`digest-repo-standards` agent](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/digest-repo-standards.md) that the `plan` skill's context fan-out uses):
 
+- **`CODE_REVIEW.md` (consumer review rules — check first)** — if a non-empty `CODE_REVIEW.md` exists at the repository root, read it in full as the applicable-standards source and SKIP the README + `docs/*`, `rfc/`, and `principles/` bullets below: the file is the consumer's distilled, review-ready rules corpus, so its rules apply as written there — ids, severities, source citations; a rule with no declared severity is a suggestion. The [Consumer Review Rules check](#consumer-review-rules) enforces it. A `CODE_REVIEW.md` the diff itself modifies is enforced at its **base-branch version** — fetch it via `gh api repos/<REPO>/contents/CODE_REVIEW.md?ref=<baseRefOid>` (from [§1.1](#11-pr-context)) — so a PR cannot legalize its own diff by editing the rules. The CLAUDE.md bullet and the external lookups below apply on both branches of this check.
 - **CLAUDE.md (stack rules)** — read the repository-root `CLAUDE.md`; map each changed line to the rule it must satisfy.
 - **README + `docs/*` (project conventions)** — read the root `README.md` and the docs it links; treat `docs/` as the source of truth for project-specific conventions. When the root README carries no docs index, fall back to `docs/README.md`, then to the Glob `docs/*.md` file names.
 - **`rfc/` (versioned standards)** — if `rfc/` exists at the repository root, build a standards inventory and read the diff-relevant standards; the [Repository Standards checks](#repository-standards-rfcs) enforce them:
@@ -54027,7 +54059,7 @@ Read the project's own conventions before judging the diff — you enforce them,
 - **Related work** — TODOs and `#<issue>` references in the codebase from `search-codebase-todos` ([§1.2](#12-load-context-via-sub-agents)): flag whether the diff resolves or conflicts with a related TODO, leaves a referenced issue half-addressed, or duplicates work tracked elsewhere; "none" when no issue is linked or none found.
 - **Prior-review findings** — unresolved findings from prior review bodies ([§1.1](#11-pr-context)) and inline threads from `fetch-pr-reviews` ([§1.2](#12-load-context-via-sub-agents)); empty on first review.
 - **Project conventions** — the CLAUDE.md / README / `docs/*` points that bear on the diff ([§1.4](#14-project-context-read-before-reviewing)).
-- **Applicable standards** — the standards and any `principles/` values selected in [§1.4](#14-project-context-read-before-reviewing): each as id + status (marked "defaulted" when the status was inferred) with a one-line why, plus any dropped candidates; "none" when nothing matched or the folders are absent. This map is the audit log of what was loaded and why.
+- **Applicable standards** — name the source first. When the [§1.4](#14-project-context-read-before-reviewing) check-first tier fired: `CODE_REVIEW.md`, plus the rule ids that bear on the diff. Otherwise the discovered inventory: the standards and any `principles/` values selected in [§1.4](#14-project-context-read-before-reviewing), each as id + status (marked "defaulted" when the status was inferred) with a one-line why, plus any dropped candidates; "none" when nothing matched or the sources are absent. This map is the audit log of what was loaded and why.
 - **Codebase pointers** — only the targeted pack-`grep` hits pulled for cross-file checks; "none" when the diff is self-contained.
 - **Stack** — `agents.rules` value (drives [§2](#phase-2-review-the-diff) thresholds), or `unknown`.
 
@@ -54056,7 +54088,7 @@ These rules are mandatory. Apply them exactly as written. Exceptions are only th
 
 Each check below carries an HTML anchor so this skill can link its `CHECK-` code back to this file (see [§2.5](#25-rule-codes)). Every `<a id="...">` anchor lives in this file, on its rule's index line — never move an anchor into a `references/` file.
 
-The full rule bodies live in per-family files under [`references/`](./references/). Each family below keeps its applicability precondition and a one-line-per-rule index here; the [§1.5](#15-context-map) Context Map (stack, changed files, presence of `rfc/`, `docs/`, or `principles/` folders) already determines which preconditions hold. Before applying a family whose precondition holds for this PR, read its `references/checks-*.md` file for the full rule bodies. A family whose precondition fails is applied from the index alone — i.e. skipped without reading its file.
+The full rule bodies live in per-family files under [`references/`](./references/). Each family below keeps its applicability precondition and a one-line-per-rule index here; the [§1.5](#15-context-map) Context Map (stack, changed files, presence of a root `CODE_REVIEW.md` or of `rfc/`, `docs/`, `principles/` folders) already determines which preconditions hold. Before applying a family whose precondition holds for this PR, read its `references/checks-*.md` file for the full rule bodies. A family whose precondition fails is applied from the index alone — i.e. skipped without reading its file.
 
 #### Correctness & Bugs
 
@@ -54231,6 +54263,14 @@ Applies to repositories carrying a `principles/` folder ([§1.4](#14-project-con
 
 Rule details: read [references/checks-repository-principles.md](./references/checks-repository-principles.md) before applying this family.
 
+#### Consumer Review Rules
+
+Applies to repositories carrying a root `CODE_REVIEW.md` ([§1.4](#14-project-context-read-before-reviewing) read it as the standards source). When that tier fired, skip CHECK-RFC-001/002, CHECK-DOC-005, and CHECK-PRINCIPLE-001 — their source corpus was deliberately not read; CHECK-RFC-003/004 still apply whenever the diff touches `rfc/` files, and every other generic check is unaffected. Each finding's `rule` is the consumer rule id as written in the file (e.g. `STR-2`), never CHECK-REVIEWFILE-001 itself — the code below defines the family, it does not replace the consumer's ids ([§2.5](#25-rule-codes) defines the rendering). Every finding must quote the violated rule verbatim (≤2 lines) in its detail; severity is the rule's own declaration, suggestion when it declares none.
+
+- <a id="CHECK-REVIEWFILE-001"></a>**CHECK-REVIEWFILE-001** (severity as the violated rule declares) — Diff violates a rule in the consumer `CODE_REVIEW.md`
+
+Rule details: read [references/checks-consumer-review-rules.md](./references/checks-consumer-review-rules.md) before applying this family.
+
 #### Service Standards
 
 Applies when the diff adds or changes a backend service's API, entrypoint, or runtime config. Skip libraries, frontend-only changes, and diffs that touch none of these. Secrets in code are CHECK-SEC-001 and missing tests are CHECK-TEST-008 — do not double-report them here.
@@ -54266,6 +54306,8 @@ Substitute the resolved `RULES_DOC_URL` value verbatim — do not invent a diffe
 - Shared location → `CHECK-BUG-002, CHECK-AI-002`.
 
 In both modes, append nothing when a finding has no rule code (do not emit `[UNSPECIFIED]`).
+
+**Consumer rule ids** — a finding from the [Consumer Review Rules](#consumer-review-rules) family carries the consumer's own rule id, not a `CHECK-*` code, and it links into `CODE_REVIEW.md` at the PR head instead of `RULES_DOC_URL`: `[STR-2](<pr-blob-url>/CODE_REVIEW.md#str-2)` when the file carries an `<a id>` anchor for the id — the fragment is the id lowercased (GitHub rewrites `<a id="STR-2">` to a lowercase `user-content-str-2` id, and fragment lookup is case-sensitive) — or the bare id as plain text when it carries none; never guess an anchor. This rendering does not depend on `RULES_DOC_URL`.
 
 Map `severity` to its emoji when rendering in [Phase 3](#phase-3-submit-review): `blocker` → 🚧, `suggestion` → 🙋‍♂️, `nitpick` → 💡. The emoji stays first so downstream severity filters keep working.
 
@@ -60680,9 +60722,19 @@ The shared CI gates accept both conventions: the branch-name and semantic-PR-tit
 
 > Chapter 12 of the [repository docs](../README.md#repository-docs).
 
-`code-review-action` reviews every PR against the repo's `CLAUDE.md` and the generic `CHECK-*` catalog in the [pr-review skill](../claude-plugins/autopilot/skills/pr-review/SKILL.md). This chapter defines the additional, convention-based contract: when a consumer repository carries `rfc/`, `docs/`, or `principles/`, the review enforces those standards too. There is no workflow input or config key — the folders are the opt-in, and repositories without them see no change and pay no cost.
+`code-review-action` reviews every PR against the repo's `CLAUDE.md` and the generic `CHECK-*` catalog in the [pr-review skill](../claude-plugins/autopilot/skills/pr-review/SKILL.md). This chapter defines the additional, convention-based contract: when a consumer repository carries a root `CODE_REVIEW.md`, that file is the review-rules source; otherwise, when it carries `rfc/`, `docs/`, or `principles/`, the review discovers and enforces those standards. There is no workflow input or config key — the file or the folders are the opt-in, and repositories without them see no change and pay no cost.
+
+## Consumer CODE_REVIEW.md
+
+A repository can distill its standards corpus into one review-ready file: a root `CODE_REVIEW.md` carrying rules with ids, declared severities, and source citations (each rule ideally anchored with `<a id="STR-2">`-style anchors). When a non-empty `CODE_REVIEW.md` exists, the review reads it in full as the applicable-standards source and skips the discovery below entirely — no README/docs indexing, no `rfc/` inventory and selection, no `principles/` matching. `CLAUDE.md` stack rules and the generic `CHECK-*` catalog apply as always.
+
+Findings from the file belong to the Consumer Review Rules family (CHECK-REVIEWFILE-001), but each finding carries the **consumer's own rule id** (e.g. `STR-2`) as its rule code, linked to that rule's anchor in `CODE_REVIEW.md` at the PR head; severity comes from the rule's own declaration (suggestion when it declares none), replacing the severity ladder below. Because the file is the only rules source read, CHECK-RFC-001/002, CHECK-DOC-005, and CHECK-PRINCIPLE-001 are skipped — CHECK-RFC-003/004 hygiene still applies whenever a diff touches `rfc/` files. A `CODE_REVIEW.md` the diff itself modifies is enforced at its base-branch version, so a PR cannot legalize its own diff by editing the rules.
+
+The file is consumer-curated: this repository ships no generator, and on any conflict between the file and its cited sources, the sources stay normative — keeping the distillation honest is the consumer's contract with itself.
 
 ## Discovery
+
+Discovery runs only when no root `CODE_REVIEW.md` fired the check-first tier above.
 
 - **`rfc/` (versioned standards)** — the review builds an inventory `{id, title, status, path}` from the `rfc/README.md` index table; when no index exists it globs `rfc/[0-9]*.md` and reads each file's frontmatter. A missing id or title is derived from the `NNNN-slug` filename (or the first H1); a missing or unparseable `status` counts as Draft and is recorded as defaulted — visible in the review, never a silent downgrade.
 - **`docs/` (project conventions)** — indexed via the root `README.md` docs table, else `docs/README.md`, else the `docs/*.md` file names.
@@ -60721,7 +60773,7 @@ Discovery is index-first: one small read builds the inventory, and only matched 
 
 ## Planning against the same standards
 
-Enforcement is only half the loop. The [`digest-repo-standards` agent](../claude-plugins/autopilot/agents/digest-repo-standards.md) reads the same `rfc/`/`docs/`/`principles/` inventory inside the [plan skill](../claude-plugins/autopilot/skills/plan/SKILL.md#repository-standards)'s context fan-out and records the selected standards in its Context Map, so a plan is shaped to **comply** with Accepted RFCs rather than propose a change this review would then block — review enforces, plan complies. The agent uses the identical discovery and selection contract (index-first inventory, token-match selection capped at 3); it adds no `CHECK-*` codes of its own, and when a change edits an Accepted RFC the plan requires the same `version` bump + Changelog entry that `CHECK-RFC-003` guards.
+Enforcement is only half the loop. The [`digest-repo-standards` agent](../claude-plugins/autopilot/agents/digest-repo-standards.md) reads the same sources inside the [plan skill](../claude-plugins/autopilot/skills/plan/SKILL.md#repository-standards)'s context fan-out and records the selected standards in its Context Map, so a plan is shaped to **comply** with Accepted RFCs rather than propose a change this review would then block — review enforces, plan complies. The agent applies the identical precedence: a root `CODE_REVIEW.md` is read first and emitted as the single standards source, and only in its absence does the agent run the same discovery and selection contract (index-first inventory, token-match selection capped at 3). It adds no `CHECK-*` codes of its own, and when a change edits an Accepted RFC the plan requires the same `version` bump + Changelog entry that `CHECK-RFC-003` guards.
 </file>
 
 <file path="docs/13-shared-rules-skill.md">
