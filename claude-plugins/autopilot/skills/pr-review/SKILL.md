@@ -135,6 +135,7 @@ Do NOT produce the structured JSON output.
 
 Read the project's own conventions before judging the diff — you enforce them, so you must load them first (mirrors the [`digest-repo-standards` agent](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/digest-repo-standards.md) that the `plan` skill's context fan-out uses):
 
+- **`CODE_REVIEW.md` (consumer review rules — check first)** — if a non-empty `CODE_REVIEW.md` exists at the repository root, read it in full as the applicable-standards source and SKIP the README + `docs/*`, `rfc/`, and `principles/` bullets below: the file is the consumer's distilled, review-ready rules corpus, so its rules apply as written there — ids, severities, source citations; a rule with no declared severity is a suggestion. The [Consumer Review Rules check](#consumer-review-rules) enforces it. A `CODE_REVIEW.md` the diff itself modifies is enforced at its **base-branch version** — fetch it via `gh api repos/<REPO>/contents/CODE_REVIEW.md?ref=<baseRefOid>` (from [§1.1](#11-pr-context)) — so a PR cannot legalize its own diff by editing the rules. The CLAUDE.md bullet and the external lookups below apply on both branches of this check.
 - **CLAUDE.md (stack rules)** — read the repository-root `CLAUDE.md`; map each changed line to the rule it must satisfy.
 - **README + `docs/*` (project conventions)** — read the root `README.md` and the docs it links; treat `docs/` as the source of truth for project-specific conventions. When the root README carries no docs index, fall back to `docs/README.md`, then to the Glob `docs/*.md` file names.
 - **`rfc/` (versioned standards)** — if `rfc/` exists at the repository root, build a standards inventory and read the diff-relevant standards; the [Repository Standards checks](#repository-standards-rfcs) enforce them:
@@ -154,7 +155,7 @@ Read the project's own conventions before judging the diff — you enforce them,
 - **Related work** — TODOs and `#<issue>` references in the codebase from `search-codebase-todos` ([§1.2](#12-load-context-via-sub-agents)): flag whether the diff resolves or conflicts with a related TODO, leaves a referenced issue half-addressed, or duplicates work tracked elsewhere; "none" when no issue is linked or none found.
 - **Prior-review findings** — unresolved findings from prior review bodies ([§1.1](#11-pr-context)) and inline threads from `fetch-pr-reviews` ([§1.2](#12-load-context-via-sub-agents)); empty on first review.
 - **Project conventions** — the CLAUDE.md / README / `docs/*` points that bear on the diff ([§1.4](#14-project-context-read-before-reviewing)).
-- **Applicable standards** — the standards and any `principles/` values selected in [§1.4](#14-project-context-read-before-reviewing): each as id + status (marked "defaulted" when the status was inferred) with a one-line why, plus any dropped candidates; "none" when nothing matched or the folders are absent. This map is the audit log of what was loaded and why.
+- **Applicable standards** — name the source first. When the [§1.4](#14-project-context-read-before-reviewing) check-first tier fired: `CODE_REVIEW.md`, plus the rule ids that bear on the diff. Otherwise the discovered inventory: the standards and any `principles/` values selected in [§1.4](#14-project-context-read-before-reviewing), each as id + status (marked "defaulted" when the status was inferred) with a one-line why, plus any dropped candidates; "none" when nothing matched or the sources are absent. This map is the audit log of what was loaded and why.
 - **Codebase pointers** — only the targeted pack-`grep` hits pulled for cross-file checks; "none" when the diff is self-contained.
 - **Stack** — `agents.rules` value (drives [§2](#phase-2-review-the-diff) thresholds), or `unknown`.
 
@@ -183,7 +184,7 @@ These rules are mandatory. Apply them exactly as written. Exceptions are only th
 
 Each check below carries an HTML anchor so this skill can link its `CHECK-` code back to this file (see [§2.5](#25-rule-codes)). Every `<a id="...">` anchor lives in this file, on its rule's index line — never move an anchor into a `references/` file.
 
-The full rule bodies live in per-family files under [`references/`](./references/). Each family below keeps its applicability precondition and a one-line-per-rule index here; the [§1.5](#15-context-map) Context Map (stack, changed files, presence of `rfc/`, `docs/`, or `principles/` folders) already determines which preconditions hold. Before applying a family whose precondition holds for this PR, read its `references/checks-*.md` file for the full rule bodies. A family whose precondition fails is applied from the index alone — i.e. skipped without reading its file.
+The full rule bodies live in per-family files under [`references/`](./references/). Each family below keeps its applicability precondition and a one-line-per-rule index here; the [§1.5](#15-context-map) Context Map (stack, changed files, presence of a root `CODE_REVIEW.md` or of `rfc/`, `docs/`, `principles/` folders) already determines which preconditions hold. Before applying a family whose precondition holds for this PR, read its `references/checks-*.md` file for the full rule bodies. A family whose precondition fails is applied from the index alone — i.e. skipped without reading its file.
 
 #### Correctness & Bugs
 
@@ -358,6 +359,14 @@ Applies to repositories carrying a `principles/` folder ([§1.4](#14-project-con
 
 Rule details: read [references/checks-repository-principles.md](./references/checks-repository-principles.md) before applying this family.
 
+#### Consumer Review Rules
+
+Applies to repositories carrying a root `CODE_REVIEW.md` ([§1.4](#14-project-context-read-before-reviewing) read it as the standards source). When that tier fired, skip CHECK-RFC-001/002, CHECK-DOC-005, and CHECK-PRINCIPLE-001 — their source corpus was deliberately not read; CHECK-RFC-003/004 still apply whenever the diff touches `rfc/` files, and every other generic check is unaffected. Each finding's `rule` is the consumer rule id as written in the file (e.g. `STR-2`), never CHECK-REVIEWFILE-001 itself — the code below defines the family, it does not replace the consumer's ids ([§2.5](#25-rule-codes) defines the rendering). Every finding must quote the violated rule verbatim (≤2 lines) in its detail; severity is the rule's own declaration, suggestion when it declares none.
+
+- <a id="CHECK-REVIEWFILE-001"></a>**CHECK-REVIEWFILE-001** (severity as the violated rule declares) — Diff violates a rule in the consumer `CODE_REVIEW.md`
+
+Rule details: read [references/checks-consumer-review-rules.md](./references/checks-consumer-review-rules.md) before applying this family.
+
 #### Service Standards
 
 Applies when the diff adds or changes a backend service's API, entrypoint, or runtime config. Skip libraries, frontend-only changes, and diffs that touch none of these. Secrets in code are CHECK-SEC-001 and missing tests are CHECK-TEST-008 — do not double-report them here.
@@ -393,6 +402,8 @@ Substitute the resolved `RULES_DOC_URL` value verbatim — do not invent a diffe
 - Shared location → `CHECK-BUG-002, CHECK-AI-002`.
 
 In both modes, append nothing when a finding has no rule code (do not emit `[UNSPECIFIED]`).
+
+**Consumer rule ids** — a finding from the [Consumer Review Rules](#consumer-review-rules) family carries the consumer's own rule id, not a `CHECK-*` code, and it links into `CODE_REVIEW.md` at the PR head instead of `RULES_DOC_URL`: `[STR-2](<pr-blob-url>/CODE_REVIEW.md#str-2)` when the file carries an `<a id>` anchor for the id — the fragment is the id lowercased (GitHub rewrites `<a id="STR-2">` to a lowercase `user-content-str-2` id, and fragment lookup is case-sensitive) — or the bare id as plain text when it carries none; never guess an anchor. This rendering does not depend on `RULES_DOC_URL`.
 
 Map `severity` to its emoji when rendering in [Phase 3](#phase-3-submit-review): `blocker` → 🚧, `suggestion` → 🙋‍♂️, `nitpick` → 💡. The emoji stays first so downstream severity filters keep working.
 
