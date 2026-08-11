@@ -1,6 +1,6 @@
 ---
 name: digest-repo-standards
-description: Read a repository's own README, docs/, rfc/, principles/, and CLAUDE.md and return a bounded standards digest. Use when planning skills need the project's conventions without loading the full documents into parent context.
+description: Read a repository's own CODE_REVIEW.md (when present) or its README, docs/, rfc/, and principles/, plus CLAUDE.md, and return a bounded standards digest. Use when planning skills need the project's conventions without loading the full documents into parent context.
 tools: Read, Glob
 model: sonnet
 ---
@@ -21,6 +21,23 @@ The invoking skill provides in the prompt:
 
 - **Repository root** (e.g., `/path/to/repo`) — absolute path.
 - **Task summary** (optional) — a one-line description of the planned change, used to rank which standards are relevant. When absent, select by breadth instead of match strength.
+
+## Phase 0: Consumer review rules file
+
+When a non-empty `CODE_REVIEW.md` exists at the repository root, it is the consumer's distilled standards source — the same check-first tier the [pr-review skill](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/pr-review/SKILL.md#14-project-context-read-before-reviewing) applies. Read it, skip Phase 1's README/docs discovery and Phases 2–3 entirely (still read `CLAUDE.md` per Phase 1), and emit it as the single `standards` entry with `dropped` and `principles` as empty arrays:
+
+```json
+{
+  "id": "CODE_REVIEW.md",
+  "title": "<its first H1>",
+  "status": "Accepted",
+  "path": "CODE_REVIEW.md",
+  "defaulted": false,
+  "why": "consumer-curated review rules; supersedes docs/rfc/principles discovery"
+}
+```
+
+When the file is absent (or empty), run Phases 1–3 as written.
 
 ## Phase 1: Conventions
 
