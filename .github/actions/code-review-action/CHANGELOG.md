@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [6.0.1](https://github.com/awinogradov/code-assistants/compare/code-review-action@v6.0.0...code-review-action@v6.0.1) (2026-08-12)
+
+## Release Notes
+
+The `linear-plan` skill now keeps Linear ticket titles accurate by refreshing rough or placeholder titles with a clear, business-friendly name once a plan is saved.
+
+## 🐛 Bug Fixes
+
+### Linear Ticket Title Refresh Restored
+
+When the `linear-plan` skill stores a plan, it now updates the Linear ticket title to reflect the actual scope of work — replacing rough or auto-generated placeholder titles with a clear, business-meaningful name. Titles that are already accurate are left untouched. This ensures your Linear board stays readable without manual cleanup after plans are created.
+
+<details><summary>Related issues</summary>
+
+- [#578: Restore Linear issue title updates in the linear-plan skill](https://github.com/awinogradov/code-assistants/issues/578)
+- [#579: Refresh the Linear ticket title when a plan is stored](https://github.com/awinogradov/code-assistants/pull/579)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #578 | [#579](https://github.com/awinogradov/code-assistants/pull/579) | @awinogradov |
+
+### Tests
+
+* **code-review:** pin title refresh in plan contract ([2018fcd](https://github.com/awinogradov/code-assistants/commit/2018fcd79e6c231d4ea7a5a34292972142da8d9b))
 ## [6.0.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v5.1.0...code-review-action@v6.0.0) (2026-08-10)
 
 ## Release Notes
