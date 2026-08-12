@@ -179,6 +179,23 @@ describe("linear plan contract", () => {
     expect(linearPlan).not.toContain("Decide whether to store");
   });
 
+  /**
+   * The title refresh is part of the store contract (issue #578: a rewording once dropped
+   * it silently). Pin its source, its rules link, and that both outcome literals appear
+   * twice — once in the write step and once in the final output block.
+   */
+  test("the store refreshes the title from the plan and reports the outcome", () => {
+    const writeSection = linearPlan.split("### The write")[1] ?? "";
+    expect(writeSection).toContain("**Derive the title.**");
+    expect(writeSection).toContain("Steelmanned Intent");
+    expect(writeSection).toContain("../linear-create/SKILL.md#phase-2-generate-title-and-body");
+    expect(writeSection).toContain("needs no confirmation");
+    expect(linearPlan.match(/✓ Title updated: <new title>/g)?.length ?? 0).toBeGreaterThanOrEqual(
+      2,
+    );
+    expect(linearPlan.match(/`title unchanged`/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+  });
+
   test("linear-run treats the stored plan as a durable artifact, not proof of approval", () => {
     expect(linearRun).toContain("checkable durable artifact");
     expect(linearRun).not.toContain("approval already happened when the plan was stored");
