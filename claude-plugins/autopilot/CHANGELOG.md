@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [5.2.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v5.1.0...autopilot@v5.2.0) (2026-08-12)
+
+## Release Notes
+
+The `linear-plan` skill now keeps your Linear ticket titles accurate automatically when a plan is stored.
+
+## ✨ What's New
+
+### Linear Ticket Titles Stay in Sync with Your Plans
+
+When you store a plan using the `linear-plan` skill, it now refreshes the Linear ticket title to reflect a clear, business-readable summary derived from the plan itself. If the ticket already has an accurate title, it's left untouched — so there's no risk of overwriting something intentional.
+
+This restores behaviour that had been lost, meaning your Linear board stays meaningful without any manual title cleanup after planning sessions.
+
+<details><summary>Related issues</summary>
+
+- [#578: Restore Linear issue title updates in the linear-plan skill](https://github.com/awinogradov/code-assistants/issues/578)
+- [#579: Refresh the Linear ticket title when a plan is stored](https://github.com/awinogradov/code-assistants/pull/579)
+
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #578 | [#579](https://github.com/awinogradov/code-assistants/pull/579) | @awinogradov |
+
+### Features
+
+* **linear-plan:** refresh ticket title during store ([108c0bd](https://github.com/awinogradov/code-assistants/commit/108c0bda9eefb5f619cdb3ccd19281dd87c66c2b))
 ## [5.1.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v5.0.0...autopilot@v5.1.0) (2026-08-11)
 
 ## Release Notes
