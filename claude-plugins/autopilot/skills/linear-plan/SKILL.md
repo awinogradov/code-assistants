@@ -1,6 +1,6 @@
 ---
 name: linear-plan
-description: Plan a Linear issue exactly as the plan skill does, expert-reviewed when --experts-review is passed, then store the finished plan in that issue's description so it outlives the session. Storing is unconditional — the recorded score or skip is information on the ticket, never used as a gate.
+description: Plan a Linear issue exactly as the plan skill does, expert-reviewed when --experts-review is passed, then store the finished plan in that issue's description — refreshing a rough ticket title along the way — so it outlives the session. Storing is unconditional — the recorded score or skip is information on the ticket, never used as a gate.
 argument-hint: "<Linear issue (ENG-123 or a Linear issue URL)> [--experts-review]"
 allowed-tools:
   - TaskCreate
@@ -208,7 +208,7 @@ Never emit HTML (`<details>` and every other tag do not render), checkbox lists 
 
 ### The write
 
-1. **Read the current description** with `get_issue`.
+1. **Read the current description and title** with `get_issue`.
 
 2. **Locate the anchor.** Search the description for a line equal to `## Implementation plan`.
    - **Anchor found** — replace from that line to the end of the description with the new block. Everything above it is preserved **byte-identical**; do not re-emit it, reformat it, or re-wrap it.
@@ -223,11 +223,13 @@ Never emit HTML (`<details>` and every other tag do not render), checkbox lists 
 
 Because the anchor is matched rather than the wrapper, re-storing on the same issue replaces only the plan and never stacks a second `+++ Original task +++`.
 
-4. **Write** with `save_issue`, passing the issue id and the new `description`.
+4. **Derive the title.** From the plan's Steelmanned Intent line, derive a candidate title under the same rules [`linear-create`](../linear-create/SKILL.md#phase-2-generate-title-and-body) applies when it generates one — capitalized, ≤ 80 characters, no trailing period, business-focused, no prefixes. Compare it with the title step 1 read: when the candidate is a material improvement — the current title is a rough one-line prompt, a placeholder, or misstates the planned work — carry the candidate as `title` into the step 5 write; when the current title already meets those rules and states the task, omit the field entirely so the write never touches it. The refresh needs no confirmation — invoking this skill authorizes it exactly as it authorizes the store, and Linear's issue activity keeps the prior title recoverable. Record the outcome line for the output block: `✓ Title updated: <new title>` or `title unchanged`.
 
-5. **On any failed or rejected write**, emit the full plan text into the transcript before reporting the failure, so the work is recoverable by hand.
+5. **Write** with `save_issue`, passing the issue id, the new `description`, and — when step 4 derived a candidate — the refreshed `title` in the same call, so the ticket can never end up with one field updated and the other not.
 
-6. **Move the issue to "AI Ready"** — best-effort, never blocks the store, and runs only after step 4's write succeeded: a failed or refused write performs no transition. The transition is the board's hand-off signal that the ticket is planned and execution-ready. Resolve the target state id with the Linear MCP `list_issue_statuses` tool for the issue's team, then call the Linear MCP `save_issue` tool with `{ "id": "<LINEAR-ID>", "state": "<AI Ready state>" }` — tool resolution per the [Completion Requirement](#completion-requirement) Linear MCP access note. On success, emit `✓ Ticket <LINEAR-ID> moved to AI Ready`; when the team has no "AI Ready" state or the state write fails, emit `issue not moved — <reason>`. Always continue — but the emitted line MUST reach the output block below, never only intermediate text.
+6. **On any failed or rejected write**, emit the full plan text into the transcript before reporting the failure, so the work is recoverable by hand.
+
+7. **Move the issue to "AI Ready"** — best-effort, never blocks the store, and runs only after step 5's write succeeded: a failed or refused write performs no transition. The transition is the board's hand-off signal that the ticket is planned and execution-ready. Resolve the target state id with the Linear MCP `list_issue_statuses` tool for the issue's team, then call the Linear MCP `save_issue` tool with `{ "id": "<LINEAR-ID>", "state": "<AI Ready state>" }` — tool resolution per the [Completion Requirement](#completion-requirement) Linear MCP access note. On success, emit `✓ Ticket <LINEAR-ID> moved to AI Ready`; when the team has no "AI Ready" state or the state write fails, emit `issue not moved — <reason>`. Always continue — but the emitted line MUST reach the output block below, never only intermediate text.
 
 Set task 6 to `completed` and output:
 
@@ -239,7 +241,7 @@ Next step:
 - Run /autopilot:linear-run <LINEAR-ID> to execute it
 ```
 
-When the review step was skipped, the `Score:` segment reads `skipped` here exactly as in the stored header. Add the step 6 outcome line after the `Score:` line — `✓ Ticket <LINEAR-ID> moved to AI Ready` on success, or the `issue not moved — <reason>` line on failure — so a skipped transition is visible in the final output, not just mid-run.
+When the review step was skipped, the `Score:` segment reads `skipped` here exactly as in the stored header. Add the step 4 outcome line after the `Score:` line — `✓ Title updated: <new title>` or `title unchanged` — and the step 7 outcome line after it — `✓ Ticket <LINEAR-ID> moved to AI Ready` on success, or the `issue not moved — <reason>` line on failure — so a skipped refresh or transition is visible in the final output, not just mid-run.
 
 ## Reference formatting
 
