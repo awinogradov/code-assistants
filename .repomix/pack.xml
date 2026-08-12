@@ -153,6 +153,7 @@ The content is organized as follows:
         5.0.0.md
         5.1.0.md
         6.0.0.md
+        6.0.1.md
       src/
         github/
           githubReview.test.ts
@@ -475,6 +476,7 @@ claude-plugins/
       4.2.2.md
       5.0.0.md
       5.1.0.md
+      5.2.0.md
     agents/
       analyze-pr-commits.md
       analyze-staged-changes.md
@@ -6944,6 +6946,37 @@ The generated `agent-skills/` layout and its export pipeline have been removed e
 
 * **autopilot:** make skills the portable source layout ([e9859e9](https://github.com/awinogradov/code-assistants/commit/e9859e9477f3f199655f49d476b90b9a26ab6724))
 * **autopilot:** validate branch names before creation and commit ([055897c](https://github.com/awinogradov/code-assistants/commit/055897cabe194bb6b467cef2f19c46711a9302e5))
+</file>
+
+<file path=".github/actions/code-review-action/.release_notes/6.0.1.md">
+## [6.0.1](https://github.com/awinogradov/code-assistants/compare/code-review-action@v6.0.0...code-review-action@v6.0.1) (2026-08-12)
+
+## Release Notes
+
+The `linear-plan` skill now keeps Linear ticket titles accurate by refreshing rough or placeholder titles with a clear, business-friendly name once a plan is saved.
+
+## 🐛 Bug Fixes
+
+### Linear Ticket Title Refresh Restored
+
+When the `linear-plan` skill stores a plan, it now updates the Linear ticket title to reflect the actual scope of work — replacing rough or auto-generated placeholder titles with a clear, business-meaningful name. Titles that are already accurate are left untouched. This ensures your Linear board stays readable without manual cleanup after plans are created.
+
+<details><summary>Related issues</summary>
+
+- [#578: Restore Linear issue title updates in the linear-plan skill](https://github.com/awinogradov/code-assistants/issues/578)
+- [#579: Refresh the Linear ticket title when a plan is stored](https://github.com/awinogradov/code-assistants/pull/579)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #578 | [#579](https://github.com/awinogradov/code-assistants/pull/579) | @awinogradov |
+
+### Tests
+
+* **code-review:** pin title refresh in plan contract ([2018fcd](https://github.com/awinogradov/code-assistants/commit/2018fcd79e6c231d4ea7a5a34292972142da8d9b))
 </file>
 
 <file path=".github/actions/code-review-action/src/github/githubReview.test.ts">
@@ -15946,6 +15979,34 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [6.0.1](https://github.com/awinogradov/code-assistants/compare/code-review-action@v6.0.0...code-review-action@v6.0.1) (2026-08-12)
+
+## Release Notes
+
+The `linear-plan` skill now keeps Linear ticket titles accurate by refreshing rough or placeholder titles with a clear, business-friendly name once a plan is saved.
+
+## 🐛 Bug Fixes
+
+### Linear Ticket Title Refresh Restored
+
+When the `linear-plan` skill stores a plan, it now updates the Linear ticket title to reflect the actual scope of work — replacing rough or auto-generated placeholder titles with a clear, business-meaningful name. Titles that are already accurate are left untouched. This ensures your Linear board stays readable without manual cleanup after plans are created.
+
+<details><summary>Related issues</summary>
+
+- [#578: Restore Linear issue title updates in the linear-plan skill](https://github.com/awinogradov/code-assistants/issues/578)
+- [#579: Refresh the Linear ticket title when a plan is stored](https://github.com/awinogradov/code-assistants/pull/579)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #578 | [#579](https://github.com/awinogradov/code-assistants/pull/579) | @awinogradov |
+
+### Tests
+
+* **code-review:** pin title refresh in plan contract ([2018fcd](https://github.com/awinogradov/code-assistants/commit/2018fcd79e6c231d4ea7a5a34292972142da8d9b))
 ## [6.0.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v5.1.0...code-review-action@v6.0.0) (2026-08-10)
 
 ## Release Notes
@@ -17623,7 +17684,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/package.json">
 {
   "name": "@code-assistants/code-review-action",
-  "version": "6.0.0",
+  "version": "6.0.1",
   "description": "Composite GitHub Action that runs AI code review on pull requests via Claude Code.",
   "private": true,
   "type": "module",
@@ -17659,7 +17720,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/README.md">
 # Code review action
 
-[![GitHub Release](https://img.shields.io/badge/release-v6.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v6.0.1-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that runs AI code review on pull requests using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Has two modes:
@@ -17843,7 +17904,7 @@ uses: awinogradov/code-assistants/.github/actions/code-review-action@v1
 </file>
 
 <file path=".github/actions/code-review-action/version">
-6.0.0
+6.0.1
 </file>
 
 <file path=".github/actions/code-review-cost-monitor/.release_notes/0.1.0.md">
@@ -41625,7 +41686,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "5.1.0",
+  "version": "5.2.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -43810,6 +43871,40 @@ If no `CODE_REVIEW.md` exists at the repo root, behaviour is unchanged — the p
 ### Features
 
 * **autopilot:** use consumer review rules file first ([cd92372](https://github.com/awinogradov/code-assistants/commit/cd92372230302da1e9094d562c83c4510de037e8))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/5.2.0.md">
+## [5.2.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v5.1.0...autopilot@v5.2.0) (2026-08-12)
+
+## Release Notes
+
+The `linear-plan` skill now keeps your Linear ticket titles accurate automatically when a plan is stored.
+
+## ✨ What's New
+
+### Linear Ticket Titles Stay in Sync with Your Plans
+
+When you store a plan using the `linear-plan` skill, it now refreshes the Linear ticket title to reflect a clear, business-readable summary derived from the plan itself. If the ticket already has an accurate title, it's left untouched — so there's no risk of overwriting something intentional.
+
+This restores behaviour that had been lost, meaning your Linear board stays meaningful without any manual title cleanup after planning sessions.
+
+<details><summary>Related issues</summary>
+
+- [#578: Restore Linear issue title updates in the linear-plan skill](https://github.com/awinogradov/code-assistants/issues/578)
+- [#579: Refresh the Linear ticket title when a plan is stored](https://github.com/awinogradov/code-assistants/pull/579)
+
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #578 | [#579](https://github.com/awinogradov/code-assistants/pull/579) | @awinogradov |
+
+### Features
+
+* **linear-plan:** refresh ticket title during store ([108c0bd](https://github.com/awinogradov/code-assistants/commit/108c0bda9eefb5f619cdb3ccd19281dd87c66c2b))
 </file>
 
 <file path="claude-plugins/autopilot/agents/analyze-pr-commits.md">
@@ -56299,6 +56394,37 @@ Before writing any output that mentions a file, standard, section, commit, or is
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [5.2.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v5.1.0...autopilot@v5.2.0) (2026-08-12)
+
+## Release Notes
+
+The `linear-plan` skill now keeps your Linear ticket titles accurate automatically when a plan is stored.
+
+## ✨ What's New
+
+### Linear Ticket Titles Stay in Sync with Your Plans
+
+When you store a plan using the `linear-plan` skill, it now refreshes the Linear ticket title to reflect a clear, business-readable summary derived from the plan itself. If the ticket already has an accurate title, it's left untouched — so there's no risk of overwriting something intentional.
+
+This restores behaviour that had been lost, meaning your Linear board stays meaningful without any manual title cleanup after planning sessions.
+
+<details><summary>Related issues</summary>
+
+- [#578: Restore Linear issue title updates in the linear-plan skill](https://github.com/awinogradov/code-assistants/issues/578)
+- [#579: Refresh the Linear ticket title when a plan is stored](https://github.com/awinogradov/code-assistants/pull/579)
+
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #578 | [#579](https://github.com/awinogradov/code-assistants/pull/579) | @awinogradov |
+
+### Features
+
+* **linear-plan:** refresh ticket title during store ([108c0bd](https://github.com/awinogradov/code-assistants/commit/108c0bda9eefb5f619cdb3ccd19281dd87c66c2b))
 ## [5.1.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v5.0.0...autopilot@v5.1.0) (2026-08-11)
 
 ## Release Notes
@@ -58440,14 +58566,14 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
   "release": {
     "type": "claude-plugin"
   },
-  "version": "5.1.0"
+  "version": "5.2.0"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v5.1.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v5.2.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -58915,7 +59041,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-5.1.0
+5.2.0
 </file>
 
 <file path="docs/01-workspace-structure.md">
