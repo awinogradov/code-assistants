@@ -2,7 +2,7 @@
 
 Reference for [`plan/SKILL.md`](../SKILL.md) and [`run/SKILL.md`](../../run/SKILL.md). Defined once here so the two callers cannot drift.
 
-Everything below runs **after** [`gather-context`](../../gather-context/SKILL.md) has returned the Context Map. That map is the codebase read: reason over it rather than re-reading the tree. Reach for an extra lookup only when the map is genuinely missing something the work turns on — a targeted query against the map's snapshot source (a `graphify` query, or `mcp__repomix__grep_repomix_output` against its `outputId`), or a live Grep/Read for working-tree code the snapshot cannot show — then fold the result back into the map.
+Everything below runs **after** [`gather-context`](../../gather-context/SKILL.md) has returned the Context Map. That map is the codebase read: reason over it rather than re-reading the tree. Reach for an extra lookup only when the map is genuinely missing something the work turns on — a targeted query against the map's snapshot source (a `graphify` query, or `mcp__repomix__grep_repomix_output` against its `outputId`), or a live Grep/Read carrying its `context-fallback: <reason> <path>` note per the [shared block's taxonomy](../../shared-rules/references/repomix-snapshot.md) for working-tree code the snapshot cannot show — then fold the result back into the map.
 
 Resolve the three stack values from [stack-deltas.md](stack-deltas.md) wherever a step says "your stack's delta".
 
