@@ -28,13 +28,15 @@
  *    failure was a stored-plan run, so binding only the fresh-plan path would leave the
  *    reported bug reachable.
  *
- * What this CANNOT prove: that a session honours the contract at runtime. CI sees text
+ * This file does run in CI: `.github/workflows/test.yml` runs `bun run test` on every
+ * pull request to `main`, unfiltered by path, and this action's own `test` script is
+ * `bun test`. Deleting a guarded phrase therefore fails the Test check rather than
+ * relying on a reviewer to notice.
+ *
+ * What that CANNOT prove: that a session honours the contract at runtime. CI sees text
  * in a file, nothing more — the same limit sharedRulesInvocation.test.ts states for its
- * own presence checks. Worse here, no workflow runs `bun test` and neither husky hook
- * does either (pre-commit runs lint-staged, pre-push validates the branch name), so this
- * gates in review rather than in CI. Runtime evidence comes from the post-merge canary
- * recorded on the issue: post-selection direct-read counts compared against the audited
- * baseline.
+ * own presence checks. Runtime evidence comes from the post-merge canary recorded on the
+ * issue: post-selection direct-read counts compared against the audited baseline.
  */
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
