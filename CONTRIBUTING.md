@@ -331,7 +331,7 @@ Never use bare `git push --force` or `git push -f` — without the lease, the pu
 
 **A stale check is not a reason to touch history.** If a check failed against a stale or superseded event rather than against the code, say so on the pull request. Do not merge or rebase unrelated base-branch changes into the branch just to trigger a fresh event: the task did not require those changes, and the resulting diff no longer describes what the pull request does.
 
-If a merge commit already landed on the branch, remove it instead of building on it — `git rebase --onto <base-tip> <merge-commit> <branch>` replays only the branch's own commits — then republish with `git push --force-with-lease`.
+If a merge commit already landed on the branch, remove it instead of building on it — `git rebase <base-tip> <branch>` replays the branch's own commits and drops the merge — then republish with `git push --force-with-lease`.
 
 > [!IMPORTANT]
 > Enforced in CI by the `contributing-check` action, which fails a pull request whose commits merge the base branch. Merge commits inherited from base history are not flagged.

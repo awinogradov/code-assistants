@@ -106,6 +106,30 @@ describe("canonical forbidden-command regex", () => {
   });
 });
 
+// `--onto <merge-commit>` replays the range <merge-commit>..<branch>, so every
+// commit the branch made before the merge is an ancestor of the exclusion point
+// and is silently dropped: `A, B, M(merge), C` recovers as `C` alone. Both
+// encodings prescribed that form until a downstream review caught it. The
+// positive half of each case is what stops this guard passing vacuously once the
+// section is renamed or moved.
+describe("the recovery recipe keeps the branch's own commits", () => {
+  const recipe = "`git rebase <base-tip> <branch>`";
+  const destructive = "rebase --onto";
+
+  test.each([
+    ["the canonical block", blockPath],
+    ["CONTRIBUTING.md", contributingPath],
+  ])("%s prescribes the plain rebase and no --onto form", async (name, path) => {
+    const content = await readFile(path, "utf8");
+    expect(`${name} prescribes the recipe: ${content.includes(recipe)}`).toBe(
+      `${name} prescribes the recipe: true`,
+    );
+    expect(`${name} mentions --onto: ${content.includes(destructive)}`).toBe(
+      `${name} mentions --onto: false`,
+    );
+  });
+});
+
 describe("prohibition wording survives every restatement", () => {
   test("the block states it as a heading", () => {
     expect(prohibition).toBeDefined();

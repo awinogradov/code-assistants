@@ -32,7 +32,7 @@ A push rejected as non-fast-forward is the same kind of condition. Report it; ne
 
 If a merge commit already exists on the branch, remove it rather than layering more history on top:
 
-- `git rebase --onto <base-tip> <merge-commit> <branch>` replays only the branch's own commits onto the current base tip; or
+- `git rebase <base-tip> <branch>` replays the branch's own commits onto the current base tip and drops the merge; or
 - reset to the fork point and cherry-pick the branch's commits back.
 
 Either way the branch is republished with `git push --force-with-lease`, and only when the branch is agent-owned.
