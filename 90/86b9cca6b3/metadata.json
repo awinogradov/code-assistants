@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "9086b9cca6b3",
+  "strategy": "manual-commit",
+  "branch": "issue-586-enforce-context-source",
+  "checkpoints_count": 2,
+  "files_touched": [
+    ".github/actions/code-review-action/src/contextSourceContract.test.ts",
+    "docs/17-linear-run-skill.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/90/86b9cca6b3/0/metadata.json",
+      "transcript": "/90/86b9cca6b3/0/full.jsonl",
+      "compact_transcript": "/90/86b9cca6b3/0/transcript.jsonl",
+      "content_hash": "/90/86b9cca6b3/0/content_hash.txt",
+      "prompt": "/90/86b9cca6b3/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 6499,
+    "cache_creation_tokens": 305089,
+    "cache_read_tokens": 19122490,
+    "output_tokens": 100958,
+    "api_call_count": 90
+  }
+}
