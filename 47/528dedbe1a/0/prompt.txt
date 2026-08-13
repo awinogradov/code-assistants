@@ -1,0 +1,16 @@
+<task-notification>
+<task-id>bt0tlgqg0</task-id>
+<summary>Monitor event: "PR 588 review decision and CI check outcomes"</summary>
+<event>REVIEW: REVIEW_REQUIRED</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bt0tlgqg0</task-id>
+<summary>Monitor event: "PR 588 review decision and CI check outcomes"</summary>
+<event>REVIEW: CHANGES_REQUESTED
+FINAL: review=CHANGES_REQUESTED, all checks settled — monitoring ends</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>

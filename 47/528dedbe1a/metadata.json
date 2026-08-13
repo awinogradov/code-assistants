@@ -1,0 +1,24 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "47528dedbe1a",
+  "strategy": "manual-commit",
+  "branch": "issue-586-enforce-context-source",
+  "checkpoints_count": 2,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/47/528dedbe1a/0/metadata.json",
+      "transcript": "/47/528dedbe1a/0/full.jsonl",
+      "compact_transcript": "/47/528dedbe1a/0/transcript.jsonl",
+      "content_hash": "/47/528dedbe1a/0/content_hash.txt",
+      "prompt": "/47/528dedbe1a/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 6509,
+    "cache_creation_tokens": 309356,
+    "cache_read_tokens": 20742688,
+    "output_tokens": 104023,
+    "api_call_count": 95
+  }
+}
