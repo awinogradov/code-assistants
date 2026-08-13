@@ -169,7 +169,9 @@ In fresh-plan mode, the shared planning pipeline produces and scores a harness p
 
 [`contextSourceContract`](../.github/actions/code-review-action/src/contextSourceContract.test.ts) guards the context-source gate from both ends: that `gather-context`'s `Snapshot` field carries the trace line at all, and that this skill reads the shared block, emits the literal stop, marks it fatal, and binds both plan modes. The mode assertions anchor on the obligation's own sentence rather than on the phase heading — both mode names appear throughout Phase 5, so a phase-wide search would pass with the obligation missing entirely.
 
-**What no test can show:** that the gate runs, or that the model honours it. CI sees text in a file. Nothing under `.github/workflows/` runs `bun test`, and neither husky hook does either — `pre-commit` runs lint-staged and `pre-push` validates the branch name — so the guard gates in review. Because this repository configures no `linear` tracker and commits no graphify graph, this skill cannot execute here at all, which puts the issue's two runtime acceptance criteria (a real graph query before any direct traversal, and a per-holder trace assertion) out of reach of any check in this repository. Runtime evidence comes from a dry run recorded on the pull request.
+Both guards run in CI. [`test.yml`](../.github/workflows/test.yml) runs `bun run test` on every pull request to `main` and is deliberately not path-filtered, precisely because these tests guard markdown — so a docs-only change that breaks a pinned phrase fails the Test check.
+
+**What no test can show:** that the gate runs, or that the model honours it. CI sees text in a file. Because this repository configures no `linear` tracker and commits no graphify graph, this skill cannot execute here at all, which puts the issue's two runtime acceptance criteria (a real graph query before any direct traversal, and a per-holder trace assertion) out of reach of any check in this repository. Runtime evidence comes from a dry run recorded on the pull request.
 
 ## Where to look in the code
 
