@@ -1,6 +1,6 @@
 ---
 name: shared-rules
-description: Canonical home for instruction blocks shared by several autopilot skills and agents — reference formatting (RFC-0001), AskUserQuestion formatting and content-preview contract, codebase context acquisition (graphify → repomix → default tools), agent structured output, issue body grammar, Linear MCP access, peer CLI delegation, and PR title/body grammar. Read the one block you need instead of carrying a copy.
+description: Canonical home for instruction blocks shared by several autopilot skills and agents — reference formatting (RFC-0001), AskUserQuestion formatting and content-preview contract, codebase context acquisition (graphify → repomix → default tools), agent structured output, issue body grammar, Linear MCP access, peer CLI delegation, git history policy, and PR title/body grammar. Read the one block you need instead of carrying a copy.
 ---
 
 # Shared Rules
@@ -31,6 +31,7 @@ Apply the block's content **verbatim**. It is an instruction, not a summary to p
 | Issue body grammar               | [issue-body-grammar.md](./references/issue-body-grammar.md)             | before generating a GitHub or Linear issue body                                     |
 | Linear MCP access                | [linear-mcp-access.md](./references/linear-mcp-access.md)               | before calling any Linear MCP tool                                                  |
 | Peer CLI delegation              | [peer-cli-delegation.md](./references/peer-cli-delegation.md)           | before delegating a task to a peer AI CLI and evaluating its output                 |
+| Git history policy               | [git-history-policy.md](./references/git-history-policy.md)             | before running any command that changes history or rewrites a remote branch         |
 | PR title and branch grammar      | [pr-title-grammar.md](./references/pr-title-grammar.md)                 | before generating or validating a PR title or branch name                           |
 | PR body grammar                  | [pr-body-grammar.md](./references/pr-body-grammar.md)                   | before generating or updating a PR description                                      |
 

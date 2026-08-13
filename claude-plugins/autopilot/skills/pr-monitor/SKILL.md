@@ -254,6 +254,8 @@ Parse the JSON output. For each check:
 - `bucket === "cancel"` → treat as pending (likely cancelled by a new push)
 - `bucket === "fail"` → CI failure detected
 
+A check that reads a stale or superseded event — one whose failure is about the event and not about the code — is reported to the user, never refreshed by changing the branch. Do not merge or rebase base-branch changes into the PR to provoke a fresh `synchronize` event: the task did not require those changes, and the resulting diff misrepresents the pull request. This is the failure mode the git history policy exists to prevent.
+
 **If any checks have `bucket === "fail"`:**
 
 For each failing check, extract the run-id from the `link` field: parse the URL path segment after `/runs/` and before `/job/` (or end of path). Compare with `fixAttempts[checkName].lastRunId` — if the run-id is different, reset `attempts` to 0 for that check (new run detected).
@@ -274,6 +276,7 @@ For each failing check, extract the run-id from the `link` field: parse the URL 
    ```bash
    git push
    ```
+   Read [`git-history-policy.md`](../shared-rules/references/git-history-policy.md) before this push. A plain fast-forward is all this step is allowed to do: if the push is rejected as non-fast-forward, report it and stop rather than merging the base branch or force-pushing.
 5. Set `cooldownRemaining = 3` (skip CI checks for next 3 poll cycles)
 6. Update `fixAttempts[checkName] = { attempts: N+1, lastRunId: <run-id> }`
 7. Output: "CI fix pushed. Cooling down for 3 poll cycles before re-checking..."

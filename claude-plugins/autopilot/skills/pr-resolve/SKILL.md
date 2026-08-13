@@ -233,6 +233,8 @@ Invoke `Skill(autopilot:commits-create)`. Pass the modification list as the comm
 git push
 ```
 
+Read [`git-history-policy.md`](../shared-rules/references/git-history-policy.md) before running anything else here. The push above is a plain fast-forward and needs nothing more; a rejection is the case that matters. If it is rejected as non-fast-forward, report that and stop — never reconcile by merging the base branch, and never retry with a force push.
+
 ---
 
 ## Phase 5: Reply to Review Threads

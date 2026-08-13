@@ -306,7 +306,7 @@ Stack is not relevant for PR hygiene — these apply universally.
 - <a id="CHECK-PR-001"></a>**CHECK-PR-001** (blocker) — Diff matches PR title/description
 - <a id="CHECK-PR-002"></a>**CHECK-PR-002** (suggestion) — PR is atomic — single concern
 - <a id="CHECK-PR-003"></a>**CHECK-PR-003** (suggestion) — PR is reviewable size (<1000 lines of meaningful diff)
-- <a id="CHECK-PR-004"></a>**CHECK-PR-004** (suggestion) — No merge commits in feature branch
+- <a id="CHECK-PR-004"></a>**CHECK-PR-004** (blocker) — No merge commits in feature branch
 - <a id="CHECK-PR-005"></a>**CHECK-PR-005** (suggestion) — No "fix review" or "address feedback" commits
 - <a id="CHECK-PR-006"></a>**CHECK-PR-006** (suggestion) — No unrelated file changes
 - <a id="CHECK-PR-007"></a>**CHECK-PR-007** (suggestion) — Description explains "why", not just "what"

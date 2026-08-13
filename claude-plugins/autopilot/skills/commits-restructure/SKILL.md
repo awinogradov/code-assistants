@@ -125,6 +125,8 @@ After the commits-create skill completes, output summary:
 
 The original commits were on the remote before the soft reset. The new restructured commits have different SHAs, so a regular push will be rejected.
 
+Read [`git-history-policy.md`](../shared-rules/references/git-history-policy.md) before offering the push: it is what makes `--force-with-lease` the only sanctioned form here, and it is what forbids rewriting this branch at all when someone else owns it. If the branch is shared or human-owned, stop and report instead of presenting the dialog below.
+
 Use **AskUserQuestion tool** to confirm.
 
 **Formatting Note:** Read [`askuserquestion-format.md`](../shared-rules/references/askuserquestion-format.md) and apply it before composing the `question` parameter.
