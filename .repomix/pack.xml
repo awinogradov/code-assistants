@@ -478,6 +478,7 @@ claude-plugins/
       5.0.0.md
       5.1.0.md
       5.2.0.md
+      5.3.0.md
     agents/
       analyze-pr-commits.md
       analyze-staged-changes.md
@@ -41794,7 +41795,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "5.2.0",
+  "version": "5.3.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -44013,6 +44014,41 @@ This restores behaviour that had been lost, meaning your Linear board stays mean
 ### Features
 
 * **linear-plan:** refresh ticket title during store ([108c0bd](https://github.com/awinogradov/code-assistants/commit/108c0bda9eefb5f619cdb3ccd19281dd87c66c2b))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/5.3.0.md">
+## [5.3.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v5.2.0...autopilot@v5.3.0) (2026-08-13)
+
+## Release Notes
+
+Autopilot sessions now enforce a single codebase-context source per run, eliminating redundant file reads when a Repomix pack or graph is already attached.
+
+## ✨ What's New
+
+### Single-Source Context Contract
+
+Autopilot sessions now select exactly one codebase-context source at the start of each run — either a graphify graph, an attached Repomix pack, or the default tool-based discovery — and record that selection as a `context-source:` trace line in the session output. This means Claude will no longer re-read files it already has access to through the selected source, reducing token consumption and keeping sessions faster and more predictable.
+
+When a direct file read outside the selected source is genuinely necessary (for example, to fetch a file not covered by the pack), the agent now emits a `context-fallback:` reason drawn from a fixed six-token taxonomy, giving you a machine-readable signal to audit where and why fallbacks occur.
+
+Oversized Repomix packs that previously caused the agent to abandon the pack and fall back to full repository rediscovery are now handled gracefully: the agent switches to bounded grep and ranged reads to stay within the selected source rather than blowing out to a wider scan.
+
+<details><summary>Related issues</summary>
+
+- [#582: Stop re-reading files already present in the attached Repomix pack](https://github.com/awinogradov/code-assistants/issues/582)
+- [#583: Serve codebase context from a single selected source with recorded fallbacks](https://github.com/awinogradov/code-assistants/pull/583)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #582 | [#583](https://github.com/awinogradov/code-assistants/pull/583) | @awinogradov |
+
+### Features
+
+* **shared-rules:** add exclusive context-source contract ([33d0da7](https://github.com/awinogradov/code-assistants/commit/33d0da75b1f8581f5f44d845e3bca8fccf2b0543))
 </file>
 
 <file path="claude-plugins/autopilot/agents/analyze-pr-commits.md">
@@ -56529,6 +56565,38 @@ Before writing any output that mentions a file, standard, section, commit, or is
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [5.3.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v5.2.0...autopilot@v5.3.0) (2026-08-13)
+
+## Release Notes
+
+Autopilot sessions now enforce a single codebase-context source per run, eliminating redundant file reads when a Repomix pack or graph is already attached.
+
+## ✨ What's New
+
+### Single-Source Context Contract
+
+Autopilot sessions now select exactly one codebase-context source at the start of each run — either a graphify graph, an attached Repomix pack, or the default tool-based discovery — and record that selection as a `context-source:` trace line in the session output. This means Claude will no longer re-read files it already has access to through the selected source, reducing token consumption and keeping sessions faster and more predictable.
+
+When a direct file read outside the selected source is genuinely necessary (for example, to fetch a file not covered by the pack), the agent now emits a `context-fallback:` reason drawn from a fixed six-token taxonomy, giving you a machine-readable signal to audit where and why fallbacks occur.
+
+Oversized Repomix packs that previously caused the agent to abandon the pack and fall back to full repository rediscovery are now handled gracefully: the agent switches to bounded grep and ranged reads to stay within the selected source rather than blowing out to a wider scan.
+
+<details><summary>Related issues</summary>
+
+- [#582: Stop re-reading files already present in the attached Repomix pack](https://github.com/awinogradov/code-assistants/issues/582)
+- [#583: Serve codebase context from a single selected source with recorded fallbacks](https://github.com/awinogradov/code-assistants/pull/583)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #582 | [#583](https://github.com/awinogradov/code-assistants/pull/583) | @awinogradov |
+
+### Features
+
+* **shared-rules:** add exclusive context-source contract ([33d0da7](https://github.com/awinogradov/code-assistants/commit/33d0da75b1f8581f5f44d845e3bca8fccf2b0543))
 ## [5.2.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v5.1.0...autopilot@v5.2.0) (2026-08-12)
 
 ## Release Notes
@@ -58701,14 +58769,14 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
   "release": {
     "type": "claude-plugin"
   },
-  "version": "5.2.0"
+  "version": "5.3.0"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v5.2.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v5.3.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -59176,7 +59244,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-5.2.0
+5.3.0
 </file>
 
 <file path="docs/01-workspace-structure.md">
