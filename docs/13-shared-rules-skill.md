@@ -53,6 +53,7 @@ Why `Read` and not the `Skill` tool: a skill loads its whole `SKILL.md`, so ther
 | Codebase context acquisition    | `repomix-snapshot.md`       | `includePatterns`       |
 | Agent structured output         | `agent-json-output.md`      | —                       |
 | Linear MCP access               | `linear-mcp-access.md`      | the bare tool-name list |
+| Git history policy              | `git-history-policy.md`     | —                       |
 | PR title and branch grammar     | `pr-title-grammar.md`       | —                       |
 | PR body grammar                 | `pr-body-grammar.md`        | —                       |
 
