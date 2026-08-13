@@ -2,6 +2,58 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [6.3.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v6.2.0...code-review-action@v6.3.0) (2026-08-13)
+
+## Release Notes
+
+The AI reviewer will now flag any PR branch that was synchronized by merging the base branch into it, and agents are instructed to rebase with `--force-with-lease` instead.
+
+## ✨ What's New
+
+### Base-Branch Merge Policy Enforcement
+
+The shared reviewer rules now explicitly forbid the pattern of merging `main` (or your base branch) into a feature branch to stay up to date. Agents operating in `react` mode will refuse that approach and will rebase with `--force-with-lease` instead. This keeps PR history clean and avoids noisy merge commits that obscure what a branch actually changes.
+
+<details><summary>Related issues</summary>
+
+- [#592: Forbid merging the base branch into pull-request branches](https://github.com/awinogradov/code-assistants/issues/592)
+</details>
+
+## 🐛 Bug Fixes
+
+### History Gate Now Applies Only to Topic Branches
+
+The preflight check that validates commit history was previously evaluating commits too broadly, which could cause false positives on base branches where inherited merge commits are expected and legitimate. It now correctly scopes that gate to topic (pull-request) branches only, so merge commits that exist in the base branch history no longer cause a spurious failure.
+
+<details><summary>Related issues</summary>
+
+- [#592: Forbid merging the base branch into pull-request branches](https://github.com/awinogradov/code-assistants/issues/592)
+</details>
+
+## 📚 Documentation & Settings Updates
+
+### Updating Pull-Request Branches Guidance
+
+The `CONTRIBUTING.md` gains a new "Updating pull-request branches" section that spells out the distinction between *landing* a PR (merging into base) and *synchronizing* a PR's head branch (which must be a rebase, not a merge). The contributing check that detects base-branch merge commits in a PR is now treated as a **blocker**, not a suggestion, so reviewers cannot approve past it without addressing the finding.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #592 | [#593](https://github.com/awinogradov/code-assistants/pull/593) | @awinogradov |
+
+### Features
+
+* **shared-rules:** forbid merging the base branch ([2e83d24](https://github.com/awinogradov/code-assistants/commit/2e83d242b3f9c34b7a4dec15fe1068a790d58a2f))
+
+### Bug Fixes
+
+* **preflight-check:** scope the history gate to topic branches ([44dcb31](https://github.com/awinogradov/code-assistants/commit/44dcb3159eff41ee02443e51f84cfadd02bb1b37))
+
+### Tests
+
+* **code-review:** guard the git history policy ([11e5bb2](https://github.com/awinogradov/code-assistants/commit/11e5bb290e4882001b80fa654b4fb9803f7eafa5))
 ## [6.2.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v6.1.0...code-review-action@v6.2.0) (2026-08-13)
 
 ## Release Notes
