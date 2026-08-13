@@ -482,6 +482,7 @@ claude-plugins/
       5.1.0.md
       5.2.0.md
       5.3.0.md
+      5.4.0.md
     agents/
       analyze-pr-commits.md
       analyze-staged-changes.md
@@ -42225,7 +42226,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "5.3.0",
+  "version": "5.4.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -44479,6 +44480,49 @@ Oversized Repomix packs that previously caused the agent to abandon the pack and
 ### Features
 
 * **shared-rules:** add exclusive context-source contract ([33d0da7](https://github.com/awinogradov/code-assistants/commit/33d0da75b1f8581f5f44d845e3bca8fccf2b0543))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/5.4.0.md">
+## [5.4.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v5.3.0...autopilot@v5.4.0) (2026-08-13)
+
+## Release Notes
+
+The most impactful change in this release is that `linear-run` now enforces that codebase context is always sourced through Graphify or Repomix — runs that skip source selection fail fast with a clear error instead of silently falling back to ordinary file search.
+
+## ✨ What's New
+
+### Smarter Graphify Query Refinement
+
+When Graphify returns a truncated or empty graph answer during a context pass, Autopilot now automatically retries with a narrower query before giving up and falling back to file search. Previously, the first answer was treated as complete even if it was cut short. Now, the context pass ends with a bounded shortlist of relevant files, and a `graphify-trace:` line is recorded capturing query count, truncation status, shortlist size, and any reads outside the shortlist. The Context Map's Snapshot section also now carries the Graphify shortlist forward, so downstream phases (plan, run) reuse what the graph already found rather than re-querying from scratch.
+
+<details><summary>Related issues</summary>
+
+- [#587: Make Graphify context gathering refine broad or truncated queries](https://github.com/awinogradov/code-assistants/issues/587)
+- [#589: Refine Graphify queries before falling back to file search](https://github.com/awinogradov/code-assistants/pull/589)
+</details>
+
+### Enforced Context Source in Linear Runs
+
+`/autopilot:linear-run` now enforces that a codebase context source — Graphify or Repomix — was actively selected and recorded during the context phase. If a run reaches the planning phase without a verified source on record, it stops immediately with a clear error. This applies to both stored-plan and fresh-plan Linear run flows. The previous behaviour allowed runs to silently re-scan the repository using ordinary file search when no source was confirmed, which could produce inconsistent or lower-quality plans without any warning.
+
+<details><summary>Related issues</summary>
+
+- [#586: Make linear-run enforce Graphify or Repomix context selection](https://github.com/awinogradov/code-assistants/issues/586)
+- [#588: Make Linear runs prove they used the codebase source they selected](https://github.com/awinogradov/code-assistants/pull/588)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #587 | [#589](https://github.com/awinogradov/code-assistants/pull/589) | @awinogradov |
+| #586 | [#588](https://github.com/awinogradov/code-assistants/pull/588) | @awinogradov |
+
+### Features
+
+* **linear-run:** fail the context phase without a source ([35b2753](https://github.com/awinogradov/code-assistants/commit/35b2753643da7522752d345267e9ca58358af99b))
+* **shared-rules:** refine truncated graphify queries ([2bf3bf0](https://github.com/awinogradov/code-assistants/commit/2bf3bf0e515746bee6bf3842790fb6767f8cd04f))
 </file>
 
 <file path="claude-plugins/autopilot/agents/analyze-pr-commits.md">
@@ -57040,6 +57084,46 @@ Before writing any output that mentions a file, standard, section, commit, or is
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [5.4.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v5.3.0...autopilot@v5.4.0) (2026-08-13)
+
+## Release Notes
+
+The most impactful change in this release is that `linear-run` now enforces that codebase context is always sourced through Graphify or Repomix — runs that skip source selection fail fast with a clear error instead of silently falling back to ordinary file search.
+
+## ✨ What's New
+
+### Smarter Graphify Query Refinement
+
+When Graphify returns a truncated or empty graph answer during a context pass, Autopilot now automatically retries with a narrower query before giving up and falling back to file search. Previously, the first answer was treated as complete even if it was cut short. Now, the context pass ends with a bounded shortlist of relevant files, and a `graphify-trace:` line is recorded capturing query count, truncation status, shortlist size, and any reads outside the shortlist. The Context Map's Snapshot section also now carries the Graphify shortlist forward, so downstream phases (plan, run) reuse what the graph already found rather than re-querying from scratch.
+
+<details><summary>Related issues</summary>
+
+- [#587: Make Graphify context gathering refine broad or truncated queries](https://github.com/awinogradov/code-assistants/issues/587)
+- [#589: Refine Graphify queries before falling back to file search](https://github.com/awinogradov/code-assistants/pull/589)
+</details>
+
+### Enforced Context Source in Linear Runs
+
+`/autopilot:linear-run` now enforces that a codebase context source — Graphify or Repomix — was actively selected and recorded during the context phase. If a run reaches the planning phase without a verified source on record, it stops immediately with a clear error. This applies to both stored-plan and fresh-plan Linear run flows. The previous behaviour allowed runs to silently re-scan the repository using ordinary file search when no source was confirmed, which could produce inconsistent or lower-quality plans without any warning.
+
+<details><summary>Related issues</summary>
+
+- [#586: Make linear-run enforce Graphify or Repomix context selection](https://github.com/awinogradov/code-assistants/issues/586)
+- [#588: Make Linear runs prove they used the codebase source they selected](https://github.com/awinogradov/code-assistants/pull/588)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #587 | [#589](https://github.com/awinogradov/code-assistants/pull/589) | @awinogradov |
+| #586 | [#588](https://github.com/awinogradov/code-assistants/pull/588) | @awinogradov |
+
+### Features
+
+* **linear-run:** fail the context phase without a source ([35b2753](https://github.com/awinogradov/code-assistants/commit/35b2753643da7522752d345267e9ca58358af99b))
+* **shared-rules:** refine truncated graphify queries ([2bf3bf0](https://github.com/awinogradov/code-assistants/commit/2bf3bf0e515746bee6bf3842790fb6767f8cd04f))
 ## [5.3.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v5.2.0...autopilot@v5.3.0) (2026-08-13)
 
 ## Release Notes
@@ -59244,14 +59328,14 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
   "release": {
     "type": "claude-plugin"
   },
-  "version": "5.3.0"
+  "version": "5.4.0"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v5.3.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v5.4.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -59719,7 +59803,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-5.3.0
+5.4.0
 </file>
 
 <file path="docs/01-workspace-structure.md">
