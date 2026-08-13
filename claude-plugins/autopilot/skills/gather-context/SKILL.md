@@ -64,7 +64,7 @@ Issue **every** call below in a **single message** so they run concurrently. Do 
 
 Only now is the task's subject matter known, so this pass runs after the fan-out returns.
 
-Search the snapshot for the implementations, patterns, and tests the change touches, using the read contract of the selected source — `graphify` queries when the graph tier was selected, `mcp__repomix__grep_repomix_output` with ranged `mcp__repomix__read_repomix_output` when the repomix tier was, or `Grep`/`Glob`/`Read` directly when only default tools remain. A graph or pack reflects the base at its last refresh, so reach for live Grep/Glob/Read **only** for working-tree code it cannot show — `digest-branch-diff` already reports what is in flight — and record each such read with the one-line `context-fallback: <reason> <path>` note from the [shared block's taxonomy](../shared-rules/references/repomix-snapshot.md) (here usually `post-snapshot-mutation`). Do not crawl the tree for anything the selected source answers.
+Search the snapshot for the implementations, patterns, and tests the change touches, using the read contract of the selected source — `graphify` queries when the graph tier was selected, `mcp__repomix__grep_repomix_output` with ranged `mcp__repomix__read_repomix_output` when the repomix tier was, or `Grep`/`Glob`/`Read` directly when only default tools remain. On the graph tier that read contract is the block's [query discipline](../shared-rules/references/repomix-snapshot.md): a truncated or empty first answer is refined with a narrower graph operation before any file read, and the pass ends at the shortlist and the `graphify-trace:` line [Phase 3](#phase-3-emit-the-context-map) carries. A graph or pack reflects the base at its last refresh, so reach for live Grep/Glob/Read **only** for working-tree code it cannot show — `digest-branch-diff` already reports what is in flight — and record each such read with the one-line `context-fallback: <reason> <path>` note from the [shared block's taxonomy](../shared-rules/references/repomix-snapshot.md) (here usually `post-snapshot-mutation`). Do not crawl the tree for anything the selected source answers.
 
 **At `broad` scope there is no change to narrow to**, so read the snapshot breadth-first instead: the principal modules and their boundaries, the entry points, and the conventions that govern them. Fill `Relevant files` and `Patterns to mirror` at that altitude — the modules a newcomer must know and the conventions they must copy, rather than the handful a specific edit would touch.
 
@@ -90,12 +90,13 @@ Emit these sections in this order. This is the caller's entire view of the repos
 **Applicable standards** — [id + status (mark "defaulted" when inferred) + one line on why the plan must honor it; then dropped candidates; "none" when nothing matched]
 **Stack** — [agents.rules value, and the deltas it resolves to]
 **Git state** — [branch, isWorktree, isStaleMerged, baseAhead]
-**Snapshot** — [the `context-source:` line emitted in Phase 1, verbatim — for later phases to reuse]
+**Snapshot** — [the `context-source:` line emitted in Phase 1, verbatim — for later phases to reuse; on the graph tier, also the shortlist entries with the relationship that justifies each, and the pass's `graphify-trace:` line]
 ```
 
-Two fields carry decisions the caller would otherwise recompute badly:
+Three fields carry decisions the caller would otherwise recompute badly:
 
 - **`isStaleMerged`** — a branch whose commits already landed upstream under rewritten SHAs still shows a non-empty `git log origin/main..HEAD`. A caller testing only for emptiness reads a finished branch as active work. Trust this field over a commit count.
 - **Applicable standards** — this doubles as the plan's audit log of what it planned against, including what the selection cap dropped. At `Scope: primed` the digest did not run, so write it as supplied by the caller's validated brief and name that brief — never leave it reading `none`, which would claim no standard applied rather than that one was sourced elsewhere.
+- **Snapshot on the graph tier** — the shortlist is what a later phase can actually reuse; the source name alone tells it where the context came from but not what the pass found, which is how a graph pass ends up repeated as a tree crawl. The `graphify-trace:` line travels with it so the caller can see how the shortlist was reached — a trace reading `truncated=yes queries=1` says the shortlist is the truncated first answer and should be treated as incomplete.
 
 When you write the Context Map, apply the reference-formatting rules in [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (RFC-0001, read it first) to every reference it contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.

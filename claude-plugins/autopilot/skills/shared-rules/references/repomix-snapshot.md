@@ -22,6 +22,42 @@ graphify explain "<Concept>"
 
 Graph queries are whole-repo by nature; the caller's `includePatterns` does not apply to this tier. Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review or when targeted queries do not surface enough context.
 
+<!-- graphify-refinement:start -->
+
+**Tier 1 query discipline — one query is not a lookup.** A graph is an iterative instrument, so a single broad question is the start of the pass, not the end of it. Scope the first query to the workspace, path, or domain when the task names one, then classify what came back:
+
+- **focused** — a usable answer with no truncation notice. Build the shortlist from it.
+- **truncated** — the answer is cut to fit the token budget. graphify v0.9.x announces this at the top of its output, e.g. `[!] TRUNCATED: showing 52 of 918 nodes`; treat any equivalent notice the installed CLI prints the same way. The answer may be among the cut nodes, so this is an incomplete lookup, not a negative result.
+- **empty** — no nodes matched, e.g. `No matching nodes found.`. The vocabulary missed, not the graph.
+- **error** — the CLI failed (non-zero exit, `error: graph file not found`). The tier is unusable.
+
+**Refine before you traverse.** On a truncated or empty answer, the next operation is another graph operation — narrowing it is the whole point of having a graph — issued **before any context-gathering file read**:
+
+- ask a narrower question naming the entity, symbol, or path the first answer surfaced;
+- constrain the relations with `--context <relation>` (repeatable) rather than widening the search;
+- go focused instead of broad: `graphify explain "<Symbol>"` for one node and its neighbors, `graphify path "<A>" "<B>"` for how two entities connect, and `graphify affected "<X>"` for reverse impact where `graphify --help` shows that subcommand;
+- on an empty answer, re-ask once in the codebase's own vocabulary (a file or symbol name rather than a concept).
+
+Raising `--budget` is a supplement, never the sole response to truncation: it re-floods the same broad answer instead of narrowing it, and the cut nodes were cut for a reason.
+
+An error answer refines nothing — fall through immediately.
+
+**Bounded, then done.** Spend at most three refinement queries after the first. The pass ends at a **shortlist** of at most ten files or entities, each carried with the relationship that justifies it (`src/app/AppShell.tsx — renders Sidebar, imports useLayout`). The shortlist is this tier's equivalent of an `outputId`: it is what the pass hands to whatever consumes it, and a consumer that receives only the source name received nothing reusable.
+
+Direct `Read` of repository content during the pass is limited to shortlisted entries — that is the tier's read contract, and it is how exact implementation detail is obtained once the graph has named where to look. Any other context-gathering read still carries its `context-fallback: <reason> <path>` line from the taxonomy below; reads made to edit a file, or to verify your own change, are not context gathering and need no line.
+
+Close the pass with one trace line:
+
+```
+graphify-trace: queries=<n> truncated=<yes|no> shortlist=<n> outside-reads=<n>
+```
+
+`queries` counts every graph invocation in the pass including the first; `truncated` is `yes` when any round came back truncated; `shortlist` is the number of entries the pass produced; `outside-reads` totals the `context-fallback:` lines emitted during it. A trace reading `truncated=yes` with `queries=1` is a contract violation on its face — it records a truncated answer that was never refined — and a reviewer should read it as one.
+
+When the three rounds are spent and no usable shortlist exists, this tier has failed rather than answered. Fall through and record the replacement as a single line, `context-source: repomix <outputId> superseding graphify (refinement exhausted)`, so exactly one source stays live and the abandoned one is visible rather than implied.
+
+<!-- graphify-refinement:end -->
+
 **Tier 2 — repomix pack.** Prefer the committed pack over re-packing — the refresh is merge-triggered, so the pack is current for anything already on the default branch.
 
 ```
