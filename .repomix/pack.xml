@@ -172,6 +172,7 @@ The content is organized as follows:
         classifyReaction.ts
         contextSourceContract.test.ts
         expertReviewContract.test.ts
+        gitHistoryPolicy.test.ts
         graphifyRefinementContract.test.ts
         linearPlanContract.test.ts
         linkResolution.test.ts
@@ -180,6 +181,7 @@ The content is organized as follows:
         markdownFiles.ts
         markedDetailsBlock.test.ts
         markedDetailsBlock.ts
+        mergeCommitGuard.test.ts
         planFileOutputPurity.test.ts
         prBodyReferenceFormatting.test.ts
         preflightChecks.ts
@@ -663,6 +665,7 @@ claude-plugins/
           agent-json-output.md
           askuserquestion-contract.md
           askuserquestion-format.md
+          git-history-policy.md
           issue-body-grammar.md
           linear-mcp-access.md
           peer-cli-delegation.md
@@ -9676,6 +9679,211 @@ describe("expert review contract", () => {
 });
 </file>
 
+<file path=".github/actions/code-review-action/src/gitHistoryPolicy.test.ts">
+/**
+ * Guards the git history policy across every encoding it has: the canonical
+ * shared block, the human-facing CONTRIBUTING.md section, the four generated
+ * rules/*.md files that sync downstream as AGENTS.md, the pr-review check that
+ * reports the same condition, and the CI step that fails it.
+ *
+ * The rule exists because an agent merged origin/main into a narrow feature
+ * branch to refresh a stale pull_request event, pulling 17 unrelated files into
+ * the diff. Prose alone did not stop it, so the block carries an executable
+ * forbidden-command regex and this test exercises it — a rule an agent has to
+ * interpret is a rule that gets interpreted away.
+ *
+ * What this CANNOT prove: that a skill actually read the block before running a
+ * command. CI sees text in a file, nothing more — the same limit
+ * sharedRulesInvocation.test.ts states for its own presence guard. What it can
+ * prove is that the pattern rejects the commands the policy names, that every
+ * restatement still carries the block's own prohibition sentence, and that the
+ * CI step exists with the dependabot guard the action's own comment demands.
+ * Whether the CI predicate is correct is mergeCommitGuard.test.ts's job.
+ *
+ * Vacuous-pass defences: the extracted regex and the extracted prohibition
+ * sentence must each be non-empty and above a minimum length, so a reworded
+ * heading or a dropped fence cannot extract "" and match everything.
+ */
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
+import { describe, expect, test } from "bun:test";
+
+const actionDir = join(import.meta.dirname, "..");
+const repoRoot = join(actionDir, "..", "..", "..");
+const skillsDir = join(repoRoot, "claude-plugins/autopilot/skills");
+const blockPath = join(skillsDir, "shared-rules/references/git-history-policy.md");
+const contributingPath = join(repoRoot, "CONTRIBUTING.md");
+const contributingCheckPath = join(repoRoot, ".github/actions/contributing-check/action.yml");
+const hygienePath = join(skillsDir, "pr-review/references/checks-pr-hygiene.md");
+const reviewSkillPath = join(skillsDir, "pr-review/SKILL.md");
+
+/** Shortest a real extraction can be; anything smaller means it went wrong. */
+const minExtractionLength = 40;
+
+/** The four generated rule files, all synced downstream as AGENTS.md. */
+const ruleFiles = [
+  "Bun.md",
+  "Bun+React+Tailwind.md",
+  "NodeJS+React.md",
+  "NodeJS+React+Tailwind.md",
+];
+
+/** Skills that run a push or a history-changing command and must load the block. */
+const consumingSkills = ["preflight-check", "commits-restructure", "pr-monitor", "pr-resolve"];
+
+/** Commands the policy names as forbidden; the regex must match every one. */
+const forbiddenCommands = [
+  "git merge main",
+  "git merge origin/main",
+  "git merge --no-ff origin/main",
+  "git pull origin main",
+  "git push --force",
+  "git push -f origin issue-592-forbid-base-merges",
+];
+
+/** Commands the policy permits; a match on any of these would block real work. */
+const permittedCommands = [
+  "git fetch origin main",
+  "git rebase origin/main",
+  "git push --force-with-lease",
+  "git push --force-with-lease --force-if-includes",
+  "git push -u origin issue-592-forbid-base-merges",
+  "git pull --rebase origin main",
+];
+
+/** The exact dependabot guard every step of contributing-check must carry. */
+const dependabotGuard = "if: ${{ github.event.pull_request.user.login != 'dependabot[bot]' }}";
+
+const block = await readFile(blockPath, "utf8");
+
+/** The single `text` fence under the canonical-regex heading. */
+const canonicalRegex = /#### Canonical forbidden-command regex[\s\S]*?```text\n(.+)\n```/.exec(
+  block,
+)?.[1];
+
+/** The block's own prohibition heading, reused as the phrase every restatement must carry. */
+const prohibition = /^#### (Never merge the base branch[^\n]*)$/m.exec(block)?.[1];
+
+describe("canonical forbidden-command regex", () => {
+  test("is extractable and substantial", () => {
+    expect(canonicalRegex).toBeDefined();
+    expect(canonicalRegex!.length).toBeGreaterThan(minExtractionLength);
+  });
+
+  test.each(forbiddenCommands)("rejects %s", (command) => {
+    expect(new RegExp(canonicalRegex!).test(command)).toBe(true);
+  });
+
+  test.each(permittedCommands)("permits %s", (command) => {
+    expect(new RegExp(canonicalRegex!).test(command)).toBe(false);
+  });
+
+  // The pattern cannot see which branch is checked out, so its scope has to be
+  // stated in prose. Without it a gate reads `git pull origin main` as a
+  // violation even on `main`, where it is an ordinary fast-forward — which is
+  // exactly the command preflight-check's own Phase 3 prescribes.
+  test("scopes itself to topic branches", () => {
+    expect(block).toContain("Evaluate it only while HEAD is on a topic branch");
+  });
+});
+
+describe("prohibition wording survives every restatement", () => {
+  test("the block states it as a heading", () => {
+    expect(prohibition).toBeDefined();
+    expect(prohibition!.length).toBeGreaterThan(minExtractionLength);
+  });
+
+  test("CONTRIBUTING.md carries the section and the block's prohibition", async () => {
+    const contributing = await readFile(contributingPath, "utf8");
+    expect(contributing).toContain("### Updating pull-request branches");
+    expect(contributing).toContain(prohibition!);
+    expect(contributing).toContain("`git push --force-with-lease`");
+    // The stale-event case is documented apart from ordinary synchronization.
+    expect(contributing).toContain("A stale check is not a reason to touch history.");
+  });
+
+  test.each(ruleFiles)("rules/%s carries the prohibition and the alternative", async (name) => {
+    const rules = await readFile(join(repoRoot, "rules", name), "utf8");
+    expect(rules).toContain(prohibition!);
+    expect(rules).toContain("`git push --force-with-lease`");
+    expect(rules).toContain("Updating pull-request branches");
+  });
+
+  test("the four rule files keep an identical Git Workflow section", async () => {
+    const sections = await Promise.all(
+      ruleFiles.map(async (name) => {
+        const rules = await readFile(join(repoRoot, "rules", name), "utf8");
+        return /^## 15\. Git Workflow$[\s\S]*?(?=^## 16\.)/m.exec(rules)?.[0] ?? "";
+      }),
+    );
+    expect(sections[0].length).toBeGreaterThan(minExtractionLength);
+    for (const section of sections) expect(section).toBe(sections[0]);
+  });
+});
+
+describe("skills load the block", () => {
+  test.each(consumingSkills)("%s points at git-history-policy.md", async (name) => {
+    const skill = await readFile(join(skillsDir, name, "SKILL.md"), "utf8");
+    expect(skill).toContain("shared-rules/references/git-history-policy.md");
+  });
+
+  // Invariants 1-3 of preflight-check are acknowledgeable by the user; this one
+  // is not, and a prompt would reintroduce exactly the acknowledgement path the
+  // policy removes.
+  test("preflight-check gates without offering an acknowledgement", async () => {
+    const skill = await readFile(join(skillsDir, "preflight-check/SKILL.md"), "utf8");
+    expect(skill).toContain("## Phase 0: History Policy Gate");
+    expect(skill).toContain("This gate takes no AskUserQuestion");
+  });
+
+  // Phase 3 tells the user to run `git pull origin main` on main, which the
+  // shape-only regex matches. Phase 0 must supply the branch condition the
+  // regex cannot, or the skill deterministically refuses its own instruction.
+  test("preflight-check scopes the gate so Phase 3 stays reachable", async () => {
+    const skill = await readFile(join(skillsDir, "preflight-check/SKILL.md"), "utf8");
+    expect(skill).toContain("whenever HEAD is on a topic branch");
+    expect(skill).toContain("On `main` or `master` itself the gate does not fire.");
+  });
+});
+
+describe("pr-review agrees with CI", () => {
+  test("CHECK-PR-004 blocks and points at the block", async () => {
+    const [hygiene, reviewSkill] = await Promise.all([
+      readFile(hygienePath, "utf8"),
+      readFile(reviewSkillPath, "utf8"),
+    ]);
+    expect(hygiene).toContain("**CHECK-PR-004: No merge commits in feature branch** — Severity: blocker");
+    expect(hygiene).toContain("shared-rules/references/git-history-policy.md");
+    expect(reviewSkill).toContain("**CHECK-PR-004** (blocker)");
+  });
+});
+
+describe("contributing-check enforces the rule", () => {
+  test("the base-branch merge step exists", async () => {
+    const actionYml = await readFile(contributingCheckPath, "utf8");
+    expect(actionYml).toContain("- name: Validate no base-branch merges");
+    expect(actionYml).toContain("git rev-list --merges");
+    // head.sha, never HEAD: on pull_request, checkout resolves refs/pull/N/merge.
+    expect(actionYml).toContain("HEAD_SHA: ${{ github.event.pull_request.head.sha }}");
+  });
+
+  // The action's own comment says every step MUST carry this guard or dependabot
+  // is re-blocked, and Actions have no YAML anchors to enforce it. Nothing tested
+  // that until this change added the first new step in a while.
+  test("every step carries the dependabot guard", async () => {
+    const actionYml = await readFile(contributingCheckPath, "utf8");
+    const steps = actionYml.split(/^    - name: /m).slice(1);
+    expect(steps.length).toBeGreaterThan(5);
+    for (const step of steps) {
+      expect(`${step.split("\n")[0]}: ${step.includes(dependabotGuard)}`).toBe(
+        `${step.split("\n")[0]}: true`,
+      );
+    }
+  });
+});
+</file>
+
 <file path=".github/actions/code-review-action/src/graphifyRefinementContract.test.ts">
 /**
  * Guards the Graphify query-refinement discipline inside the repomix-snapshot shared block
@@ -10993,6 +11201,189 @@ export function buildMarkedDetailsBlock({
     endMarker,
   ].join("\n");
 }
+</file>
+
+<file path=".github/actions/code-review-action/src/mergeCommitGuard.test.ts">
+/**
+ * Executes the `Validate no base-branch merges` step of contributing-check
+ * against real git history, instead of asserting that its text exists.
+ *
+ * Presence is already covered by gitHistoryPolicy.test.ts. What that cannot see
+ * is whether the predicate is right, and the predicate is the whole risk: the
+ * step ships to every repository consuming the action at `@main` and fails a
+ * required check, so a rule that is too broad breaks pull requests that never
+ * violated anything. The issue asks for exactly this distinction — reject merge
+ * commits the pull request introduces, without flagging merge commits inherited
+ * from the base branch — and only running it can show which side each case
+ * lands on.
+ *
+ * The script is extracted from action.yml rather than restated here, so the YAML
+ * stays the single source: an edit to the step is exercised by these cases on the
+ * next run.
+ *
+ * Vacuous-pass defence: the extracted script must be non-empty, above a minimum
+ * length, and contain the `git rev-list --merges` call, so a renamed step or a
+ * changed block scalar cannot extract "" and "pass" every case.
+ */
+import { execFileSync } from "node:child_process";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterAll, describe, expect, test } from "bun:test";
+
+const actionDir = join(import.meta.dirname, "..");
+const repoRoot = join(actionDir, "..", "..", "..");
+const contributingCheckPath = join(repoRoot, ".github/actions/contributing-check/action.yml");
+
+/** Shortest the real script can be; anything smaller means the extraction went wrong. */
+const minScriptLength = 200;
+
+/** Deterministic identity and no global config, so the host's git setup cannot leak in. */
+const gitEnv = {
+  ...process.env,
+  GIT_AUTHOR_NAME: "Guard Test",
+  GIT_AUTHOR_EMAIL: "guard@example.com",
+  GIT_COMMITTER_NAME: "Guard Test",
+  GIT_COMMITTER_EMAIL: "guard@example.com",
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_CONFIG_SYSTEM: "/dev/null",
+};
+
+/** The `run: |` body of a named step, dedented back to column zero. */
+function extractRunScript(actionYml: string, stepName: string): string | null {
+  const marker = `    - name: ${stepName}\n`;
+  const stepStart = actionYml.indexOf(marker);
+  if (stepStart === -1) return null;
+  const runMarker = "\n      run: |\n";
+  const runStart = actionYml.indexOf(runMarker, stepStart);
+  if (runStart === -1) return null;
+  const lines: string[] = [];
+  for (const line of actionYml.slice(runStart + runMarker.length).split("\n")) {
+    if (line.trim() !== "" && !line.startsWith("        ")) break;
+    lines.push(line.slice(8));
+  }
+  return lines.join("\n");
+}
+
+const script = extractRunScript(
+  await readFile(contributingCheckPath, "utf8"),
+  "Validate no base-branch merges",
+);
+
+const scratchDirs: string[] = [];
+
+afterAll(async () => {
+  await Promise.all(scratchDirs.map((dir) => rm(dir, { recursive: true, force: true })));
+});
+
+function git(cwd: string, ...args: string[]): string {
+  return execFileSync("git", args, { cwd, env: gitEnv, encoding: "utf8" });
+}
+
+/** One file per commit — a shared file would make the merge cases conflict. */
+async function commit(cwd: string, message: string): Promise<string> {
+  const name = message.replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase();
+  await writeFile(join(cwd, `${name}.txt`), `${message}\n`);
+  git(cwd, "add", "-A");
+  git(cwd, "commit", "-m", message);
+  return git(cwd, "rev-parse", "HEAD").trim();
+}
+
+/** A `base` repository holding `main` plus a clone of it in `work`. */
+async function scratch(): Promise<{ base: string; work: string }> {
+  const dir = await mkdtemp(join(tmpdir(), "merge-guard-"));
+  scratchDirs.push(dir);
+  const base = join(dir, "base");
+  await mkdir(base);
+  git(base, "init", "-q", "-b", "main");
+  await commit(base, "A: initial");
+  return { base, work: join(dir, "work") };
+}
+
+function clone(base: string, work: string): void {
+  execFileSync("git", ["clone", "-q", base, work], { env: gitEnv, encoding: "utf8" });
+}
+
+function runGuard(cwd: string, headSha: string): { code: number; output: string } {
+  try {
+    const stdout = execFileSync("bash", ["-c", script!], {
+      cwd,
+      env: { ...gitEnv, BASE_REF: "main", HEAD_SHA: headSha },
+      encoding: "utf8",
+    });
+    return { code: 0, output: stdout };
+  } catch (error) {
+    const failure = error as { status: number; stdout: string; stderr: string };
+    return { code: failure.status, output: `${failure.stdout}${failure.stderr}` };
+  }
+}
+
+describe("extraction", () => {
+  test("the step's script is extractable and substantial", () => {
+    expect(script).not.toBeNull();
+    expect(script!.length).toBeGreaterThan(minScriptLength);
+    expect(script).toContain("git rev-list --merges");
+  });
+});
+
+describe("Validate no base-branch merges", () => {
+  test("passes a branch rebased onto an advanced main", async () => {
+    const { base, work } = await scratch();
+    clone(base, work);
+    await commit(base, "B: main moves on");
+    git(work, "fetch", "-q", "origin");
+    git(work, "checkout", "-q", "-b", "topic", "origin/main");
+    const head = await commit(work, "T1: the actual task");
+
+    const { code, output } = runGuard(work, head);
+    expect(`${code}: ${output.trim()}`).toBe(`0: contributing-check: no base-branch merges since ${git(work, "rev-parse", "origin/main").trim()}`);
+  });
+
+  test("fails a branch that merged the base branch, naming the commit", async () => {
+    const { base, work } = await scratch();
+    clone(base, work);
+    git(work, "checkout", "-q", "-b", "topic");
+    await commit(work, "T1: the actual task");
+    await commit(base, "B: main moves on");
+    git(work, "fetch", "-q", "origin");
+    git(work, "merge", "-q", "--no-ff", "origin/main", "-m", "Merge branch main into topic");
+    const head = git(work, "rev-parse", "HEAD").trim();
+
+    const { code, output } = runGuard(work, head);
+    expect(code).toBe(1);
+    expect(output).toContain("Pull request merges the base branch into its head branch");
+    expect(output).toContain(head.slice(0, 7));
+  });
+
+  test("passes when the merge commit was inherited from base history", async () => {
+    const { base, work } = await scratch();
+    git(base, "checkout", "-q", "-b", "feature");
+    await commit(base, "F1: someone else's work");
+    git(base, "checkout", "-q", "main");
+    git(base, "merge", "-q", "--no-ff", "feature", "-m", "Merge feature into main");
+    clone(base, work);
+    git(work, "checkout", "-q", "-b", "topic");
+    const head = await commit(work, "T1: the actual task");
+
+    const { code } = runGuard(work, head);
+    expect(code).toBe(0);
+  });
+
+  test("passes a branch that merged another topic branch", async () => {
+    const { base, work } = await scratch();
+    clone(base, work);
+    git(work, "checkout", "-q", "-b", "side");
+    await commit(work, "S1: stacked work");
+    git(work, "checkout", "-q", "-b", "topic", "main");
+    await commit(work, "T1: the actual task");
+    git(work, "merge", "-q", "--no-ff", "side", "-m", "Merge side into topic");
+    const head = git(work, "rev-parse", "HEAD").trim();
+
+    const { code } = runGuard(work, head);
+    expect(code).toBe(0);
+  });
+});
 </file>
 
 <file path=".github/actions/code-review-action/src/planFileOutputPurity.test.ts">
@@ -14672,6 +15063,7 @@ const blockSentinels: Record<string, string> = {
   "issue-body-grammar.md": "issue-body-grammar",
   "linear-mcp-access.md": "linear-mcp",
   "peer-cli-delegation.md": "peer-cli",
+  "git-history-policy.md": "git-history",
   "pr-title-grammar.md": "pr-title-grammar",
   "pr-body-grammar.md": "pr-body-grammar",
 };
@@ -14811,6 +15203,7 @@ const removedBlockPhrases: Record<string, string> = {
   "issue-body-grammar": "each section answers exactly one question",
   "linear-mcp-access": "never bind a generic tool name",
   "peer-cli-delegation": "zero bytes of stdout",
+  "git-history-policy": "Recovering from a base-branch merge",
   "pr-title-grammar": "Release keyword is required, capitalized exactly as shown",
   "pr-body-grammar": "DO NOT use `**Release Notes:**` (capital",
 };
@@ -21296,6 +21689,41 @@ runs:
       with:
         fetch-depth: 0
 
+    # CONTRIBUTING.md forbids merging the base branch into a pull-request
+    # branch. Two choices keep this from over-firing: the range starts at the
+    # merge base, so merges inherited from base history are outside it, and a
+    # merge only counts when one of its extra parents is already contained in
+    # the base branch, so a PR that merges a second topic branch still passes.
+    # HEAD is deliberately unused — on `pull_request` actions/checkout resolves
+    # refs/pull/N/merge, so HEAD is itself a merge commit and would self-match.
+    - name: Validate no base-branch merges
+      if: ${{ github.event.pull_request.user.login != 'dependabot[bot]' }}
+      shell: bash
+      env:
+        BASE_REF: ${{ github.base_ref }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      run: |
+        set -euo pipefail
+        git fetch --no-tags --quiet origin "${BASE_REF}"
+        base_sha="$(git merge-base FETCH_HEAD "${HEAD_SHA}")"
+        offenders=()
+        while read -r merge_sha; do
+          [ -n "${merge_sha}" ] || continue
+          while read -r parent; do
+            [ -n "${parent}" ] || continue
+            if git merge-base --is-ancestor "${parent}" FETCH_HEAD; then
+              offenders+=("${merge_sha}")
+              break
+            fi
+          done < <(git rev-list --parents -n 1 "${merge_sha}" | cut -d' ' -f3- | tr ' ' '\n')
+        done < <(git rev-list --merges "${base_sha}..${HEAD_SHA}")
+        if [ "${#offenders[@]}" -gt 0 ]; then
+          echo "::error::Pull request merges the base branch into its head branch. Rebase onto ${BASE_REF} and push with --force-with-lease. See CONTRIBUTING.md §updating-pull-request-branches."
+          git log --no-walk --format='  %h %s' "${offenders[@]}"
+          exit 1
+        fi
+        echo "contributing-check: no base-branch merges since ${base_sha}"
+
     - name: Validate commit messages
       if: ${{ github.event.pull_request.user.login != 'dependabot[bot]' }}
       uses: wagoid/commitlint-github-action@v6
@@ -21339,9 +21767,9 @@ runs:
 <file path=".github/actions/contributing-check/README.md">
 # Contributing check
 
-Composite GitHub Action that validates the three CONTRIBUTING.md enforcement points on a pull
-request — branch name, commit messages, and PR title — in a single job. It wraps existing
-community actions (`deepakputhraya/action-branch-name`, `wagoid/commitlint-github-action`,
+Composite GitHub Action that validates the CONTRIBUTING.md enforcement points on a pull
+request — branch name, branch history, commit messages, and PR title — in a single job. It wraps
+existing community actions (`deepakputhraya/action-branch-name`, `wagoid/commitlint-github-action`,
 `amannn/action-semantic-pull-request`) so consumer repos get the full check set with one `uses:`
 line.
 
@@ -21400,15 +21828,16 @@ The action never writes to the repository or to the PR, so writes are not reques
 
 ## Behavior
 
-The action runs four steps sequentially. The first failure short-circuits the job — later steps do not run.
+The action runs the steps below sequentially. The first failure short-circuits the job — later steps do not run.
 
 Dependabot-authored PRs (author `dependabot[bot]`) skip every step — their machine-generated `dependabot/...` branches and update titles do not follow the human conventions. Each step is gated on the PR author, so the "Validate PR" job still reports success (green) rather than a stuck or failed required check.
 
 1. **Branch name** — [`deepakputhraya/action-branch-name@v1.0.0`](https://github.com/deepakputhraya/action-branch-name) enforces the regex `^(issue-\d+-[a-z0-9]+(-[a-z0-9]+)*|[a-z][a-z0-9]*-\d+-[a-z0-9]+(-[a-z0-9]+)*|(hotfix|trivial|maintenance|proposal|security)-[a-z0-9]+(-[a-z0-9]+)*|release-([a-z0-9]+(-[a-z0-9]+)*-)?\d+\.\d+\.\d+)$` — the GitHub `issue-<n>-<slug>` form, the Linear `<team>-<n>-<slug>` form, the special prefixes, and release branches — with `min_length: 5`, `max_length: 100`, and `ignore: main,master`. This matches the CONTRIBUTING.md `Branches` section.
 2. **Checkout** — `actions/checkout@v4` with `fetch-depth: 0` so commitlint can resolve the full PR commit range.
-3. **Commit messages** — [`wagoid/commitlint-github-action@v6`](https://github.com/wagoid/commitlint-github-action) runs against `./commitlint.config.ts` with `failOnWarnings: false`. Level-1 (warning) rules — `body-max-line-length` and `footer-max-line-length` — are surfaced as warnings but do not block merge. Level-2 (error) rules — including the custom `body-required-for-types`, `no-issue-id-in-subject`, and `no-ai-coauthored-by` — block merge.
-4. **PR title (semantic)** — [`amannn/action-semantic-pull-request@v6`](https://github.com/amannn/action-semantic-pull-request) accepts the special prefixes (`HOTFIX`, `TRIVIAL`, `MAINTENANCE`, `PROPOSAL`, `SECURITY`, `Release`), the Linear ticket-id prefix via the `[A-Z][A-Z0-9]*-\d+` type pattern (e.g. `ENG-123: …` on Linear-tracked repos), and any capitalized business-style title via the `[A-Z]\w*` type pattern. Titles ending in a period are rejected with a CONTRIBUTING.md cross-reference.
-5. **PR title length** — Inline bash check fails the job if the PR title exceeds 120 characters. The title is read via the `PR_TITLE` env var (not shell-interpolated) to avoid command injection from a hostile title.
+3. **Base-branch merges** — Inline bash check that fails the job when the pull request's own commits merge the base branch, which CONTRIBUTING.md `Updating pull-request branches` forbids. It ranges from `git merge-base` between the fetched base ref and the PR head SHA, and counts a merge commit only when one of its extra parents is already contained in the base branch — so merge commits inherited from base history, and a PR that merges a second topic branch, both pass. On failure it prints each offending SHA and subject under the annotation `Pull request merges the base branch into its head branch. Rebase onto <base> and push with --force-with-lease.` The remedy is `git fetch origin <base>`, `git rebase origin/<base>`, `git push --force-with-lease` — never a merge, and never a bare `--force`. Like every other step it is skipped for `dependabot[bot]`; for every other author it is a hard failure, not a warning, in every repository consuming this action.
+4. **Commit messages** — [`wagoid/commitlint-github-action@v6`](https://github.com/wagoid/commitlint-github-action) runs against `./commitlint.config.ts` with `failOnWarnings: false`. Level-1 (warning) rules — `body-max-line-length` and `footer-max-line-length` — are surfaced as warnings but do not block merge. Level-2 (error) rules — including the custom `body-required-for-types`, `no-issue-id-in-subject`, and `no-ai-coauthored-by` — block merge.
+5. **PR title (semantic)** — [`amannn/action-semantic-pull-request@v6`](https://github.com/amannn/action-semantic-pull-request) accepts the special prefixes (`HOTFIX`, `TRIVIAL`, `MAINTENANCE`, `PROPOSAL`, `SECURITY`, `Release`), the Linear ticket-id prefix via the `[A-Z][A-Z0-9]*-\d+` type pattern (e.g. `ENG-123: …` on Linear-tracked repos), and any capitalized business-style title via the `[A-Z]\w*` type pattern. Titles ending in a period are rejected with a CONTRIBUTING.md cross-reference.
+6. **PR title length** — Inline bash check fails the job if the PR title exceeds 120 characters. The title is read via the `PR_TITLE` env var (not shell-interpolated) to avoid command injection from a hostile title.
 
 All third-party action references are pinned to commit SHAs with `# vX.Y.Z` comments so a tag move does not silently change behavior.
 
@@ -47441,6 +47870,8 @@ After the commits-create skill completes, output summary:
 
 The original commits were on the remote before the soft reset. The new restructured commits have different SHAs, so a regular push will be rejected.
 
+Read [`git-history-policy.md`](../shared-rules/references/git-history-policy.md) before offering the push: it is what makes `--force-with-lease` the only sanctioned form here, and it is what forbids rewriting this branch at all when someone else owns it. If the branch is shared or human-owned, stop and report instead of presenting the dialog below.
+
 Use **AskUserQuestion tool** to confirm.
 
 **Formatting Note:** Read [`askuserquestion-format.md`](../shared-rules/references/askuserquestion-format.md) and apply it before composing the `question` parameter.
@@ -53608,6 +54039,8 @@ Parse the JSON output. For each check:
 - `bucket === "cancel"` → treat as pending (likely cancelled by a new push)
 - `bucket === "fail"` → CI failure detected
 
+A check that reads a stale or superseded event — one whose failure is about the event and not about the code — is reported to the user, never refreshed by changing the branch. Do not merge or rebase base-branch changes into the PR to provoke a fresh `synchronize` event: the task did not require those changes, and the resulting diff misrepresents the pull request. This is the failure mode the git history policy exists to prevent.
+
 **If any checks have `bucket === "fail"`:**
 
 For each failing check, extract the run-id from the `link` field: parse the URL path segment after `/runs/` and before `/job/` (or end of path). Compare with `fixAttempts[checkName].lastRunId` — if the run-id is different, reset `attempts` to 0 for that check (new run detected).
@@ -53628,6 +54061,7 @@ For each failing check, extract the run-id from the `link` field: parse the URL 
    ```bash
    git push
    ```
+   Read [`git-history-policy.md`](../shared-rules/references/git-history-policy.md) before this push. A plain fast-forward is all this step is allowed to do: if the push is rejected as non-fast-forward, report it and stop rather than merging the base branch or force-pushing.
 5. Set `cooldownRemaining = 3` (skip CI checks for next 3 poll cycles)
 6. Update `fixAttempts[checkName] = { attempts: N+1, lastRunId: <run-id> }`
 7. Output: "CI fix pushed. Cooling down for 3 poll cycles before re-checking..."
@@ -53972,6 +54406,8 @@ Invoke `Skill(autopilot:commits-create)`. Pass the modification list as the comm
 ```bash
 git push
 ```
+
+Read [`git-history-policy.md`](../shared-rules/references/git-history-policy.md) before running anything else here. The push above is a plain fast-forward and needs nothing more; a rejection is the case that matters. If it is rejected as non-fast-forward, report that and stop — never reconcile by merging the base branch, and never retry with a force push.
 
 ---
 
@@ -54424,9 +54860,9 @@ PR addresses one logical change. Bug fixes shouldn't include refactoring; featur
 
 Exclude generated files, lockfiles, and config, but the meaningful code diff should be reviewable in one sitting.
 
-**CHECK-PR-004: No merge commits in feature branch** — Severity: suggestion
+**CHECK-PR-004: No merge commits in feature branch** — Severity: blocker
 
-Feature branches should be rebased on main, not merged. Merge commits clutter history.
+A feature branch takes base changes by rebase, never by merge — the rule and its permitted alternative are in [`git-history-policy.md`](../../shared-rules/references/git-history-policy.md). A merge of the base branch pulls unrelated changes into the diff, so the pull request no longer describes what it does. `contributing-check` fails the same condition in CI; flagging it as a suggestion would tell the author the build can be argued with.
 
 **CHECK-PR-005: No "fix review" or "address feedback" commits** — Severity: suggestion
 
@@ -54987,7 +55423,7 @@ Stack is not relevant for PR hygiene — these apply universally.
 - <a id="CHECK-PR-001"></a>**CHECK-PR-001** (blocker) — Diff matches PR title/description
 - <a id="CHECK-PR-002"></a>**CHECK-PR-002** (suggestion) — PR is atomic — single concern
 - <a id="CHECK-PR-003"></a>**CHECK-PR-003** (suggestion) — PR is reviewable size (<1000 lines of meaningful diff)
-- <a id="CHECK-PR-004"></a>**CHECK-PR-004** (suggestion) — No merge commits in feature branch
+- <a id="CHECK-PR-004"></a>**CHECK-PR-004** (blocker) — No merge commits in feature branch
 - <a id="CHECK-PR-005"></a>**CHECK-PR-005** (suggestion) — No "fix review" or "address feedback" commits
 - <a id="CHECK-PR-006"></a>**CHECK-PR-006** (suggestion) — No unrelated file changes
 - <a id="CHECK-PR-007"></a>**CHECK-PR-007** (suggestion) — Description explains "why", not just "what"
@@ -55679,7 +56115,7 @@ Before writing any output that mentions a file, standard, section, commit, or is
 <file path="claude-plugins/autopilot/skills/preflight-check/SKILL.md">
 ---
 name: preflight-check
-description: Validate git working state before committing, branching, or opening a PR. Detects wrong branch, invalid branch names, stale merged branches, uncommitted changes, and out-of-date main.
+description: Validate git working state before committing, branching, or opening a PR. Detects wrong branch, invalid branch names, forbidden history-changing commands, stale merged branches, uncommitted changes, and out-of-date main.
 user-invocable: false
 allowed-tools:
   - Bash(git *)
@@ -55694,6 +56130,7 @@ The skill protects three invariants; the phases below implement them:
 1. Never create a branch from a stale branch or a `main` that is behind its remote.
 2. Never commit or open a PR on `main` without the user explicitly acknowledging it.
 3. Never commit on a branch whose name violates the naming convention without the user explicitly acknowledging it — a violation caught at commit time costs a rename; caught on an open PR it costs the PR.
+4. Never run a history-changing git command the repository forbids — merging the base branch into a topic branch, force-pushing without a lease, or rewriting a branch someone else owns. Unlike the three above, this one is not acknowledgeable: there is no prompt that makes it acceptable.
 
 ## Context
 
@@ -55712,6 +56149,16 @@ The action noun used in prompts below follows the mode:
 | `pr`      | pull request    |
 
 **Decision points.** Every user decision below uses AskUserQuestion. Read [`askuserquestion-format.md`](../shared-rules/references/askuserquestion-format.md) once and apply it to every `question` you compose. Each decision point states the situation, a suggested header, the choices with their consequences, and the action each choice triggers — compose the dialog from that. The quoted output strings are the skill's contract with its callers (they parse them, e.g. for the word "cancelled") — emit them EXACTLY as written.
+
+## Phase 0: History Policy Gate
+
+Read [`git-history-policy.md`](../shared-rules/references/git-history-policy.md) and apply it verbatim for the rest of the session, not only for the checks below.
+
+Evaluate every git command this session is about to run against the block's canonical regex before running it, **whenever HEAD is on a topic branch**. On a match, refuse: report the matched command, name the permitted alternative from the block, and abort with "<Action noun> cancelled. <command> merges or rewrites history in a way CONTRIBUTING.md forbids — see the git history policy." This gate takes no AskUserQuestion, in every mode. The later phases ask the user to accept a risk; this one states a rule, and a prompt would only invite the acknowledgement that invariant 4 rules out.
+
+The branch condition is load-bearing, and this skill owns it: the regex is shape-only and cannot see which branch is checked out, so a gate that fired unconditionally would refuse [Phase 3](#phase-3-on-main)'s own "Pull updates" action — `git pull origin main` while standing on `main` — which fast-forwards the base branch rather than pulling it into other work. On `main` or `master` itself the gate does not fire.
+
+Ownership is part of the same gate. When a rewrite is contemplated on a branch this session did not create — a shared branch, or one whose last commits carry another author — stop and report rather than guessing; the block's recovery procedure applies only to agent-owned branches.
 
 ## Phase 1: Detect Current Branch
 
@@ -56264,6 +56711,78 @@ These rules govern every AskUserQuestion call that presents generated content fo
 **Formatting Note:** Do not use markdown formatting (bold, italic, headers) in the AskUserQuestion `question` parameter — it renders as raw text. Use plain text with line breaks and simple labels instead.
 
 <!-- auq-format:end -->
+</file>
+
+<file path="claude-plugins/autopilot/skills/shared-rules/references/git-history-policy.md">
+<!-- git-history:start -->
+
+### Git history policy
+
+The canonical encoding of `CONTRIBUTING.md` for updating a pull-request branch — do not invent alternatives. Read it before running any command that changes history or rewrites a remote branch.
+
+#### Never merge the base branch into a pull-request branch
+
+Do not run `git merge main`, `git merge origin/main`, `git pull origin main`, or an equivalent merge from the configured default branch while on a topic branch. A merge commit pulls unrelated base changes into the pull request, inflates the diff far past the task, and contradicts the repository's rebase-only history.
+
+#### Synchronizing an agent-owned branch
+
+When an agent-owned pull-request branch genuinely needs the base branch's changes:
+
+1. fetch the current base branch;
+2. rebase the topic branch onto it;
+3. push the rewritten branch only with `git push --force-with-lease`.
+
+Never use bare `git push --force` or `git push -f`: without the lease, a push silently discards commits pushed by someone else since the last fetch.
+
+#### Never rewrite a branch you do not own
+
+Never rebase, amend, or force-push a shared or human-owned branch without explicit authorization from its owner. When branch ownership or safe-update semantics are uncertain, stop and report — a wrong guess destroys work that cannot be recovered from the remote.
+
+#### A stale event is reported, never refreshed
+
+A stale, superseded, or fail-closed `pull_request` check is a reporting condition, not a reason to change history. Do not merge or rebase base-branch changes into the task merely to produce a fresh `synchronize` event: the task did not require those changes, and the resulting diff misrepresents what the pull request does. Use the smallest scope-preserving operation repository policy allows, or stop and report the stale-event condition.
+
+A push rejected as non-fast-forward is the same kind of condition. Report it; never resolve it by merging the base branch or by force-pushing without a lease.
+
+#### Recovering from a base-branch merge
+
+If a merge commit already exists on the branch, remove it rather than layering more history on top:
+
+- `git rebase --onto <base-tip> <merge-commit> <branch>` replays only the branch's own commits onto the current base tip; or
+- reset to the fork point and cherry-pick the branch's commits back.
+
+Either way the branch is republished with `git push --force-with-lease`, and only when the branch is agent-owned.
+
+#### Canonical forbidden-command regex
+
+The prohibitions above compress into one executable pattern, exercised by the `gitHistoryPolicy` guard test so the rule is checkable rather than a matter of interpretation. Evaluate an intended command against it before running the command:
+
+```text
+\bgit\s+(?:merge|pull)\s+(?:\S+\s+)?(?:(?:origin|upstream)/)?(?:main|master)\b|\bgit\s+push\b[^\n]*?\s(?:--force(?![-\w])|-f(?![-\w]))
+```
+
+- The pattern is shape-only. It spells `main` and `master` because those are the names it can know; the rule binds whatever the repository configures as its default branch, which no regex can express — a base branch named otherwise is still forbidden.
+- **Evaluate it only while HEAD is on a topic branch.** Every prohibition above is about pulling the base branch _into_ other work, so fast-forwarding the base branch while checked out on it — `git pull origin main` on `main` — is ordinary maintenance and is not covered. A shape-only pattern cannot see which branch you are on, so the caller must supply that half before treating a match as a violation.
+- A match is a refusal, not a warning. Report the match, name the permitted alternative from [Synchronizing an agent-owned branch](#synchronizing-an-agent-owned-branch), and do not run the command.
+
+**Forbidden commands:**
+
+- `git merge main` — merges the base branch into the topic branch
+- `git merge origin/main` — same, via the remote-tracking ref
+- `git merge --no-ff origin/main` — an explicit merge commit is still a merge commit
+- `git pull origin main` — on a topic branch, `git pull` merges by default (the same command on `main` itself is a permitted fast-forward)
+- `git push --force` — no lease, so a concurrent push is silently discarded
+- `git push -f origin issue-42-example` — the short form is the same command
+
+**Permitted commands:**
+
+- `git fetch origin main` — fetching never changes history
+- `git rebase origin/main` — the sanctioned way to take base changes
+- `git push --force-with-lease` — the only sanctioned rewrite of a remote branch
+- `git push --force-with-lease --force-if-includes` — a stricter lease, still leased
+- `git push -u origin issue-42-example` — an ordinary fast-forward push
+
+<!-- git-history:end -->
 </file>
 
 <file path="claude-plugins/autopilot/skills/shared-rules/references/issue-body-grammar.md">
@@ -56825,7 +57344,7 @@ RFC-0001 remains the binding standard for the reference-formatting block; `refer
 <file path="claude-plugins/autopilot/skills/shared-rules/SKILL.md">
 ---
 name: shared-rules
-description: Canonical home for instruction blocks shared by several autopilot skills and agents — reference formatting (RFC-0001), AskUserQuestion formatting and content-preview contract, codebase context acquisition (graphify → repomix → default tools), agent structured output, issue body grammar, Linear MCP access, peer CLI delegation, and PR title/body grammar. Read the one block you need instead of carrying a copy.
+description: Canonical home for instruction blocks shared by several autopilot skills and agents — reference formatting (RFC-0001), AskUserQuestion formatting and content-preview contract, codebase context acquisition (graphify → repomix → default tools), agent structured output, issue body grammar, Linear MCP access, peer CLI delegation, git history policy, and PR title/body grammar. Read the one block you need instead of carrying a copy.
 ---
 
 # Shared Rules
@@ -56856,6 +57375,7 @@ Apply the block's content **verbatim**. It is an instruction, not a summary to p
 | Issue body grammar               | [issue-body-grammar.md](./references/issue-body-grammar.md)             | before generating a GitHub or Linear issue body                                     |
 | Linear MCP access                | [linear-mcp-access.md](./references/linear-mcp-access.md)               | before calling any Linear MCP tool                                                  |
 | Peer CLI delegation              | [peer-cli-delegation.md](./references/peer-cli-delegation.md)           | before delegating a task to a peer AI CLI and evaluating its output                 |
+| Git history policy               | [git-history-policy.md](./references/git-history-policy.md)             | before running any command that changes history or rewrites a remote branch         |
 | PR title and branch grammar      | [pr-title-grammar.md](./references/pr-title-grammar.md)                 | before generating or validating a PR title or branch name                           |
 | PR body grammar                  | [pr-body-grammar.md](./references/pr-body-grammar.md)                   | before generating or updating a PR description                                      |
 
@@ -61830,6 +62350,7 @@ Why `Read` and not the `Skill` tool: a skill loads its whole `SKILL.md`, so ther
 | Codebase context acquisition    | `repomix-snapshot.md`       | `includePatterns`       |
 | Agent structured output         | `agent-json-output.md`      | —                       |
 | Linear MCP access               | `linear-mcp-access.md`      | the bare tool-name list |
+| Git history policy              | `git-history-policy.md`     | —                       |
 | PR title and branch grammar     | `pr-title-grammar.md`       | —                       |
 | PR body grammar                 | `pr-body-grammar.md`        | —                       |
 
@@ -64461,9 +64982,10 @@ example/       # multiple modules: a directory, no index.ts barrel
 ## 15. Git Workflow
 
 - **MANDATORY**: `CONTRIBUTING.md` in the repository root is the binding standard for every branch, commit, PR, and issue operation — read the governing section before acting; never restate or improvise its rules
-- Governing sections: "Branches" for branch names, "Commits" for commit messages, "PR Title" and "Special PR Prefixes" for PR titles, "PR Description" and "Magic Words" for PR bodies and issue linking, "How to Contribute" for issues
+- Governing sections: "Branches" for branch names, "Commits" for commit messages, "Updating pull-request branches" for synchronizing a PR branch with its base, "PR Title" and "Special PR Prefixes" for PR titles, "PR Description" and "Magic Words" for PR bodies and issue linking, "How to Contribute" for issues
 - **MANDATORY**: With the autopilot skills installed, perform these operations only through them — `branch-create` for branches, `commits-create` for commits, `pr-create` for pull requests, `issue-create` for issues, `plan` for implementation plans — never their raw `git`/`gh`/web-UI equivalents and never ad-hoc planning; invoking the skill satisfies this section. Without the skills, follow CONTRIBUTING.md directly
 - Never bypass validation hooks with `--no-verify` — fix the violation instead
+- **MANDATORY**: Never merge the base branch into a pull-request branch — no `git merge main`, `git merge origin/main`, or `git pull origin main` while on a topic branch. Synchronize with fetch → rebase → `git push --force-with-lease`; never bare `--force`, and never rewrite a shared or human-owned branch without explicit authorization. A stale check is reported, never refreshed by pulling base changes into the task
 
 ## 16. AI Assistant Workflow
 
@@ -64820,9 +65342,10 @@ Choose ONE backend based on the project's needs. Do not mix.
 ## 15. Git Workflow
 
 - **MANDATORY**: `CONTRIBUTING.md` in the repository root is the binding standard for every branch, commit, PR, and issue operation — read the governing section before acting; never restate or improvise its rules
-- Governing sections: "Branches" for branch names, "Commits" for commit messages, "PR Title" and "Special PR Prefixes" for PR titles, "PR Description" and "Magic Words" for PR bodies and issue linking, "How to Contribute" for issues
+- Governing sections: "Branches" for branch names, "Commits" for commit messages, "Updating pull-request branches" for synchronizing a PR branch with its base, "PR Title" and "Special PR Prefixes" for PR titles, "PR Description" and "Magic Words" for PR bodies and issue linking, "How to Contribute" for issues
 - **MANDATORY**: With the autopilot skills installed, perform these operations only through them — `branch-create` for branches, `commits-create` for commits, `pr-create` for pull requests, `issue-create` for issues, `plan` for implementation plans — never their raw `git`/`gh`/web-UI equivalents and never ad-hoc planning; invoking the skill satisfies this section. Without the skills, follow CONTRIBUTING.md directly
 - Never bypass validation hooks with `--no-verify` — fix the violation instead
+- **MANDATORY**: Never merge the base branch into a pull-request branch — no `git merge main`, `git merge origin/main`, or `git pull origin main` while on a topic branch. Synchronize with fetch → rebase → `git push --force-with-lease`; never bare `--force`, and never rewrite a shared or human-owned branch without explicit authorization. A stale check is reported, never refreshed by pulling base changes into the task
 
 ## 16. AI Assistant Workflow
 
@@ -65175,9 +65698,10 @@ example/       # multiple modules: a directory, no index.ts barrel
 ## 15. Git Workflow
 
 - **MANDATORY**: `CONTRIBUTING.md` in the repository root is the binding standard for every branch, commit, PR, and issue operation — read the governing section before acting; never restate or improvise its rules
-- Governing sections: "Branches" for branch names, "Commits" for commit messages, "PR Title" and "Special PR Prefixes" for PR titles, "PR Description" and "Magic Words" for PR bodies and issue linking, "How to Contribute" for issues
+- Governing sections: "Branches" for branch names, "Commits" for commit messages, "Updating pull-request branches" for synchronizing a PR branch with its base, "PR Title" and "Special PR Prefixes" for PR titles, "PR Description" and "Magic Words" for PR bodies and issue linking, "How to Contribute" for issues
 - **MANDATORY**: With the autopilot skills installed, perform these operations only through them — `branch-create` for branches, `commits-create` for commits, `pr-create` for pull requests, `issue-create` for issues, `plan` for implementation plans — never their raw `git`/`gh`/web-UI equivalents and never ad-hoc planning; invoking the skill satisfies this section. Without the skills, follow CONTRIBUTING.md directly
 - Never bypass validation hooks with `--no-verify` — fix the violation instead
+- **MANDATORY**: Never merge the base branch into a pull-request branch — no `git merge main`, `git merge origin/main`, or `git pull origin main` while on a topic branch. Synchronize with fetch → rebase → `git push --force-with-lease`; never bare `--force`, and never rewrite a shared or human-owned branch without explicit authorization. A stale check is reported, never refreshed by pulling base changes into the task
 
 ## 16. AI Assistant Workflow
 
@@ -65532,9 +66056,10 @@ example/       # multiple modules: a directory, no index.ts barrel
 ## 15. Git Workflow
 
 - **MANDATORY**: `CONTRIBUTING.md` in the repository root is the binding standard for every branch, commit, PR, and issue operation — read the governing section before acting; never restate or improvise its rules
-- Governing sections: "Branches" for branch names, "Commits" for commit messages, "PR Title" and "Special PR Prefixes" for PR titles, "PR Description" and "Magic Words" for PR bodies and issue linking, "How to Contribute" for issues
+- Governing sections: "Branches" for branch names, "Commits" for commit messages, "Updating pull-request branches" for synchronizing a PR branch with its base, "PR Title" and "Special PR Prefixes" for PR titles, "PR Description" and "Magic Words" for PR bodies and issue linking, "How to Contribute" for issues
 - **MANDATORY**: With the autopilot skills installed, perform these operations only through them — `branch-create` for branches, `commits-create` for commits, `pr-create` for pull requests, `issue-create` for issues, `plan` for implementation plans — never their raw `git`/`gh`/web-UI equivalents and never ad-hoc planning; invoking the skill satisfies this section. Without the skills, follow CONTRIBUTING.md directly
 - Never bypass validation hooks with `--no-verify` — fix the violation instead
+- **MANDATORY**: Never merge the base branch into a pull-request branch — no `git merge main`, `git merge origin/main`, or `git pull origin main` while on a topic branch. Synchronize with fetch → rebase → `git push --force-with-lease`; never bare `--force`, and never rewrite a shared or human-owned branch without explicit authorization. A stale check is reported, never refreshed by pulling base changes into the task
 
 ## 16. AI Assistant Workflow
 
@@ -66363,6 +66888,25 @@ docs(auth): add jwt validation documentation
 > [!TIP]
 > Use the `/autopilot:commits-create` slash command to generate commit messages.
 
+### Updating pull-request branches
+
+Never merge the base branch into a pull-request branch. Do not run `git merge main`, `git merge origin/main`, `git pull origin main`, or an equivalent merge from the default branch while on a topic branch. A merge commit pulls unrelated base changes into the pull request, inflates the diff far past the task, and contradicts the rebase-only history described in [Merging Strategies](#merging-strategies).
+
+When a pull-request branch genuinely needs the base branch's changes:
+
+1. fetch the current base branch;
+2. rebase the topic branch onto it;
+3. push the rewritten branch only with `git push --force-with-lease`.
+
+Never use bare `git push --force` or `git push -f` — without the lease, the push silently discards commits someone else pushed since your last fetch. Never rebase, amend, or force-push a shared or someone else's branch without their explicit authorization; when ownership is unclear, ask rather than guess.
+
+**A stale check is not a reason to touch history.** If a check failed against a stale or superseded event rather than against the code, say so on the pull request. Do not merge or rebase unrelated base-branch changes into the branch just to trigger a fresh event: the task did not require those changes, and the resulting diff no longer describes what the pull request does.
+
+If a merge commit already landed on the branch, remove it instead of building on it — `git rebase --onto <base-tip> <merge-commit> <branch>` replays only the branch's own commits — then republish with `git push --force-with-lease`.
+
+> [!IMPORTANT]
+> Enforced in CI by the `contributing-check` action, which fails a pull request whose commits merge the base branch. Merge commits inherited from base history are not flagged.
+
 ## PR Guidelines
 
 **Why these rules are important:**
@@ -66555,6 +67099,8 @@ We use the following merging strategies:
 
 - **Rebase**: When the branch is up to date with the base branch
 
+This governs how a pull request lands on the base branch. It says nothing about how the pull request's own head branch is kept current — that is [Updating pull-request branches](#updating-pull-request-branches), and it is always a rebase, never a merge.
+
 Only one strategy is used per repository. Reasons:
 
 - Avoid confusion and complexity in the review process
@@ -66576,6 +67122,7 @@ Only one strategy is used per repository. Reasons:
 - [ ] All commits follow Conventional Commits format
 - [ ] No commits contain issue numbers in messages
 - [ ] No commits contain AI agent `Co-authored-by` trailers
+- [ ] Branch was synchronized by rebase — no merge commits from the base branch
 - [ ] Tests pass locally
 - [ ] If release notes included, uses `**Release notes:**` format (not `## Release Notes`)
 - [ ] Code follows standards
