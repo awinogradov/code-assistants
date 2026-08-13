@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "1a042962f0e2",
+  "strategy": "manual-commit",
+  "branch": "issue-592-forbid-base-merges",
+  "checkpoints_count": 3,
+  "files_touched": [
+    ".github/actions/code-review-action/src/gitHistoryPolicy.test.ts",
+    "claude-plugins/autopilot/skills/preflight-check/SKILL.md",
+    "claude-plugins/autopilot/skills/shared-rules/references/git-history-policy.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/1a/042962f0e2/0/metadata.json",
+      "transcript": "/1a/042962f0e2/0/full.jsonl",
+      "compact_transcript": "/1a/042962f0e2/0/transcript.jsonl",
+      "content_hash": "/1a/042962f0e2/0/content_hash.txt",
+      "prompt": "/1a/042962f0e2/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 5516,
+    "cache_creation_tokens": 301626,
+    "cache_read_tokens": 27421346,
+    "output_tokens": 109593,
+    "api_call_count": 127
+  }
+}

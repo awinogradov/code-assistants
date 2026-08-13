@@ -1,0 +1,47 @@
+/autopilot:run #592
+
+---
+
+<task-notification>
+<task-id>bnxeqc5ad</task-id>
+<summary>Monitor event: "PR 593 check results and review decision"</summary>
+<event>review OPEN/REVIEW_REQUIRED</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bvn07aylq</task-id>
+<summary>Monitor event: "PR 593 check results and review decision"</summary>
+<event>check Analyze (actions): SUCCESS
+check Analyze (javascript-typescript): SUCCESS
+check Auto label: SUCCESS
+check CodeQL: SUCCESS
+check GitGuardian Security Checks: SUCCESS
+check Test: SUCCESS
+check Validate PR: SUCCESS
+check Validate: SUCCESS
+review OPEN/REVIEW_REQUIRED</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bvn07aylq</task-id>
+<summary>Monitor event: "PR 593 check results and review decision"</summary>
+<event>check ai-review: SUCCESS
+check Analyze (actions): SUCCESS
+check Analyze (javascript-typescript): SUCCESS
+check Auto label: SUCCESS
+check automerge: SKIPPED
+check CodeQL: SUCCESS
+check GitGuardian Security Checks: SUCCESS
+check Test: SUCCESS
+check Validate PR: SUCCESS
+check Validate: SUCCESS
+review OPEN/CHANGES_REQUESTED
+done changes-requested</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
