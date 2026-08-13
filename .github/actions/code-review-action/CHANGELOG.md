@@ -2,6 +2,40 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [6.1.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v6.0.1...code-review-action@v6.1.0) (2026-08-13)
+
+## Release Notes
+
+The review action's AI sessions now commit to a single codebase-context source per run — and when they must reach outside it, they say exactly why.
+
+## ✨ What's New
+
+### Exclusive Context-Source Contract for AI Review Sessions
+
+Autopilot review and react sessions now operate with a strict single-source rule for codebase context: at the start of each session, exactly one source is selected — a Graphify graph, a Repomix pack, or the default tool set — and that choice is recorded as a `context-source:` trace line visible in the session log.
+
+Previously, sessions could silently mix sources, meaning a run that had a Repomix pack attached might still trigger broad repository rediscovery when the pack was large or a file wasn't found. That silent fallback wasted tokens and made session behavior unpredictable. Now, any read that must go outside the selected source is tagged with a `context-fallback:` reason drawn from a fixed six-token taxonomy, so the delivery team can see exactly when and why a fallback occurred.
+
+Oversized Repomix packs no longer cause repository-wide rediscovery. Instead, the session serves them through bounded grep and ranged reads, keeping token usage contained even on large codebases.
+
+There are no configuration changes required — this behaviour is enforced at the shared-rules level and applies automatically to all `review` and `react` mode runs.
+
+<details><summary>Related issues</summary>
+
+- [#582: Stop re-reading files already present in the attached Repomix pack](https://github.com/awinogradov/code-assistants/issues/582)
+- [#583: Serve codebase context from a single selected source with recorded fallbacks](https://github.com/awinogradov/code-assistants/pull/583)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #582 | [#583](https://github.com/awinogradov/code-assistants/pull/583) | @awinogradov |
+
+### Features
+
+* **shared-rules:** add exclusive context-source contract ([33d0da7](https://github.com/awinogradov/code-assistants/commit/33d0da75b1f8581f5f44d845e3bca8fccf2b0543))
 ## [6.0.1](https://github.com/awinogradov/code-assistants/compare/code-review-action@v6.0.0...code-review-action@v6.0.1) (2026-08-12)
 
 ## Release Notes
