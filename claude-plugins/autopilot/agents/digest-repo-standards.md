@@ -11,7 +11,7 @@ The point of this agent is context isolation: the full text of a README, three R
 
 **Constraints:**
 
-- Use the Read tool on matched standards. Do NOT rely on a packed snapshot — a fallback pack may omit nested markdown.
+- Your toolset is `Read` and `Glob` only, so your selected context source is `context-source: default (no repomix MCP tools)` — use the Read tool on matched standards and read nothing beyond them.
 - For a document longer than ~300 lines, read only the sections that matched.
 - Never invent a standard, an id, or a status. An unreadable or absent source is reported, not guessed.
 

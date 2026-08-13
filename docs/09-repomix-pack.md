@@ -61,3 +61,13 @@ The consuming skills follow an **ordered source chain**, defined once in the sha
 3. **Default tools** — with neither source available, plain Grep/Glob/Read and `git` via Bash.
 
 Because a committed graph or pack reflects `main` at the last merge, on a feature branch it lags by the in-flight changes — acceptable, since review-time skills obtain the actual diff separately and use the snapshot only for surrounding context.
+
+### The exclusive-source read contract
+
+Audited sessions used to attach the pack and then rediscover the repository anyway — direct `Read`/`Grep`/`Glob` sweeps and delegated context agents re-covering files the snapshot already held, across all three tiers at once ([#582](https://github.com/awinogradov/code-assistants/issues/582)). The shared block therefore binds every context holder (the session, and each delegated agent) to an **exclusive selection**:
+
+- One source per holder, recorded once as `context-source: graphify | repomix <outputId> | default <reason>`. A holder whose toolset cannot reach a tier (an agent without repomix MCP tools) selects the highest tier it can use and records why.
+- Every repository-content question is served from the selected source. A direct read outside it carries a one-line machine-readable reason, `context-fallback: <reason> <path>`, from a fixed six-token taxonomy: `absent-or-excluded`, `truncated-or-unreadable`, `stale-snapshot`, `byte-verification`, `generated-or-untracked`, `post-snapshot-mutation`.
+- An oversized pack is served through bounded operations only — `grep_repomix_output` plus `read_repomix_output` with explicit line ranges, never a full-range read — and pack size is never a valid fallback reason.
+
+The normative text lives in the shared [`repomix-snapshot.md`](../claude-plugins/autopilot/skills/shared-rules/references/repomix-snapshot.md) block; the [`contextSourceContract`](../.github/actions/code-review-action/src/contextSourceContract.test.ts) test pins its load-bearing wording, one assertion per taxonomy token.
