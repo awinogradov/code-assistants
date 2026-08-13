@@ -9845,6 +9845,30 @@ describe("canonical forbidden-command regex", () => {
   });
 });
 
+// `--onto <merge-commit>` replays the range <merge-commit>..<branch>, so every
+// commit the branch made before the merge is an ancestor of the exclusion point
+// and is silently dropped: `A, B, M(merge), C` recovers as `C` alone. Both
+// encodings prescribed that form until a downstream review caught it. The
+// positive half of each case is what stops this guard passing vacuously once the
+// section is renamed or moved.
+describe("the recovery recipe keeps the branch's own commits", () => {
+  const recipe = "`git rebase <base-tip> <branch>`";
+  const destructive = "rebase --onto";
+
+  test.each([
+    ["the canonical block", blockPath],
+    ["CONTRIBUTING.md", contributingPath],
+  ])("%s prescribes the plain rebase and no --onto form", async (name, path) => {
+    const content = await readFile(path, "utf8");
+    expect(`${name} prescribes the recipe: ${content.includes(recipe)}`).toBe(
+      `${name} prescribes the recipe: true`,
+    );
+    expect(`${name} mentions --onto: ${content.includes(destructive)}`).toBe(
+      `${name} mentions --onto: false`,
+    );
+  });
+});
+
 describe("prohibition wording survives every restatement", () => {
   test("the block states it as a heading", () => {
     expect(prohibition).toBeDefined();
@@ -56905,7 +56929,7 @@ A push rejected as non-fast-forward is the same kind of condition. Report it; ne
 
 If a merge commit already exists on the branch, remove it rather than layering more history on top:
 
-- `git rebase --onto <base-tip> <merge-commit> <branch>` replays only the branch's own commits onto the current base tip; or
+- `git rebase <base-tip> <branch>` replays the branch's own commits onto the current base tip and drops the merge; or
 - reset to the fork point and cherry-pick the branch's commits back.
 
 Either way the branch is republished with `git push --force-with-lease`, and only when the branch is agent-owned.
@@ -67104,7 +67128,7 @@ Never use bare `git push --force` or `git push -f` — without the lease, the pu
 
 **A stale check is not a reason to touch history.** If a check failed against a stale or superseded event rather than against the code, say so on the pull request. Do not merge or rebase unrelated base-branch changes into the branch just to trigger a fresh event: the task did not require those changes, and the resulting diff no longer describes what the pull request does.
 
-If a merge commit already landed on the branch, remove it instead of building on it — `git rebase --onto <base-tip> <merge-commit> <branch>` replays only the branch's own commits — then republish with `git push --force-with-lease`.
+If a merge commit already landed on the branch, remove it instead of building on it — `git rebase <base-tip> <branch>` replays the branch's own commits and drops the merge — then republish with `git push --force-with-lease`.
 
 > [!IMPORTANT]
 > Enforced in CI by the `contributing-check` action, which fails a pull request whose commits merge the base branch. Merge commits inherited from base history are not flagged.
