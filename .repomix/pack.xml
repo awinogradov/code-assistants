@@ -171,6 +171,7 @@ The content is organized as follows:
         classifyReaction.ts
         contextSourceContract.test.ts
         expertReviewContract.test.ts
+        graphifyRefinementContract.test.ts
         linearPlanContract.test.ts
         linkResolution.test.ts
         logClaudeMessage.test.ts
@@ -9618,6 +9619,175 @@ describe("expert review contract", () => {
   test("the agent still forbids asserting unread file contents", () => {
     expect(agent).toContain("an inferred file listing is a fabrication");
     expect(agent).toContain("Do not list a file you did not open");
+  });
+});
+</file>
+
+<file path=".github/actions/code-review-action/src/graphifyRefinementContract.test.ts">
+/**
+ * Guards the Graphify query-refinement discipline inside the repomix-snapshot shared block
+ * (claude-plugins/autopilot/skills/shared-rules/references/repomix-snapshot.md), added for
+ * issue #587: a truncated or over-broad graph answer is not a finished lookup, so the tier
+ * must classify the response, refine it with a narrower graph operation before any
+ * context-gathering file read, end at a bounded shortlist, and close with a
+ * `graphify-trace:` line whose fields are defined rather than suggestive.
+ *
+ * The discipline carries its OWN nested sentinel (`graphify-refinement`) inside the outer
+ * block. That is load-bearing, not decoration: the outer block already contains the words
+ * "truncated" (in the fallback reason `truncated-or-unreadable`), "error", and "empty", so
+ * a whole-block substring check for the four response classes would pass before the
+ * discipline was ever written. Extracting the inner sentinel makes those assertions mean
+ * what they say.
+ *
+ * Response classes and trace fields are explicit test data, one assertion per token, so
+ * dropping a class or a field fails loudly instead of shrinking the contract silently. The
+ * block is asserted present before anything else — the vacuous-pass defence
+ * contextSourceContract.test.ts and sharedBlockSync.test.ts both state: a missing sentinel
+ * would otherwise extract nothing and pass every substring check on "".
+ *
+ * What this CANNOT prove, in two directions:
+ *   - Downstream: that a session honours the discipline at runtime. CI sees text in a file,
+ *     nothing more. Runtime evidence comes from the post-merge canary recorded on the
+ *     issue — the first planning run in a graphify-enabled repository reports its
+ *     `graphify-trace:` values and post-selection direct-read count against the #587
+ *     baseline (one query, zero refinements, full traversal fallback).
+ *   - Upstream: that the transcribed CLI surface still matches the tool. The truncation
+ *     marker and the flag names are transcribed from graphify v0.9.32; if graphify renames
+ *     them, every assertion here still passes while the contract points agents at strings
+ *     the CLI no longer emits. A graphify upgrade must re-verify the marker by hand.
+ */
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
+import { describe, expect, test } from "bun:test";
+
+// Depth mirrors contextSourceContract.test.ts in this directory — a move of the
+// action updates both in lockstep.
+const actionDir = join(import.meta.dirname, "..");
+const repoRoot = join(actionDir, "..", "..", "..");
+
+const blockPath = join(
+  repoRoot,
+  "claude-plugins/autopilot/skills/shared-rules/references/repomix-snapshot.md",
+);
+const gatherContextPath = join(repoRoot, "claude-plugins/autopilot/skills/gather-context/SKILL.md");
+const packDocPath = join(repoRoot, "docs/09-repomix-pack.md");
+
+/** The rule files synced to consumer repositories; each carries the same Graphify bullet. */
+const rulesPaths = [
+  "rules/Bun.md",
+  "rules/Bun+React+Tailwind.md",
+  "rules/NodeJS+React.md",
+  "rules/NodeJS+React+Tailwind.md",
+].map((relative) => join(repoRoot, relative));
+
+/** Shortest the discipline can be; anything smaller means the extraction went wrong. */
+const minBlockLength = 80;
+
+/**
+ * The four response classes a graph query can land in. Every one needs a stated handling
+ * rule, because the gap issue #587 reports is a truncated answer being treated as focused.
+ */
+const responseClasses = ["focused", "truncated", "empty", "error"];
+
+/** The `graphify-trace:` fields. A trace missing one cannot be compared between runs. */
+const traceFields = ["queries=", "truncated=", "shortlist=", "outside-reads="];
+
+/** Read a file, failing with its absolute path rather than a bare ENOENT at module load. */
+async function readContract(path: string): Promise<string> {
+  try {
+    return await readFile(path, "utf8");
+  } catch (cause) {
+    throw new Error(`Cannot read contract file: ${path}`, { cause });
+  }
+}
+
+/** Extract the named sentinel-delimited block from `content`, trimmed; null when absent. */
+function extractBlock(content: string, sentinel: string): string | null {
+  const pattern = new RegExp(`<!-- ${sentinel}:start -->([\\s\\S]*?)<!-- ${sentinel}:end -->`);
+  return pattern.exec(content)?.[1].trim() ?? null;
+}
+
+/** The `**Graphify**` bullet, normalized for whitespace so wrapping is not a difference. */
+function extractGraphifyBullet(content: string): string | null {
+  const bullet = /^\s*-\s+\*\*Graphify\*\*[\s\S]*?(?=\n\s*-\s+\*\*|\n\n)/m.exec(content);
+  return bullet?.[0].replace(/\s+/g, " ").trim() ?? null;
+}
+
+const [blockSource, gatherContext, packDoc, ...rulesSources] = await Promise.all([
+  readContract(blockPath),
+  readContract(gatherContextPath),
+  readContract(packDocPath),
+  ...rulesPaths.map(readContract),
+]);
+
+const refinement = extractBlock(blockSource, "graphify-refinement");
+
+describe("graphify refinement discipline", () => {
+  test("the nested sentinel block exists and is substantial", () => {
+    expect(refinement).not.toBeNull();
+    expect(refinement?.length ?? 0).toBeGreaterThan(minBlockLength);
+  });
+
+  test("it lives inside the repomix-snapshot block it refines", () => {
+    const outer = extractBlock(blockSource, "repomix-snapshot");
+    expect(outer).not.toBeNull();
+    expect(outer).toContain("graphify-refinement:start");
+  });
+
+  test.each(responseClasses)("a %s response has a stated handling rule", (responseClass) => {
+    expect(refinement).toContain(responseClass);
+  });
+
+  test("truncation is detected by the marker graphify prints", () => {
+    expect(refinement).toContain("[!] TRUNCATED");
+  });
+
+  test("a truncated answer is refined before ordinary file traversal", () => {
+    expect(refinement).toContain("before any context-gathering file read");
+  });
+
+  test("raising the budget cannot stand in for narrowing", () => {
+    expect(refinement).toContain("never the sole response");
+  });
+
+  test("refinement is bounded and the shortlist is bounded", () => {
+    expect(refinement).toContain("at most three");
+    expect(refinement).toContain("at most ten");
+  });
+
+  test("reads during the pass are limited to the shortlist", () => {
+    expect(refinement).toContain("context-fallback:");
+  });
+
+  test("an exhausted tier hands over to exactly one successor source", () => {
+    expect(refinement).toContain("superseding graphify");
+  });
+
+  test.each(traceFields)("the trace records %s", (field) => {
+    expect(refinement).toContain(field);
+  });
+
+  test("a trace that skipped refinement reads as a violation", () => {
+    expect(refinement).toContain("`truncated=yes` with `queries=1`");
+  });
+});
+
+describe("consumers record the shortlist", () => {
+  test("gather-context carries the shortlist into the Context Map", () => {
+    expect(gatherContext).toContain("graphify-trace:");
+    expect(gatherContext).toContain("shortlist");
+  });
+
+  test("the repomix-pack doc documents the discipline", () => {
+    expect(packDoc).toContain("graphify-trace:");
+  });
+
+  test("the four synced rule files carry one identical Graphify bullet", () => {
+    const bullets = rulesSources.map(extractGraphifyBullet);
+    for (const bullet of bullets) expect(bullet).not.toBeNull();
+    expect(new Set(bullets).size).toBe(1);
+    expect(bullets[0]).toContain("narrower");
   });
 });
 </file>
@@ -47607,7 +47777,7 @@ Issue **every** call below in a **single message** so they run concurrently. Do 
 
 Only now is the task's subject matter known, so this pass runs after the fan-out returns.
 
-Search the snapshot for the implementations, patterns, and tests the change touches, using the read contract of the selected source — `graphify` queries when the graph tier was selected, `mcp__repomix__grep_repomix_output` with ranged `mcp__repomix__read_repomix_output` when the repomix tier was, or `Grep`/`Glob`/`Read` directly when only default tools remain. A graph or pack reflects the base at its last refresh, so reach for live Grep/Glob/Read **only** for working-tree code it cannot show — `digest-branch-diff` already reports what is in flight — and record each such read with the one-line `context-fallback: <reason> <path>` note from the [shared block's taxonomy](../shared-rules/references/repomix-snapshot.md) (here usually `post-snapshot-mutation`). Do not crawl the tree for anything the selected source answers.
+Search the snapshot for the implementations, patterns, and tests the change touches, using the read contract of the selected source — `graphify` queries when the graph tier was selected, `mcp__repomix__grep_repomix_output` with ranged `mcp__repomix__read_repomix_output` when the repomix tier was, or `Grep`/`Glob`/`Read` directly when only default tools remain. On the graph tier that read contract is the block's [query discipline](../shared-rules/references/repomix-snapshot.md): a truncated or empty first answer is refined with a narrower graph operation before any file read, and the pass ends at the shortlist and the `graphify-trace:` line [Phase 3](#phase-3-emit-the-context-map) carries. A graph or pack reflects the base at its last refresh, so reach for live Grep/Glob/Read **only** for working-tree code it cannot show — `digest-branch-diff` already reports what is in flight — and record each such read with the one-line `context-fallback: <reason> <path>` note from the [shared block's taxonomy](../shared-rules/references/repomix-snapshot.md) (here usually `post-snapshot-mutation`). Do not crawl the tree for anything the selected source answers.
 
 **At `broad` scope there is no change to narrow to**, so read the snapshot breadth-first instead: the principal modules and their boundaries, the entry points, and the conventions that govern them. Fill `Relevant files` and `Patterns to mirror` at that altitude — the modules a newcomer must know and the conventions they must copy, rather than the handful a specific edit would touch.
 
@@ -47633,13 +47803,14 @@ Emit these sections in this order. This is the caller's entire view of the repos
 **Applicable standards** — [id + status (mark "defaulted" when inferred) + one line on why the plan must honor it; then dropped candidates; "none" when nothing matched]
 **Stack** — [agents.rules value, and the deltas it resolves to]
 **Git state** — [branch, isWorktree, isStaleMerged, baseAhead]
-**Snapshot** — [the `context-source:` line emitted in Phase 1, verbatim — for later phases to reuse]
+**Snapshot** — [the `context-source:` line emitted in Phase 1, verbatim — for later phases to reuse; on the graph tier, also the shortlist entries with the relationship that justifies each, and the pass's `graphify-trace:` line]
 ```
 
-Two fields carry decisions the caller would otherwise recompute badly:
+Three fields carry decisions the caller would otherwise recompute badly:
 
 - **`isStaleMerged`** — a branch whose commits already landed upstream under rewritten SHAs still shows a non-empty `git log origin/main..HEAD`. A caller testing only for emptiness reads a finished branch as active work. Trust this field over a commit count.
 - **Applicable standards** — this doubles as the plan's audit log of what it planned against, including what the selection cap dropped. At `Scope: primed` the digest did not run, so write it as supplied by the caller's validated brief and name that brief — never leave it reading `none`, which would claim no standard applied rather than that one was sourced elsewhere.
+- **Snapshot on the graph tier** — the shortlist is what a later phase can actually reuse; the source name alone tells it where the context came from but not what the pass found, which is how a graph pass ends up repeated as a tree crawl. The `graphify-trace:` line travels with it so the caller can see how the shortlist was reached — a trace reading `truncated=yes queries=1` says the shortlist is the truncated first answer and should be treated as incomplete.
 
 When you write the Context Map, apply the reference-formatting rules in [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (RFC-0001, read it first) to every reference it contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
 </file>
@@ -56398,6 +56569,42 @@ graphify explain "<Concept>"
 
 Graph queries are whole-repo by nature; the caller's `includePatterns` does not apply to this tier. Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review or when targeted queries do not surface enough context.
 
+<!-- graphify-refinement:start -->
+
+**Tier 1 query discipline — one query is not a lookup.** A graph is an iterative instrument, so a single broad question is the start of the pass, not the end of it. Scope the first query to the workspace, path, or domain when the task names one, then classify what came back:
+
+- **focused** — a usable answer with no truncation notice. Build the shortlist from it.
+- **truncated** — the answer is cut to fit the token budget. graphify v0.9.x announces this at the top of its output, e.g. `[!] TRUNCATED: showing 52 of 918 nodes`; treat any equivalent notice the installed CLI prints the same way. The answer may be among the cut nodes, so this is an incomplete lookup, not a negative result.
+- **empty** — no nodes matched, e.g. `No matching nodes found.`. The vocabulary missed, not the graph.
+- **error** — the CLI failed (non-zero exit, `error: graph file not found`). The tier is unusable.
+
+**Refine before you traverse.** On a truncated or empty answer, the next operation is another graph operation — narrowing it is the whole point of having a graph — issued **before any context-gathering file read**:
+
+- ask a narrower question naming the entity, symbol, or path the first answer surfaced;
+- constrain the relations with `--context <relation>` (repeatable) rather than widening the search;
+- go focused instead of broad: `graphify explain "<Symbol>"` for one node and its neighbors, `graphify path "<A>" "<B>"` for how two entities connect, and `graphify affected "<X>"` for reverse impact where `graphify --help` shows that subcommand;
+- on an empty answer, re-ask once in the codebase's own vocabulary (a file or symbol name rather than a concept).
+
+Raising `--budget` is a supplement, never the sole response to truncation: it re-floods the same broad answer instead of narrowing it, and the cut nodes were cut for a reason.
+
+An error answer refines nothing — fall through immediately.
+
+**Bounded, then done.** Spend at most three refinement queries after the first. The pass ends at a **shortlist** of at most ten files or entities, each carried with the relationship that justifies it (`src/app/AppShell.tsx — renders Sidebar, imports useLayout`). The shortlist is this tier's equivalent of an `outputId`: it is what the pass hands to whatever consumes it, and a consumer that receives only the source name received nothing reusable.
+
+Direct `Read` of repository content during the pass is limited to shortlisted entries — that is the tier's read contract, and it is how exact implementation detail is obtained once the graph has named where to look. Any other context-gathering read still carries its `context-fallback: <reason> <path>` line from the taxonomy below; reads made to edit a file, or to verify your own change, are not context gathering and need no line.
+
+Close the pass with one trace line:
+
+```
+graphify-trace: queries=<n> truncated=<yes|no> shortlist=<n> outside-reads=<n>
+```
+
+`queries` counts every graph invocation in the pass including the first; `truncated` is `yes` when any round came back truncated; `shortlist` is the number of entries the pass produced; `outside-reads` totals the `context-fallback:` lines emitted during it. A trace reading `truncated=yes` with `queries=1` is a contract violation on its face — it records a truncated answer that was never refined — and a reviewer should read it as one.
+
+When the three rounds are spent and no usable shortlist exists, this tier has failed rather than answered. Fall through and record the replacement as a single line, `context-source: repomix <outputId> superseding graphify (refinement exhausted)`, so exactly one source stays live and the abandoned one is visible rather than implied.
+
+<!-- graphify-refinement:end -->
+
 **Tier 2 — repomix pack.** Prefer the committed pack over re-packing — the refresh is merge-triggered, so the pack is current for anything already on the default branch.
 
 ```
@@ -61012,6 +61219,18 @@ The consuming skills follow an **ordered source chain**, defined once in the sha
 
 Because a committed graph or pack reflects `main` at the last merge, on a feature branch it lags by the in-flight changes — acceptable, since review-time skills obtain the actual diff separately and use the snapshot only for surrounding context.
 
+### Graphify query refinement
+
+Preferring the graph is not the same as using it. An audited planning run asked one broad question, got an answer graphify had cut to 52 of 918 nodes, made no follow-up, and continued with ordinary repository traversal ([#587](https://github.com/awinogradov/code-assistants/issues/587)) — the graph was paid for and then re-derived by hand. The shared block therefore gives tier 1 a query discipline:
+
+- Each answer is classified as **focused**, **truncated** (graphify announces it, e.g. `[!] TRUNCATED: showing 52 of 918 nodes`), **empty** (`No matching nodes found.`), or **error**. A truncated answer is an incomplete lookup, not a negative result.
+- A truncated or empty answer is refined with another **graph** operation before any context-gathering file read — a narrower question, a `--context <relation>` filter, or a focused `explain` / `path` / `affected` lookup. Raising `--budget` re-floods the same broad answer, so it is never the sole response.
+- Refinement is capped at three rounds after the first, and the pass ends at a **shortlist** of at most ten files or entities, each with the relationship that justifies it. Direct reads during the pass are limited to that shortlist; the shortlist is what the pass hands on, the way an `outputId` is on tier 2.
+- The pass closes with `graphify-trace: queries=<n> truncated=<yes|no> shortlist=<n> outside-reads=<n>`, which makes the failure mode legible after the fact: `truncated=yes` with `queries=1` is a truncated answer that was never refined.
+- An exhausted tier hands over explicitly — `context-source: repomix <outputId> superseding graphify (refinement exhausted)` — so exactly one source stays live.
+
+The wording is pinned by [`graphifyRefinementContract`](../.github/actions/code-review-action/src/graphifyRefinementContract.test.ts), which extracts a nested `graphify-refinement` sentinel because the outer block already contains the words the discipline uses. CI can only prove the text is there; whether sessions honour it is measured by the canary recorded on the issue.
+
 ### The exclusive-source read contract
 
 Audited sessions used to attach the pack and then rediscover the repository anyway — direct `Read`/`Grep`/`Glob` sweeps and delegated context agents re-covering files the snapshot already held, across all three tiers at once ([#582](https://github.com/awinogradov/code-assistants/issues/582)). The shared block therefore binds every context holder (the session, and each delegated agent) to an **exclusive selection**:
@@ -63879,7 +64098,7 @@ Before making any changes:
 7. When a `design.md` exists at the repository root, read it before any UI or visual work — it is the binding design and brand spec (tokens, typography, layout conventions); follow it over generic styling defaults
 8. Inspect `package.json` before assuming scripts or package-manager commands
 9. Acquire codebase context from the first source that works, falling through to the next on any failure:
-   - **Graphify** — fires when `graphify-out/graph.json` exists and the `graphify` CLI resolves on PATH. Run `graphify query "<question>"` first; use `graphify path "<A>" "<B>"` for relationships, `graphify explain "<concept>"` for focused concepts, and `graphify-out/wiki/index.md` for broad navigation. After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+   - **Graphify** — fires when `graphify-out/graph.json` exists and the `graphify` CLI resolves on PATH. Run `graphify query "<question>"` first; use `graphify path "<A>" "<B>"` for relationships, `graphify explain "<concept>"` for focused concepts, and `graphify-out/wiki/index.md` for broad navigation. A truncated or empty answer is an unfinished lookup, not a negative result: refine it with a narrower query, a `--context <relation>` filter, or a focused `path`/`explain` lookup before falling back to ordinary file reads. After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
    - **Repomix** — fires when the Repomix MCP server is connected. Attach the committed `.repomix/pack.xml` when it exists, otherwise pack the codebase; grep/read the digest for codebase-wide analysis instead of loading every file.
    - **Default tools** — with neither available, search and read the repository files directly.
 
@@ -64107,7 +64326,7 @@ Before making any changes:
 7. When a `design.md` exists at the repository root, read it before any UI or visual work — it is the binding design and brand spec (tokens, typography, layout conventions); follow it over generic styling defaults
 8. Inspect `package.json` before assuming scripts or package-manager commands
 9. Acquire codebase context from the first source that works, falling through to the next on any failure:
-   - **Graphify** — fires when `graphify-out/graph.json` exists and the `graphify` CLI resolves on PATH. Run `graphify query "<question>"` first; use `graphify path "<A>" "<B>"` for relationships, `graphify explain "<concept>"` for focused concepts, and `graphify-out/wiki/index.md` for broad navigation. After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+   - **Graphify** — fires when `graphify-out/graph.json` exists and the `graphify` CLI resolves on PATH. Run `graphify query "<question>"` first; use `graphify path "<A>" "<B>"` for relationships, `graphify explain "<concept>"` for focused concepts, and `graphify-out/wiki/index.md` for broad navigation. A truncated or empty answer is an unfinished lookup, not a negative result: refine it with a narrower query, a `--context <relation>` filter, or a focused `path`/`explain` lookup before falling back to ordinary file reads. After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
    - **Repomix** — fires when the Repomix MCP server is connected. Attach the committed `.repomix/pack.xml` when it exists, otherwise pack the codebase; grep/read the digest for codebase-wide analysis instead of loading every file.
    - **Default tools** — with neither available, search and read the repository files directly.
 
@@ -64469,7 +64688,7 @@ Before making any changes:
 7. When a `design.md` exists at the repository root, read it before any UI or visual work — it is the binding design and brand spec (tokens, typography, layout conventions); follow it over generic styling defaults
 8. Inspect `package.json` before assuming scripts or package-manager commands
 9. Acquire codebase context from the first source that works, falling through to the next on any failure:
-   - **Graphify** — fires when `graphify-out/graph.json` exists and the `graphify` CLI resolves on PATH. Run `graphify query "<question>"` first; use `graphify path "<A>" "<B>"` for relationships, `graphify explain "<concept>"` for focused concepts, and `graphify-out/wiki/index.md` for broad navigation. After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+   - **Graphify** — fires when `graphify-out/graph.json` exists and the `graphify` CLI resolves on PATH. Run `graphify query "<question>"` first; use `graphify path "<A>" "<B>"` for relationships, `graphify explain "<concept>"` for focused concepts, and `graphify-out/wiki/index.md` for broad navigation. A truncated or empty answer is an unfinished lookup, not a negative result: refine it with a narrower query, a `--context <relation>` filter, or a focused `path`/`explain` lookup before falling back to ordinary file reads. After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
    - **Repomix** — fires when the Repomix MCP server is connected. Attach the committed `.repomix/pack.xml` when it exists, otherwise pack the codebase; grep/read the digest for codebase-wide analysis instead of loading every file.
    - **Default tools** — with neither available, search and read the repository files directly.
 
@@ -64823,7 +65042,7 @@ Before making any changes:
 7. When a `design.md` exists at the repository root, read it before any UI or visual work — it is the binding design and brand spec (tokens, typography, layout conventions); follow it over generic styling defaults
 8. Inspect `package.json` before assuming scripts or package-manager commands
 9. Acquire codebase context from the first source that works, falling through to the next on any failure:
-   - **Graphify** — fires when `graphify-out/graph.json` exists and the `graphify` CLI resolves on PATH. Run `graphify query "<question>"` first; use `graphify path "<A>" "<B>"` for relationships, `graphify explain "<concept>"` for focused concepts, and `graphify-out/wiki/index.md` for broad navigation. After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+   - **Graphify** — fires when `graphify-out/graph.json` exists and the `graphify` CLI resolves on PATH. Run `graphify query "<question>"` first; use `graphify path "<A>" "<B>"` for relationships, `graphify explain "<concept>"` for focused concepts, and `graphify-out/wiki/index.md` for broad navigation. A truncated or empty answer is an unfinished lookup, not a negative result: refine it with a narrower query, a `--context <relation>` filter, or a focused `path`/`explain` lookup before falling back to ordinary file reads. After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
    - **Repomix** — fires when the Repomix MCP server is connected. Attach the committed `.repomix/pack.xml` when it exists, otherwise pack the codebase; grep/read the digest for codebase-wide analysis instead of loading every file.
    - **Default tools** — with neither available, search and read the repository files directly.
 
