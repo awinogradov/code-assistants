@@ -317,6 +317,25 @@ docs(auth): add jwt validation documentation
 > [!TIP]
 > Use the `/autopilot:commits-create` slash command to generate commit messages.
 
+### Updating pull-request branches
+
+Never merge the base branch into a pull-request branch. Do not run `git merge main`, `git merge origin/main`, `git pull origin main`, or an equivalent merge from the default branch while on a topic branch. A merge commit pulls unrelated base changes into the pull request, inflates the diff far past the task, and contradicts the rebase-only history described in [Merging Strategies](#merging-strategies).
+
+When a pull-request branch genuinely needs the base branch's changes:
+
+1. fetch the current base branch;
+2. rebase the topic branch onto it;
+3. push the rewritten branch only with `git push --force-with-lease`.
+
+Never use bare `git push --force` or `git push -f` — without the lease, the push silently discards commits someone else pushed since your last fetch. Never rebase, amend, or force-push a shared or someone else's branch without their explicit authorization; when ownership is unclear, ask rather than guess.
+
+**A stale check is not a reason to touch history.** If a check failed against a stale or superseded event rather than against the code, say so on the pull request. Do not merge or rebase unrelated base-branch changes into the branch just to trigger a fresh event: the task did not require those changes, and the resulting diff no longer describes what the pull request does.
+
+If a merge commit already landed on the branch, remove it instead of building on it — `git rebase --onto <base-tip> <merge-commit> <branch>` replays only the branch's own commits — then republish with `git push --force-with-lease`.
+
+> [!IMPORTANT]
+> Enforced in CI by the `contributing-check` action, which fails a pull request whose commits merge the base branch. Merge commits inherited from base history are not flagged.
+
 ## PR Guidelines
 
 **Why these rules are important:**
@@ -509,6 +528,8 @@ We use the following merging strategies:
 
 - **Rebase**: When the branch is up to date with the base branch
 
+This governs how a pull request lands on the base branch. It says nothing about how the pull request's own head branch is kept current — that is [Updating pull-request branches](#updating-pull-request-branches), and it is always a rebase, never a merge.
+
 Only one strategy is used per repository. Reasons:
 
 - Avoid confusion and complexity in the review process
@@ -530,6 +551,7 @@ Only one strategy is used per repository. Reasons:
 - [ ] All commits follow Conventional Commits format
 - [ ] No commits contain issue numbers in messages
 - [ ] No commits contain AI agent `Co-authored-by` trailers
+- [ ] Branch was synchronized by rebase — no merge commits from the base branch
 - [ ] Tests pass locally
 - [ ] If release notes included, uses `**Release notes:**` format (not `## Release Notes`)
 - [ ] Code follows standards
