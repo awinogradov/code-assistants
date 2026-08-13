@@ -154,6 +154,12 @@ Pass the detected input type, the Linear issue id, repository, repository root, 
 
 Nothing in the fan-out is gated off. A stored plan records what to do, not what the repository looks like; a fresh plan needs the full Context Map as its drafting input. In both modes the standards digest, branch diff, TODO search, and a fresh context-source acquisition still run. A recorded `outputId` would be useless anyway, since it is session-scoped and dead in any later session.
 
+**Accept the context source before continuing.** Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) and check the returned map's **Snapshot** field against it: it must carry that block's `context-source:` line naming the tier the fan-out selected. When the field is absent, or carries no such line, stop:
+
+`Context phase failed on <LINEAR-ID>: gather-context returned no context-source selection.`
+
+This stop is fatal, unlike a `digestError` the map records and moves past. A degraded digest costs the plan some context; an unrecorded selection means nothing bounds the repository reads that follow — which is the failure the gate exists for, since a production run once completed its entire pre-implementation pass on ordinary traversal, making zero graph and zero pack calls in a repository that had both. Re-run the skill, or file against it if the fan-out keeps returning no selection; do not continue by hand.
+
 Set task 3 to `completed`.
 
 ## Phase 3: Preflight verdict
@@ -195,6 +201,8 @@ The resulting harness plan is the execution plan for this run only. Do not store
 In `stored-plan` mode, the stored `### Implementation Steps` must be worked in order, verifying each against its own `verify:` line before moving on. Verbatim means verbatim: do not re-draft, reorder, merge, or add steps. Where a step cannot be carried out as written, stop and report which step and why. Treat the stored `### Files` list as the expected blast radius and report any required expansion.
 
 In `fresh-plan` mode, the finalized harness plan is the execution contract exactly as it is for [`run`](../run/SKILL.md#phase-5-implement-and-proceed). This mode is autonomous and adds no approval prompt.
+
+**The selected source bounds both modes.** Repository investigation before the first edit is served from the source the Context Map recorded — in `stored-plan` mode as much as in `fresh-plan` mode. A stored plan names the files to touch; it is not a licence to re-derive the repository with ordinary traversal, and the audited failure this answers was a stored-plan run. Reads outside the selected source carry the shared block's `context-fallback:` line, and broad rediscovery does not become valid because a plan already exists.
 
 ## Phase 6: Branch and run the autopilot chain
 

@@ -50,7 +50,7 @@ Issue **every** call below in a **single message** so they run concurrently. Do 
 
 **Direct calls** in the same message:
 
-- **Snapshot** — follow the ordered source chain in [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md); this skill passes no `includePatterns`. Record the selected source, and the returned `outputId` when the repomix tier was selected.
+- **Snapshot** — follow the ordered source chain in [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md); this skill passes no `includePatterns`. Emit the block's `context-source:` trace line for the tier you selected, including the `outputId` when it was the repomix tier. The fan-out is not complete until that line exists: it is what [Phase 3](#phase-3-emit-the-context-map) hands to the caller, and a caller cannot enforce a selection it was never told about.
 - **Stack** — Read `package.json` and extract `agents.rules`.
 - **Git state** — `git branch --show-current`, `git rev-parse --git-dir`, and `git rev-parse --git-common-dir` (the last two differ inside a worktree).
 
@@ -90,7 +90,7 @@ Emit these sections in this order. This is the caller's entire view of the repos
 **Applicable standards** — [id + status (mark "defaulted" when inferred) + one line on why the plan must honor it; then dropped candidates; "none" when nothing matched]
 **Stack** — [agents.rules value, and the deltas it resolves to]
 **Git state** — [branch, isWorktree, isStaleMerged, baseAhead]
-**Snapshot** — [selected source: graphify graph | repomix outputId | live tools — for later phases to reuse]
+**Snapshot** — [the `context-source:` line emitted in Phase 1, verbatim — for later phases to reuse]
 ```
 
 Two fields carry decisions the caller would otherwise recompute badly:

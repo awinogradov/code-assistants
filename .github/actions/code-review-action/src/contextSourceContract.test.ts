@@ -15,10 +15,26 @@
  * vacuous-pass defence in sharedBlockSync.test.ts — a missing sentinel would otherwise
  * extract nothing and pass every substring check on "".
  *
+ * Issue #586 adds the enforcement half. The block binds every context holder, but a
+ * contract nothing checks is the failure it was written for: a production linear-run
+ * finished its whole pre-implementation pass with zero graphify and zero repomix calls
+ * in a repository that had both. Two links close that loop, and each fails silently
+ * without a guard:
+ *
+ * 1. gather-context carries the selection into the Context Map's `**Snapshot**` field.
+ *    That field is the ONLY thing a caller receives, so a selection recorded anywhere
+ *    else is invisible to the skill expected to act on it.
+ * 2. linear-run treats a missing selection as fatal, in both plan modes. The audited
+ *    failure was a stored-plan run, so binding only the fresh-plan path would leave the
+ *    reported bug reachable.
+ *
  * What this CANNOT prove: that a session honours the contract at runtime. CI sees text
  * in a file, nothing more — the same limit sharedRulesInvocation.test.ts states for its
- * own presence checks. Runtime evidence comes from the post-merge canary recorded on the
- * issue: post-selection direct-read counts compared against the audited baseline.
+ * own presence checks. Worse here, no workflow runs `bun test` and neither husky hook
+ * does either (pre-commit runs lint-staged, pre-push validates the branch name), so this
+ * gates in review rather than in CI. Runtime evidence comes from the post-merge canary
+ * recorded on the issue: post-selection direct-read counts compared against the audited
+ * baseline.
  */
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -37,6 +53,7 @@ const digestAgentPath = join(
   repoRoot,
   "claude-plugins/autopilot/agents/digest-repo-standards.md",
 );
+const skillsDir = join(repoRoot, "claude-plugins/autopilot/skills");
 
 /** Shortest the contract block can be; anything smaller means the extraction went wrong. */
 const minBlockLength = 80;
@@ -63,6 +80,34 @@ function extractBlock(content: string, sentinel: string): string | null {
 }
 
 const block = extractBlock(await readFile(blockPath, "utf8"), "repomix-snapshot");
+
+const [gatherContext, linearRun] = await Promise.all(
+  ["gather-context", "linear-run"].map((name) =>
+    readFile(join(skillsDir, name, "SKILL.md"), "utf8"),
+  ),
+);
+
+/**
+ * The Context Map template's `**Snapshot**` row. It is the only channel by which a
+ * selection reaches a calling skill, so it is extracted rather than substring-matched —
+ * a `context-source:` mention elsewhere in the file would not propagate anything.
+ */
+const snapshotField =
+  gatherContext.split("\n").find((line) => line.startsWith("**Snapshot** —")) ?? "";
+
+/** The literal stop linear-run emits when the fan-out came back with no selection. */
+const missingSelection =
+  "Context phase failed on <LINEAR-ID>: gather-context returned no context-source selection.";
+
+/** Both plan modes must be bound; the audited failure was a stored-plan run. */
+const planModes = ["stored-plan", "fresh-plan"];
+
+/**
+ * Anchor for the no-rediscovery obligation. Anchored rather than scoped to a phase
+ * heading because both mode names already appear throughout Phase 5 — a phase-wide
+ * search would pass without the obligation being written at all.
+ */
+const boundsBothModes = "**The selected source bounds both modes.**";
 
 describe("exclusive-source read contract", () => {
   test("the sentinel block exists and is substantial", () => {
@@ -100,5 +145,46 @@ describe("digest-repo-standards conforms to the contract", () => {
     const agent = await readFile(digestAgentPath, "utf8");
     expect(agent).not.toContain("Do NOT rely on a packed snapshot");
     expect(agent).toContain("context-source: default");
+  });
+});
+
+describe("gather-context propagates the selection", () => {
+  test("the Snapshot field exists in the Context Map template", () => {
+    expect(snapshotField.length).toBeGreaterThan(0);
+  });
+
+  test("the Snapshot field carries the recorded trace line", () => {
+    expect(snapshotField).toContain("context-source:");
+  });
+
+  test("the pre-contract wording no longer names a tier the block cannot record", () => {
+    // "live tools" predates the contract and has no `context-source:` form, so a caller
+    // reading it back could not tell which tier was selected or why.
+    expect(snapshotField).not.toContain("live tools");
+  });
+});
+
+describe("linear-run enforces the selection", () => {
+  test("it reads the shared block instead of paraphrasing the contract", () => {
+    expect(linearRun).toContain("shared-rules/references/repomix-snapshot.md");
+  });
+
+  test("a missing selection fails the context phase", () => {
+    expect(linearRun).toContain(missingSelection);
+  });
+
+  test("the gate is fatal, unlike a recorded digest failure", () => {
+    const [, gate = ""] = linearRun.split(missingSelection);
+    expect(gate).toContain("fatal");
+    expect(gate).toContain("digestError");
+  });
+
+  test("the no-rediscovery obligation is present", () => {
+    expect(linearRun).toContain(boundsBothModes);
+  });
+
+  test.each(planModes)("the no-rediscovery obligation binds %s mode", (mode) => {
+    const obligation = linearRun.split(boundsBothModes)[1]?.split("\n\n")[0] ?? "";
+    expect(`${mode}: ${obligation.includes(`\`${mode}\``)}`).toBe(`${mode}: true`);
   });
 });
