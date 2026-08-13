@@ -2,6 +2,51 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [5.5.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v5.4.0...autopilot@v5.5.0) (2026-08-13)
+
+## Release Notes
+
+Agents now enforce rebase-only branch synchronization, refusing to merge the base branch into pull-request branches.
+
+## ✨ What's New
+
+### Rebase-Only Branch Synchronization
+
+Agents running in this plugin now refuse to merge the base branch (e.g. `main`) into a pull-request branch. Instead, they synchronize using `git rebase` with `--force-with-lease`, keeping PR history clean and linear. This eliminates accidental merge commits in PR branches, which can complicate code review, confuse history, and cause integration headaches downstream.
+
+The merge-commit check during PR review has also been elevated from a suggestion to a **blocker** — a PR whose own commits include a merge of the base branch will fail the contributing check and cannot proceed until resolved.
+
+<details><summary>Related issues</summary>
+
+- [#592: Forbid merging the base branch into pull-request branches](https://github.com/awinogradov/code-assistants/issues/592)
+- [#593: Stop agents from merging the base branch into pull-request branches](https://github.com/awinogradov/code-assistants/pull/593)
+</details>
+
+## 🐛 Bug Fixes
+
+### Preflight History Gate Now Targets Topic Branches Only
+
+The history gate in the preflight check was previously too broad, potentially flagging merge commits that were inherited from base branch history rather than introduced by the PR author. It now correctly scopes its check to commits on the topic branch itself, so only merge commits that the PR actually adds are evaluated — inherited history is ignored.
+
+<details><summary>Related issues</summary>
+
+- [#593: Stop agents from merging the base branch into pull-request branches](https://github.com/awinogradov/code-assistants/pull/593)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #592 | [#593](https://github.com/awinogradov/code-assistants/pull/593) | @awinogradov |
+
+### Features
+
+* **shared-rules:** forbid merging the base branch ([2e83d24](https://github.com/awinogradov/code-assistants/commit/2e83d242b3f9c34b7a4dec15fe1068a790d58a2f))
+
+### Bug Fixes
+
+* **preflight-check:** scope the history gate to topic branches ([44dcb31](https://github.com/awinogradov/code-assistants/commit/44dcb3159eff41ee02443e51f84cfadd02bb1b37))
 ## [5.4.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v5.3.0...autopilot@v5.4.0) (2026-08-13)
 
 ## Release Notes
