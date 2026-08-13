@@ -9271,7 +9271,25 @@ if (import.meta.main) {
  * vacuous-pass defence in sharedBlockSync.test.ts — a missing sentinel would otherwise
  * extract nothing and pass every substring check on "".
  *
- * What this CANNOT prove: that a session honours the contract at runtime. CI sees text
+ * Issue #586 adds the enforcement half. The block binds every context holder, but a
+ * contract nothing checks is the failure it was written for: a production linear-run
+ * finished its whole pre-implementation pass with zero graphify and zero repomix calls
+ * in a repository that had both. Two links close that loop, and each fails silently
+ * without a guard:
+ *
+ * 1. gather-context carries the selection into the Context Map's `**Snapshot**` field.
+ *    That field is the ONLY thing a caller receives, so a selection recorded anywhere
+ *    else is invisible to the skill expected to act on it.
+ * 2. linear-run treats a missing selection as fatal, in both plan modes. The audited
+ *    failure was a stored-plan run, so binding only the fresh-plan path would leave the
+ *    reported bug reachable.
+ *
+ * This file does run in CI: `.github/workflows/test.yml` runs `bun run test` on every
+ * pull request to `main`, unfiltered by path, and this action's own `test` script is
+ * `bun test`. Deleting a guarded phrase therefore fails the Test check rather than
+ * relying on a reviewer to notice.
+ *
+ * What that CANNOT prove: that a session honours the contract at runtime. CI sees text
  * in a file, nothing more — the same limit sharedRulesInvocation.test.ts states for its
  * own presence checks. Runtime evidence comes from the post-merge canary recorded on the
  * issue: post-selection direct-read counts compared against the audited baseline.
@@ -9293,6 +9311,7 @@ const digestAgentPath = join(
   repoRoot,
   "claude-plugins/autopilot/agents/digest-repo-standards.md",
 );
+const skillsDir = join(repoRoot, "claude-plugins/autopilot/skills");
 
 /** Shortest the contract block can be; anything smaller means the extraction went wrong. */
 const minBlockLength = 80;
@@ -9319,6 +9338,34 @@ function extractBlock(content: string, sentinel: string): string | null {
 }
 
 const block = extractBlock(await readFile(blockPath, "utf8"), "repomix-snapshot");
+
+const [gatherContext, linearRun] = await Promise.all(
+  ["gather-context", "linear-run"].map((name) =>
+    readFile(join(skillsDir, name, "SKILL.md"), "utf8"),
+  ),
+);
+
+/**
+ * The Context Map template's `**Snapshot**` row. It is the only channel by which a
+ * selection reaches a calling skill, so it is extracted rather than substring-matched —
+ * a `context-source:` mention elsewhere in the file would not propagate anything.
+ */
+const snapshotField =
+  gatherContext.split("\n").find((line) => line.startsWith("**Snapshot** —")) ?? "";
+
+/** The literal stop linear-run emits when the fan-out came back with no selection. */
+const missingSelection =
+  "Context phase failed on <LINEAR-ID>: gather-context returned no context-source selection.";
+
+/** Both plan modes must be bound; the audited failure was a stored-plan run. */
+const planModes = ["stored-plan", "fresh-plan"];
+
+/**
+ * Anchor for the no-rediscovery obligation. Anchored rather than scoped to a phase
+ * heading because both mode names already appear throughout Phase 5 — a phase-wide
+ * search would pass without the obligation being written at all.
+ */
+const boundsBothModes = "**The selected source bounds both modes.**";
 
 describe("exclusive-source read contract", () => {
   test("the sentinel block exists and is substantial", () => {
@@ -9356,6 +9403,47 @@ describe("digest-repo-standards conforms to the contract", () => {
     const agent = await readFile(digestAgentPath, "utf8");
     expect(agent).not.toContain("Do NOT rely on a packed snapshot");
     expect(agent).toContain("context-source: default");
+  });
+});
+
+describe("gather-context propagates the selection", () => {
+  test("the Snapshot field exists in the Context Map template", () => {
+    expect(snapshotField.length).toBeGreaterThan(0);
+  });
+
+  test("the Snapshot field carries the recorded trace line", () => {
+    expect(snapshotField).toContain("context-source:");
+  });
+
+  test("the pre-contract wording no longer names a tier the block cannot record", () => {
+    // "live tools" predates the contract and has no `context-source:` form, so a caller
+    // reading it back could not tell which tier was selected or why.
+    expect(snapshotField).not.toContain("live tools");
+  });
+});
+
+describe("linear-run enforces the selection", () => {
+  test("it reads the shared block instead of paraphrasing the contract", () => {
+    expect(linearRun).toContain("shared-rules/references/repomix-snapshot.md");
+  });
+
+  test("a missing selection fails the context phase", () => {
+    expect(linearRun).toContain(missingSelection);
+  });
+
+  test("the gate is fatal, unlike a recorded digest failure", () => {
+    const [, gate = ""] = linearRun.split(missingSelection);
+    expect(gate).toContain("fatal");
+    expect(gate).toContain("digestError");
+  });
+
+  test("the no-rediscovery obligation is present", () => {
+    expect(linearRun).toContain(boundsBothModes);
+  });
+
+  test.each(planModes)("the no-rediscovery obligation binds %s mode", (mode) => {
+    const obligation = linearRun.split(boundsBothModes)[1]?.split("\n\n")[0] ?? "";
+    expect(`${mode}: ${obligation.includes(`\`${mode}\``)}`).toBe(`${mode}: true`);
   });
 });
 </file>
@@ -47505,7 +47593,7 @@ Issue **every** call below in a **single message** so they run concurrently. Do 
 
 **Direct calls** in the same message:
 
-- **Snapshot** — follow the ordered source chain in [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md); this skill passes no `includePatterns`. Record the selected source, and the returned `outputId` when the repomix tier was selected.
+- **Snapshot** — follow the ordered source chain in [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md); this skill passes no `includePatterns`. Emit the block's `context-source:` trace line for the tier you selected, including the `outputId` when it was the repomix tier. The fan-out is not complete until that line exists: it is what [Phase 3](#phase-3-emit-the-context-map) hands to the caller, and a caller cannot enforce a selection it was never told about.
 - **Stack** — Read `package.json` and extract `agents.rules`.
 - **Git state** — `git branch --show-current`, `git rev-parse --git-dir`, and `git rev-parse --git-common-dir` (the last two differ inside a worktree).
 
@@ -47545,7 +47633,7 @@ Emit these sections in this order. This is the caller's entire view of the repos
 **Applicable standards** — [id + status (mark "defaulted" when inferred) + one line on why the plan must honor it; then dropped candidates; "none" when nothing matched]
 **Stack** — [agents.rules value, and the deltas it resolves to]
 **Git state** — [branch, isWorktree, isStaleMerged, baseAhead]
-**Snapshot** — [selected source: graphify graph | repomix outputId | live tools — for later phases to reuse]
+**Snapshot** — [the `context-source:` line emitted in Phase 1, verbatim — for later phases to reuse]
 ```
 
 Two fields carry decisions the caller would otherwise recompute badly:
@@ -48618,6 +48706,12 @@ Pass the detected input type, the Linear issue id, repository, repository root, 
 
 Nothing in the fan-out is gated off. A stored plan records what to do, not what the repository looks like; a fresh plan needs the full Context Map as its drafting input. In both modes the standards digest, branch diff, TODO search, and a fresh context-source acquisition still run. A recorded `outputId` would be useless anyway, since it is session-scoped and dead in any later session.
 
+**Accept the context source before continuing.** Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) and check the returned map's **Snapshot** field against it: it must carry that block's `context-source:` line naming the tier the fan-out selected. When the field is absent, or carries no such line, stop:
+
+`Context phase failed on <LINEAR-ID>: gather-context returned no context-source selection.`
+
+This stop is fatal, unlike a `digestError` the map records and moves past. A degraded digest costs the plan some context; an unrecorded selection means nothing bounds the repository reads that follow — which is the failure the gate exists for, since a production run once completed its entire pre-implementation pass on ordinary traversal, making zero graph and zero pack calls in a repository that had both. Re-run the skill, or file against it if the fan-out keeps returning no selection; do not continue by hand.
+
 Set task 3 to `completed`.
 
 ## Phase 3: Preflight verdict
@@ -48659,6 +48753,8 @@ The resulting harness plan is the execution plan for this run only. Do not store
 In `stored-plan` mode, the stored `### Implementation Steps` must be worked in order, verifying each against its own `verify:` line before moving on. Verbatim means verbatim: do not re-draft, reorder, merge, or add steps. Where a step cannot be carried out as written, stop and report which step and why. Treat the stored `### Files` list as the expected blast radius and report any required expansion.
 
 In `fresh-plan` mode, the finalized harness plan is the execution contract exactly as it is for [`run`](../run/SKILL.md#phase-5-implement-and-proceed). This mode is autonomous and adds no approval prompt.
+
+**The selected source bounds both modes.** Repository investigation before the first edit is served from the source the Context Map recorded — in `stored-plan` mode as much as in `fresh-plan` mode. A stored plan names the files to touch; it is not a licence to re-derive the repository with ordinary traversal, and the audited failure this answers was a stored-plan run. Reads outside the selected source carry the shared block's `context-fallback:` line, and broad rediscovery does not become valid because a plan already exists.
 
 ## Phase 6: Branch and run the autopilot chain
 
@@ -61984,6 +62080,50 @@ Stored `### Pre-Implementation` and `### Post-Implementation` sections are read 
 
 **Nothing in the fan-out is gated off**, which is the other place this pair diverges from the explore pair. `run-primed` skips the standards digest because a validated brief already carries it. A stored plan carries no such thing: it records decisions, not architecture. So the standards digest, branch diff, TODO search, and a freshly attached snapshot all still run. A recorded snapshot id would be useless anyway — it is session-scoped and dead in any later session.
 
+## Enforcing the context source
+
+The fan-out gathers repository context through the shared [exclusive-source read contract](./09-repomix-pack.md#the-exclusive-source-read-contract): each context holder selects one tier, records it as a `context-source:` line, and serves every repository-content question from it. Referencing that contract turned out not to be the same as enforcing it. A production run of this skill completed its entire pre-implementation pass with **zero** graphify and **zero** repomix calls — 34 Bash, 8 Read, 6 Grep, 3 Glob and 5 Agent calls over roughly seven minutes — in a repository that carried a committed graph and a resolving CLI ([#586](https://github.com/awinogradov/code-assistants/issues/586)). The preceding planning run had queried the graph successfully, so nothing was missing; the implementation run simply re-collected the repository with default tools.
+
+```text
+┌──────────────────────────────────────────────┐
+│ repomix-snapshot.md — one source per holder  │
+└──────────────────────┬───────────────────────┘
+                       │ ①
+                       ▼
+┌──────────────────────────────────────────────┐
+│ gather-context — context-source: <selection> │
+└──────────────────────┬───────────────────────┘
+                       │ ②
+                       ▼
+┌──────────────────────────────────────────────┐
+│ Context Map — Snapshot field                 │
+└──────────────────────┬───────────────────────┘
+                       │ ③
+                       ▼
+┌──────────────────────────────────────────────┐
+│ linear-run Phase 2 — accept or fail          │
+└───────┬────────────────────────┬─────────────┘
+        │ ④                      │ ⑤
+        ▼                        ▼
+┌────────────────┐  ┌──────────────────────────┐
+│ line absent    │  │ stored-plan and          │
+│ context phase  │  │ fresh-plan both bounded  │
+│ fails          │  │ by the selected source   │
+└────────────────┘  └──────────────────────────┘
+```
+
+**Flow Legend:**
+
+- ① The shared block binds every holder to one selected tier.
+- ② [`gather-context`](../claude-plugins/autopilot/skills/gather-context/SKILL.md) emits the selection as a trace line rather than leaving it implied by which tools happened to run.
+- ③ That line travels in the Context Map's `Snapshot` field — the only channel by which a selection reaches this skill.
+- ④ A map with no selection fails the context phase outright.
+- ⑤ Both plan modes are bound by the recorded source, because the audited failure was a stored-plan run.
+
+Two properties make the gate worth its cost. **The failure is fatal, unlike a `digestError`.** A degraded standards digest leaves the plan with less context; an unrecorded selection leaves nothing bounding the repository reads that follow, which is a different kind of wrong. **Both modes are bound.** A stored plan names the files to touch, which reads like permission to go find them — so the obligation is stated for `stored-plan` mode explicitly, not inherited by implication from the fresh-plan path.
+
+The gate is deliberately local to this skill. Every consumer of the shared block inherits the emission requirement, but issue 586 scoped the fatal check to `linear-run`, where the failure was observed; [`run`](../claude-plugins/autopilot/skills/run/SKILL.md) and [`run-primed`](../claude-plugins/autopilot/skills/run-primed/SKILL.md) are unchanged.
+
 ## Executing the selected plan
 
 In stored-plan mode, the `### Implementation Steps` are worked in order, each verified against its own `verify:` line before the next begins. No re-drafting, no re-ordering, no merging, no added steps, and no second expert review — the producer's pipeline already finalized the stored artifact, recording either its panel's score or an explicit skip.
@@ -61996,17 +62136,23 @@ In fresh-plan mode, the shared planning pipeline produces and scores a harness p
 
 `linearPlanContract.test.ts` relates this skill to its producer — see [the guard section in chapter 16](./16-linear-plan-skill.md#how-this-is-guarded) for what it asserts. The parts that constrain this side: every verdict must be named and mapped to a mode, fresh-plan verdicts must continue without invoking `linear-plan` or writing Linear, the consumed stored sections must match the producer's required set exactly, and caller-owned sections must remain unused.
 
-**What no test can show:** that the gate runs, or that the model honours it. CI sees text in a file. Nothing under `.github/workflows/` runs `bun test`, so the guard gates locally and in review; and because this repository configures no `linear` tracker, neither skill can execute here at all. Runtime evidence comes from a dry run recorded on the pull request.
+[`contextSourceContract`](../.github/actions/code-review-action/src/contextSourceContract.test.ts) guards the context-source gate from both ends: that `gather-context`'s `Snapshot` field carries the trace line at all, and that this skill reads the shared block, emits the literal stop, marks it fatal, and binds both plan modes. The mode assertions anchor on the obligation's own sentence rather than on the phase heading — both mode names appear throughout Phase 5, so a phase-wide search would pass with the obligation missing entirely.
+
+Both guards run in CI. [`test.yml`](../.github/workflows/test.yml) runs `bun run test` on every pull request to `main` and is deliberately not path-filtered, precisely because these tests guard markdown — so a docs-only change that breaks a pinned phrase fails the Test check.
+
+**What no test can show:** that the gate runs, or that the model honours it. CI sees text in a file. Because this repository configures no `linear` tracker and commits no graphify graph, this skill cannot execute here at all, which puts the issue's two runtime acceptance criteria (a real graph query before any direct traversal, and a per-holder trace assertion) out of reach of any check in this repository. Runtime evidence comes from a dry run recorded on the pull request.
 
 ## Where to look in the code
 
-| File                                                                | Role                                                       |
-| ------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `claude-plugins/autopilot/skills/linear-run/SKILL.md`               | The skill: inspect, select plan source, and deliver        |
-| `claude-plugins/autopilot/skills/linear-plan/SKILL.md`              | Writes the stored plan and owns its format                 |
-| `claude-plugins/autopilot/skills/run/SKILL.md`                      | The phases this skill references for everything downstream |
-| `claude-plugins/autopilot/skills/gather-context/SKILL.md`           | The fan-out, run in full here                              |
-| `.github/actions/code-review-action/src/linearPlanContract.test.ts` | The producer/consumer guard                                |
+| File                                                                   | Role                                                       |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `claude-plugins/autopilot/skills/linear-run/SKILL.md`                  | The skill: inspect, select plan source, and deliver        |
+| `claude-plugins/autopilot/skills/linear-plan/SKILL.md`                 | Writes the stored plan and owns its format                 |
+| `claude-plugins/autopilot/skills/run/SKILL.md`                         | The phases this skill references for everything downstream |
+| `claude-plugins/autopilot/skills/gather-context/SKILL.md`              | The fan-out, run in full here; emits the selection         |
+| `…/skills/shared-rules/references/repomix-snapshot.md`                 | The exclusive-source contract this skill enforces          |
+| `.github/actions/code-review-action/src/linearPlanContract.test.ts`    | The producer/consumer guard                                |
+| `.github/actions/code-review-action/src/contextSourceContract.test.ts` | The context-source gate guard                              |
 </file>
 
 <file path="docs/18-agent-skills-export.md">
