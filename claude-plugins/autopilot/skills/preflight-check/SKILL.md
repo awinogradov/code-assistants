@@ -39,7 +39,9 @@ The action noun used in prompts below follows the mode:
 
 Read [`git-history-policy.md`](../shared-rules/references/git-history-policy.md) and apply it verbatim for the rest of the session, not only for the checks below.
 
-Evaluate every git command this session is about to run against the block's canonical regex before running it. On a match, refuse: report the matched command, name the permitted alternative from the block, and abort with "<Action noun> cancelled. <command> merges or rewrites history in a way CONTRIBUTING.md forbids — see the git history policy." This gate takes no AskUserQuestion, in every mode. The later phases ask the user to accept a risk; this one states a rule, and a prompt would only invite the acknowledgement that invariant 4 rules out.
+Evaluate every git command this session is about to run against the block's canonical regex before running it, **whenever HEAD is on a topic branch**. On a match, refuse: report the matched command, name the permitted alternative from the block, and abort with "<Action noun> cancelled. <command> merges or rewrites history in a way CONTRIBUTING.md forbids — see the git history policy." This gate takes no AskUserQuestion, in every mode. The later phases ask the user to accept a risk; this one states a rule, and a prompt would only invite the acknowledgement that invariant 4 rules out.
+
+The branch condition is load-bearing, and this skill owns it: the regex is shape-only and cannot see which branch is checked out, so a gate that fired unconditionally would refuse [Phase 3](#phase-3-on-main)'s own "Pull updates" action — `git pull origin main` while standing on `main` — which fast-forwards the base branch rather than pulling it into other work. On `main` or `master` itself the gate does not fire.
 
 Ownership is part of the same gate. When a rewrite is contemplated on a branch this session did not create — a shared branch, or one whose last commits carry another author — stop and report rather than guessing; the block's recovery procedure applies only to agent-owned branches.
 
