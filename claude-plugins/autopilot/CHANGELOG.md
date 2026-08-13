@@ -2,6 +2,38 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [5.3.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v5.2.0...autopilot@v5.3.0) (2026-08-13)
+
+## Release Notes
+
+Autopilot sessions now enforce a single codebase-context source per run, eliminating redundant file reads when a Repomix pack or graph is already attached.
+
+## ✨ What's New
+
+### Single-Source Context Contract
+
+Autopilot sessions now select exactly one codebase-context source at the start of each run — either a graphify graph, an attached Repomix pack, or the default tool-based discovery — and record that selection as a `context-source:` trace line in the session output. This means Claude will no longer re-read files it already has access to through the selected source, reducing token consumption and keeping sessions faster and more predictable.
+
+When a direct file read outside the selected source is genuinely necessary (for example, to fetch a file not covered by the pack), the agent now emits a `context-fallback:` reason drawn from a fixed six-token taxonomy, giving you a machine-readable signal to audit where and why fallbacks occur.
+
+Oversized Repomix packs that previously caused the agent to abandon the pack and fall back to full repository rediscovery are now handled gracefully: the agent switches to bounded grep and ranged reads to stay within the selected source rather than blowing out to a wider scan.
+
+<details><summary>Related issues</summary>
+
+- [#582: Stop re-reading files already present in the attached Repomix pack](https://github.com/awinogradov/code-assistants/issues/582)
+- [#583: Serve codebase context from a single selected source with recorded fallbacks](https://github.com/awinogradov/code-assistants/pull/583)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #582 | [#583](https://github.com/awinogradov/code-assistants/pull/583) | @awinogradov |
+
+### Features
+
+* **shared-rules:** add exclusive context-source contract ([33d0da7](https://github.com/awinogradov/code-assistants/commit/33d0da75b1f8581f5f44d845e3bca8fccf2b0543))
 ## [5.2.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v5.1.0...autopilot@v5.2.0) (2026-08-12)
 
 ## Release Notes
