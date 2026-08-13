@@ -62,6 +62,18 @@ The consuming skills follow an **ordered source chain**, defined once in the sha
 
 Because a committed graph or pack reflects `main` at the last merge, on a feature branch it lags by the in-flight changes — acceptable, since review-time skills obtain the actual diff separately and use the snapshot only for surrounding context.
 
+### Graphify query refinement
+
+Preferring the graph is not the same as using it. An audited planning run asked one broad question, got an answer graphify had cut to 52 of 918 nodes, made no follow-up, and continued with ordinary repository traversal ([#587](https://github.com/awinogradov/code-assistants/issues/587)) — the graph was paid for and then re-derived by hand. The shared block therefore gives tier 1 a query discipline:
+
+- Each answer is classified as **focused**, **truncated** (graphify announces it, e.g. `[!] TRUNCATED: showing 52 of 918 nodes`), **empty** (`No matching nodes found.`), or **error**. A truncated answer is an incomplete lookup, not a negative result.
+- A truncated or empty answer is refined with another **graph** operation before any context-gathering file read — a narrower question, a `--context <relation>` filter, or a focused `explain` / `path` / `affected` lookup. Raising `--budget` re-floods the same broad answer, so it is never the sole response.
+- Refinement is capped at three rounds after the first, and the pass ends at a **shortlist** of at most ten files or entities, each with the relationship that justifies it. Direct reads during the pass are limited to that shortlist; the shortlist is what the pass hands on, the way an `outputId` is on tier 2.
+- The pass closes with `graphify-trace: queries=<n> truncated=<yes|no> shortlist=<n> outside-reads=<n>`, which makes the failure mode legible after the fact: `truncated=yes` with `queries=1` is a truncated answer that was never refined.
+- An exhausted tier hands over explicitly — `context-source: repomix <outputId> superseding graphify (refinement exhausted)` — so exactly one source stays live.
+
+The wording is pinned by [`graphifyRefinementContract`](../.github/actions/code-review-action/src/graphifyRefinementContract.test.ts), which extracts a nested `graphify-refinement` sentinel because the outer block already contains the words the discipline uses. CI can only prove the text is there; whether sessions honour it is measured by the canary recorded on the issue.
+
 ### The exclusive-source read contract
 
 Audited sessions used to attach the pack and then rediscover the repository anyway — direct `Read`/`Grep`/`Glob` sweeps and delegated context agents re-covering files the snapshot already held, across all three tiers at once ([#582](https://github.com/awinogradov/code-assistants/issues/582)). The shared block therefore binds every context holder (the session, and each delegated agent) to an **exclusive selection**:
