@@ -52,6 +52,7 @@ const blockSentinels: Record<string, string> = {
   "issue-body-grammar.md": "issue-body-grammar",
   "linear-mcp-access.md": "linear-mcp",
   "peer-cli-delegation.md": "peer-cli",
+  "git-history-policy.md": "git-history",
   "pr-title-grammar.md": "pr-title-grammar",
   "pr-body-grammar.md": "pr-body-grammar",
 };

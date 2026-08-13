@@ -1,6 +1,6 @@
 ---
 name: preflight-check
-description: Validate git working state before committing, branching, or opening a PR. Detects wrong branch, invalid branch names, stale merged branches, uncommitted changes, and out-of-date main.
+description: Validate git working state before committing, branching, or opening a PR. Detects wrong branch, invalid branch names, forbidden history-changing commands, stale merged branches, uncommitted changes, and out-of-date main.
 user-invocable: false
 allowed-tools:
   - Bash(git *)
@@ -15,6 +15,7 @@ The skill protects three invariants; the phases below implement them:
 1. Never create a branch from a stale branch or a `main` that is behind its remote.
 2. Never commit or open a PR on `main` without the user explicitly acknowledging it.
 3. Never commit on a branch whose name violates the naming convention without the user explicitly acknowledging it — a violation caught at commit time costs a rename; caught on an open PR it costs the PR.
+4. Never run a history-changing git command the repository forbids — merging the base branch into a topic branch, force-pushing without a lease, or rewriting a branch someone else owns. Unlike the three above, this one is not acknowledgeable: there is no prompt that makes it acceptable.
 
 ## Context
 
@@ -33,6 +34,14 @@ The action noun used in prompts below follows the mode:
 | `pr`      | pull request    |
 
 **Decision points.** Every user decision below uses AskUserQuestion. Read [`askuserquestion-format.md`](../shared-rules/references/askuserquestion-format.md) once and apply it to every `question` you compose. Each decision point states the situation, a suggested header, the choices with their consequences, and the action each choice triggers — compose the dialog from that. The quoted output strings are the skill's contract with its callers (they parse them, e.g. for the word "cancelled") — emit them EXACTLY as written.
+
+## Phase 0: History Policy Gate
+
+Read [`git-history-policy.md`](../shared-rules/references/git-history-policy.md) and apply it verbatim for the rest of the session, not only for the checks below.
+
+Evaluate every git command this session is about to run against the block's canonical regex before running it. On a match, refuse: report the matched command, name the permitted alternative from the block, and abort with "<Action noun> cancelled. <command> merges or rewrites history in a way CONTRIBUTING.md forbids — see the git history policy." This gate takes no AskUserQuestion, in every mode. The later phases ask the user to accept a risk; this one states a rule, and a prompt would only invite the acknowledgement that invariant 4 rules out.
+
+Ownership is part of the same gate. When a rewrite is contemplated on a branch this session did not create — a shared branch, or one whose last commits carry another author — stop and report rather than guessing; the block's recovery procedure applies only to agent-owned branches.
 
 ## Phase 1: Detect Current Branch
 

@@ -330,9 +330,10 @@ example/       # multiple modules: a directory, no index.ts barrel
 ## 15. Git Workflow
 
 - **MANDATORY**: `CONTRIBUTING.md` in the repository root is the binding standard for every branch, commit, PR, and issue operation — read the governing section before acting; never restate or improvise its rules
-- Governing sections: "Branches" for branch names, "Commits" for commit messages, "PR Title" and "Special PR Prefixes" for PR titles, "PR Description" and "Magic Words" for PR bodies and issue linking, "How to Contribute" for issues
+- Governing sections: "Branches" for branch names, "Commits" for commit messages, "Updating pull-request branches" for synchronizing a PR branch with its base, "PR Title" and "Special PR Prefixes" for PR titles, "PR Description" and "Magic Words" for PR bodies and issue linking, "How to Contribute" for issues
 - **MANDATORY**: With the autopilot skills installed, perform these operations only through them — `branch-create` for branches, `commits-create` for commits, `pr-create` for pull requests, `issue-create` for issues, `plan` for implementation plans — never their raw `git`/`gh`/web-UI equivalents and never ad-hoc planning; invoking the skill satisfies this section. Without the skills, follow CONTRIBUTING.md directly
 - Never bypass validation hooks with `--no-verify` — fix the violation instead
+- **MANDATORY**: Never merge the base branch into a pull-request branch — no `git merge main`, `git merge origin/main`, or `git pull origin main` while on a topic branch. Synchronize with fetch → rebase → `git push --force-with-lease`; never bare `--force`, and never rewrite a shared or human-owned branch without explicit authorization. A stale check is reported, never refreshed by pulling base changes into the task
 
 ## 16. AI Assistant Workflow
 

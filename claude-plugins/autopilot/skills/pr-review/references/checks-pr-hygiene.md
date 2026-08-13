@@ -28,9 +28,9 @@ PR addresses one logical change. Bug fixes shouldn't include refactoring; featur
 
 Exclude generated files, lockfiles, and config, but the meaningful code diff should be reviewable in one sitting.
 
-**CHECK-PR-004: No merge commits in feature branch** — Severity: suggestion
+**CHECK-PR-004: No merge commits in feature branch** — Severity: blocker
 
-Feature branches should be rebased on main, not merged. Merge commits clutter history.
+A feature branch takes base changes by rebase, never by merge — the rule and its permitted alternative are in [`git-history-policy.md`](../../shared-rules/references/git-history-policy.md). A merge of the base branch pulls unrelated changes into the diff, so the pull request no longer describes what it does. `contributing-check` fails the same condition in CI; flagging it as a suggestion would tell the author the build can be argued with.
 
 **CHECK-PR-005: No "fix review" or "address feedback" commits** — Severity: suggestion
 
