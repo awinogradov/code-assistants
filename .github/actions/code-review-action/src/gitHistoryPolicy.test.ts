@@ -96,6 +96,14 @@ describe("canonical forbidden-command regex", () => {
   test.each(permittedCommands)("permits %s", (command) => {
     expect(new RegExp(canonicalRegex!).test(command)).toBe(false);
   });
+
+  // The pattern cannot see which branch is checked out, so its scope has to be
+  // stated in prose. Without it a gate reads `git pull origin main` as a
+  // violation even on `main`, where it is an ordinary fast-forward — which is
+  // exactly the command preflight-check's own Phase 3 prescribes.
+  test("scopes itself to topic branches", () => {
+    expect(block).toContain("Evaluate it only while HEAD is on a topic branch");
+  });
 });
 
 describe("prohibition wording survives every restatement", () => {
@@ -145,6 +153,15 @@ describe("skills load the block", () => {
     const skill = await readFile(join(skillsDir, "preflight-check/SKILL.md"), "utf8");
     expect(skill).toContain("## Phase 0: History Policy Gate");
     expect(skill).toContain("This gate takes no AskUserQuestion");
+  });
+
+  // Phase 3 tells the user to run `git pull origin main` on main, which the
+  // shape-only regex matches. Phase 0 must supply the branch condition the
+  // regex cannot, or the skill deterministically refuses its own instruction.
+  test("preflight-check scopes the gate so Phase 3 stays reachable", async () => {
+    const skill = await readFile(join(skillsDir, "preflight-check/SKILL.md"), "utf8");
+    expect(skill).toContain("whenever HEAD is on a topic branch");
+    expect(skill).toContain("On `main` or `master` itself the gate does not fire.");
   });
 });
 

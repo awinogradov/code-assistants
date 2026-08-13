@@ -46,6 +46,7 @@ The prohibitions above compress into one executable pattern, exercised by the `g
 ```
 
 - The pattern is shape-only. It spells `main` and `master` because those are the names it can know; the rule binds whatever the repository configures as its default branch, which no regex can express — a base branch named otherwise is still forbidden.
+- **Evaluate it only while HEAD is on a topic branch.** Every prohibition above is about pulling the base branch _into_ other work, so fast-forwarding the base branch while checked out on it — `git pull origin main` on `main` — is ordinary maintenance and is not covered. A shape-only pattern cannot see which branch you are on, so the caller must supply that half before treating a match as a violation.
 - A match is a refusal, not a warning. Report the match, name the permitted alternative from [Synchronizing an agent-owned branch](#synchronizing-an-agent-owned-branch), and do not run the command.
 
 **Forbidden commands:**
@@ -53,7 +54,7 @@ The prohibitions above compress into one executable pattern, exercised by the `g
 - `git merge main` — merges the base branch into the topic branch
 - `git merge origin/main` — same, via the remote-tracking ref
 - `git merge --no-ff origin/main` — an explicit merge commit is still a merge commit
-- `git pull origin main` — `git pull` merges by default
+- `git pull origin main` — on a topic branch, `git pull` merges by default (the same command on `main` itself is a permitted fast-forward)
 - `git push --force` — no lease, so a concurrent push is silently discarded
 - `git push -f origin issue-42-example` — the short form is the same command
 
