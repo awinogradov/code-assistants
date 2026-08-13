@@ -26,6 +26,41 @@ runs:
       with:
         fetch-depth: 0
 
+    # CONTRIBUTING.md forbids merging the base branch into a pull-request
+    # branch. Two choices keep this from over-firing: the range starts at the
+    # merge base, so merges inherited from base history are outside it, and a
+    # merge only counts when one of its extra parents is already contained in
+    # the base branch, so a PR that merges a second topic branch still passes.
+    # HEAD is deliberately unused — on `pull_request` actions/checkout resolves
+    # refs/pull/N/merge, so HEAD is itself a merge commit and would self-match.
+    - name: Validate no base-branch merges
+      if: ${{ github.event.pull_request.user.login != 'dependabot[bot]' }}
+      shell: bash
+      env:
+        BASE_REF: ${{ github.base_ref }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      run: |
+        set -euo pipefail
+        git fetch --no-tags --quiet origin "${BASE_REF}"
+        base_sha="$(git merge-base FETCH_HEAD "${HEAD_SHA}")"
+        offenders=()
+        while read -r merge_sha; do
+          [ -n "${merge_sha}" ] || continue
+          while read -r parent; do
+            [ -n "${parent}" ] || continue
+            if git merge-base --is-ancestor "${parent}" FETCH_HEAD; then
+              offenders+=("${merge_sha}")
+              break
+            fi
+          done < <(git rev-list --parents -n 1 "${merge_sha}" | cut -d' ' -f3- | tr ' ' '\n')
+        done < <(git rev-list --merges "${base_sha}..${HEAD_SHA}")
+        if [ "${#offenders[@]}" -gt 0 ]; then
+          echo "::error::Pull request merges the base branch into its head branch. Rebase onto ${BASE_REF} and push with --force-with-lease. See CONTRIBUTING.md §updating-pull-request-branches."
+          git log --no-walk --format='  %h %s' "${offenders[@]}"
+          exit 1
+        fi
+        echo "contributing-check: no base-branch merges since ${base_sha}"
+
     - name: Validate commit messages
       if: ${{ github.event.pull_request.user.login != 'dependabot[bot]' }}
       uses: wagoid/commitlint-github-action@v6
