@@ -168,6 +168,7 @@ The content is organized as follows:
         branchGrammarSync.test.ts
         classifyReaction.test.ts
         classifyReaction.ts
+        contextSourceContract.test.ts
         expertReviewContract.test.ts
         linearPlanContract.test.ts
         linkResolution.test.ts
@@ -9211,6 +9212,113 @@ if (import.meta.main) {
     console.log("PR-author acknowledgement in bot thread — skipping model reply (issue #111)");
   }
 }
+</file>
+
+<file path=".github/actions/code-review-action/src/contextSourceContract.test.ts">
+/**
+ * Guards the exclusive-source read contract inside the repomix-snapshot shared block
+ * (claude-plugins/autopilot/skills/shared-rules/references/repomix-snapshot.md), added for
+ * issue #582: a context holder selects exactly one source from the ordered chain, records
+ * the selection as a `context-source:` trace line, and reads outside it only with a
+ * machine-readable `context-fallback: <reason> <path>` line whose reason comes from a
+ * fixed six-token taxonomy. Also holds the one consumer whose local text used to
+ * contradict the contract — the digest-repo-standards agent's blanket "Do NOT rely on a
+ * packed snapshot" rule — to its replacement, an explicit recorded default-tools
+ * selection.
+ *
+ * The taxonomy tokens are explicit test data, one assertion per token, so dropping a
+ * reason from the block fails loudly instead of shrinking the taxonomy silently. The
+ * block is extracted through its sentinels and asserted non-empty first, mirroring the
+ * vacuous-pass defence in sharedBlockSync.test.ts — a missing sentinel would otherwise
+ * extract nothing and pass every substring check on "".
+ *
+ * What this CANNOT prove: that a session honours the contract at runtime. CI sees text
+ * in a file, nothing more — the same limit sharedRulesInvocation.test.ts states for its
+ * own presence checks. Runtime evidence comes from the post-merge canary recorded on the
+ * issue: post-selection direct-read counts compared against the audited baseline.
+ */
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
+import { describe, expect, test } from "bun:test";
+
+// Depth mirrors sharedBlockSync.test.ts in this directory — a move of the
+// action updates both in lockstep.
+const actionDir = join(import.meta.dirname, "..");
+const repoRoot = join(actionDir, "..", "..", "..");
+const blockPath = join(
+  repoRoot,
+  "claude-plugins/autopilot/skills/shared-rules/references/repomix-snapshot.md",
+);
+const digestAgentPath = join(
+  repoRoot,
+  "claude-plugins/autopilot/agents/digest-repo-standards.md",
+);
+
+/** Shortest the contract block can be; anything smaller means the extraction went wrong. */
+const minBlockLength = 80;
+
+/**
+ * The six machine-readable fallback reasons. Every direct read outside the selected
+ * source must cite exactly one of these; the block must name them all.
+ */
+const fallbackReasons = [
+  "absent-or-excluded",
+  "truncated-or-unreadable",
+  "stale-snapshot",
+  "byte-verification",
+  "generated-or-untracked",
+  "post-snapshot-mutation",
+];
+
+/** Extract the named sentinel-delimited block from `content`, trimmed; null when absent. */
+function extractBlock(content: string, sentinel: string): string | null {
+  const pattern = new RegExp(
+    `<!-- ${sentinel}:start -->([\\s\\S]*?)<!-- ${sentinel}:end -->`,
+  );
+  return pattern.exec(content)?.[1].trim() ?? null;
+}
+
+const block = extractBlock(await readFile(blockPath, "utf8"), "repomix-snapshot");
+
+describe("exclusive-source read contract", () => {
+  test("the sentinel block exists and is substantial", () => {
+    expect(block).not.toBeNull();
+    expect(block!.length).toBeGreaterThan(minBlockLength);
+  });
+
+  test("selection is exclusive and recorded as a trace line", () => {
+    expect(block).toContain("exactly one source");
+    expect(block).toContain("context-source:");
+  });
+
+  test("reading outside the selected source requires a recorded reason", () => {
+    expect(block).toContain("context-fallback:");
+  });
+
+  test.each(fallbackReasons)("the fallback taxonomy names %s", (reason) => {
+    expect(block).toContain(reason);
+  });
+
+  test("oversized packs stay bounded instead of triggering rediscovery", () => {
+    expect(block).toContain("never a full-range read");
+    expect(block).toContain("Pack size is never a valid reason to fall back");
+  });
+
+  test("the pack_codebase fallback marker phrase survives the rewrite", () => {
+    // sharedRulesInvocation.test.ts pins this exact phrase as the block's
+    // removed-text marker; rewording it there and here must happen together.
+    expect(block).toContain("fall back to `mcp__repomix__pack_codebase` with");
+  });
+});
+
+describe("digest-repo-standards conforms to the contract", () => {
+  test("the blanket packed-snapshot ban is replaced by a recorded selection", async () => {
+    const agent = await readFile(digestAgentPath, "utf8");
+    expect(agent).not.toContain("Do NOT rely on a packed snapshot");
+    expect(agent).toContain("context-source: default");
+  });
+});
 </file>
 
 <file path=".github/actions/code-review-action/src/expertReviewContract.test.ts">
@@ -44221,7 +44329,7 @@ The point of this agent is context isolation: the full text of a README, three R
 
 **Constraints:**
 
-- Use the Read tool on matched standards. Do NOT rely on a packed snapshot — a fallback pack may omit nested markdown.
+- Your toolset is `Read` and `Glob` only, so your selected context source is `context-source: default (no repomix MCP tools)` — use the Read tool on matched standards and read nothing beyond them.
 - For a document longer than ~300 lines, read only the sections that matched.
 - Never invent a standard, an id, or a status. An unreadable or absent source is reported, not guessed.
 
@@ -47303,7 +47411,7 @@ Issue **every** call below in a **single message** so they run concurrently. Do 
 
 Only now is the task's subject matter known, so this pass runs after the fan-out returns.
 
-Search the snapshot for the implementations, patterns, and tests the change touches, using the read contract of the selected source — `graphify` queries when the graph tier was selected, `mcp__repomix__grep_repomix_output` with ranged `mcp__repomix__read_repomix_output` when the repomix tier was, or `Grep`/`Glob`/`Read` directly when only default tools remain. A graph or pack reflects the base at its last refresh, so reach for live Grep/Glob/Read **only** for working-tree code it cannot show — `digest-branch-diff` already reports what is in flight. Do not crawl the tree for anything the selected source answers.
+Search the snapshot for the implementations, patterns, and tests the change touches, using the read contract of the selected source — `graphify` queries when the graph tier was selected, `mcp__repomix__grep_repomix_output` with ranged `mcp__repomix__read_repomix_output` when the repomix tier was, or `Grep`/`Glob`/`Read` directly when only default tools remain. A graph or pack reflects the base at its last refresh, so reach for live Grep/Glob/Read **only** for working-tree code it cannot show — `digest-branch-diff` already reports what is in flight — and record each such read with the one-line `context-fallback: <reason> <path>` note from the [shared block's taxonomy](../shared-rules/references/repomix-snapshot.md) (here usually `post-snapshot-mutation`). Do not crawl the tree for anything the selected source answers.
 
 **At `broad` scope there is no change to narrow to**, so read the snapshot breadth-first instead: the principal modules and their boundaries, the entry points, and the conventions that govern them. Fill `Relevant files` and `Patterns to mirror` at that altitude — the modules a newcomer must know and the conventions they must copy, rather than the handful a specific edit would touch.
 
@@ -51812,7 +51920,7 @@ There is no TODO search and no assignee for alert inputs.
 
 Reference for [`plan/SKILL.md`](../SKILL.md) and [`run/SKILL.md`](../../run/SKILL.md). Defined once here so the two callers cannot drift.
 
-Everything below runs **after** [`gather-context`](../../gather-context/SKILL.md) has returned the Context Map. That map is the codebase read: reason over it rather than re-reading the tree. Reach for an extra lookup only when the map is genuinely missing something the work turns on — a targeted query against the map's snapshot source (a `graphify` query, or `mcp__repomix__grep_repomix_output` against its `outputId`), or a live Grep/Read for working-tree code the snapshot cannot show — then fold the result back into the map.
+Everything below runs **after** [`gather-context`](../../gather-context/SKILL.md) has returned the Context Map. That map is the codebase read: reason over it rather than re-reading the tree. Reach for an extra lookup only when the map is genuinely missing something the work turns on — a targeted query against the map's snapshot source (a `graphify` query, or `mcp__repomix__grep_repomix_output` against its `outputId`), or a live Grep/Read carrying its `context-fallback: <reason> <path>` note per the [shared block's taxonomy](../../shared-rules/references/repomix-snapshot.md) for working-tree code the snapshot cannot show — then fold the result back into the map.
 
 Resolve the three stack values from [stack-deltas.md](stack-deltas.md) wherever a step says "your stack's delta".
 
@@ -56064,9 +56172,17 @@ Write the most helpful, readable output you can: plain, direct prose; every refe
 <file path="claude-plugins/autopilot/skills/shared-rules/references/repomix-snapshot.md">
 <!-- repomix-snapshot:start -->
 
-### Acquire codebase context
+### Codebase context: select one source, then read only it
 
-Codebase context comes from an ordered source chain. Check the tiers top-down and use the first one that works; any failure inside a tier falls through to the next rather than aborting.
+Codebase context comes from an ordered source chain. Check the tiers top-down and select the first one that works; any failure inside a tier falls through to the next rather than aborting.
+
+Selection is **exclusive and per context holder**: the session and each delegated agent select for themselves, and each holder selects exactly one source, records the selection once, and serves every repository-content question from that source for the rest of its run. Running the tiers side by side — graph queries plus pack reads plus tree crawling in one holder — is the duplication this contract exists to prevent, whichever tier was selected. Record the selection as a single trace line when the source is chosen:
+
+```
+context-source: graphify | repomix <outputId> | default <reason>
+```
+
+A holder whose toolset cannot reach a tier selects the highest tier it can actually use and records why — an agent with only `Read`/`Glob` has no repomix MCP tools, so it selects `context-source: default (no repomix MCP tools)` and that selection is legitimate, not a fallback.
 
 **Tier 1 — graphify knowledge graph.** Fires when the consuming repository carries a committed graph: `graphify-out/graph.json` exists at the repository root AND the `graphify` CLI resolves on PATH (`command -v graphify`). For natural-language codebase questions, query the graph first — no LLM, no network:
 
@@ -56095,11 +56211,30 @@ Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
 
 **Tier 3 — default tools.** With neither a graph nor a working repomix path, use plain `Grep`/`Glob`/`Read` on the repository plus `git` via Bash. This tier is the single last resort for every consumer — a skill does not define its own fallback.
 
-**Per-tier read contract.** Record which tier was selected; what "search and read the snapshot" means downstream depends on it:
+**Per-tier read contract.** What "search and read the snapshot" means downstream depends on the selected source:
 
 - Tier 1 returns no `outputId` — answer codebase questions with further `graphify` queries and targeted `Read` of the files the graph names.
 - Tier 2 — store the returned `outputId`; search the snapshot with `mcp__repomix__grep_repomix_output` and read matched regions with `mcp__repomix__read_repomix_output` using `startLine`/`endLine`. Do not read the full pack.
 - Tier 3 — search with `Grep`/`Glob` and read only the matched files.
+
+**Bounded operations on an oversized pack.** Pack size is never a valid reason to fall back to direct reads: serve an oversized pack through `mcp__repomix__grep_repomix_output` (regex plus context lines) and `mcp__repomix__read_repomix_output` with explicit `startLine`/`endLine` slices — never a full-range read, and never a switch to tree crawling because the pack is large.
+
+**Fallback taxonomy — reading outside the selected source.** After selection, a direct `Read`/`Grep`/`Glob` of repository content the selected source should answer is permitted only for a recorded reason, emitted as one line beside the access:
+
+```
+context-fallback: <reason> <path>
+```
+
+with `<reason>` exactly one of:
+
+- `absent-or-excluded` — the content is not in the selected source (not packed, or excluded by `includePatterns`).
+- `truncated-or-unreadable` — the source is damaged where this content lives: a truncated or unreadable pack region, or a graph query that errors.
+- `stale-snapshot` — the snapshot predates a base-branch change this task depends on.
+- `byte-verification` — exact byte-level content is required (hashes, whitespace-sensitive edits) that a snapshot cannot guarantee.
+- `generated-or-untracked` — generated or untracked content a committed snapshot never contains.
+- `post-snapshot-mutation` — working-tree changes made after the snapshot, including this session's own edits; the branch diff already reports what is in flight, so this stays a targeted read, never re-exploration.
+
+A read with no reason from this list does not happen — re-ask the selected source instead. Broad rediscovery after selection (repository-wide `Read`/`Grep`/`Glob` sweeps, or delegating a context agent to re-cover content the selected source already answers) is never valid.
 
 <!-- repomix-snapshot:end -->
 </file>
@@ -60640,6 +60775,16 @@ The consuming skills follow an **ordered source chain**, defined once in the sha
 3. **Default tools** — with neither source available, plain Grep/Glob/Read and `git` via Bash.
 
 Because a committed graph or pack reflects `main` at the last merge, on a feature branch it lags by the in-flight changes — acceptable, since review-time skills obtain the actual diff separately and use the snapshot only for surrounding context.
+
+### The exclusive-source read contract
+
+Audited sessions used to attach the pack and then rediscover the repository anyway — direct `Read`/`Grep`/`Glob` sweeps and delegated context agents re-covering files the snapshot already held, across all three tiers at once ([#582](https://github.com/awinogradov/code-assistants/issues/582)). The shared block therefore binds every context holder (the session, and each delegated agent) to an **exclusive selection**:
+
+- One source per holder, recorded once as `context-source: graphify | repomix <outputId> | default <reason>`. A holder whose toolset cannot reach a tier (an agent without repomix MCP tools) selects the highest tier it can use and records why.
+- Every repository-content question is served from the selected source. A direct read outside it carries a one-line machine-readable reason, `context-fallback: <reason> <path>`, from a fixed six-token taxonomy: `absent-or-excluded`, `truncated-or-unreadable`, `stale-snapshot`, `byte-verification`, `generated-or-untracked`, `post-snapshot-mutation`.
+- An oversized pack is served through bounded operations only — `grep_repomix_output` plus `read_repomix_output` with explicit line ranges, never a full-range read — and pack size is never a valid fallback reason.
+
+The normative text lives in the shared [`repomix-snapshot.md`](../claude-plugins/autopilot/skills/shared-rules/references/repomix-snapshot.md) block; the [`contextSourceContract`](../.github/actions/code-review-action/src/contextSourceContract.test.ts) test pins its load-bearing wording, one assertion per taxonomy token.
 </file>
 
 <file path="docs/10-pdf-create-skill.md">
