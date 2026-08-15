@@ -155,6 +155,14 @@ Two properties make the gate worth its cost. **The failure is fatal, unlike a `d
 
 The gate is deliberately local to this skill. Every consumer of the shared block inherits the emission requirement, but issue 586 scoped the fatal check to `linear-run`, where the failure was observed; [`run`](../claude-plugins/autopilot/skills/run/SKILL.md) and [`run-primed`](../claude-plugins/autopilot/skills/run-primed/SKILL.md) are unchanged.
 
+### The second gate: a label is not a selection
+
+The first gate asks whether a line came back. It cannot tell a graph pass from a claim about one, so a holder that wrote `context-source: graphify` without querying anything passed it and then bounded nothing ([#597](https://github.com/awinogradov/code-assistants/issues/597)). Phase 2 therefore checks the field a second time when it names the graph tier: a `graphify-trace:` line whose `queries=` is one or more, and a `graphify-shortlist:` with at least one entry. A label arriving with **no query evidence** stops the run, fatally, naming whichever half was missing.
+
+Refusing rather than downgrading is the right severity here because the fan-out already has a cheaper exit. A graph pass that genuinely fails writes `superseding graphify (<reason>)` and the successor tier selects normally — that costs a tier. A bare label reaching this gate is not an unlucky repository; it is a pass that reported something it did not do, and the run built on it would inherit the fault silently.
+
+The perimeter is stated in the skill rather than left to inference: this skill is the gated caller, while `plan`, `run`, and `run-primed` stay **ungated** and carry the record into the plan file's `## Context source` section instead, where a reader can see whether anything is behind it. Gating those too would abort a run over a context-acquisition detail at the moment the plan is already written, which no audited failure has required.
+
 ## Executing the selected plan
 
 In stored-plan mode, the `### Implementation Steps` are worked in order, each verified against its own `verify:` line before the next begins. No re-drafting, no re-ordering, no merging, no added steps, and no second expert review — the producer's pipeline already finalized the stored artifact, recording either its panel's score or an explicit skip.
@@ -169,9 +177,11 @@ In fresh-plan mode, the shared planning pipeline produces and scores a harness p
 
 [`contextSourceContract`](../.github/actions/code-review-action/src/contextSourceContract.test.ts) guards the context-source gate from both ends: that `gather-context`'s `Snapshot` field carries the trace line at all, and that this skill reads the shared block, emits the literal stop, marks it fatal, and binds both plan modes. The mode assertions anchor on the obligation's own sentence rather than on the phase heading — both mode names appear throughout Phase 5, so a phase-wide search would pass with the obligation missing entirely.
 
-Both guards run in CI. [`test.yml`](../.github/workflows/test.yml) runs `bun run test` on every pull request to `main` and is deliberately not path-filtered, precisely because these tests guard markdown — so a docs-only change that breaks a pinned phrase fails the Test check.
+[`graphifyEvidenceContract`](../.github/actions/code-review-action/src/graphifyEvidenceContract.test.ts) guards the second gate the same way: that the `graphify-evidence` sentinel states its clauses, that `gather-context` carries all three record lines into the `Snapshot` field, that this skill emits the **no query evidence** stop and marks it fatal, and that the consumption obligation names both plan modes on its own anchored sentence.
 
-**What no test can show:** that the gate runs, or that the model honours it. CI sees text in a file. Because this repository configures no `linear` tracker and commits no graphify graph, this skill cannot execute here at all, which puts the issue's two runtime acceptance criteria (a real graph query before any direct traversal, and a per-holder trace assertion) out of reach of any check in this repository. Runtime evidence comes from a dry run recorded on the pull request.
+All three guards run in CI. [`test.yml`](../.github/workflows/test.yml) runs `bun run test` on every pull request to `main` and is deliberately not path-filtered, precisely because these tests guard markdown — so a docs-only change that breaks a pinned phrase fails the Test check.
+
+**What no test can show:** that the gate runs, or that the model honours it. CI sees text in a file. Because this repository configures no `linear` tracker and commits no graphify graph, this skill cannot execute here at all. What is now checkable is narrower but real: [`graphifyEvidence`](../.github/actions/code-review-action/src/graphifyEvidence.test.ts) fixes one machine-checkable meaning for "graphify was selected", and [`graphifyEvidenceFixture`](../.github/actions/code-review-action/src/graphifyEvidenceFixture.test.ts) proves a conforming holder's recorded log orders a real query before its first traversal and carries the shortlist across the hand-off. Both use scripted holders, so the model's own behaviour still comes from a dry run recorded on the pull request.
 
 ## Where to look in the code
 
@@ -184,3 +194,6 @@ Both guards run in CI. [`test.yml`](../.github/workflows/test.yml) runs `bun run
 | `…/skills/shared-rules/references/repomix-snapshot.md`                 | The exclusive-source contract this skill enforces          |
 | `.github/actions/code-review-action/src/linearPlanContract.test.ts`    | The producer/consumer guard                                |
 | `.github/actions/code-review-action/src/contextSourceContract.test.ts` | The context-source gate guard                              |
+| `…/code-review-action/src/graphifyEvidenceContract.test.ts`            | The evidence gate guard                                    |
+| `…/code-review-action/src/graphifyEvidence.ts`                         | The evidence contract as runnable code                     |
+| `…/code-review-action/src/graphifyEvidenceFixture.test.ts`             | The conformance harness over a stubbed graphify CLI        |
