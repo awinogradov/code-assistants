@@ -174,6 +174,10 @@ The content is organized as follows:
         contextSourceContract.test.ts
         expertReviewContract.test.ts
         gitHistoryPolicy.test.ts
+        graphifyEvidence.test.ts
+        graphifyEvidence.ts
+        graphifyEvidenceContract.test.ts
+        graphifyEvidenceFixture.test.ts
         graphifyRefinementContract.test.ts
         linearPlanContract.test.ts
         linkResolution.test.ts
@@ -9961,6 +9965,1284 @@ describe("contributing-check enforces the rule", () => {
         `${step.split("\n")[0]}: true`,
       );
     }
+  });
+});
+</file>
+
+<file path=".github/actions/code-review-action/src/graphifyEvidence.test.ts">
+/**
+ * The Graphify evidence contract as runnable assertions — one rejection per clause the
+ * shared block states, so a clause that stops being enforced fails here rather than being
+ * discovered in a session.
+ *
+ * This file and graphifyEvidence.ts are the executable half of issue #597. They do not
+ * prove a Claude session honours the contract; nothing in `bun test` can execute a markdown
+ * skill. What they prove is that the contract has one machine-checkable meaning, so
+ * "graphify was selected" stops being a matter of opinion — see the headers on
+ * graphifyEvidenceContract.test.ts and graphifyEvidenceFixture.test.ts for the other two
+ * thirds of that split.
+ */
+import { describe, expect, test } from "bun:test";
+
+import {
+  acceptSelection,
+  contextFallbackReasons,
+  graphifyTransitionReasons,
+  maxQueries,
+  maxShortlistEntries,
+  parseEvidenceRecord,
+  parseTransition,
+  validateHolderTrace,
+  type HolderEvent,
+} from "./graphifyEvidence.ts";
+
+/** A record that satisfies every clause; each rejection case below mutates one part of it. */
+const validRecord = [
+  "context-source: graphify",
+  "graphify-trace: queries=3 truncated=yes shortlist=2 outside-reads=1",
+  "graphify-shortlist:",
+  "- src/app/AppShell.tsx — renders Sidebar, imports useLayout",
+  "- src/hooks/useLayout.ts — the hook AppShell depends on",
+].join("\n");
+
+/** Build a record from explicit trace values and shortlist bullets. */
+function record(trace: string, bullets: string[]): string {
+  return ["context-source: graphify", `graphify-trace: ${trace}`, "graphify-shortlist:", ...bullets]
+    .join("\n")
+    .trimEnd();
+}
+
+/** `n` well-formed shortlist bullets, for the cap cases. */
+function bullets(n: number): string[] {
+  return Array.from({ length: n }, (_, i) => `- src/file${i}.ts — imported by AppShell`);
+}
+
+describe("parseEvidenceRecord", () => {
+  test("a complete record parses into its parts", () => {
+    const result = parseEvidenceRecord(validRecord);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.evidence.queries).toBe(3);
+    expect(result.evidence.truncated).toBe(true);
+    expect(result.evidence.outsideReads).toBe(1);
+    expect(result.evidence.shortlist).toEqual([
+      {
+        target: "src/app/AppShell.tsx",
+        relationship: "renders Sidebar, imports useLayout",
+      },
+      { target: "src/hooks/useLayout.ts", relationship: "the hook AppShell depends on" },
+    ]);
+  });
+
+  test("a record with no trace line is rejected", () => {
+    const missing = ["context-source: graphify", "graphify-shortlist:", ...bullets(1)].join("\n");
+    const result = parseEvidenceRecord(missing);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toContain("graphify-trace:");
+  });
+
+  test("queries=0 is an unrecorded selection, not a weak one", () => {
+    const result = parseEvidenceRecord(
+      record("queries=0 truncated=no shortlist=1 outside-reads=0", bullets(1)),
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  test("a fractional query count is rejected", () => {
+    const result = parseEvidenceRecord(
+      record("queries=1.5 truncated=no shortlist=1 outside-reads=0", bullets(1)),
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  test("a negative query count is rejected", () => {
+    const result = parseEvidenceRecord(
+      record("queries=-1 truncated=no shortlist=1 outside-reads=0", bullets(1)),
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  test("more queries than the refinement cap allows is rejected", () => {
+    const overCap = maxQueries + 1;
+    const result = parseEvidenceRecord(
+      record(`queries=${overCap} truncated=no shortlist=1 outside-reads=0`, bullets(1)),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toContain("refinement");
+  });
+
+  test("an empty shortlist is rejected", () => {
+    const result = parseEvidenceRecord(
+      record("queries=1 truncated=no shortlist=0 outside-reads=0", []),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toContain("shortlist");
+  });
+
+  test("an entry with no relationship is rejected", () => {
+    const result = parseEvidenceRecord(
+      record("queries=1 truncated=no shortlist=1 outside-reads=0", ["- src/app/AppShell.tsx"]),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toContain("relationship");
+  });
+
+  test("a shortlist above the cap is rejected", () => {
+    const over = maxShortlistEntries + 1;
+    const result = parseEvidenceRecord(
+      record(`queries=1 truncated=no shortlist=${over} outside-reads=0`, bullets(over)),
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  test("a trace whose count disagrees with the bullets is rejected", () => {
+    const result = parseEvidenceRecord(
+      record("queries=1 truncated=no shortlist=5 outside-reads=0", bullets(2)),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toContain("disagrees");
+  });
+
+  test("a truncation flag outside yes|no is rejected", () => {
+    const result = parseEvidenceRecord(
+      record("queries=1 truncated=maybe shortlist=1 outside-reads=0", bullets(1)),
+    );
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe("parseTransition", () => {
+  test.each([...graphifyTransitionReasons])("%s is a recorded reason", (reason) => {
+    const line = `context-source: repomix abc123 superseding graphify (${reason})`;
+    expect(parseTransition(line)).toEqual({ successor: "repomix abc123", reason });
+  });
+
+  test("a default successor keeps its own reason separate from the graph's", () => {
+    const line = "context-source: default (no repomix MCP tools) superseding graphify (unavailable)";
+    expect(parseTransition(line)).toEqual({
+      successor: "default (no repomix MCP tools)",
+      reason: "unavailable",
+    });
+  });
+
+  test("a reason outside the taxonomy is not a transition", () => {
+    expect(parseTransition("context-source: repomix abc superseding graphify (gave up)")).toBeNull();
+  });
+
+  test("a plain selection is not a transition", () => {
+    expect(parseTransition("context-source: repomix abc123")).toBeNull();
+  });
+});
+
+describe("acceptSelection", () => {
+  test("a graphify label backed by a record is accepted", () => {
+    const verdict = acceptSelection(validRecord);
+    expect(verdict.accepted).toBe(true);
+    if (!verdict.accepted) return;
+    expect(verdict.source).toBe("graphify");
+    expect(verdict.evidence?.shortlist).toHaveLength(2);
+  });
+
+  test("a bare graphify label is rejected", () => {
+    const verdict = acceptSelection("context-source: graphify");
+    expect(verdict.accepted).toBe(false);
+    if (verdict.accepted) return;
+    expect(verdict.reason).toContain("graphify-trace:");
+  });
+
+  test("a graphify label with a trace but no shortlist is rejected", () => {
+    const verdict = acceptSelection(
+      "context-source: graphify\ngraphify-trace: queries=2 truncated=no shortlist=0 outside-reads=0",
+    );
+    expect(verdict.accepted).toBe(false);
+    if (verdict.accepted) return;
+    expect(verdict.reason).toContain("shortlist");
+  });
+
+  test("a repomix selection needs no graph evidence", () => {
+    const verdict = acceptSelection("context-source: repomix 8b1d56ac");
+    expect(verdict.accepted).toBe(true);
+    if (!verdict.accepted) return;
+    expect(verdict.source).toBe("repomix");
+    expect(verdict.evidence).toBeNull();
+  });
+
+  test("a transition away from graphify is a successor selection, not a graph claim", () => {
+    const verdict = acceptSelection(
+      "context-source: repomix 8b1d56ac superseding graphify (unavailable)",
+    );
+    expect(verdict.accepted).toBe(true);
+    if (!verdict.accepted) return;
+    expect(verdict.source).toBe("repomix");
+  });
+
+  test("a field carrying no selection at all is rejected", () => {
+    const verdict = acceptSelection("live tools");
+    expect(verdict.accepted).toBe(false);
+  });
+});
+
+describe("validateHolderTrace", () => {
+  const selection: HolderEvent = { holder: "planning", kind: "selection", detail: validRecord };
+
+  test("a query before the first read is the conforming order", () => {
+    const verdict = validateHolderTrace([
+      selection,
+      { holder: "planning", kind: "query", detail: "graphify query \"where is layout decided\"" },
+      { holder: "planning", kind: "read", detail: "src/app/AppShell.tsx" },
+    ]);
+    expect(verdict.valid).toBe(true);
+  });
+
+  test("a read before any query is the failure this contract exists for", () => {
+    const verdict = validateHolderTrace([
+      selection,
+      { holder: "planning", kind: "read", detail: "src/app/AppShell.tsx" },
+      { holder: "planning", kind: "query", detail: "graphify query \"too late\"" },
+    ]);
+    expect(verdict.valid).toBe(false);
+    if (verdict.valid) return;
+    expect(verdict.reason).toContain("before");
+  });
+
+  test("a read outside the shortlist needs a recorded fallback", () => {
+    const verdict = validateHolderTrace([
+      selection,
+      { holder: "planning", kind: "query", detail: "graphify query \"q\"" },
+      { holder: "planning", kind: "read", detail: "src/unrelated.ts" },
+    ]);
+    expect(verdict.valid).toBe(false);
+    if (verdict.valid) return;
+    expect(verdict.reason).toContain("context-fallback:");
+  });
+
+  test.each([...contextFallbackReasons])("%s licenses a read outside the shortlist", (reason) => {
+    const verdict = validateHolderTrace([
+      selection,
+      { holder: "planning", kind: "query", detail: "graphify query \"q\"" },
+      { holder: "planning", kind: "read", detail: "src/unrelated.ts", fallback: reason },
+    ]);
+    expect(verdict.valid).toBe(true);
+  });
+
+  test("a fallback reason outside the taxonomy does not license the read", () => {
+    const verdict = validateHolderTrace([
+      selection,
+      { holder: "planning", kind: "query", detail: "graphify query \"q\"" },
+      { holder: "planning", kind: "read", detail: "src/unrelated.ts", fallback: "seemed-useful" },
+    ]);
+    expect(verdict.valid).toBe(false);
+  });
+
+  test("two live selections in one holder is the mixing the contract forbids", () => {
+    const verdict = validateHolderTrace([
+      selection,
+      { holder: "planning", kind: "selection", detail: "context-source: repomix abc123" },
+    ]);
+    expect(verdict.valid).toBe(false);
+    if (verdict.valid) return;
+    expect(verdict.reason).toContain("one source");
+  });
+
+  test("a recorded transition is not a second live selection", () => {
+    const verdict = validateHolderTrace([
+      {
+        holder: "planning",
+        kind: "selection",
+        detail: "context-source: repomix abc123 superseding graphify (unavailable)",
+      },
+      { holder: "planning", kind: "read", detail: "src/anything.ts" },
+    ]);
+    expect(verdict.valid).toBe(true);
+  });
+
+  test("a holder that inherited the record reads without re-querying", () => {
+    const verdict = validateHolderTrace([
+      selection,
+      { holder: "planning", kind: "query", detail: "graphify query \"q\"" },
+      { holder: "implementation", kind: "inherited", detail: validRecord },
+      { holder: "implementation", kind: "read", detail: "src/hooks/useLayout.ts" },
+    ]);
+    expect(verdict.valid).toBe(true);
+  });
+
+  test("inheriting the record does not license reading past the shortlist", () => {
+    const verdict = validateHolderTrace([
+      { holder: "implementation", kind: "inherited", detail: validRecord },
+      { holder: "implementation", kind: "read", detail: "src/rediscovered.ts" },
+    ]);
+    expect(verdict.valid).toBe(false);
+    if (verdict.valid) return;
+    expect(verdict.reason).toContain("context-fallback:");
+  });
+
+  test("a holder that never recorded a selection is rejected", () => {
+    const verdict = validateHolderTrace([
+      { holder: "implementation", kind: "read", detail: "src/app/AppShell.tsx" },
+    ]);
+    expect(verdict.valid).toBe(false);
+    if (verdict.valid) return;
+    expect(verdict.reason).toContain("no selection");
+  });
+});
+</file>
+
+<file path=".github/actions/code-review-action/src/graphifyEvidence.ts">
+/**
+ * The Graphify evidence contract, expressed as code.
+ *
+ * The normative text lives in the shared block
+ * (claude-plugins/autopilot/skills/shared-rules/references/repomix-snapshot.md); this module
+ * is the one place that text has a single machine-checkable meaning. Issue #597 exists
+ * because `context-source: graphify` was a label a holder could write without querying
+ * anything, so "was the graph tier selected" was answerable only by reading prose and
+ * believing it. Here it is answerable by parsing a record.
+ *
+ * There is deliberately **no production importer**: no runner intercepts a session's tool
+ * calls, and inventing one would be a consumer-side hook, which issue #597 lists as a
+ * non-goal. The consumers are the guards beside it — graphifyEvidence.test.ts, which asserts
+ * one rejection per contract clause, and graphifyEvidenceFixture.test.ts, which drives a real
+ * stubbed CLI through a conformance harness. Reviewers and the post-merge canary are the
+ * other consumers: a recorded selection can be pasted in and judged rather than argued over.
+ *
+ * Malformed input is the expected case, not an exceptional one — a record is written by a
+ * model into a transcript — so every entry point returns a discriminated verdict carrying the
+ * reason it refused. Nothing here throws.
+ *
+ * @example
+ * const verdict = acceptSelection(contextMapSnapshotField);
+ * if (!verdict.accepted) stop(`gather-context declared graphify: ${verdict.reason}`);
+ *
+ * @see https://github.com/awinogradov/code-assistants/issues/597
+ */
+import { z } from "zod";
+
+/**
+ * Why a holder left tier 1. These explain the end of a source, and are not the
+ * `contextFallbackReasons` below, which explain one read outside a source still live.
+ */
+export const graphifyTransitionReasons = ["unavailable", "error", "refinement-exhausted"] as const;
+
+/** The six reasons that license a direct read outside the selected source. */
+export const contextFallbackReasons = [
+  "absent-or-excluded",
+  "truncated-or-unreadable",
+  "stale-snapshot",
+  "byte-verification",
+  "generated-or-untracked",
+  "post-snapshot-mutation",
+] as const;
+
+/** Shortlist cap from the refinement discipline: ten files or entities. */
+export const maxShortlistEntries = 10;
+
+/** Refinement cap: three rounds after the first query, so four invocations in all. */
+export const maxQueries = 4;
+
+/** Why a holder left tier 1, narrowed from {@link graphifyTransitionReasons}. */
+export type GraphifyTransitionReason = (typeof graphifyTransitionReasons)[number];
+
+const shortlistEntrySchema = z.object({
+  target: z.string().min(1, "a shortlist entry needs a path or entity"),
+  relationship: z
+    .string()
+    .min(1, "a shortlist entry needs the relationship that justifies it, after an em dash"),
+});
+
+const evidenceSchema = z.object({
+  queries: z
+    .number()
+    .int()
+    .min(1, "context-source: graphify needs at least one query that exited zero")
+    .max(maxQueries, `refinement is capped at ${maxQueries - 1} rounds after the first query`),
+  truncated: z.boolean(),
+  shortlist: z
+    .array(shortlistEntrySchema)
+    .min(1, "a graphify selection hands on a shortlist, not a source name")
+    .max(maxShortlistEntries, `a shortlist holds at most ${maxShortlistEntries} entries`),
+  outsideReads: z.number().int().min(0),
+});
+
+/** A parsed evidence record: what the pass did, and what it produced. */
+export type GraphifyEvidence = z.infer<typeof evidenceSchema>;
+
+/** One shortlist bullet: where to look, and the relationship that put it there. */
+export type ShortlistEntry = z.infer<typeof shortlistEntrySchema>;
+
+/** A record that satisfies every clause. */
+export interface EvidenceParsed {
+  ok: true;
+  evidence: GraphifyEvidence;
+}
+
+/** A record that does not, with the clause it failed. */
+export interface EvidenceInvalid {
+  ok: false;
+  reason: string;
+}
+
+/** The outcome of reading an evidence record. */
+export type EvidenceResult = EvidenceParsed | EvidenceInvalid;
+
+/** The tier a `context-source:` line names. */
+export type ContextSource = "graphify" | "repomix" | "default";
+
+/** A selection a consumer may proceed on; `evidence` is null off the graph tier. */
+export interface SelectionAccepted {
+  accepted: true;
+  source: ContextSource;
+  evidence: GraphifyEvidence | null;
+}
+
+/** A selection a consumer must refuse, with what was missing. */
+export interface SelectionRejected {
+  accepted: false;
+  reason: string;
+}
+
+/** The outcome of the gate a consuming skill applies to a Context Map's Snapshot field. */
+export type SelectionVerdict = SelectionAccepted | SelectionRejected;
+
+/** A recorded hand-over from tier 1 to whatever replaced it. */
+export interface GraphifyTransition {
+  successor: string;
+  reason: GraphifyTransitionReason;
+}
+
+/**
+ * One recorded act by one context holder, in the order it happened.
+ *
+ * `selection` and `inherited` both carry a record, and the difference decides whether the
+ * ordering rule applies: a holder that selected the graph tier itself must query before it
+ * reads, while one that inherited the record from an upstream holder must not re-derive what
+ * it was handed. Both are bound to the shortlist.
+ */
+export interface HolderEvent {
+  /** Distinguishes the planning holder from the implementation holder that follows it. */
+  holder: string;
+  kind: "selection" | "inherited" | "query" | "read";
+  /** The `context-source:` record, the graph invocation, or the path read. */
+  detail: string;
+  /** A `context-fallback:` reason recorded beside a read outside the shortlist. */
+  fallback?: string;
+}
+
+/** A trace whose ordering and reads honour the contract. */
+export interface TraceValid {
+  valid: true;
+}
+
+/** A trace that does not, with the first violation found. */
+export interface TraceInvalid {
+  valid: false;
+  reason: string;
+}
+
+/** The outcome of judging one recorded run. */
+export type TraceVerdict = TraceValid | TraceInvalid;
+
+const tracePattern =
+  /^graphify-trace: queries=(\S+) truncated=(\S+) shortlist=(\S+) outside-reads=(\S+)$/m;
+
+/** Em dash only: the hyphen form would swallow hyphenated paths. */
+const shortlistBulletPattern = /^- (.+?) — (.+)$/;
+
+const transitionPattern = /^context-source: (.+?) superseding graphify \(([^)]+)\)$/;
+
+/**
+ * Read the three-line evidence record a graphify pass hands on.
+ *
+ * Accepts the record on its own or embedded in a larger field, so a Context Map's
+ * `**Snapshot**` row can be passed in whole.
+ */
+export function parseEvidenceRecord(record: string): EvidenceResult {
+  const trace = tracePattern.exec(record);
+  if (!trace) return { ok: false, reason: "no graphify-trace: line — the pass recorded nothing" };
+
+  const [, queries, truncated, declared, outsideReads] = trace;
+  if (truncated !== "yes" && truncated !== "no") {
+    return { ok: false, reason: `truncated=${truncated} is neither yes nor no` };
+  }
+
+  const shortlist = parseShortlist(record);
+  if (shortlist.some((entry) => entry.relationship === "")) {
+    return { ok: false, reason: "a shortlist entry carries no relationship" };
+  }
+  if (Number(declared) !== shortlist.length) {
+    return {
+      ok: false,
+      reason: `graphify-trace: shortlist=${declared} disagrees with ${shortlist.length} bullet(s)`,
+    };
+  }
+
+  const parsed = evidenceSchema.safeParse({
+    queries: Number(queries),
+    truncated: truncated === "yes",
+    shortlist,
+    outsideReads: Number(outsideReads),
+  });
+  if (!parsed.success) {
+    return { ok: false, reason: parsed.error.issues.map((issue) => issue.message).join("; ") };
+  }
+  return { ok: true, evidence: parsed.data };
+}
+
+/**
+ * Decide whether a recorded selection may be proceeded on.
+ *
+ * This is the gate `linear-run` applies to the Context Map's `**Snapshot**` field: off the
+ * graph tier any well-formed `context-source:` line is enough, while a graphify label must
+ * bring its record. A bare label is refused rather than downgraded — a pass that genuinely
+ * failed has the `superseding graphify (<reason>)` transition to leave through.
+ */
+export function acceptSelection(snapshot: string): SelectionVerdict {
+  const line = snapshot.split("\n").find((candidate) => candidate.startsWith("context-source: "));
+  if (!line) return { accepted: false, reason: "no context-source: line" };
+
+  const transition = parseTransition(line);
+  const declared = transition ? transition.successor : line.slice("context-source: ".length);
+  const source = readSource(declared);
+  if (!source) return { accepted: false, reason: `unknown context source in "${line}"` };
+  if (source !== "graphify") return { accepted: true, source, evidence: null };
+
+  const parsed = parseEvidenceRecord(snapshot);
+  if (!parsed.ok) return { accepted: false, reason: parsed.reason };
+  return { accepted: true, source, evidence: parsed.evidence };
+}
+
+/** Read a hand-over line; null when the line is a plain selection or names no known reason. */
+export function parseTransition(line: string): GraphifyTransition | null {
+  const match = transitionPattern.exec(line.trim());
+  if (!match) return null;
+
+  const [, successor, reason] = match;
+  if (!isTransitionReason(reason)) return null;
+  return { successor, reason };
+}
+
+/**
+ * Judge one recorded run: every holder selects exactly once, a graph selection queries
+ * before it reads, and reads outside the shortlist carry a reason from the taxonomy.
+ *
+ * Events are the ordered log a harness records; holders are judged independently, because
+ * the contract binds each context holder separately.
+ */
+export function validateHolderTrace(events: HolderEvent[]): TraceVerdict {
+  const holders = new Set(events.map((event) => event.holder));
+  for (const holder of holders) {
+    const verdict = validateOneHolder(events.filter((event) => event.holder === holder));
+    if (!verdict.valid) return verdict;
+  }
+  return { valid: true };
+}
+
+/**
+ * Judge a single holder's events; the loop body of {@link validateHolderTrace}.
+ *
+ * A transition line replaces whatever was live, which is what makes falling through legal; a
+ * plain selection arriving while a source is already live is the side-by-side running the
+ * contract forbids. Read rules are judged against the record that ends up live — a superseded
+ * graph pass has no shortlist to have read against, since that is why it was superseded.
+ */
+function validateOneHolder(events: HolderEvent[]): TraceVerdict {
+  const records = events.filter((event) => event.kind === "selection" || event.kind === "inherited");
+  if (records.length === 0) return { valid: false, reason: "the holder recorded no selection" };
+
+  let live = records[0];
+  for (const record of records.slice(1)) {
+    if (parseTransition(firstLine(record.detail)) === null) {
+      return { valid: false, reason: "a holder serves one source, not several" };
+    }
+    live = record;
+  }
+
+  const verdict = acceptSelection(live.detail);
+  if (!verdict.accepted) return { valid: false, reason: verdict.reason };
+  if (verdict.source !== "graphify" || !verdict.evidence) return { valid: true };
+
+  return validateGraphReads(events, verdict.evidence, live.kind === "inherited");
+}
+
+/**
+ * Ordering and read-scope rules that apply once the graph tier is in play. An inherited
+ * record starts already queried — the upstream holder ran it, and re-running it is the
+ * duplication the handoff exists to remove.
+ */
+function validateGraphReads(
+  events: HolderEvent[],
+  evidence: GraphifyEvidence,
+  inherited: boolean,
+): TraceVerdict {
+  const shortlisted = new Set(evidence.shortlist.map((entry) => entry.target));
+  let queried = inherited;
+
+  for (const event of events) {
+    if (event.kind === "query") queried = true;
+    if (event.kind !== "read") continue;
+    if (!queried) {
+      return { valid: false, reason: `read ${event.detail} before any graphify query` };
+    }
+    if (shortlisted.has(event.detail)) continue;
+    if (!event.fallback || !isFallbackReason(event.fallback)) {
+      return {
+        valid: false,
+        reason: `read ${event.detail} outside the shortlist with no context-fallback: reason`,
+      };
+    }
+  }
+  return { valid: true };
+}
+
+/** Collect the `graphify-shortlist:` bullets; an entry with no em dash keeps an empty relationship. */
+function parseShortlist(record: string): ShortlistEntry[] {
+  const lines = record.split("\n");
+  const header = lines.findIndex((line) => line.trim() === "graphify-shortlist:");
+  if (header === -1) return [];
+
+  const entries: ShortlistEntry[] = [];
+  for (const line of lines.slice(header + 1)) {
+    if (!line.startsWith("- ")) break;
+    const bullet = shortlistBulletPattern.exec(line);
+    entries.push(
+      bullet
+        ? { target: bullet[1].trim(), relationship: bullet[2].trim() }
+        : { target: line.slice(2).trim(), relationship: "" },
+    );
+  }
+  return entries;
+}
+
+/** The tier a declared selection names, ignoring whatever qualifies it. */
+function readSource(declared: string): ContextSource | null {
+  if (declared === "graphify" || declared.startsWith("graphify ")) return "graphify";
+  if (declared.startsWith("repomix")) return "repomix";
+  if (declared.startsWith("default")) return "default";
+  return null;
+}
+
+/** The first line of a possibly multi-line record. */
+function firstLine(detail: string): string {
+  return detail.split("\n")[0];
+}
+
+function isTransitionReason(value: string): value is GraphifyTransitionReason {
+  return (graphifyTransitionReasons as readonly string[]).includes(value);
+}
+
+function isFallbackReason(value: string): boolean {
+  return (contextFallbackReasons as readonly string[]).includes(value);
+}
+</file>
+
+<file path=".github/actions/code-review-action/src/graphifyEvidenceContract.test.ts">
+/**
+ * Guards the Graphify evidence contract inside the repomix-snapshot shared block
+ * (claude-plugins/autopilot/skills/shared-rules/references/repomix-snapshot.md), added for
+ * issue #597: `context-source: graphify` used to be a label anyone could write. Availability
+ * made the tier eligible, and eligibility read as selection — so a holder could declare the
+ * graph, query nothing, and traverse the tree exactly as before, which is the run #586
+ * audited. The tier now has to earn its label with a query that happened, hand on a bounded
+ * shortlist rather than a source name, and record every exit from itself.
+ *
+ * The contract carries its OWN nested sentinel (`graphify-evidence`) inside the outer block,
+ * for the reason graphifyRefinementContract.test.ts states about its own: the surrounding
+ * text already contains "shortlist", "queries", and "graphify", so whole-block substring
+ * checks would pass before a word of this contract was written. Extracting the inner
+ * sentinel makes the assertions mean what they say, and the block is asserted present and
+ * substantial first — the vacuous-pass defence both sibling guards use, since a missing
+ * sentinel extracts nothing and every substring check on "" succeeds.
+ *
+ * Record lines and transition reasons are explicit test data, one assertion per token, so
+ * dropping a line from the record or a reason from the taxonomy fails loudly instead of
+ * shrinking the contract in silence.
+ *
+ * What this CANNOT prove: that a session honours any of it. This file reads text, exactly
+ * like the two guards beside it. The executable half of issue #597 lives in
+ * graphifyEvidence.test.ts (the contract as runnable code) and graphifyEvidenceFixture.test.ts
+ * (a conformance harness driving a real stubbed CLI); neither executes a Claude session
+ * either, and each says so in its own header. Evidence that production runs comply comes
+ * from the post-merge canary — and now from a durable place to look for it, since the
+ * selection is recorded in the plan file rather than only in a transcript.
+ */
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
+import { describe, expect, test } from "bun:test";
+
+// Depth mirrors contextSourceContract.test.ts in this directory — a move of the
+// action updates all three in lockstep.
+const actionDir = join(import.meta.dirname, "..");
+const repoRoot = join(actionDir, "..", "..", "..");
+
+const blockPath = join(
+  repoRoot,
+  "claude-plugins/autopilot/skills/shared-rules/references/repomix-snapshot.md",
+);
+const skillsDir = join(repoRoot, "claude-plugins/autopilot/skills");
+
+/** Shortest the contract can be; anything smaller means the extraction went wrong. */
+const minBlockLength = 80;
+
+/**
+ * The three lines that make up the evidence record. A consumer receiving fewer than all
+ * three received a claim rather than an artifact, so each is pinned separately.
+ */
+const recordLines = ["context-source: graphify", "graphify-trace:", "graphify-shortlist:"];
+
+/**
+ * Why a holder left tier 1. Distinct from the six `context-fallback:` reasons, which
+ * explain one read outside a selection that is still live.
+ *
+ * Kept local rather than imported from graphifyEvidence.ts on purpose: this guard must be
+ * able to fail on the markdown alone, and importing the validator would make a missing
+ * module — not a missing contract — the reason it goes red.
+ */
+const transitionReasons = ["unavailable", "error", "refinement-exhausted"];
+
+/** Read a file, failing with its absolute path rather than a bare ENOENT at module load. */
+async function readContract(path: string): Promise<string> {
+  try {
+    return await readFile(path, "utf8");
+  } catch (cause) {
+    throw new Error(`Cannot read contract file: ${path}`, { cause });
+  }
+}
+
+/** Extract the named sentinel-delimited block from `content`, trimmed; null when absent. */
+function extractBlock(content: string, sentinel: string): string | null {
+  const pattern = new RegExp(`<!-- ${sentinel}:start -->([\\s\\S]*?)<!-- ${sentinel}:end -->`);
+  return pattern.exec(content)?.[1].trim() ?? null;
+}
+
+const [blockSource, gatherContext, linearRun, pipeline, run, packDoc, linearRunDoc, planRunDoc] =
+  await Promise.all([
+    readContract(blockPath),
+    readContract(join(skillsDir, "gather-context/SKILL.md")),
+    readContract(join(skillsDir, "linear-run/SKILL.md")),
+    readContract(join(skillsDir, "plan/references/pipeline.md")),
+    readContract(join(skillsDir, "run/SKILL.md")),
+    readContract(join(repoRoot, "docs/09-repomix-pack.md")),
+    readContract(join(repoRoot, "docs/17-linear-run-skill.md")),
+    readContract(join(repoRoot, "docs/05-plan-run-skills.md")),
+  ]);
+
+const evidence = extractBlock(blockSource, "graphify-evidence");
+
+/**
+ * The Context Map template's `**Snapshot**` row — the only channel by which a selection
+ * reaches a calling skill, so it is extracted rather than substring-matched, as
+ * contextSourceContract.test.ts does for the same row.
+ */
+const snapshotField =
+  gatherContext.split("\n").find((line) => line.startsWith("**Snapshot** —")) ?? "";
+
+/** The literal stop linear-run emits when a graphify label arrives with nothing behind it. */
+const unevidencedSelection =
+  "Context phase failed on <LINEAR-ID>: gather-context declared graphify with no query evidence.";
+
+/** Both plan modes must consume the record; a stored plan is not a licence to skip it. */
+const planModes = ["stored-plan", "fresh-plan"];
+
+/** Anchor for the consumption obligation, for the reason `boundsBothModes` is anchored. */
+const consumesRecord = "**Both modes consume the evidence record before traversal.**";
+
+describe("graphify evidence contract", () => {
+  test("the nested sentinel block exists and is substantial", () => {
+    expect(evidence).not.toBeNull();
+    expect(evidence?.length ?? 0).toBeGreaterThan(minBlockLength);
+  });
+
+  test("it lives inside the repomix-snapshot block it constrains", () => {
+    const outer = extractBlock(blockSource, "repomix-snapshot");
+    expect(outer).not.toBeNull();
+    expect(outer).toContain("graphify-evidence:start");
+  });
+
+  test("the label follows a query that actually ran", () => {
+    expect(evidence).toContain("exited zero");
+    expect(evidence).toContain("at least one");
+  });
+
+  test("eligibility is distinguished from selection", () => {
+    expect(evidence).toContain("Availability is not evidence");
+  });
+
+  test.each(recordLines)("the record carries %s", (line) => {
+    expect(evidence).toContain(line);
+  });
+
+  test("a shortlist entry carries the relationship that justifies it", () => {
+    expect(evidence).toContain("relationship");
+    expect(evidence).toMatch(/^- \S.* — .+$/m);
+  });
+
+  test("an incomplete record is an unrecorded selection, not a weak one", () => {
+    expect(evidence).toContain("queries=0");
+    expect(evidence).toContain("not a selection");
+  });
+
+  test("a successor is a full selection, not a bare tier name", () => {
+    expect(evidence).toContain("superseding graphify (");
+    expect(evidence).toContain("repomix <outputId>");
+    expect(evidence).toContain("default <reason>");
+  });
+
+  test.each(transitionReasons)("the transition taxonomy names %s", (reason) => {
+    expect(evidence).toContain(reason);
+  });
+
+  test("transition reasons are told apart from fallback reasons", () => {
+    expect(evidence).toContain("context-fallback:");
+    expect(evidence).toContain("still live");
+  });
+
+  test("the pre-taxonomy hand-over wording is gone from the whole block", () => {
+    // The spaced form cannot be matched by a machine-readable reason token, so it must be
+    // rewritten rather than left beside its replacement in the refinement block.
+    expect(blockSource).not.toContain("(refinement exhausted)");
+  });
+});
+
+describe("gather-context emits the record", () => {
+  test("the graph label waits for a query to return", () => {
+    expect(gatherContext).toContain("exited zero");
+  });
+
+  test("a pass that cannot produce a record leaves through the transition line", () => {
+    expect(gatherContext).toContain("superseding graphify");
+  });
+
+  test.each(recordLines)("the Snapshot field carries %s", (line) => {
+    expect(snapshotField).toContain(line.replace("context-source: graphify", "context-source:"));
+  });
+});
+
+describe("linear-run rejects an unevidenced selection", () => {
+  test("the literal stop exists", () => {
+    expect(linearRun).toContain(unevidencedSelection);
+  });
+
+  test("the stop is fatal and names what was missing", () => {
+    const [, gate = ""] = linearRun.split(unevidencedSelection);
+    expect(gate).toContain("fatal");
+    expect(gate).toContain("shortlist");
+  });
+
+  test("the gated perimeter is stated rather than left implied", () => {
+    expect(linearRun).toContain("ungated");
+  });
+
+  test("the consumption obligation is present", () => {
+    expect(linearRun).toContain(consumesRecord);
+  });
+
+  test.each(planModes)("the consumption obligation binds %s mode", (mode) => {
+    const obligation = linearRun.split(consumesRecord)[1]?.split("\n\n")[0] ?? "";
+    expect(`${mode}: ${obligation.includes(`\`${mode}\``)}`).toBe(`${mode}: true`);
+  });
+});
+
+describe("the plan file carries the handoff", () => {
+  test("the template gains a context-source section", () => {
+    expect(pipeline).toContain("## Context source");
+  });
+
+  test("a plan written before this change is not a stop", () => {
+    expect(pipeline).toContain("unrecorded source");
+  });
+
+  test("implementation serves repository questions from the recorded section", () => {
+    expect(run).toContain("## Context source");
+  });
+});
+
+describe("the documentation matches the contract", () => {
+  test("the pack chapter documents the evidence record", () => {
+    expect(packDoc).toContain("graphify-shortlist:");
+  });
+
+  test("the pack chapter states what the new tests cannot prove", () => {
+    expect(packDoc).toContain("graphifyEvidenceFixture.test.ts");
+    expect(packDoc).toContain("does not execute a session");
+  });
+
+  test("the pack chapter no longer prints the pre-taxonomy hand-over", () => {
+    expect(packDoc).not.toContain("(refinement exhausted)");
+  });
+
+  test("the linear-run chapter documents the second gate", () => {
+    expect(linearRunDoc).toContain("graphifyEvidenceContract.test.ts");
+    expect(linearRunDoc).toContain("no query evidence");
+  });
+
+  test("the plan/run chapter lists the new template section", () => {
+    expect(planRunDoc).toContain("## Context source");
+  });
+});
+</file>
+
+<file path=".github/actions/code-review-action/src/graphifyEvidenceFixture.test.ts">
+/**
+ * A conformance harness for the Graphify evidence contract: a temporary repository carrying
+ * `graphify-out/graph.json`, a deterministic `graphify` executable reached only through the
+ * spawn call's own PATH, and instrumented recorders standing in for Read/Grep/Glob/Bash and a
+ * delegated context agent. Every act lands in one ordered log the parent process owns, so
+ * "the query happened before the first traversal" is read off recorded invocations — the
+ * `graphify` process really is spawned, and really does exit, before the first read is
+ * appended — rather than off a sentence in a skill file.
+ *
+ * What this proves, precisely: that a holder written to follow the contract produces a log
+ * the validator accepts, that each violation the contract names produces one it rejects, and
+ * that the shortlist survives the hand-off from the holder that queried to the holder that
+ * implements — in both the stored-plan shape (the record travels in a plan file's
+ * `## Context source` section) and the fresh-plan shape (it travels in the Context Map).
+ *
+ * What it does NOT prove, and no test in this repository can: that a live Claude session
+ * behaves this way. The holders below are scripted, because `bun test` cannot execute a
+ * markdown skill, and a fixture that quietly swapped a scripted holder for a real one would
+ * be the same substitution issue #597 was filed about, pointed the other way. Production
+ * conformance stays a post-merge canary — with a durable artifact to read now, since the
+ * selection lands in the plan file rather than only in a transcript.
+ *
+ * POSIX only: the stub is a `/bin/sh` script made executable with mode 0o755, which is what
+ * the Linux runners in .github/workflows/test.yml provide.
+ */
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+
+import {
+  acceptSelection,
+  graphifyTransitionReasons,
+  maxQueries,
+  parseEvidenceRecord,
+  parseTransition,
+  validateHolderTrace,
+  type HolderEvent,
+} from "./graphifyEvidence.ts";
+
+/** Generous enough for four sequential spawns on a loaded runner, short enough to fail fast. */
+const spawnTimeoutMs = 20_000;
+
+/** What the stub should pretend the graph returned, chosen per invocation. */
+type StubMode = "focused" | "truncated" | "empty" | "error";
+
+/** The shortlist the stub returns on a focused answer, and the files backing it. */
+const knownShortlist = [
+  { target: "src/app/AppShell.tsx", relationship: "renders Sidebar, imports useLayout" },
+  { target: "src/hooks/useLayout.ts", relationship: "the hook AppShell depends on" },
+];
+
+const stubScript = `#!/bin/sh
+case "\${GRAPHIFY_STUB_MODE:-focused}" in
+  error)     echo "error: graph file not found" >&2; exit 1 ;;
+  empty)     echo "No matching nodes found."; exit 0 ;;
+  truncated) echo "[!] TRUNCATED: showing 52 of 918 nodes"; exit 0 ;;
+esac
+echo "${knownShortlist[0].target} — ${knownShortlist[0].relationship}"
+echo "${knownShortlist[1].target} — ${knownShortlist[1].relationship}"
+`;
+
+let repoDir = "";
+let binDir = "";
+
+beforeAll(async () => {
+  repoDir = await mkdtemp(join(tmpdir(), "graphify-evidence-"));
+  binDir = join(repoDir, "bin");
+  await mkdir(binDir, { recursive: true });
+  await mkdir(join(repoDir, "graphify-out"), { recursive: true });
+  await mkdir(join(repoDir, "src/app"), { recursive: true });
+  await mkdir(join(repoDir, "src/hooks"), { recursive: true });
+
+  await writeFile(join(repoDir, "graphify-out/graph.json"), '{"nodes":[],"edges":[]}');
+  await writeFile(join(binDir, "graphify"), stubScript, { mode: 0o755 });
+  for (const entry of knownShortlist) {
+    await writeFile(join(repoDir, entry.target), `// ${entry.relationship}\n`);
+  }
+});
+
+afterAll(async () => {
+  if (repoDir) await rm(repoDir, { recursive: true, force: true });
+});
+
+/**
+ * One run's ordered log, owned by the parent process.
+ *
+ * Deliberately in memory rather than a file both the stub and the harness append to: two
+ * writers ordered by whenever their writes land is a race, and the ordering claim is the
+ * whole point. Here the order is program order — the spawn is awaited to completion before
+ * its event is appended, so a read recorded after a query provably followed it.
+ */
+function createRecorder(holder: string) {
+  const events: HolderEvent[] = [];
+
+  return {
+    events,
+    record(detail: string, kind: HolderEvent["kind"] = "selection") {
+      events.push({ holder, kind, detail });
+    },
+    read(path: string, fallback?: string) {
+      events.push({ holder, kind: "read", detail: path, fallback });
+    },
+    /** Stands in for a Grep/Glob/Bash sweep or a delegated context agent. */
+    traverse(what: string, fallback?: string) {
+      events.push({ holder, kind: "read", detail: what, fallback });
+    },
+    async query(question: string, mode: StubMode): Promise<{ exitCode: number; stdout: string }> {
+      const proc = Bun.spawn({
+        cmd: ["graphify", "query", question],
+        cwd: repoDir,
+        env: { ...process.env, PATH: `${binDir}:${process.env.PATH}`, GRAPHIFY_STUB_MODE: mode },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const stdout = await new Response(proc.stdout).text();
+      const exitCode = await proc.exited;
+      events.push({ holder, kind: "query", detail: `graphify query ${question}` });
+      return { exitCode, stdout };
+    },
+  };
+}
+
+/** Render the three-line evidence record a conforming pass hands on. */
+function renderRecord(queries: number, truncated: boolean, outsideReads: number): string {
+  return [
+    "context-source: graphify",
+    `graphify-trace: queries=${queries} truncated=${truncated ? "yes" : "no"} shortlist=${knownShortlist.length} outside-reads=${outsideReads}`,
+    "graphify-shortlist:",
+    ...knownShortlist.map((entry) => `- ${entry.target} — ${entry.relationship}`),
+  ].join("\n");
+}
+
+/**
+ * A planning holder following the contract: query first, classify, refine a truncated answer,
+ * and only then record a selection and read what the graph named.
+ *
+ * Returns the record it produced, or the transition line it left through.
+ */
+async function runPlanningHolder(modes: StubMode[]) {
+  const recorder = createRecorder("planning");
+  let truncated = false;
+
+  for (const [round, mode] of modes.entries()) {
+    const { exitCode, stdout } = await recorder.query(`round-${round}`, mode);
+    if (exitCode !== 0) {
+      return { transition: transitionLine("error"), events: recorder.events };
+    }
+    if (stdout.includes("[!] TRUNCATED")) {
+      truncated = true;
+      continue;
+    }
+    if (stdout.includes("No matching nodes found.")) continue;
+
+    const record = renderRecord(round + 1, truncated, 0);
+    recorder.record(record);
+    for (const entry of knownShortlist) recorder.read(entry.target);
+    return { record, events: recorder.events };
+  }
+  return { transition: transitionLine("refinement-exhausted"), events: recorder.events };
+}
+
+/** The hand-over line a failed or ineligible pass leaves behind. */
+function transitionLine(reason: (typeof graphifyTransitionReasons)[number]): string {
+  return `context-source: repomix pack-abc123 superseding graphify (${reason})`;
+}
+
+/** An implementation holder that inherits the record and reads only what it names. */
+function runImplementationHolder(record: string) {
+  const recorder = createRecorder("implementation");
+  recorder.record(record, "inherited");
+
+  const parsed = parseEvidenceRecord(record);
+  if (parsed.ok) {
+    for (const entry of parsed.evidence.shortlist) recorder.read(entry.target);
+  }
+  return recorder.events;
+}
+
+/** The plan file's `## Context source` section, the stored-plan channel for the record. */
+function renderPlanFile(record: string): string {
+  return ["# A plan", "", "## Summary", "", "Something.", "", "## Context source", "", record, ""].join(
+    "\n",
+  );
+}
+
+/** Read the record back out of a plan file, as an implementation session would. */
+function readContextSourceSection(plan: string): string {
+  const [, after = ""] = plan.split("## Context source\n");
+  return after.split(/\n## /)[0].trim();
+}
+
+describe("a conforming pass records the query before it traverses", () => {
+  test(
+    "the graphify process exits before the first read is recorded",
+    async () => {
+      const { record, events } = await runPlanningHolder(["focused"]);
+      expect(record).toBeDefined();
+
+      const firstQuery = events.findIndex((event) => event.kind === "query");
+      const firstRead = events.findIndex((event) => event.kind === "read");
+      expect(firstQuery).toBeGreaterThanOrEqual(0);
+      expect(firstRead).toBeGreaterThan(firstQuery);
+      expect(events[firstQuery].detail).toContain("graphify query");
+    },
+    spawnTimeoutMs,
+  );
+
+  test(
+    "the recorded log satisfies the validator",
+    async () => {
+      const { events } = await runPlanningHolder(["focused"]);
+      expect(validateHolderTrace(events).valid).toBe(true);
+    },
+    spawnTimeoutMs,
+  );
+
+  test(
+    "a truncated first answer is refined rather than accepted",
+    async () => {
+      const { record, events } = await runPlanningHolder(["truncated", "focused"]);
+      const parsed = parseEvidenceRecord(record ?? "");
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) return;
+      expect(parsed.evidence.queries).toBe(2);
+      expect(parsed.evidence.truncated).toBe(true);
+      expect(events.filter((event) => event.kind === "query")).toHaveLength(2);
+    },
+    spawnTimeoutMs,
+  );
+
+  test(
+    "a holder that traverses before querying is rejected",
+    async () => {
+      const recorder = createRecorder("planning");
+      recorder.record(renderRecord(1, false, 0));
+      recorder.traverse("src/app/AppShell.tsx");
+      await recorder.query("too late", "focused");
+
+      const verdict = validateHolderTrace(recorder.events);
+      expect(verdict.valid).toBe(false);
+      if (verdict.valid) return;
+      expect(verdict.reason).toContain("before any graphify query");
+    },
+    spawnTimeoutMs,
+  );
+});
+
+describe("the shortlist survives the hand-off", () => {
+  test(
+    "a fresh-plan implementation holder consumes the record it was handed",
+    async () => {
+      const { record, events } = await runPlanningHolder(["focused"]);
+      const downstream = runImplementationHolder(record ?? "");
+
+      expect(validateHolderTrace([...events, ...downstream]).valid).toBe(true);
+      const reads = downstream.filter((event) => event.kind === "read").map((e) => e.detail);
+      expect(reads).toEqual(knownShortlist.map((entry) => entry.target));
+    },
+    spawnTimeoutMs,
+  );
+
+  test(
+    "a stored-plan implementation holder recovers the record from the plan file",
+    async () => {
+      const { record } = await runPlanningHolder(["focused"]);
+      const planPath = join(repoDir, "plan.md");
+      await writeFile(planPath, renderPlanFile(record ?? ""));
+
+      const recovered = readContextSourceSection(await Bun.file(planPath).text());
+      expect(recovered).toBe(record ?? "");
+      expect(validateHolderTrace(runImplementationHolder(recovered)).valid).toBe(true);
+    },
+    spawnTimeoutMs,
+  );
+
+  test("a hand-off carrying only paths is not evidence", () => {
+    const pathsOnly = [
+      "context-source: graphify",
+      "graphify-trace: queries=1 truncated=no shortlist=2 outside-reads=0",
+      "graphify-shortlist:",
+      ...knownShortlist.map((entry) => `- ${entry.target}`),
+    ].join("\n");
+
+    const verdict = acceptSelection(pathsOnly);
+    expect(verdict.accepted).toBe(false);
+    if (verdict.accepted) return;
+    expect(verdict.reason).toContain("relationship");
+  });
+
+  test("an inherited record does not license rediscovery around it", () => {
+    const events = runImplementationHolder(renderRecord(1, false, 0));
+    events.push({
+      holder: "implementation",
+      kind: "read",
+      detail: "src/somewhere/else.ts",
+    });
+    expect(validateHolderTrace(events).valid).toBe(false);
+  });
+});
+
+describe("every exit from the tier is recorded", () => {
+  test("a declared selection with no query evidence fails", () => {
+    const verdict = acceptSelection("context-source: graphify");
+    expect(verdict.accepted).toBe(false);
+  });
+
+  test("an ineligible repository transitions as unavailable", () => {
+    // No graph.json means no query is attempted at all, so eligibility is the whole test.
+    const line = transitionLine("unavailable");
+    expect(parseTransition(line)?.reason).toBe("unavailable");
+    expect(acceptSelection(line).accepted).toBe(true);
+  });
+
+  test(
+    "a failing CLI transitions as error",
+    async () => {
+      const { transition, events } = await runPlanningHolder(["error"]);
+      expect(parseTransition(transition ?? "")?.reason).toBe("error");
+      expect(events.filter((event) => event.kind === "read")).toHaveLength(0);
+    },
+    spawnTimeoutMs,
+  );
+
+  test(
+    "an unrefinable answer transitions as refinement-exhausted",
+    async () => {
+      const modes = Array.from({ length: maxQueries }, (): StubMode => "truncated");
+      const { transition, events } = await runPlanningHolder(modes);
+
+      expect(parseTransition(transition ?? "")?.reason).toBe("refinement-exhausted");
+      expect(events.filter((event) => event.kind === "query")).toHaveLength(maxQueries);
+      expect(events.filter((event) => event.kind === "read")).toHaveLength(0);
+    },
+    spawnTimeoutMs,
+  );
+
+  test(
+    "an empty answer that never narrows also exhausts rather than falling through silently",
+    async () => {
+      const { transition } = await runPlanningHolder(["empty", "empty"]);
+      expect(parseTransition(transition ?? "")?.reason).toBe("refinement-exhausted");
+    },
+    spawnTimeoutMs,
+  );
+
+  test("a transition is a successor selection, so one source stays active", () => {
+    const events: HolderEvent[] = [
+      { holder: "planning", kind: "selection", detail: transitionLine("error") },
+      { holder: "planning", kind: "read", detail: "src/anything.ts" },
+    ];
+    expect(validateHolderTrace(events).valid).toBe(true);
+
+    events.push({ holder: "planning", kind: "selection", detail: "context-source: default (none)" });
+    expect(validateHolderTrace(events).valid).toBe(false);
   });
 });
 </file>
@@ -48519,7 +49801,7 @@ Issue **every** call below in a **single message** so they run concurrently. Do 
 
 **Direct calls** in the same message:
 
-- **Snapshot** — follow the ordered source chain in [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md); this skill passes no `includePatterns`. Emit the block's `context-source:` trace line for the tier you selected, including the `outputId` when it was the repomix tier. The fan-out is not complete until that line exists: it is what [Phase 3](#phase-3-emit-the-context-map) hands to the caller, and a caller cannot enforce a selection it was never told about.
+- **Snapshot** — follow the ordered source chain in [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md); this skill passes no `includePatterns`. Emit the block's `context-source:` trace line for the tier you selected, including the `outputId` when it was the repomix tier. On the graph tier the line waits for a query that **exited zero** and emit the whole evidence record, trace and shortlist together — a label written before the first query records an intention, not a selection. A graph pass that cannot produce a valid record leaves through the block's `superseding graphify (<reason>)` transition and the successor tier selects normally; a partial record is never the cheaper option. The fan-out is not complete until that line exists: it is what [Phase 3](#phase-3-emit-the-context-map) hands to the caller, and a caller cannot enforce a selection it was never told about.
 - **Stack** — Read `package.json` and extract `agents.rules`.
 - **Git state** — `git branch --show-current`, `git rev-parse --git-dir`, and `git rev-parse --git-common-dir` (the last two differ inside a worktree).
 
@@ -48559,14 +49841,14 @@ Emit these sections in this order. This is the caller's entire view of the repos
 **Applicable standards** — [id + status (mark "defaulted" when inferred) + one line on why the plan must honor it; then dropped candidates; "none" when nothing matched]
 **Stack** — [agents.rules value, and the deltas it resolves to]
 **Git state** — [branch, isWorktree, isStaleMerged, baseAhead]
-**Snapshot** — [the `context-source:` line emitted in Phase 1, verbatim — for later phases to reuse; on the graph tier, also the shortlist entries with the relationship that justifies each, and the pass's `graphify-trace:` line]
+**Snapshot** — [the evidence record emitted in Phase 1, verbatim — the `context-source:` line for later phases to reuse, and on the graph tier the `graphify-trace:` line and the `graphify-shortlist:` bullets with the relationship justifying each]
 ```
 
 Three fields carry decisions the caller would otherwise recompute badly:
 
 - **`isStaleMerged`** — a branch whose commits already landed upstream under rewritten SHAs still shows a non-empty `git log origin/main..HEAD`. A caller testing only for emptiness reads a finished branch as active work. Trust this field over a commit count.
 - **Applicable standards** — this doubles as the plan's audit log of what it planned against, including what the selection cap dropped. At `Scope: primed` the digest did not run, so write it as supplied by the caller's validated brief and name that brief — never leave it reading `none`, which would claim no standard applied rather than that one was sourced elsewhere.
-- **Snapshot on the graph tier** — the shortlist is what a later phase can actually reuse; the source name alone tells it where the context came from but not what the pass found, which is how a graph pass ends up repeated as a tree crawl. The `graphify-trace:` line travels with it so the caller can see how the shortlist was reached — a trace reading `truncated=yes queries=1` says the shortlist is the truncated first answer and should be treated as incomplete.
+- **Snapshot on the graph tier** — the shortlist is what a later phase can actually reuse; the source name alone tells it where the context came from but not what the pass found, which is how a graph pass ends up repeated as a tree crawl. The `graphify-trace:` line travels with it so the caller can see how the shortlist was reached — a trace reading `truncated=yes queries=1` says the shortlist is the truncated first answer and should be treated as incomplete. Carry all three lines or none: a caller that receives the label without the trace and the bullets is entitled to reject the selection outright, because there is nothing in it to consume.
 
 When you write the Context Map, apply the reference-formatting rules in [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (RFC-0001, read it first) to every reference it contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
 </file>
@@ -49639,6 +50921,14 @@ Nothing in the fan-out is gated off. A stored plan records what to do, not what 
 
 This stop is fatal, unlike a `digestError` the map records and moves past. A degraded digest costs the plan some context; an unrecorded selection means nothing bounds the repository reads that follow — which is the failure the gate exists for, since a production run once completed its entire pre-implementation pass on ordinary traversal, making zero graph and zero pack calls in a repository that had both. Re-run the skill, or file against it if the fan-out keeps returning no selection; do not continue by hand.
 
+**A graphify label needs the evidence behind it.** When the field reads `context-source: graphify`, check it against the block's evidence record: a `graphify-trace:` line whose `queries=` is one or more, and a `graphify-shortlist:` carrying at least one entry. When either is absent, stop:
+
+`Context phase failed on <LINEAR-ID>: gather-context declared graphify with no query evidence.`
+
+This stop is fatal for the same reason as the first, and it names what was missing — the trace, the shortlist, or both — so the fan-out can be fixed rather than guessed at. A selection with nothing behind it is worse than no selection: the first gate would have caught the second, while a bare label passes it and then bounds nothing. The fan-out has a cheaper exit whenever a graph pass genuinely fails — the `superseding graphify (<reason>)` transition, which costs a tier instead of the run — so a label arriving here without a record is a reporting fault, not an unlucky repository.
+
+This skill is the gated caller. [`plan`](../plan/SKILL.md), [`run`](../run/SKILL.md), and [`run-primed`](../run-primed/SKILL.md) consume the same map and are deliberately left **ungated**: they carry the record into the plan file's `## Context source` section instead, where a missing or empty record is visible to whoever reads the plan. Gating those too would stop a run over a context-acquisition detail at the one moment the plan is already written, which the audited failure never required.
+
 Set task 3 to `completed`.
 
 ## Phase 3: Preflight verdict
@@ -49682,6 +50972,8 @@ In `stored-plan` mode, the stored `### Implementation Steps` must be worked in o
 In `fresh-plan` mode, the finalized harness plan is the execution contract exactly as it is for [`run`](../run/SKILL.md#phase-5-implement-and-proceed). This mode is autonomous and adds no approval prompt.
 
 **The selected source bounds both modes.** Repository investigation before the first edit is served from the source the Context Map recorded — in `stored-plan` mode as much as in `fresh-plan` mode. A stored plan names the files to touch; it is not a licence to re-derive the repository with ordinary traversal, and the audited failure this answers was a stored-plan run. Reads outside the selected source carry the shared block's `context-fallback:` line, and broad rediscovery does not become valid because a plan already exists.
+
+**Both modes consume the evidence record before traversal.** On the graph tier the map's shortlist is the first place investigation looks, in `stored-plan` mode and `fresh-plan` mode alike — its entries carry the relationship that put them there, so they answer where to look and why without a query being repeated. Only once the shortlist is exhausted does anything else happen, and then as a recorded `context-fallback:` read rather than a fresh sweep. A shortlist that arrived and went unread is the same waste as a graph that was never queried, one step later.
 
 ## Phase 6: Branch and run the autopilot chain
 
@@ -53051,7 +54343,7 @@ There is no TODO search and no assignee for alert inputs.
 
 Reference for [`plan/SKILL.md`](../SKILL.md) and [`run/SKILL.md`](../../run/SKILL.md). Defined once here so the two callers cannot drift.
 
-Everything below runs **after** [`gather-context`](../../gather-context/SKILL.md) has returned the Context Map. That map is the codebase read: reason over it rather than re-reading the tree. Reach for an extra lookup only when the map is genuinely missing something the work turns on — a targeted query against the map's snapshot source (a `graphify` query, or `mcp__repomix__grep_repomix_output` against its `outputId`), or a live Grep/Read carrying its `context-fallback: <reason> <path>` note per the [shared block's taxonomy](../../shared-rules/references/repomix-snapshot.md) for working-tree code the snapshot cannot show — then fold the result back into the map.
+Everything below runs **after** [`gather-context`](../../gather-context/SKILL.md) has returned the Context Map. That map is the codebase read: reason over it rather than re-reading the tree. Reach for an extra lookup only when the map is genuinely missing something the work turns on — on the graph tier that lookup starts from the map's shortlist, which already names where to look and why, and widens to another `graphify` query only when the shortlist does not cover it; on the repomix tier it is `mcp__repomix__grep_repomix_output` against the recorded `outputId`; and a live Grep/Read carries its `context-fallback: <reason> <path>` note per the [shared block's taxonomy](../../shared-rules/references/repomix-snapshot.md) for working-tree code the snapshot cannot show. Fold the result back into the map.
 
 Resolve the three stack values from [stack-deltas.md](stack-deltas.md) wherever a step says "your stack's delta".
 
@@ -53081,6 +54373,10 @@ The template begins with `# <Title>` — see the **Plan File Header** rule in th
 Steelmanned intent: [verbatim from the Steelmanned Intent block]
 Score: [filled by the review step — leave as a placeholder in the draft]
 
+## Context source
+
+[the Context Map's Snapshot record, verbatim — on the graph tier all three lines, `context-source:` then `graphify-trace:` then the `graphify-shortlist:` bullets; on the repomix and default tiers the `context-source:` line and a sentence of provenance. One line of prose says what the reader should take from it.]
+
 ## Implementation Steps
 
 One numbered step per action, written as an imperative naming the file it touches and what changes there. Every step MUST include a `verify:` line — an observable check (test name, command, or behavior). Follow your stack's verify examples as the pattern. Reasoning belongs in `## Summary`; a step that explains itself instead of stating an action is prose, not a step. Use no checkboxes — the plan file is read, not ticked off.
@@ -53098,6 +54394,8 @@ Once every step above is done and verified:
 ```
 
 The template is prose because the plan file is what the reader approves — see the **Plan file is output, not instructions** rule in the calling skill. Both callers replace step 2 with their own machinery: `plan` asks in its post-implementation handoff phase, `run` runs the automated chain in [`run/SKILL.md`](../../run/SKILL.md) instead of asking.
+
+`## Context source` is required in every plan and is the one section quoted rather than composed. That does not make it an instruction: the record states where this plan's understanding of the repository came from, which is an outcome like any other, and quoting it is what keeps it reusable — a paraphrase drops the relationship on each shortlist entry, which is the part a later holder needs. A plan file with no such section, including every plan written before the section existed, is an **unrecorded source**: read it as a selection nobody wrote down and fall back to the shared block's taxonomy, never as a reason to stop.
 
 ## Review and score (task 4)
 
@@ -56691,6 +57989,8 @@ Once the plan file carries `## Pre-Implementation` and `## Post-Implementation (
 2. Implement every step in the plan, verifying each as you go.
 3. Execute the autopilot chain — commit → push → PR → monitor — per [Phase 4](#phase-4-embed-branch-creation-and-the-autopilot-chain)'s Step 1 through Completion, without prompting.
 
+Repository questions that come up while implementing step 2 are served from the plan's `## Context source` section — on the graph tier its shortlist first, since each entry already carries the relationship that put it there, and a further `graphify` query only when the shortlist does not cover the question. Reads outside it carry the `context-fallback:` line from the [shared block's taxonomy](../shared-rules/references/repomix-snapshot.md). The section exists because implementation frequently happens in a session that never ran the query, and a source name alone leaves that session re-collecting a repository someone already mapped. A plan with no such section is an unrecorded source: fall back to the taxonomy and carry on.
+
 The only user prompts in the entire run are the branch-type pick for plain-description inputs and review-feedback handling during PR monitoring. There is no plan-approval step.
 
 When you write the plan file, apply the reference-formatting rules in [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (RFC-0001, read it first) to every reference it contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
@@ -57445,9 +58745,43 @@ graphify-trace: queries=<n> truncated=<yes|no> shortlist=<n> outside-reads=<n>
 
 `queries` counts every graph invocation in the pass including the first; `truncated` is `yes` when any round came back truncated; `shortlist` is the number of entries the pass produced; `outside-reads` totals the `context-fallback:` lines emitted during it. A trace reading `truncated=yes` with `queries=1` is a contract violation on its face — it records a truncated answer that was never refined — and a reviewer should read it as one.
 
-When the three rounds are spent and no usable shortlist exists, this tier has failed rather than answered. Fall through and record the replacement as a single line, `context-source: repomix <outputId> superseding graphify (refinement exhausted)`, so exactly one source stays live and the abandoned one is visible rather than implied.
+When the three rounds are spent and no usable shortlist exists, this tier has failed rather than answered. Fall through and record the replacement as a single line, `context-source: repomix <outputId> superseding graphify (refinement-exhausted)`, so exactly one source stays live and the abandoned one is visible rather than implied. That line is one of the transitions defined below.
 
 <!-- graphify-refinement:end -->
+
+<!-- graphify-evidence:start -->
+
+**Tier 1 selection is earned, not declared.** Write `context-source: graphify` only once at least one graph invocation has **exited zero** and returned a usable answer — `focused`, or `truncated` that refinement then narrowed. Availability is not evidence: a committed graph and a resolving CLI make the tier _eligible_, and the first query is what tests that eligibility. A label written ahead of the query records an intention, and an intention is indistinguishable in a transcript from a pass that never happened.
+
+The tier hands on an **evidence record**, not a source name — three consecutive lines, the last opening a bullet per shortlist entry:
+
+```
+context-source: graphify
+graphify-trace: queries=3 truncated=yes shortlist=4 outside-reads=1
+graphify-shortlist:
+- src/app/AppShell.tsx — renders Sidebar, imports useLayout
+- src/hooks/useLayout.ts — the hook AppShell depends on
+```
+
+Each bullet is `<path or entity> — <relationship>`, the same em-dash form the refinement discipline above uses: the relationship is what makes the entry reusable, because a bare path tells the next holder where you looked but not why, and it re-derives the reasoning by traversing. A record whose `graphify-trace:` is absent, whose count reads `queries=0`, or whose shortlist is empty is **not a selection** — it is an unrecorded one, and a consumer must treat it as no selection at all rather than as a weaker version of one.
+
+**Consumption is the other half.** A holder that receives the record answers repository questions from the shortlist before any context-gathering traversal, and a holder that receives only the source name, or only paths stripped of their relationships, received nothing reusable and must say so instead of quietly re-collecting the repository. This is what makes the tier survive the gap between a planning session and the implementation session that follows it.
+
+**Leaving the tier is recorded, never silent.** Whenever tier 1 is eligible but rejected, or fails part-way, write one line before the successor selects:
+
+```
+context-source: <successor> superseding graphify (<reason>)
+```
+
+`<successor>` is a full selection in its own right — `repomix <outputId>` or `default <reason>` — so the line names what took over rather than only what was abandoned; where both slots carry a reason, the parenthesized one always explains the graph. `<reason>` is exactly one of:
+
+- `unavailable` — no `graphify-out/graph.json` at the repository root, or no `graphify` on PATH. The tier was never reachable.
+- `error` — an invocation exited non-zero, or the graph was unreadable. The tier was reachable and broke.
+- `refinement-exhausted` — the three refinement rounds are spent with no usable shortlist.
+
+These three explain **why a tier was left**, and they are not the `context-fallback:` reasons from the taxonomy below, which explain a single read outside a selection that is **still live**. A transition ends a source; a fallback is a permitted exception within one. Recording a transition is always cheaper than emitting a partial record: a graph pass that cannot produce evidence should cost the tier, not the run.
+
+<!-- graphify-evidence:end -->
 
 **Tier 2 — repomix pack.** Prefer the committed pack over re-packing — the refresh is merge-triggered, so the pack is current for anything already on the default branch.
 
@@ -61498,7 +62832,9 @@ Defined once in [`references/pipeline.md`](../claude-plugins/autopilot/skills/pl
 
 ### Draft plan
 
-Assemble a complete draft **before** review and scoring, so both operate on a concrete artifact rather than an imagined one. The draft follows a fixed template: `## Summary` (with steelmanned intent and a `Score:` placeholder), `## Implementation Steps` (each with an observable `verify:` line patterned on the stack's verify examples), `## Files`, and `## Post-Implementation` — the last of these stating in prose that documentation is updated and the work is committed or opened as a PR.
+Assemble a complete draft **before** review and scoring, so both operate on a concrete artifact rather than an imagined one. The draft follows a fixed template: `## Summary` (with steelmanned intent and a `Score:` placeholder), `## Context source`, `## Implementation Steps` (each with an observable `verify:` line patterned on the stack's verify examples), `## Files`, and `## Post-Implementation` — the last of these stating in prose that documentation is updated and the work is committed or opened as a PR.
+
+`## Context source` is the one section quoted rather than composed: it carries the Context Map's `Snapshot` record verbatim, which on the graph tier means the `context-source:`, `graphify-trace:`, and `graphify-shortlist:` lines together. Implementation frequently happens in a session that never ran the query, and a source name alone leaves that session re-collecting a repository someone already mapped ([#597](https://github.com/awinogradov/code-assistants/issues/597)) — the shortlist entries carry the relationship that put them there, so they survive the hand-off as something to read rather than something to re-derive. It also makes a past run auditable, since a plan file is durable and greppable where a transcript is not. A plan with no such section — every plan written before the section existed — is an unrecorded source, read as a selection nobody wrote down, never as a reason to stop.
 
 Two constraints bound what that draft may contain. The first is minimality: the draft proposes the smallest reliable solution that satisfies the steelmanned intent, reusing what the Context Map already shows, and every step must trace to that intent — no unrequested abstraction, no configurability nobody asked for, no error handling for impossible states, no opportunistic refactor of adjacent code. The second is shape: a step is one imperative action naming the file it touches and its `verify:` line, with reasoning left to `## Summary` and no checkboxes, since the plan file is read rather than ticked off.
 
@@ -62157,9 +63493,26 @@ Preferring the graph is not the same as using it. An audited planning run asked 
 - A truncated or empty answer is refined with another **graph** operation before any context-gathering file read — a narrower question, a `--context <relation>` filter, or a focused `explain` / `path` / `affected` lookup. Raising `--budget` re-floods the same broad answer, so it is never the sole response.
 - Refinement is capped at three rounds after the first, and the pass ends at a **shortlist** of at most ten files or entities, each with the relationship that justifies it. Direct reads during the pass are limited to that shortlist; the shortlist is what the pass hands on, the way an `outputId` is on tier 2.
 - The pass closes with `graphify-trace: queries=<n> truncated=<yes|no> shortlist=<n> outside-reads=<n>`, which makes the failure mode legible after the fact: `truncated=yes` with `queries=1` is a truncated answer that was never refined.
-- An exhausted tier hands over explicitly — `context-source: repomix <outputId> superseding graphify (refinement exhausted)` — so exactly one source stays live.
+- An exhausted tier hands over explicitly — `context-source: repomix <outputId> superseding graphify (refinement-exhausted)` — so exactly one source stays live.
 
 The wording is pinned by [`graphifyRefinementContract`](../.github/actions/code-review-action/src/graphifyRefinementContract.test.ts), which extracts a nested `graphify-refinement` sentinel because the outer block already contains the words the discipline uses. CI can only prove the text is there; whether sessions honour it is measured by the canary recorded on the issue.
+
+### Evidence, not declaration
+
+Refinement assumed a query had happened. Nothing required one: `context-source: graphify` was a label, and a repository that merely _had_ a graph made the label true enough to write. A planning run could query the graph properly while the implementation run that followed it received the source name, rebuilt its own picture with ordinary traversal, and reported the graph tier throughout ([#597](https://github.com/awinogradov/code-assistants/issues/597)). The tier now has to produce evidence:
+
+- The label follows a query that **exited zero** with a usable answer. Availability makes the tier eligible; the first query is what tests that eligibility.
+- What the tier hands on is a three-line record, not a name — `context-source: graphify`, then `graphify-trace:`, then `graphify-shortlist:` with one `path or entity — relationship` bullet per entry. A record with no trace, `queries=0`, or an empty shortlist is an unrecorded selection, and a consumer treats it as no selection at all.
+- Leaving the tier is written down: `context-source: <successor> superseding graphify (<reason>)`, where `<reason>` is `unavailable`, `error`, or `refinement-exhausted`. These say why a source ended, and are not the six `context-fallback:` reasons, which excuse one read inside a source still live.
+- The record travels. [`linear-run`](./17-linear-run-skill.md#enforcing-the-context-source) reads it from the Context Map's `**Snapshot**` field and refuses a graphify label with nothing behind it; `plan` and `run` carry it into the plan file's `## Context source` section, which is also what makes a past run auditable — a plan file is durable and greppable where a transcript is not.
+
+```text
+eligible ──query exits 0──▶ record ──hand-off──▶ shortlist read first
+    │                                                    │
+    └──unavailable / error / refinement-exhausted──▶ successor tier
+```
+
+Two tests carry the executable half. [`graphifyEvidence`](../.github/actions/code-review-action/src/graphifyEvidence.test.ts) is the contract as runnable code — one rejection per clause, so "was graphify selected" has a single machine-checkable answer. [`graphifyEvidenceFixture`](../.github/actions/code-review-action/src/graphifyEvidenceFixture.test.ts) spawns a deterministic `graphify` stub in a temporary repository and records every act in one ordered log, proving a real process ran and exited before the first traversal, and that the shortlist survives the hand-off in both the stored-plan and fresh-plan shapes. Both state their limit in their headers, because it is the limit that makes the rest honest: a `bun test` run **does not execute a session**, so the holders are scripted, and what is proven is that a conforming holder produces a log the validator accepts while every named violation produces one it rejects. Production conformance remains the canary — now with a durable artifact to read it from. The static half stays [`graphifyEvidenceContract`](../.github/actions/code-review-action/src/graphifyEvidenceContract.test.ts), a documentation guard over the `graphify-evidence` sentinel and its consumers.
 
 ### The exclusive-source read contract
 
@@ -63274,6 +64627,14 @@ Two properties make the gate worth its cost. **The failure is fatal, unlike a `d
 
 The gate is deliberately local to this skill. Every consumer of the shared block inherits the emission requirement, but issue 586 scoped the fatal check to `linear-run`, where the failure was observed; [`run`](../claude-plugins/autopilot/skills/run/SKILL.md) and [`run-primed`](../claude-plugins/autopilot/skills/run-primed/SKILL.md) are unchanged.
 
+### The second gate: a label is not a selection
+
+The first gate asks whether a line came back. It cannot tell a graph pass from a claim about one, so a holder that wrote `context-source: graphify` without querying anything passed it and then bounded nothing ([#597](https://github.com/awinogradov/code-assistants/issues/597)). Phase 2 therefore checks the field a second time when it names the graph tier: a `graphify-trace:` line whose `queries=` is one or more, and a `graphify-shortlist:` with at least one entry. A label arriving with **no query evidence** stops the run, fatally, naming whichever half was missing.
+
+Refusing rather than downgrading is the right severity here because the fan-out already has a cheaper exit. A graph pass that genuinely fails writes `superseding graphify (<reason>)` and the successor tier selects normally — that costs a tier. A bare label reaching this gate is not an unlucky repository; it is a pass that reported something it did not do, and the run built on it would inherit the fault silently.
+
+The perimeter is stated in the skill rather than left to inference: this skill is the gated caller, while `plan`, `run`, and `run-primed` stay **ungated** and carry the record into the plan file's `## Context source` section instead, where a reader can see whether anything is behind it. Gating those too would abort a run over a context-acquisition detail at the moment the plan is already written, which no audited failure has required.
+
 ## Executing the selected plan
 
 In stored-plan mode, the `### Implementation Steps` are worked in order, each verified against its own `verify:` line before the next begins. No re-drafting, no re-ordering, no merging, no added steps, and no second expert review — the producer's pipeline already finalized the stored artifact, recording either its panel's score or an explicit skip.
@@ -63288,9 +64649,11 @@ In fresh-plan mode, the shared planning pipeline produces and scores a harness p
 
 [`contextSourceContract`](../.github/actions/code-review-action/src/contextSourceContract.test.ts) guards the context-source gate from both ends: that `gather-context`'s `Snapshot` field carries the trace line at all, and that this skill reads the shared block, emits the literal stop, marks it fatal, and binds both plan modes. The mode assertions anchor on the obligation's own sentence rather than on the phase heading — both mode names appear throughout Phase 5, so a phase-wide search would pass with the obligation missing entirely.
 
-Both guards run in CI. [`test.yml`](../.github/workflows/test.yml) runs `bun run test` on every pull request to `main` and is deliberately not path-filtered, precisely because these tests guard markdown — so a docs-only change that breaks a pinned phrase fails the Test check.
+[`graphifyEvidenceContract`](../.github/actions/code-review-action/src/graphifyEvidenceContract.test.ts) guards the second gate the same way: that the `graphify-evidence` sentinel states its clauses, that `gather-context` carries all three record lines into the `Snapshot` field, that this skill emits the **no query evidence** stop and marks it fatal, and that the consumption obligation names both plan modes on its own anchored sentence.
 
-**What no test can show:** that the gate runs, or that the model honours it. CI sees text in a file. Because this repository configures no `linear` tracker and commits no graphify graph, this skill cannot execute here at all, which puts the issue's two runtime acceptance criteria (a real graph query before any direct traversal, and a per-holder trace assertion) out of reach of any check in this repository. Runtime evidence comes from a dry run recorded on the pull request.
+All three guards run in CI. [`test.yml`](../.github/workflows/test.yml) runs `bun run test` on every pull request to `main` and is deliberately not path-filtered, precisely because these tests guard markdown — so a docs-only change that breaks a pinned phrase fails the Test check.
+
+**What no test can show:** that the gate runs, or that the model honours it. CI sees text in a file. Because this repository configures no `linear` tracker and commits no graphify graph, this skill cannot execute here at all. What is now checkable is narrower but real: [`graphifyEvidence`](../.github/actions/code-review-action/src/graphifyEvidence.test.ts) fixes one machine-checkable meaning for "graphify was selected", and [`graphifyEvidenceFixture`](../.github/actions/code-review-action/src/graphifyEvidenceFixture.test.ts) proves a conforming holder's recorded log orders a real query before its first traversal and carries the shortlist across the hand-off. Both use scripted holders, so the model's own behaviour still comes from a dry run recorded on the pull request.
 
 ## Where to look in the code
 
@@ -63303,6 +64666,9 @@ Both guards run in CI. [`test.yml`](../.github/workflows/test.yml) runs `bun run
 | `…/skills/shared-rules/references/repomix-snapshot.md`                 | The exclusive-source contract this skill enforces          |
 | `.github/actions/code-review-action/src/linearPlanContract.test.ts`    | The producer/consumer guard                                |
 | `.github/actions/code-review-action/src/contextSourceContract.test.ts` | The context-source gate guard                              |
+| `…/code-review-action/src/graphifyEvidenceContract.test.ts`            | The evidence gate guard                                    |
+| `…/code-review-action/src/graphifyEvidence.ts`                         | The evidence contract as runnable code                     |
+| `…/code-review-action/src/graphifyEvidenceFixture.test.ts`             | The conformance harness over a stubbed graphify CLI        |
 </file>
 
 <file path="docs/18-agent-skills-export.md">
