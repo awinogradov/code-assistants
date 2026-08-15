@@ -54,9 +54,43 @@ graphify-trace: queries=<n> truncated=<yes|no> shortlist=<n> outside-reads=<n>
 
 `queries` counts every graph invocation in the pass including the first; `truncated` is `yes` when any round came back truncated; `shortlist` is the number of entries the pass produced; `outside-reads` totals the `context-fallback:` lines emitted during it. A trace reading `truncated=yes` with `queries=1` is a contract violation on its face — it records a truncated answer that was never refined — and a reviewer should read it as one.
 
-When the three rounds are spent and no usable shortlist exists, this tier has failed rather than answered. Fall through and record the replacement as a single line, `context-source: repomix <outputId> superseding graphify (refinement exhausted)`, so exactly one source stays live and the abandoned one is visible rather than implied.
+When the three rounds are spent and no usable shortlist exists, this tier has failed rather than answered. Fall through and record the replacement as a single line, `context-source: repomix <outputId> superseding graphify (refinement-exhausted)`, so exactly one source stays live and the abandoned one is visible rather than implied. That line is one of the transitions defined below.
 
 <!-- graphify-refinement:end -->
+
+<!-- graphify-evidence:start -->
+
+**Tier 1 selection is earned, not declared.** Write `context-source: graphify` only once at least one graph invocation has **exited zero** and returned a usable answer — `focused`, or `truncated` that refinement then narrowed. Availability is not evidence: a committed graph and a resolving CLI make the tier _eligible_, and the first query is what tests that eligibility. A label written ahead of the query records an intention, and an intention is indistinguishable in a transcript from a pass that never happened.
+
+The tier hands on an **evidence record**, not a source name — three consecutive lines, the last opening a bullet per shortlist entry:
+
+```
+context-source: graphify
+graphify-trace: queries=3 truncated=yes shortlist=4 outside-reads=1
+graphify-shortlist:
+- src/app/AppShell.tsx — renders Sidebar, imports useLayout
+- src/hooks/useLayout.ts — the hook AppShell depends on
+```
+
+Each bullet is `<path or entity> — <relationship>`, the same em-dash form the refinement discipline above uses: the relationship is what makes the entry reusable, because a bare path tells the next holder where you looked but not why, and it re-derives the reasoning by traversing. A record whose `graphify-trace:` is absent, whose count reads `queries=0`, or whose shortlist is empty is **not a selection** — it is an unrecorded one, and a consumer must treat it as no selection at all rather than as a weaker version of one.
+
+**Consumption is the other half.** A holder that receives the record answers repository questions from the shortlist before any context-gathering traversal, and a holder that receives only the source name, or only paths stripped of their relationships, received nothing reusable and must say so instead of quietly re-collecting the repository. This is what makes the tier survive the gap between a planning session and the implementation session that follows it.
+
+**Leaving the tier is recorded, never silent.** Whenever tier 1 is eligible but rejected, or fails part-way, write one line before the successor selects:
+
+```
+context-source: <successor> superseding graphify (<reason>)
+```
+
+`<successor>` is a full selection in its own right — `repomix <outputId>` or `default <reason>` — so the line names what took over rather than only what was abandoned; where both slots carry a reason, the parenthesized one always explains the graph. `<reason>` is exactly one of:
+
+- `unavailable` — no `graphify-out/graph.json` at the repository root, or no `graphify` on PATH. The tier was never reachable.
+- `error` — an invocation exited non-zero, or the graph was unreadable. The tier was reachable and broke.
+- `refinement-exhausted` — the three refinement rounds are spent with no usable shortlist.
+
+These three explain **why a tier was left**, and they are not the `context-fallback:` reasons from the taxonomy below, which explain a single read outside a selection that is **still live**. A transition ends a source; a fallback is a permitted exception within one. Recording a transition is always cheaper than emitting a partial record: a graph pass that cannot produce evidence should cost the tier, not the run.
+
+<!-- graphify-evidence:end -->
 
 **Tier 2 — repomix pack.** Prefer the committed pack over re-packing — the refresh is merge-triggered, so the pack is current for anything already on the default branch.
 

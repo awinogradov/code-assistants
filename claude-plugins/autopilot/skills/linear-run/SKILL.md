@@ -160,6 +160,14 @@ Nothing in the fan-out is gated off. A stored plan records what to do, not what 
 
 This stop is fatal, unlike a `digestError` the map records and moves past. A degraded digest costs the plan some context; an unrecorded selection means nothing bounds the repository reads that follow — which is the failure the gate exists for, since a production run once completed its entire pre-implementation pass on ordinary traversal, making zero graph and zero pack calls in a repository that had both. Re-run the skill, or file against it if the fan-out keeps returning no selection; do not continue by hand.
 
+**A graphify label needs the evidence behind it.** When the field reads `context-source: graphify`, check it against the block's evidence record: a `graphify-trace:` line whose `queries=` is one or more, and a `graphify-shortlist:` carrying at least one entry. When either is absent, stop:
+
+`Context phase failed on <LINEAR-ID>: gather-context declared graphify with no query evidence.`
+
+This stop is fatal for the same reason as the first, and it names what was missing — the trace, the shortlist, or both — so the fan-out can be fixed rather than guessed at. A selection with nothing behind it is worse than no selection: the first gate would have caught the second, while a bare label passes it and then bounds nothing. The fan-out has a cheaper exit whenever a graph pass genuinely fails — the `superseding graphify (<reason>)` transition, which costs a tier instead of the run — so a label arriving here without a record is a reporting fault, not an unlucky repository.
+
+This skill is the gated caller. [`plan`](../plan/SKILL.md), [`run`](../run/SKILL.md), and [`run-primed`](../run-primed/SKILL.md) consume the same map and are deliberately left **ungated**: they carry the record into the plan file's `## Context source` section instead, where a missing or empty record is visible to whoever reads the plan. Gating those too would stop a run over a context-acquisition detail at the one moment the plan is already written, which the audited failure never required.
+
 Set task 3 to `completed`.
 
 ## Phase 3: Preflight verdict
@@ -203,6 +211,8 @@ In `stored-plan` mode, the stored `### Implementation Steps` must be worked in o
 In `fresh-plan` mode, the finalized harness plan is the execution contract exactly as it is for [`run`](../run/SKILL.md#phase-5-implement-and-proceed). This mode is autonomous and adds no approval prompt.
 
 **The selected source bounds both modes.** Repository investigation before the first edit is served from the source the Context Map recorded — in `stored-plan` mode as much as in `fresh-plan` mode. A stored plan names the files to touch; it is not a licence to re-derive the repository with ordinary traversal, and the audited failure this answers was a stored-plan run. Reads outside the selected source carry the shared block's `context-fallback:` line, and broad rediscovery does not become valid because a plan already exists.
+
+**Both modes consume the evidence record before traversal.** On the graph tier the map's shortlist is the first place investigation looks, in `stored-plan` mode and `fresh-plan` mode alike — its entries carry the relationship that put them there, so they answer where to look and why without a query being repeated. Only once the shortlist is exhausted does anything else happen, and then as a recorded `context-fallback:` read rather than a fresh sweep. A shortlist that arrived and went unread is the same waste as a graph that was never queried, one step later.
 
 ## Phase 6: Branch and run the autopilot chain
 
