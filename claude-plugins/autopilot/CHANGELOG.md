@@ -2,6 +2,48 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [5.6.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v5.5.0...autopilot@v5.6.0) (2026-08-15)
+
+## Release Notes
+
+Graphify context selection is now provable at runtime — sessions can no longer claim graph-based context while actually doing ordinary file traversal.
+
+## ✨ What's New
+
+### Provable Graphify Context Selection
+
+The Graphify context tier now requires verifiable runtime evidence that a query actually executed and returned results. Previously, a session could self-report that it used the Graphify graph while silently falling back to ordinary repository traversal — meaning plans built on "Graphify context" could actually reflect shallow, traversal-based discovery without anyone knowing.
+
+Now the Graphify pass hands off a bounded shortlist of entries to the implementing session, with each entry's relationship to the task explicitly justified. Plans record this shortlist in a new `## Context source` section so the implementing session can reuse it directly rather than rebuilding context from scratch.
+
+When Graphify is skipped or unavailable, the fallback to Repomix or default tools is now logged as an explicit `superseding graphify (<reason>)` line — making a skipped tier visible in the plan record rather than silent.
+
+<details><summary>Related issues</summary>
+
+- [#597: Require runtime evidence that Graphify was queried and consumed](https://github.com/awinogradov/code-assistants/issues/597)
+- [#598: Make Graphify context selection provable instead of self-reported](https://github.com/awinogradov/code-assistants/pull/598)
+</details>
+
+## 🐛 Bug Fixes
+
+### Branch Recovery Rebase No Longer Drops Commits
+
+The documented recovery command for a pull-request branch that already carries a base-branch merge commit was previously using `git rebase --onto`, which silently discarded every commit made before the merge point. The correct form — `git rebase <base-tip> <branch>` — replaces the `--onto` form and preserves the full commit history. If you've used the branch-recovery workflow recently on a branch with a merge commit, verify your commit history is intact.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #597 | [#598](https://github.com/awinogradov/code-assistants/pull/598) | @awinogradov |
+
+### Features
+
+* **shared-rules:** require query evidence for graphify tier ([c728d8d](https://github.com/awinogradov/code-assistants/commit/c728d8d6aa30092665c9698413e363dfa7b3ee3e))
+
+### Bug Fixes
+
+* drop --onto from merge recovery rebase ([e1958f4](https://github.com/awinogradov/code-assistants/commit/e1958f44f0a3dcb972ac24abea5820bcedc2fb98))
 ## [5.5.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v5.4.0...autopilot@v5.5.0) (2026-08-13)
 
 ## Release Notes
