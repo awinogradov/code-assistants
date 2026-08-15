@@ -2,6 +2,52 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [6.4.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v6.3.0...code-review-action@v6.4.0) (2026-08-15)
+
+## Release Notes
+
+The most impactful change in this release is a new enforcement mechanism that ensures the AI reviewer can no longer claim it used Graphify for context selection without proof that it actually did.
+
+## ✨ What's New
+
+### Provable Graphify Context Selection
+
+Previously, a review session could report that it had used Graphify to select relevant context while actually falling back to ordinary repository traversal — meaning the graph-aware selection was silently bypassed with no visible indication. That gap is now closed.
+
+The Graphify pass is now required to produce a bounded shortlist of files with the relationship justifying each entry, and review plans must record this in a dedicated `## Context source` section. The implementing session reads from that section directly, so it reuses the already-resolved context rather than rebuilding it from scratch. When Graphify is skipped in favour of Repomix or default tools, the fallback is now recorded as an explicit `superseding graphify (<reason>)` line — making a bypassed tier visible rather than silent.
+
+From a delivery perspective, this means review output is now traceable: you can inspect the plan artifact and confirm which context tier was actually used, and why, rather than inferring it from review quality alone.
+
+<details><summary>Related issues</summary>
+
+- [#597: Require runtime evidence that Graphify was queried and consumed](https://github.com/awinogradov/code-assistants/issues/597)
+- [#598: Make Graphify context selection provable instead of self-reported](https://github.com/awinogradov/code-assistants/pull/598)
+</details>
+
+## 🐛 Bug Fixes
+
+### Branch-Recovery Rebase Command Corrected
+
+The documented recovery procedure for a pull-request branch that already contained a base-branch merge commit was using `git rebase --onto`, which silently discarded every commit made before that merge. The correct form — `git rebase <base-tip> <branch>` — is now in place, so teams following the recovery steps will no longer lose work.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #597 | [#598](https://github.com/awinogradov/code-assistants/pull/598) | @awinogradov |
+
+### Features
+
+* **code-review-action:** add graphify evidence validator ([7a86cc6](https://github.com/awinogradov/code-assistants/commit/7a86cc6047d6537e88ebbbca3ce5e7df8d54a009))
+
+### Bug Fixes
+
+* drop --onto from merge recovery rebase ([e1958f4](https://github.com/awinogradov/code-assistants/commit/e1958f44f0a3dcb972ac24abea5820bcedc2fb98))
+
+### Tests
+
+* **code-review-action:** guard the graphify evidence contract ([cd3a027](https://github.com/awinogradov/code-assistants/commit/cd3a027dbb2aad52e5c908efa4627309a012c9e9))
 ## [6.3.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v6.2.0...code-review-action@v6.3.0) (2026-08-13)
 
 ## Release Notes
