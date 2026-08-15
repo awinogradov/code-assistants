@@ -70,9 +70,26 @@ Preferring the graph is not the same as using it. An audited planning run asked 
 - A truncated or empty answer is refined with another **graph** operation before any context-gathering file read — a narrower question, a `--context <relation>` filter, or a focused `explain` / `path` / `affected` lookup. Raising `--budget` re-floods the same broad answer, so it is never the sole response.
 - Refinement is capped at three rounds after the first, and the pass ends at a **shortlist** of at most ten files or entities, each with the relationship that justifies it. Direct reads during the pass are limited to that shortlist; the shortlist is what the pass hands on, the way an `outputId` is on tier 2.
 - The pass closes with `graphify-trace: queries=<n> truncated=<yes|no> shortlist=<n> outside-reads=<n>`, which makes the failure mode legible after the fact: `truncated=yes` with `queries=1` is a truncated answer that was never refined.
-- An exhausted tier hands over explicitly — `context-source: repomix <outputId> superseding graphify (refinement exhausted)` — so exactly one source stays live.
+- An exhausted tier hands over explicitly — `context-source: repomix <outputId> superseding graphify (refinement-exhausted)` — so exactly one source stays live.
 
 The wording is pinned by [`graphifyRefinementContract`](../.github/actions/code-review-action/src/graphifyRefinementContract.test.ts), which extracts a nested `graphify-refinement` sentinel because the outer block already contains the words the discipline uses. CI can only prove the text is there; whether sessions honour it is measured by the canary recorded on the issue.
+
+### Evidence, not declaration
+
+Refinement assumed a query had happened. Nothing required one: `context-source: graphify` was a label, and a repository that merely _had_ a graph made the label true enough to write. A planning run could query the graph properly while the implementation run that followed it received the source name, rebuilt its own picture with ordinary traversal, and reported the graph tier throughout ([#597](https://github.com/awinogradov/code-assistants/issues/597)). The tier now has to produce evidence:
+
+- The label follows a query that **exited zero** with a usable answer. Availability makes the tier eligible; the first query is what tests that eligibility.
+- What the tier hands on is a three-line record, not a name — `context-source: graphify`, then `graphify-trace:`, then `graphify-shortlist:` with one `path or entity — relationship` bullet per entry. A record with no trace, `queries=0`, or an empty shortlist is an unrecorded selection, and a consumer treats it as no selection at all.
+- Leaving the tier is written down: `context-source: <successor> superseding graphify (<reason>)`, where `<reason>` is `unavailable`, `error`, or `refinement-exhausted`. These say why a source ended, and are not the six `context-fallback:` reasons, which excuse one read inside a source still live.
+- The record travels. [`linear-run`](./17-linear-run-skill.md#enforcing-the-context-source) reads it from the Context Map's `**Snapshot**` field and refuses a graphify label with nothing behind it; `plan` and `run` carry it into the plan file's `## Context source` section, which is also what makes a past run auditable — a plan file is durable and greppable where a transcript is not.
+
+```text
+eligible ──query exits 0──▶ record ──hand-off──▶ shortlist read first
+    │                                                    │
+    └──unavailable / error / refinement-exhausted──▶ successor tier
+```
+
+Two tests carry the executable half. [`graphifyEvidence`](../.github/actions/code-review-action/src/graphifyEvidence.test.ts) is the contract as runnable code — one rejection per clause, so "was graphify selected" has a single machine-checkable answer. [`graphifyEvidenceFixture`](../.github/actions/code-review-action/src/graphifyEvidenceFixture.test.ts) spawns a deterministic `graphify` stub in a temporary repository and records every act in one ordered log, proving a real process ran and exited before the first traversal, and that the shortlist survives the hand-off in both the stored-plan and fresh-plan shapes. Both state their limit in their headers, because it is the limit that makes the rest honest: a `bun test` run **does not execute a session**, so the holders are scripted, and what is proven is that a conforming holder produces a log the validator accepts while every named violation produces one it rejects. Production conformance remains the canary — now with a durable artifact to read it from. The static half stays [`graphifyEvidenceContract`](../.github/actions/code-review-action/src/graphifyEvidenceContract.test.ts), a documentation guard over the `graphify-evidence` sentinel and its consumers.
 
 ### The exclusive-source read contract
 
