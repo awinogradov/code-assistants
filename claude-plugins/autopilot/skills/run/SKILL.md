@@ -181,6 +181,8 @@ Once the plan file carries `## Pre-Implementation` and `## Post-Implementation (
 2. Implement every step in the plan, verifying each as you go.
 3. Execute the autopilot chain — commit → push → PR → monitor — per [Phase 4](#phase-4-embed-branch-creation-and-the-autopilot-chain)'s Step 1 through Completion, without prompting.
 
+Repository questions that come up while implementing step 2 are served from the plan's `## Context source` section — on the graph tier its shortlist first, since each entry already carries the relationship that put it there, and a further `graphify` query only when the shortlist does not cover the question. Reads outside it carry the `context-fallback:` line from the [shared block's taxonomy](../shared-rules/references/repomix-snapshot.md). The section exists because implementation frequently happens in a session that never ran the query, and a source name alone leaves that session re-collecting a repository someone already mapped. A plan with no such section is an unrecorded source: fall back to the taxonomy and carry on.
+
 The only user prompts in the entire run are the branch-type pick for plain-description inputs and review-feedback handling during PR monitoring. There is no plan-approval step.
 
 When you write the plan file, apply the reference-formatting rules in [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (RFC-0001, read it first) to every reference it contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.

@@ -50,7 +50,7 @@ Issue **every** call below in a **single message** so they run concurrently. Do 
 
 **Direct calls** in the same message:
 
-- **Snapshot** — follow the ordered source chain in [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md); this skill passes no `includePatterns`. Emit the block's `context-source:` trace line for the tier you selected, including the `outputId` when it was the repomix tier. The fan-out is not complete until that line exists: it is what [Phase 3](#phase-3-emit-the-context-map) hands to the caller, and a caller cannot enforce a selection it was never told about.
+- **Snapshot** — follow the ordered source chain in [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md); this skill passes no `includePatterns`. Emit the block's `context-source:` trace line for the tier you selected, including the `outputId` when it was the repomix tier. On the graph tier the line waits for a query that **exited zero** and emit the whole evidence record, trace and shortlist together — a label written before the first query records an intention, not a selection. A graph pass that cannot produce a valid record leaves through the block's `superseding graphify (<reason>)` transition and the successor tier selects normally; a partial record is never the cheaper option. The fan-out is not complete until that line exists: it is what [Phase 3](#phase-3-emit-the-context-map) hands to the caller, and a caller cannot enforce a selection it was never told about.
 - **Stack** — Read `package.json` and extract `agents.rules`.
 - **Git state** — `git branch --show-current`, `git rev-parse --git-dir`, and `git rev-parse --git-common-dir` (the last two differ inside a worktree).
 
@@ -90,13 +90,13 @@ Emit these sections in this order. This is the caller's entire view of the repos
 **Applicable standards** — [id + status (mark "defaulted" when inferred) + one line on why the plan must honor it; then dropped candidates; "none" when nothing matched]
 **Stack** — [agents.rules value, and the deltas it resolves to]
 **Git state** — [branch, isWorktree, isStaleMerged, baseAhead]
-**Snapshot** — [the `context-source:` line emitted in Phase 1, verbatim — for later phases to reuse; on the graph tier, also the shortlist entries with the relationship that justifies each, and the pass's `graphify-trace:` line]
+**Snapshot** — [the evidence record emitted in Phase 1, verbatim — the `context-source:` line for later phases to reuse, and on the graph tier the `graphify-trace:` line and the `graphify-shortlist:` bullets with the relationship justifying each]
 ```
 
 Three fields carry decisions the caller would otherwise recompute badly:
 
 - **`isStaleMerged`** — a branch whose commits already landed upstream under rewritten SHAs still shows a non-empty `git log origin/main..HEAD`. A caller testing only for emptiness reads a finished branch as active work. Trust this field over a commit count.
 - **Applicable standards** — this doubles as the plan's audit log of what it planned against, including what the selection cap dropped. At `Scope: primed` the digest did not run, so write it as supplied by the caller's validated brief and name that brief — never leave it reading `none`, which would claim no standard applied rather than that one was sourced elsewhere.
-- **Snapshot on the graph tier** — the shortlist is what a later phase can actually reuse; the source name alone tells it where the context came from but not what the pass found, which is how a graph pass ends up repeated as a tree crawl. The `graphify-trace:` line travels with it so the caller can see how the shortlist was reached — a trace reading `truncated=yes queries=1` says the shortlist is the truncated first answer and should be treated as incomplete.
+- **Snapshot on the graph tier** — the shortlist is what a later phase can actually reuse; the source name alone tells it where the context came from but not what the pass found, which is how a graph pass ends up repeated as a tree crawl. The `graphify-trace:` line travels with it so the caller can see how the shortlist was reached — a trace reading `truncated=yes queries=1` says the shortlist is the truncated first answer and should be treated as incomplete. Carry all three lines or none: a caller that receives the label without the trace and the bullets is entitled to reject the selection outright, because there is nothing in it to consume.
 
 When you write the Context Map, apply the reference-formatting rules in [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (RFC-0001, read it first) to every reference it contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.

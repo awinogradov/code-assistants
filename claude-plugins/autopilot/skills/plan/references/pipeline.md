@@ -2,7 +2,7 @@
 
 Reference for [`plan/SKILL.md`](../SKILL.md) and [`run/SKILL.md`](../../run/SKILL.md). Defined once here so the two callers cannot drift.
 
-Everything below runs **after** [`gather-context`](../../gather-context/SKILL.md) has returned the Context Map. That map is the codebase read: reason over it rather than re-reading the tree. Reach for an extra lookup only when the map is genuinely missing something the work turns on — a targeted query against the map's snapshot source (a `graphify` query, or `mcp__repomix__grep_repomix_output` against its `outputId`), or a live Grep/Read carrying its `context-fallback: <reason> <path>` note per the [shared block's taxonomy](../../shared-rules/references/repomix-snapshot.md) for working-tree code the snapshot cannot show — then fold the result back into the map.
+Everything below runs **after** [`gather-context`](../../gather-context/SKILL.md) has returned the Context Map. That map is the codebase read: reason over it rather than re-reading the tree. Reach for an extra lookup only when the map is genuinely missing something the work turns on — on the graph tier that lookup starts from the map's shortlist, which already names where to look and why, and widens to another `graphify` query only when the shortlist does not cover it; on the repomix tier it is `mcp__repomix__grep_repomix_output` against the recorded `outputId`; and a live Grep/Read carries its `context-fallback: <reason> <path>` note per the [shared block's taxonomy](../../shared-rules/references/repomix-snapshot.md) for working-tree code the snapshot cannot show. Fold the result back into the map.
 
 Resolve the three stack values from [stack-deltas.md](stack-deltas.md) wherever a step says "your stack's delta".
 
@@ -32,6 +32,10 @@ The template begins with `# <Title>` — see the **Plan File Header** rule in th
 Steelmanned intent: [verbatim from the Steelmanned Intent block]
 Score: [filled by the review step — leave as a placeholder in the draft]
 
+## Context source
+
+[the Context Map's Snapshot record, verbatim — on the graph tier all three lines, `context-source:` then `graphify-trace:` then the `graphify-shortlist:` bullets; on the repomix and default tiers the `context-source:` line and a sentence of provenance. One line of prose says what the reader should take from it.]
+
 ## Implementation Steps
 
 One numbered step per action, written as an imperative naming the file it touches and what changes there. Every step MUST include a `verify:` line — an observable check (test name, command, or behavior). Follow your stack's verify examples as the pattern. Reasoning belongs in `## Summary`; a step that explains itself instead of stating an action is prose, not a step. Use no checkboxes — the plan file is read, not ticked off.
@@ -49,6 +53,8 @@ Once every step above is done and verified:
 ```
 
 The template is prose because the plan file is what the reader approves — see the **Plan file is output, not instructions** rule in the calling skill. Both callers replace step 2 with their own machinery: `plan` asks in its post-implementation handoff phase, `run` runs the automated chain in [`run/SKILL.md`](../../run/SKILL.md) instead of asking.
+
+`## Context source` is required in every plan and is the one section quoted rather than composed. That does not make it an instruction: the record states where this plan's understanding of the repository came from, which is an outcome like any other, and quoting it is what keeps it reusable — a paraphrase drops the relationship on each shortlist entry, which is the part a later holder needs. A plan file with no such section, including every plan written before the section existed, is an **unrecorded source**: read it as a selection nobody wrote down and fall back to the shared block's taxonomy, never as a reason to stop.
 
 ## Review and score (task 4)
 
