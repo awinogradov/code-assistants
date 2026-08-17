@@ -493,6 +493,7 @@ claude-plugins/
       5.4.0.md
       5.5.0.md
       5.6.0.md
+      5.7.0.md
     agents/
       analyze-pr-commits.md
       analyze-staged-changes.md
@@ -44168,7 +44169,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "5.6.0",
+  "version": "5.7.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -46558,6 +46559,25 @@ The documented recovery command for a pull-request branch that already carries a
 ### Bug Fixes
 
 * drop --onto from merge recovery rebase ([e1958f4](https://github.com/awinogradov/code-assistants/commit/e1958f44f0a3dcb972ac24abea5820bcedc2fb98))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/5.7.0.md">
+## [5.7.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v5.6.0...autopilot@v5.7.0) (2026-08-17)
+
+## Release Notes
+
+Autopilot can now cleanly complete tasks that require no code changes, avoiding the creation of empty pull requests.
+
+## ✨ What's New
+
+### Clean Completion for No-Change Tasks
+
+When Autopilot determines that a task is already done — either because an external action handled it or because no code changes are actually needed — it now exits gracefully without opening a pull request. Previously, these scenarios could result in an empty or meaningless PR being created. Now the `run` skill recognises this outcome as a valid completion state and stops there, keeping your pull request queue clean and free of noise.
+
+
+### Features
+
+* **run:** add no-change completion path ([4135175](https://github.com/awinogradov/code-assistants/commit/41351755dbbff8c48270535748b5b14d650e869e))
 </file>
 
 <file path="claude-plugins/autopilot/agents/analyze-pr-commits.md">
@@ -59299,6 +59319,22 @@ Before writing any output that mentions a file, standard, section, commit, or is
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [5.7.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v5.6.0...autopilot@v5.7.0) (2026-08-17)
+
+## Release Notes
+
+Autopilot can now cleanly complete tasks that require no code changes, avoiding the creation of empty pull requests.
+
+## ✨ What's New
+
+### Clean Completion for No-Change Tasks
+
+When Autopilot determines that a task is already done — either because an external action handled it or because no code changes are actually needed — it now exits gracefully without opening a pull request. Previously, these scenarios could result in an empty or meaningless PR being created. Now the `run` skill recognises this outcome as a valid completion state and stops there, keeping your pull request queue clean and free of noise.
+
+
+### Features
+
+* **run:** add no-change completion path ([4135175](https://github.com/awinogradov/code-assistants/commit/41351755dbbff8c48270535748b5b14d650e869e))
 ## [5.6.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v5.5.0...autopilot@v5.6.0) (2026-08-15)
 
 ## Release Notes
@@ -61630,14 +61666,14 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
   "release": {
     "type": "claude-plugin"
   },
-  "version": "5.6.0"
+  "version": "5.7.0"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v5.6.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v5.7.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -62105,7 +62141,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-5.6.0
+5.7.0
 </file>
 
 <file path="docs/01-workspace-structure.md">
