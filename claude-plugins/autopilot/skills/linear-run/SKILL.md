@@ -219,9 +219,9 @@ In `fresh-plan` mode, the finalized harness plan is the execution contract exact
 Follow [`run`'s Phase 4](../run/SKILL.md#phase-4-embed-branch-creation-and-the-autopilot-chain) and [Phase 5](../run/SKILL.md#phase-5-implement-and-proceed) without an approval gate.
 
 - In `fresh-plan` mode, embed the Linear branch block and autopilot post-implementation block in the harness plan exactly as `run` does.
-- In `stored-plan` mode, do not modify the Linear description or synthesize a replacement plan file. Invoke `Skill(autopilot:branch-create)` with the Linear issue using the body from [branch-blocks.md](../plan/references/branch-blocks.md), then implement the frozen stored steps.
+- In `stored-plan` mode, do not modify the Linear description or synthesize a replacement plan file. When the frozen plan explicitly requires no repository file changes, defer branch creation; otherwise invoke `Skill(autopilot:branch-create)` with the Linear issue using the body from [branch-blocks.md](../plan/references/branch-blocks.md). Then implement the frozen stored steps.
 
-After implementation, both modes use the same commit, push, pull-request, and monitoring chain.
+After implementation, both modes evaluate `run`'s [no-repository-change exit](../run/SKILL.md#no-repository-change-exit). A qualifying run reports `Outcome: no_repository_change`; every other successful run uses the same commit, push, pull-request, and monitoring chain.
 
 `run` numbers its delivery tasks differently; track them by subject — where its chain sets the Commit-changes, Create-PR, or Monitor-PR task, use this skill's task of the same name.
 

@@ -2,9 +2,9 @@
 
 > Chapter 5 of the [repository docs](../README.md#repository-docs).
 
-How `/autopilot:plan` and `/autopilot:run` turn a task — a GitHub issue, a Linear ticket, a code-scanning alert, or a free-form description — into a validated, expert-reviewed implementation plan, and (for `run`) all the way into a merged pull request.
+How `/autopilot:plan` and `/autopilot:run` turn a task — a GitHub issue, a Linear ticket, a code-scanning alert, or a free-form description — into a validated, expert-reviewed implementation plan, and (for `run`) either a verified no-repository-change result or a merged pull request.
 
-The two skills share the same front half. `plan` produces the plan and stops, asking what to do next. `run` is `plan` plus an automated post-implementation chain: commit → PR → monitor. Everything below applies to both unless a section calls out a difference.
+The two skills share the same front half. `plan` produces the plan and stops, asking what to do next. `run` is `plan` plus automated terminal selection: verified no repository change, or commit → PR → monitor. Everything below applies to both unless a section calls out a difference.
 
 > Source of truth: `claude-plugins/autopilot/skills/plan/SKILL.md` (orchestrator) and its `references/` files (input detection, pipeline, stack deltas, branch blocks), `…/skills/gather-context/SKILL.md` (the context fan-out), `…/skills/run/SKILL.md` (the automated tail), and the sub-agents under `…/agents/`.
 
@@ -54,7 +54,7 @@ The two skills share the same front half. `plan` produces the plan and stops, as
 - ③ Steelmanned intent, assumptions, and open questions — the human gate, now asked with the code already understood.
 - ④ Branch and worktree state read from the Context Map; `preflight-check` handles only what the map cannot settle.
 - ⑤ The shared pipeline: draft, review and score, finalize (see [The shared pipeline](#the-shared-pipeline)).
-- ⑥ `run` only: commit → PR → monitor until approved (see [How run differs](#how-run-differs-automated-post-implementation)).
+- ⑥ `run` only: verify a no-repository-change result, or commit → PR → monitor until approved (see [How run differs](#how-run-differs-automated-post-implementation)).
 
 ## One fan-out, then decide
 
@@ -265,29 +265,39 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
 
 ## How run differs: automated post-implementation
 
-`run` shares Phases 0–3 and the pipeline with `plan`, but never stops for plan approval — invoking `/autopilot:run` is itself the authorization, so there is **no plan-approval gate**; run implements the moment the plan file is written. It then **replaces** the plan's `## Post-Implementation` section with a body saying the tail is automated, and drives the chain below from its own Phase 4 — the steps, flags, and recovery rules stay in the skill, not in the plan file.
+`run` shares Phases 0–3 and the pipeline with `plan`, but never stops for plan approval — invoking `/autopilot:run` is itself the authorization, so there is **no plan-approval gate**; run implements the moment the plan file is written. It then **replaces** the plan's `## Post-Implementation` section with a body for the selected terminal path and drives the decision from its own Phase 4 — the checks, steps, flags, and recovery rules stay in the skill, not in the plan file.
 
 ```text
- ┌────────────┐   ┌──────────────┐   ┌──────────────┐   ┌───────────────┐
- │ Plan file  │──▶│ Auto-Commit  │──▶│ Auto-Create  │──▶│ Monitor       │
- │ (written)  │   │ commits-     │   │ PR           │   │ pr-monitor:   │
- │            │   │ create +push │   │ pr-create    │   │ CI + review   │
- └────────────┘   └──────────────┘   └──────────────┘   └───────┬───────┘
-                                                                │
-                                                                ▼
-                                                     ┌────────────────────┐
-                                                     │ Approved / Merged  │
-                                                     └────────────────────┘
+                    ┌───────────────────────────┐
+                    │ Plan implemented and     │
+                    │ every verify line passed │
+                    └─────────────┬─────────────┘
+                                  ▼
+                    ┌───────────────────────────┐
+                    │ Completion-path checks    │
+                    └──────┬─────────────┬──────┘
+             no repo work  │             │ repository change
+                           ▼             ▼
+              ┌──────────────────┐  ┌──────────────┐   ┌──────────────┐
+              │ Outcome:         │  │ Auto-Commit  │──▶│ Auto-Create  │
+              │ no_repository_   │  │ and push     │   │ PR           │
+              │ change           │  └──────────────┘   └──────┬───────┘
+              └──────────────────┘                            ▼
+                                                    ┌──────────────────┐
+                                                    │ Monitor until    │
+                                                    │ approved/merged  │
+                                                    └──────────────────┘
 ```
 
 **Flow Legend:**
 
+- **No repository change** — available only when the finalized plan explicitly says no repository files must change, every step and `verify:` line passed, and the worktree, diff, and topic-commit checks are empty. An empty diff alone is never evidence of completion. This path emits `Outcome: no_repository_change` and performs no branch, commit, push, PR, or monitoring action.
 - **Auto-Commit** — `Skill(autopilot:commits-create)` with `--autopilot`, then `git push`.
 - **Auto-Create PR** — `Skill(autopilot:pr-create)` with `--autopilot`, then a format check on the result.
 - **Monitor** — `Skill(autopilot:pr-monitor)` polls CI and review status; on changes-requested it runs `pr-resolve` (auto "Address all") and loops until approval.
 - Direct `gh pr create` / `git commit` are forbidden in autopilot mode — everything routes through the sub-skills so format stays correct.
 
-There are two variants of this flow, each replacing a different half of it. [`/autopilot:run-primed`](./15-run-primed-skill.md) keeps every phase above and replaces only the context gather, reading a SHA-validated [explore brief](./14-explore-skill.md) instead of re-mapping the repository. [`/autopilot:linear-run`](./17-linear-run-skill.md) keeps the phases from branch creation onward and replaces the draft-and-review half, executing a plan that [`/autopilot:linear-plan`](./16-linear-plan-skill.md) stored on a Linear issue earlier — possibly in another session, for another person to read first. Ordinary `run` is unchanged by either.
+There are two variants of this flow, each replacing a different half of it. [`/autopilot:run-primed`](./15-run-primed-skill.md) keeps every phase above and replaces only the context gather, reading a SHA-validated [explore brief](./14-explore-skill.md) instead of re-mapping the repository. [`/autopilot:linear-run`](./17-linear-run-skill.md) keeps terminal selection and replaces the draft-and-review half, executing a plan that [`/autopilot:linear-plan`](./16-linear-plan-skill.md) stored on a Linear issue earlier — possibly in another session, for another person to read first. Both variants inherit the same no-change checks and repository-delivery chain instead of copying them.
 
 ## Where to look in the code
 
