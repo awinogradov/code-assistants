@@ -744,6 +744,7 @@ scripts/
 .gitignore
 .nvmrc
 .prettierignore
+AGENTS.md
 CODE_OF_CONDUCT.md
 commitlint.config.ts
 CONTRIBUTING.md
@@ -51122,9 +51123,9 @@ In `fresh-plan` mode, the finalized harness plan is the execution contract exact
 Follow [`run`'s Phase 4](../run/SKILL.md#phase-4-embed-branch-creation-and-the-autopilot-chain) and [Phase 5](../run/SKILL.md#phase-5-implement-and-proceed) without an approval gate.
 
 - In `fresh-plan` mode, embed the Linear branch block and autopilot post-implementation block in the harness plan exactly as `run` does.
-- In `stored-plan` mode, do not modify the Linear description or synthesize a replacement plan file. Invoke `Skill(autopilot:branch-create)` with the Linear issue using the body from [branch-blocks.md](../plan/references/branch-blocks.md), then implement the frozen stored steps.
+- In `stored-plan` mode, do not modify the Linear description or synthesize a replacement plan file. When the frozen plan explicitly requires no repository file changes, defer branch creation; otherwise invoke `Skill(autopilot:branch-create)` with the Linear issue using the body from [branch-blocks.md](../plan/references/branch-blocks.md). Then implement the frozen stored steps.
 
-After implementation, both modes use the same commit, push, pull-request, and monitoring chain.
+After implementation, both modes evaluate `run`'s [no-repository-change exit](../run/SKILL.md#no-repository-change-exit). A qualifying run reports `Outcome: no_repository_change`; every other successful run uses the same commit, push, pull-request, and monitoring chain.
 
 `run` numbers its delivery tasks differently; track them by subject — where its chain sets the Commit-changes, Create-PR, or Monitor-PR task, use this skill's task of the same name.
 
@@ -57950,7 +57951,7 @@ Before writing any output that mentions a file, standard, section, commit, or is
 <file path="claude-plugins/autopilot/skills/run/SKILL.md">
 ---
 name: run
-description: Plan, implement, commit, create PR, and monitor until approved
+description: Plan and implement, then either report verified no repository change or deliver a PR
 argument-hint: "<task, GitHub/Linear issue (123, #123, ENG-123, or URL), or code-scanning alert (alert#N or URL)>"
 allowed-tools:
   - TaskCreate
@@ -57983,9 +57984,9 @@ allowed-tools:
   - Skill(autopilot:pr-create)
 ---
 
-Plan, implement, commit, create a PR, and monitor until approved. Extended version of `/autopilot:plan` that automates the post-implementation steps.
+Plan and implement a task, then finish through one of two terminal paths: report a verified no-repository-change outcome, or commit, create a PR, and monitor until approved. Extended version of `/autopilot:plan` that automates the post-implementation steps.
 
-**Difference from `/autopilot:plan`:** invoking `/autopilot:run` authorizes the entire flow up front — there is **no plan-approval gate**. Autopilot plans, implements, commits, creates a PR, and monitors for review approval without pausing for confirmation. (`/autopilot:plan` has two gates: it stops to get the plan approved, then asks again before creating a PR.)
+**Difference from `/autopilot:plan`:** invoking `/autopilot:run` authorizes the entire flow up front — there is **no plan-approval gate**. Autopilot plans and implements without pausing, then either proves that the completed task required no repository change or delivers the repository change through a monitored PR. (`/autopilot:plan` has two gates: it stops to get the plan approved, then asks again before creating a PR.)
 
 ## Input
 
@@ -58059,15 +58060,19 @@ Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) —
 
 ## Phase 4: Embed branch creation and the autopilot chain
 
-Embed both blocks into the plan file, then implement it. **Do NOT pause for plan approval** — invoking `/autopilot:run` is the approval. Never tell the user "after you approve I'll implement"; that is `/autopilot:plan` behavior.
+Choose the plan's terminal path, embed the matching blocks, then implement it. **Do NOT pause for plan approval** — invoking `/autopilot:run` is the approval. Never tell the user "after you approve I'll implement"; that is `/autopilot:plan` behavior.
+
+A plan is a no-repository-change candidate only when its finalized implementation steps explicitly require no repository file changes and instead close the task through an external action, verification, or a proven no-action-needed result. An empty or missing `## Files` section is not that declaration. For every other plan, use the repository-delivery path.
 
 ### Pre-Implementation (branch creation)
 
-Pick the body by input type from [branch-blocks.md](../plan/references/branch-blocks.md), using the **run variant** where one is noted — it appends `--autopilot` so branch-create skips its confirmation. Issue and Linear inputs have no run variant: their names are derived from the tracked issue and are never confirmed, so both callers emit the same body. That file also defines when the block is emitted at all.
+For a repository-delivery plan, pick the body by input type from [branch-blocks.md](../plan/references/branch-blocks.md), using the **run variant** where one is noted — it appends `--autopilot` so branch-create skips its confirmation. Issue and Linear inputs have no run variant: their names are derived from the tracked issue and are never confirmed, so both callers emit the same body. That file also defines when the block is emitted at all.
+
+For a no-repository-change candidate, omit `## Pre-Implementation` and defer branch creation. Implementation may still discover that repository changes are required; [Phase 5](#phase-5-implement-and-proceed) routes that case back to repository delivery before anything is committed.
 
 ### Post-Implementation (REPLACES the pipeline's default)
 
-**REPLACE** the `## Post-Implementation` section the pipeline template produced with this body, which tells the reader the tail is automated:
+For a repository-delivery plan, **REPLACE** the `## Post-Implementation` section the pipeline template produced with this body, which tells the reader the tail is automated:
 
 ```
 ## Post-Implementation (Autopilot)
@@ -58080,7 +58085,39 @@ Once every step above is done and verified, the rest runs automatically, with no
 4. Monitor the pull request until the review approves it or it merges, addressing review feedback as it arrives.
 ```
 
-The steps below are how that body is carried out. They are instructions for you, not text for the plan file — the plan file is what the reader sees, so it stays prose (see the **Plan file is output, not instructions** rule in [`plan/SKILL.md`](../plan/SKILL.md#plan-file-is-output-not-instructions)). Execute them in [Phase 5](#phase-5-implement-and-proceed) without pausing, and never present a "What's next?" AskUserQuestion.
+For a no-repository-change candidate, replace it with this body instead:
+
+```
+## Post-Implementation (Autopilot)
+
+Once every step above is done and verified, confirm that the repository remains unchanged and report the completed external action or verified result. Do not create a branch, commit, push, or pull request unless implementation discovers that repository files must change.
+```
+
+The steps below are how those bodies are carried out. They are instructions for you, not text for the plan file — the plan file is what the reader sees, so it stays prose (see the **Plan file is output, not instructions** rule in [`plan/SKILL.md`](../plan/SKILL.md#plan-file-is-output-not-instructions)). Execute them in [Phase 5](#phase-5-implement-and-proceed) without pausing, and never present a "What's next?" AskUserQuestion.
+
+#### No-repository-change exit
+
+Take this exit only when all of the following are true:
+
+1. The finalized plan explicitly requires no repository file changes.
+2. Confirm that every implementation step and its `verify:` line passed. An empty diff alone is never evidence of completion. If any action or verification failed, stop and report the failed verification.
+3. `git status --porcelain` produces no output.
+4. `git diff --quiet origin/main...HEAD` exits successfully.
+5. `git log --oneline origin/main..HEAD` produces no output.
+
+If the plan expected repository changes but the diff is empty, the task is incomplete: report that mismatch and stop. If implementation discovered repository changes or topic commits, do not take this exit; create the deferred branch when needed and continue through Auto-Commit.
+
+When every condition passes, do not invoke `branch-create`, `commits-create`, `git push`, `pr-create`, `pr-update`, or `pr-monitor`. Set tasks 6–8 to `completed` as not applicable, then output:
+
+```
+Autopilot complete.
+Outcome: no_repository_change
+Summary: <what resolved the task>
+Evidence:
+- <verification or external-action receipt>
+```
+
+Otherwise continue with the repository-delivery steps below.
 
 #### Step 1: Auto-Commit
 
@@ -58125,11 +58162,12 @@ Status: <approved/merged>
 
 ## Phase 5: Implement and proceed
 
-Once the plan file carries `## Pre-Implementation` and `## Post-Implementation (Autopilot)`, proceed straight through with no approval gate:
+Once the plan file carries the applicable blocks, proceed straight through with no approval gate:
 
-1. Create the branch per the **Mechanics** paragraph beside the matching block in [branch-blocks.md](../plan/references/branch-blocks.md), using the run variant where one is noted. The plan file's `## Pre-Implementation` states the outcome; that paragraph carries the invocation.
+1. For a repository-delivery plan, create the branch per the **Mechanics** paragraph beside the matching block in [branch-blocks.md](../plan/references/branch-blocks.md), using the run variant where one is noted. The plan file's `## Pre-Implementation` states the outcome; that paragraph carries the invocation. For a no-repository-change candidate, defer this step.
 2. Implement every step in the plan, verifying each as you go.
-3. Execute the autopilot chain — commit → push → PR → monitor — per [Phase 4](#phase-4-embed-branch-creation-and-the-autopilot-chain)'s Step 1 through Completion, without prompting.
+3. Evaluate the [no-repository-change exit](#no-repository-change-exit). If it passes, report that outcome and stop. If it does not apply and branch creation was deferred, create the branch before repository files change; if files already changed, preserve them while invoking `branch-create` and confirm the worktree afterward.
+4. Execute the autopilot chain — commit → push → PR → monitor — per [Phase 4](#phase-4-embed-branch-creation-and-the-autopilot-chain)'s Step 1 through Completion, without prompting.
 
 Repository questions that come up while implementing step 2 are served from the plan's `## Context source` section — on the graph tier its shortlist first, since each entry already carries the relationship that put it there, and a further `graphify` query only when the shortlist does not cover the question. Reads outside it carry the `context-fallback:` line from the [shared block's taxonomy](../shared-rules/references/repomix-snapshot.md). The section exists because implementation frequently happens in a session that never ran the query, and a source name alone leaves that session re-collecting a repository someone already mapped. A plan with no such section is an unrecorded source: fall back to the taxonomy and carry on.
 
@@ -58289,9 +58327,9 @@ The [Common Instructions in `plan/SKILL.md`](../plan/SKILL.md#common-instruction
 
 Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft (task 3), review and score (task 4), finalize (task 5) — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md).
 
-## Phase 6: Branch, implement, and run the autopilot chain
+## Phase 6: Implement and finish the autopilot run
 
-Identical to `run`. Embed the branch block and the automated tail per [its Phase 4](../run/SKILL.md#phase-4-embed-branch-creation-and-the-autopilot-chain), then proceed without an approval gate per [its Phase 5](../run/SKILL.md#phase-5-implement-and-proceed) — branch, implement every step, then commit, push, open or update the pull request, and monitor it.
+Identical to `run`. Select and embed the applicable blocks per [its Phase 4](../run/SKILL.md#phase-4-embed-branch-creation-and-the-autopilot-chain), then proceed without an approval gate per [its Phase 5](../run/SKILL.md#phase-5-implement-and-proceed) — implement every step, then either take the inherited [no-repository-change exit](../run/SKILL.md#no-repository-change-exit) or deliver and monitor the pull request.
 
 Those phases are referenced, never copied. Two long prompts restating the same chain would drift the first time one side changed, and `run` already sets this precedent by referencing `plan` for input resolution and Common Instructions.
 
@@ -61799,7 +61837,7 @@ Perform deep analysis and create a validated implementation plan. Detects tech s
 
 ### `/autopilot:run`
 
-Plan, implement, commit, create PR, and monitor until approved. Same as `/autopilot:plan` but after plan confirmation, automatically commits, creates a PR, and monitors for review approval. Uses the [codebase context snapshot](#codebase-context-snapshot). See [how the plan and run skills work](../../docs/05-plan-run-skills.md#how-run-differs-automated-post-implementation) for the automated post-implementation chain.
+Plan and implement without a plan-approval pause, then select one of two terminal paths. A task whose verified plan explicitly requires no repository edits reports `Outcome: no_repository_change`; a repository change is committed, opened as a PR, and monitored for review approval. Uses the [codebase context snapshot](#codebase-context-snapshot). See [how the plan and run skills work](../../docs/05-plan-run-skills.md#how-run-differs-automated-post-implementation) for the terminal-path contract.
 
 ```bash
 /autopilot:run #42                                                      # From GitHub issue
@@ -62844,9 +62882,9 @@ The prose is never lost; only the one-click apply degrades when the anchor canno
 
 > Chapter 5 of the [repository docs](../README.md#repository-docs).
 
-How `/autopilot:plan` and `/autopilot:run` turn a task — a GitHub issue, a Linear ticket, a code-scanning alert, or a free-form description — into a validated, expert-reviewed implementation plan, and (for `run`) all the way into a merged pull request.
+How `/autopilot:plan` and `/autopilot:run` turn a task — a GitHub issue, a Linear ticket, a code-scanning alert, or a free-form description — into a validated, expert-reviewed implementation plan, and (for `run`) either a verified no-repository-change result or a merged pull request.
 
-The two skills share the same front half. `plan` produces the plan and stops, asking what to do next. `run` is `plan` plus an automated post-implementation chain: commit → PR → monitor. Everything below applies to both unless a section calls out a difference.
+The two skills share the same front half. `plan` produces the plan and stops, asking what to do next. `run` is `plan` plus automated terminal selection: verified no repository change, or commit → PR → monitor. Everything below applies to both unless a section calls out a difference.
 
 > Source of truth: `claude-plugins/autopilot/skills/plan/SKILL.md` (orchestrator) and its `references/` files (input detection, pipeline, stack deltas, branch blocks), `…/skills/gather-context/SKILL.md` (the context fan-out), `…/skills/run/SKILL.md` (the automated tail), and the sub-agents under `…/agents/`.
 
@@ -62896,7 +62934,7 @@ The two skills share the same front half. `plan` produces the plan and stops, as
 - ③ Steelmanned intent, assumptions, and open questions — the human gate, now asked with the code already understood.
 - ④ Branch and worktree state read from the Context Map; `preflight-check` handles only what the map cannot settle.
 - ⑤ The shared pipeline: draft, review and score, finalize (see [The shared pipeline](#the-shared-pipeline)).
-- ⑥ `run` only: commit → PR → monitor until approved (see [How run differs](#how-run-differs-automated-post-implementation)).
+- ⑥ `run` only: verify a no-repository-change result, or commit → PR → monitor until approved (see [How run differs](#how-run-differs-automated-post-implementation)).
 
 ## One fan-out, then decide
 
@@ -63107,29 +63145,39 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
 
 ## How run differs: automated post-implementation
 
-`run` shares Phases 0–3 and the pipeline with `plan`, but never stops for plan approval — invoking `/autopilot:run` is itself the authorization, so there is **no plan-approval gate**; run implements the moment the plan file is written. It then **replaces** the plan's `## Post-Implementation` section with a body saying the tail is automated, and drives the chain below from its own Phase 4 — the steps, flags, and recovery rules stay in the skill, not in the plan file.
+`run` shares Phases 0–3 and the pipeline with `plan`, but never stops for plan approval — invoking `/autopilot:run` is itself the authorization, so there is **no plan-approval gate**; run implements the moment the plan file is written. It then **replaces** the plan's `## Post-Implementation` section with a body for the selected terminal path and drives the decision from its own Phase 4 — the checks, steps, flags, and recovery rules stay in the skill, not in the plan file.
 
 ```text
- ┌────────────┐   ┌──────────────┐   ┌──────────────┐   ┌───────────────┐
- │ Plan file  │──▶│ Auto-Commit  │──▶│ Auto-Create  │──▶│ Monitor       │
- │ (written)  │   │ commits-     │   │ PR           │   │ pr-monitor:   │
- │            │   │ create +push │   │ pr-create    │   │ CI + review   │
- └────────────┘   └──────────────┘   └──────────────┘   └───────┬───────┘
-                                                                │
-                                                                ▼
-                                                     ┌────────────────────┐
-                                                     │ Approved / Merged  │
-                                                     └────────────────────┘
+                    ┌───────────────────────────┐
+                    │ Plan implemented and     │
+                    │ every verify line passed │
+                    └─────────────┬─────────────┘
+                                  ▼
+                    ┌───────────────────────────┐
+                    │ Completion-path checks    │
+                    └──────┬─────────────┬──────┘
+             no repo work  │             │ repository change
+                           ▼             ▼
+              ┌──────────────────┐  ┌──────────────┐   ┌──────────────┐
+              │ Outcome:         │  │ Auto-Commit  │──▶│ Auto-Create  │
+              │ no_repository_   │  │ and push     │   │ PR           │
+              │ change           │  └──────────────┘   └──────┬───────┘
+              └──────────────────┘                            ▼
+                                                    ┌──────────────────┐
+                                                    │ Monitor until    │
+                                                    │ approved/merged  │
+                                                    └──────────────────┘
 ```
 
 **Flow Legend:**
 
+- **No repository change** — available only when the finalized plan explicitly says no repository files must change, every step and `verify:` line passed, and the worktree, diff, and topic-commit checks are empty. An empty diff alone is never evidence of completion. This path emits `Outcome: no_repository_change` and performs no branch, commit, push, PR, or monitoring action.
 - **Auto-Commit** — `Skill(autopilot:commits-create)` with `--autopilot`, then `git push`.
 - **Auto-Create PR** — `Skill(autopilot:pr-create)` with `--autopilot`, then a format check on the result.
 - **Monitor** — `Skill(autopilot:pr-monitor)` polls CI and review status; on changes-requested it runs `pr-resolve` (auto "Address all") and loops until approval.
 - Direct `gh pr create` / `git commit` are forbidden in autopilot mode — everything routes through the sub-skills so format stays correct.
 
-There are two variants of this flow, each replacing a different half of it. [`/autopilot:run-primed`](./15-run-primed-skill.md) keeps every phase above and replaces only the context gather, reading a SHA-validated [explore brief](./14-explore-skill.md) instead of re-mapping the repository. [`/autopilot:linear-run`](./17-linear-run-skill.md) keeps the phases from branch creation onward and replaces the draft-and-review half, executing a plan that [`/autopilot:linear-plan`](./16-linear-plan-skill.md) stored on a Linear issue earlier — possibly in another session, for another person to read first. Ordinary `run` is unchanged by either.
+There are two variants of this flow, each replacing a different half of it. [`/autopilot:run-primed`](./15-run-primed-skill.md) keeps every phase above and replaces only the context gather, reading a SHA-validated [explore brief](./14-explore-skill.md) instead of re-mapping the repository. [`/autopilot:linear-run`](./17-linear-run-skill.md) keeps terminal selection and replaces the draft-and-review half, executing a plan that [`/autopilot:linear-plan`](./16-linear-plan-skill.md) stored on a Linear issue earlier — possibly in another session, for another person to read first. Both variants inherit the same no-change checks and repository-delivery chain instead of copying them.
 
 ## Where to look in the code
 
@@ -64331,7 +64379,7 @@ Suppressing that machinery is half the value. A fix that costs one edit should n
 
 > Chapter 15 of the [repository docs](../README.md#repository-docs).
 
-How `/autopilot:run-primed` lets an already-primed session deliver a tracked issue without mapping the repository a second time — and why it refuses, loudly, rather than guessing.
+How `/autopilot:run-primed` lets an already-primed session complete a tracked issue without mapping the repository a second time — and why it refuses, loudly, rather than guessing. Its terminal behavior is inherited from `run`, including the verified `Outcome: no_repository_change` path and ordinary PR delivery.
 
 > Source of truth: `claude-plugins/autopilot/skills/run-primed/SKILL.md` (the skill), `…/skills/explore/SKILL.md` (the brief it consumes), and `…/skills/gather-context/SKILL.md` (the `Scope: primed` value this chapter adds).
 
@@ -64763,7 +64811,9 @@ Both modes use a fresh Context Map. Their plan source differs:
 | Stored plan | `### Summary`, `### Implementation Steps`, and `### Files`         | Context Map       |
 | Fresh plan  | Shared draft, review, and finalize pipeline using the Linear issue | Context Map       |
 
-Stored `### Pre-Implementation` and `### Post-Implementation` sections are read past deliberately. They describe a branch and a post-implementation chain, and this skill supplies both from `run` — the branch because it has to be created in _this_ checkout, and the chain because `run` owns it. Replaying a stored branch step would mean acting on a tree that may no longer exist.
+Stored `### Pre-Implementation` and `### Post-Implementation` sections are read past deliberately. They describe a branch and a post-implementation chain, and this skill supplies both from `run` — the branch because it has to be created in _this_ checkout, and terminal selection because `run` owns it. Replaying a stored branch step would mean acting on a tree that may no longer exist.
+
+That terminal selection includes non-code work. When the selected plan explicitly requires no repository file changes, `linear-run` defers branch creation and inherits `run`'s verification gate. Only completed steps with passing evidence and an unchanged repository can emit `Outcome: no_repository_change`; otherwise the run stops on failed verification or follows the ordinary PR path. The conditions live in `run`, not in this skill, so fresh and stored Linear plans cannot drift from the general runner.
 
 **Nothing in the fan-out is gated off**, which is the other place this pair diverges from the explore pair. `run-primed` skips the standards digest because a validated brief already carries it. A stored plan carries no such thing: it records decisions, not architecture. So the standards digest, branch diff, TODO search, and a freshly attached snapshot all still run. A recorded snapshot id would be useless anyway — it is session-scoped and dead in any later session.
 
@@ -68171,6 +68221,235 @@ claude-plugins/autopilot/skills/pdf-create/renderer/
 # Local context brief written by the explore skill — machine-generated and
 # git-ignored, so the root Prettier (.{md,json}) glob must not check it.
 .claude/context/
+</file>
+
+<file path="AGENTS.md">
+---
+alwaysApply: true
+---
+
+<!--
+Source: https://github.com/awinogradov/code-assistants/blob/main/rules/Bun.md
+This file is distributed to downstream repositories by an automated sync.
+Edits made downstream are overwritten on the next run.
+To change it, open a pull request against the source file above.
+-->
+
+# Bun Project Rules
+
+## Mandatory Context
+
+Before making any changes:
+
+1. Read the root `README.md` — its Documentation section lists every doc in reading order, as a Markdown table (or an equivalent linked list), each with a link and a description
+2. When an `llms.txt` exists at the repository root, use it as the curated documentation index — follow its links before crawling docs manually
+3. Read the root `CONTRIBUTING.md` — the binding conventions for every branch, commit, PR, and issue operation
+4. When a `principles/` folder exists, read its `README.md` and the principles relevant to the task — they are the long-lived values that standards and reviews appeal to; follow `rfc/` and `docs/` over them for concrete rules
+5. When an `rfc/` folder exists, treat its Accepted RFCs as binding versioned standards — follow them over `docs/` and this file when they conflict; see `rfc/README.md` for the convention
+6. Inspect all file names under `docs/` and subfolders in the current repository — some files may be missing from the README — read those relevant to the current task, and treat `docs/` as the source of truth for project-specific conventions, following those documents over this file when they conflict
+7. When a `design.md` exists at the repository root, read it before any UI or visual work — it is the binding design and brand spec (tokens, typography, layout conventions); follow it over generic styling defaults
+8. Inspect `package.json` before assuming scripts or package-manager commands
+9. Acquire codebase context from the first source that works, falling through to the next on any failure:
+   - **Graphify** — fires when `graphify-out/graph.json` exists and the `graphify` CLI resolves on PATH. Run `graphify query "<question>"` first; use `graphify path "<A>" "<B>"` for relationships, `graphify explain "<concept>"` for focused concepts, and `graphify-out/wiki/index.md` for broad navigation. A truncated or empty answer is an unfinished lookup, not a negative result: refine it with a narrower query, a `--context <relation>` filter, or a focused `path`/`explain` lookup before falling back to ordinary file reads. After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+   - **Repomix** — fires when the Repomix MCP server is connected. Attach the committed `.repomix/pack.xml` when it exists, otherwise pack the codebase; grep/read the digest for codebase-wide analysis instead of loading every file.
+   - **Default tools** — with neither available, search and read the repository files directly.
+
+In a monorepo, `README.md`, `llms.txt`, `docs/`, `design.md`, and `package.json` may also exist per workspace member (`apps/*`, `packages/*`, …). When working inside a member, apply the steps above at both levels — the member's own copies govern that member's code and take precedence over the root copies; the root copies govern repo-wide concerns.
+
+## 1. Core Principles
+
+- Context first: gather complete understanding before changes; check the codebase for similar implementations to mirror
+- Progressive enhancement: Build incrementally, test frequently
+- Functional/declarative patterns; avoid classes
+- Keep dependencies minimal - prefer built-in features
+- The fewer lines the better: every line and export used or removed, duplication factored into reuse
+- Do not over-engineer - only make directly requested changes. No abstractions for single-use code, no unrequested configurability, no error handling for impossible scenarios. If 200 lines could be 50, rewrite
+- Surface assumptions and ambiguities before coding; if multiple interpretations exist, present them - don't pick silently
+- Every changed line must trace to the request - no opportunistic refactors of adjacent code or unrelated formatting
+- When deleting unused code, only remove orphans your changes created; mention pre-existing dead code instead of deleting it
+- Be consistent with existing code style
+- Write failing tests first, then write code to pass tests
+- Run tests after any code changes
+- Do not remove existing code/comments unless necessary
+
+## 2. Architecture
+
+### 2.1 Technology Stack
+
+- Bun, TypeScript 6.x
+- ESLint for linting
+- Prettier for formatting
+
+## 3. Project Structure
+
+### 3.1 File Organization
+
+```
+example.ts     # single module: a file, no directory
+
+example/       # multiple modules: a directory, no index.ts barrel
+├── example.ts
+├── example.test.ts
+├── example.types.ts
+└── example.module.css
+```
+
+- Order code top-down by importance: public entry points and core domain logic first, lower-level helpers and utilities last
+
+### 3.2 Import Rules
+
+- Always import from actual files - never barrel files
+- Import order: builtin → external → internal → parent → sibling
+- Use ES6 imports, never CommonJS require()
+- Use `bun:` protocol prefix for built-in modules
+- No generic names (index.ts, init.ts) - use descriptive names
+
+## 4. Naming Conventions
+
+- Variables/functions: camelCase
+- Components/types/interfaces: PascalCase
+- No I prefix for interfaces
+- Files: Components PascalCase, utilities camelCase
+- Test files: `*.test.ts` suffix
+- Named exports only - no default exports
+- camelCase for constants (not SCREAMING_SNAKE_CASE)
+- Descriptive names with auxiliary verbs (isLoading, hasError)
+
+## 6. Common Standards
+
+### 6.1 JavaScript
+
+- Use async/await, not callbacks
+- Use template literals for string interpolation, not concatenation
+- Use `Object.hasOwn()` instead of `hasOwnProperty()`
+- Use `for...of` for array iteration, avoid classical `for` loops
+- Write pure functions - same input returns same output, no side effects
+- Prefer immutable array methods (map, filter, spread) over mutating (push, splice)
+- Use destructuring to extract object/array values
+- Use strict equality `===` and `!==`, never `==` or `!=`
+- Never mutate function parameters
+- Always throw Error objects, not primitives
+- Always reject Promises with Error objects
+- Use rest params `...args` instead of `arguments`
+- Limit nesting depth to 2 levels max
+- Limit cyclomatic complexity - few conditional branches
+- Use early returns (fail fast) instead of nested else
+- Extend Error class for custom errors with context properties
+- Await promises before returning for complete stack traces
+- Subscribe to 'error' events on EventEmitters and streams
+- Functions should be 100 lines max
+
+### 6.2 TypeScript
+
+- Prefer interfaces over types
+- Avoid enums; use const assertions
+- Never use @ts-ignore
+- No type assertions without runtime validation (use Zod)
+- Return specific types, not generic (string → KnownCallOutcome)
+- Use type guards for narrowing
+- Ask user for type information when `any` is unavoidable
+
+### 6.3 File Operations
+
+- Use `bun:fs/promises` for files < 100MB
+- Use streams for files > 100MB
+- Use `pipeline()` for stream chaining
+- Use `import.meta.dirname` for module-relative paths
+- Handle error codes: ENOENT, EACCES, etc.
+- Always close file handles in finally blocks
+
+## 8. Server-Side Standards
+
+### 8.1 Bun
+
+- Graceful shutdown with signal handlers; never call process.exit() directly
+- Validate env variables at startup
+
+## 9. API Standards
+
+### 9.2 Zod
+
+- Use .merge(), .partial(), .pick(), .omit()
+- Use z.infer<> for types
+- Add custom error messages
+- Use .transform() for normalization
+- Use .refine() for complex validation
+
+## 11. Documentation
+
+### 11.1 JSDoc
+
+- Every exported interface/type must have JSDoc
+- File-level JSDoc for config modules
+- Use @example where usage isn't obvious
+- Use @see <link> to add links to documentation
+- Focus on "why" and "how to use", not "what"
+- No useless descriptions repeating function name
+- Skip JSDoc only if no params AND obvious from name
+- Use @deprecated <reason> to mark deprecated code
+- All modules must have top level JSDoc with description and usage examples
+
+### 11.2 Code comments
+
+- Avoid obvious comments, links to exact code lines, and duplicated comments — duplication means the code needs refactoring
+- Track deferred work as issue-linked `TODO`/`FIXME` comments per CONTRIBUTING.md "TODO Comments"; use the autopilot `todo-cleanup` skill to scan, create, and link issues
+
+### 11.3 docs/ structure
+
+- Organize `docs/` as numbered chapters in reading order (`NN-topic.md`, plus `appendix-X-topic.md` for non-sequential references), matching the README Documentation order
+
+## 12. Performance
+
+- O(1) lookups: Use Object/Map, not Array.find()
+- Avoid map/reduce/for combinations
+- Memoize data transformations creating objects/arrays
+- Use factory functions for handlers with parameters
+
+## 13. Security
+
+- Validate all external input before processing
+- Never trust user data in object operations — no untrusted input to Object.assign(), use Object.create(null) for user-provided keys
+- Use crypto.timingSafeEqual() for secret comparison
+- Never log or expose secrets, tokens, or PII (logs, error messages, API responses)
+- Use exact versions in package.json (no ^ or ~)
+- Never enable debug inspector in production
+- Use lockfile-based installs in CI/CD (`bun install --frozen-lockfile`)
+- Run bun audit before deploying
+- Never use eval() or Function() constructor
+- Avoid dynamic require()/import() with user-controlled paths
+
+## 14. Anti-Patterns
+
+- No sync file operations in servers
+- No commented-out code - delete it (recover from version control if needed)
+- No empty catch blocks - never swallow errors; rethrow or handle with context
+- No wrapper functions without added logic
+- No inline functions in loops
+
+## 15. Git Workflow
+
+- **MANDATORY**: `CONTRIBUTING.md` in the repository root is the binding standard for every branch, commit, PR, and issue operation — read the governing section before acting; never restate or improvise its rules
+- Governing sections: "Branches" for branch names, "Commits" for commit messages, "Updating pull-request branches" for synchronizing a PR branch with its base, "PR Title" and "Special PR Prefixes" for PR titles, "PR Description" and "Magic Words" for PR bodies and issue linking, "How to Contribute" for issues
+- **MANDATORY**: With the autopilot skills installed, perform these operations only through them — `branch-create` for branches, `commits-create` for commits, `pr-create` for pull requests, `issue-create` for issues, `plan` for implementation plans — never their raw `git`/`gh`/web-UI equivalents and never ad-hoc planning; invoking the skill satisfies this section. Without the skills, follow CONTRIBUTING.md directly
+- Never bypass validation hooks with `--no-verify` — fix the violation instead
+- **MANDATORY**: Never merge the base branch into a pull-request branch — no `git merge main`, `git merge origin/main`, or `git pull origin main` while on a topic branch. Synchronize with fetch → rebase → `git push --force-with-lease`; never bare `--force`, and never rewrite a shared or human-owned branch without explicit authorization. A stale check is reported, never refreshed by pulling base changes into the task
+
+## 16. AI Assistant Workflow
+
+- Track complex tasks with the built-in todo list; mark items completed immediately
+- Parallel tool execution when possible
+- Use sub-agents for search-heavy or parallelizable investigation to keep the main context focused
+- Use `gh` CLI for GitHub issues, PRs, comments, and Actions info
+
+### 16.1 MCP Servers
+
+Prefer the project-registered MCP servers declared in the repo's own `.mcp.json`. The repository README and `docs/` are the authoritative list of which servers are registered and when to reach for each — consult them before hand-rolling work a registered server handles.
+
+- **Documentation servers** (context7, Ref, Exa) — look up docs for any technology, framework, or API (global/user servers, not project-registered)
+
+## 17. Code Review
+
+- All rules from AGENTS.md must be applied to the code review
 </file>
 
 <file path="CODE_OF_CONDUCT.md">
