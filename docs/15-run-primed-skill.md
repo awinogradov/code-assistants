@@ -2,7 +2,7 @@
 
 > Chapter 15 of the [repository docs](../README.md#repository-docs).
 
-How `/autopilot:run-primed` lets an already-primed session deliver a tracked issue without mapping the repository a second time — and why it refuses, loudly, rather than guessing.
+How `/autopilot:run-primed` lets an already-primed session complete a tracked issue without mapping the repository a second time — and why it refuses, loudly, rather than guessing. Its terminal behavior is inherited from `run`, including the verified `Outcome: no_repository_change` path and ordinary PR delivery.
 
 > Source of truth: `claude-plugins/autopilot/skills/run-primed/SKILL.md` (the skill), `…/skills/explore/SKILL.md` (the brief it consumes), and `…/skills/gather-context/SKILL.md` (the `Scope: primed` value this chapter adds).
 

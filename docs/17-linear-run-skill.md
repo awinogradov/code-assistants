@@ -107,7 +107,9 @@ Both modes use a fresh Context Map. Their plan source differs:
 | Stored plan | `### Summary`, `### Implementation Steps`, and `### Files`         | Context Map       |
 | Fresh plan  | Shared draft, review, and finalize pipeline using the Linear issue | Context Map       |
 
-Stored `### Pre-Implementation` and `### Post-Implementation` sections are read past deliberately. They describe a branch and a post-implementation chain, and this skill supplies both from `run` — the branch because it has to be created in _this_ checkout, and the chain because `run` owns it. Replaying a stored branch step would mean acting on a tree that may no longer exist.
+Stored `### Pre-Implementation` and `### Post-Implementation` sections are read past deliberately. They describe a branch and a post-implementation chain, and this skill supplies both from `run` — the branch because it has to be created in _this_ checkout, and terminal selection because `run` owns it. Replaying a stored branch step would mean acting on a tree that may no longer exist.
+
+That terminal selection includes non-code work. When the selected plan explicitly requires no repository file changes, `linear-run` defers branch creation and inherits `run`'s verification gate. Only completed steps with passing evidence and an unchanged repository can emit `Outcome: no_repository_change`; otherwise the run stops on failed verification or follows the ordinary PR path. The conditions live in `run`, not in this skill, so fresh and stored Linear plans cannot drift from the general runner.
 
 **Nothing in the fan-out is gated off**, which is the other place this pair diverges from the explore pair. `run-primed` skips the standards digest because a validated brief already carries it. A stored plan carries no such thing: it records decisions, not architecture. So the standards digest, branch diff, TODO search, and a freshly attached snapshot all still run. A recorded snapshot id would be useless anyway — it is session-scoped and dead in any later session.
 

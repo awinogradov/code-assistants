@@ -148,9 +148,9 @@ The [Common Instructions in `plan/SKILL.md`](../plan/SKILL.md#common-instruction
 
 Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft (task 3), review and score (task 4), finalize (task 5) — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md).
 
-## Phase 6: Branch, implement, and run the autopilot chain
+## Phase 6: Implement and finish the autopilot run
 
-Identical to `run`. Embed the branch block and the automated tail per [its Phase 4](../run/SKILL.md#phase-4-embed-branch-creation-and-the-autopilot-chain), then proceed without an approval gate per [its Phase 5](../run/SKILL.md#phase-5-implement-and-proceed) — branch, implement every step, then commit, push, open or update the pull request, and monitor it.
+Identical to `run`. Select and embed the applicable blocks per [its Phase 4](../run/SKILL.md#phase-4-embed-branch-creation-and-the-autopilot-chain), then proceed without an approval gate per [its Phase 5](../run/SKILL.md#phase-5-implement-and-proceed) — implement every step, then either take the inherited [no-repository-change exit](../run/SKILL.md#no-repository-change-exit) or deliver and monitor the pull request.
 
 Those phases are referenced, never copied. Two long prompts restating the same chain would drift the first time one side changed, and `run` already sets this precedent by referencing `plan` for input resolution and Common Instructions.
 

@@ -1,6 +1,6 @@
 ---
 name: run
-description: Plan, implement, commit, create PR, and monitor until approved
+description: Plan and implement, then either report verified no repository change or deliver a PR
 argument-hint: "<task, GitHub/Linear issue (123, #123, ENG-123, or URL), or code-scanning alert (alert#N or URL)>"
 allowed-tools:
   - TaskCreate
@@ -33,9 +33,9 @@ allowed-tools:
   - Skill(autopilot:pr-create)
 ---
 
-Plan, implement, commit, create a PR, and monitor until approved. Extended version of `/autopilot:plan` that automates the post-implementation steps.
+Plan and implement a task, then finish through one of two terminal paths: report a verified no-repository-change outcome, or commit, create a PR, and monitor until approved. Extended version of `/autopilot:plan` that automates the post-implementation steps.
 
-**Difference from `/autopilot:plan`:** invoking `/autopilot:run` authorizes the entire flow up front — there is **no plan-approval gate**. Autopilot plans, implements, commits, creates a PR, and monitors for review approval without pausing for confirmation. (`/autopilot:plan` has two gates: it stops to get the plan approved, then asks again before creating a PR.)
+**Difference from `/autopilot:plan`:** invoking `/autopilot:run` authorizes the entire flow up front — there is **no plan-approval gate**. Autopilot plans and implements without pausing, then either proves that the completed task required no repository change or delivers the repository change through a monitored PR. (`/autopilot:plan` has two gates: it stops to get the plan approved, then asks again before creating a PR.)
 
 ## Input
 
@@ -109,15 +109,19 @@ Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) —
 
 ## Phase 4: Embed branch creation and the autopilot chain
 
-Embed both blocks into the plan file, then implement it. **Do NOT pause for plan approval** — invoking `/autopilot:run` is the approval. Never tell the user "after you approve I'll implement"; that is `/autopilot:plan` behavior.
+Choose the plan's terminal path, embed the matching blocks, then implement it. **Do NOT pause for plan approval** — invoking `/autopilot:run` is the approval. Never tell the user "after you approve I'll implement"; that is `/autopilot:plan` behavior.
+
+A plan is a no-repository-change candidate only when its finalized implementation steps explicitly require no repository file changes and instead close the task through an external action, verification, or a proven no-action-needed result. An empty or missing `## Files` section is not that declaration. For every other plan, use the repository-delivery path.
 
 ### Pre-Implementation (branch creation)
 
-Pick the body by input type from [branch-blocks.md](../plan/references/branch-blocks.md), using the **run variant** where one is noted — it appends `--autopilot` so branch-create skips its confirmation. Issue and Linear inputs have no run variant: their names are derived from the tracked issue and are never confirmed, so both callers emit the same body. That file also defines when the block is emitted at all.
+For a repository-delivery plan, pick the body by input type from [branch-blocks.md](../plan/references/branch-blocks.md), using the **run variant** where one is noted — it appends `--autopilot` so branch-create skips its confirmation. Issue and Linear inputs have no run variant: their names are derived from the tracked issue and are never confirmed, so both callers emit the same body. That file also defines when the block is emitted at all.
+
+For a no-repository-change candidate, omit `## Pre-Implementation` and defer branch creation. Implementation may still discover that repository changes are required; [Phase 5](#phase-5-implement-and-proceed) routes that case back to repository delivery before anything is committed.
 
 ### Post-Implementation (REPLACES the pipeline's default)
 
-**REPLACE** the `## Post-Implementation` section the pipeline template produced with this body, which tells the reader the tail is automated:
+For a repository-delivery plan, **REPLACE** the `## Post-Implementation` section the pipeline template produced with this body, which tells the reader the tail is automated:
 
 ```
 ## Post-Implementation (Autopilot)
@@ -130,7 +134,39 @@ Once every step above is done and verified, the rest runs automatically, with no
 4. Monitor the pull request until the review approves it or it merges, addressing review feedback as it arrives.
 ```
 
-The steps below are how that body is carried out. They are instructions for you, not text for the plan file — the plan file is what the reader sees, so it stays prose (see the **Plan file is output, not instructions** rule in [`plan/SKILL.md`](../plan/SKILL.md#plan-file-is-output-not-instructions)). Execute them in [Phase 5](#phase-5-implement-and-proceed) without pausing, and never present a "What's next?" AskUserQuestion.
+For a no-repository-change candidate, replace it with this body instead:
+
+```
+## Post-Implementation (Autopilot)
+
+Once every step above is done and verified, confirm that the repository remains unchanged and report the completed external action or verified result. Do not create a branch, commit, push, or pull request unless implementation discovers that repository files must change.
+```
+
+The steps below are how those bodies are carried out. They are instructions for you, not text for the plan file — the plan file is what the reader sees, so it stays prose (see the **Plan file is output, not instructions** rule in [`plan/SKILL.md`](../plan/SKILL.md#plan-file-is-output-not-instructions)). Execute them in [Phase 5](#phase-5-implement-and-proceed) without pausing, and never present a "What's next?" AskUserQuestion.
+
+#### No-repository-change exit
+
+Take this exit only when all of the following are true:
+
+1. The finalized plan explicitly requires no repository file changes.
+2. Confirm that every implementation step and its `verify:` line passed. An empty diff alone is never evidence of completion. If any action or verification failed, stop and report the failed verification.
+3. `git status --porcelain` produces no output.
+4. `git diff --quiet origin/main...HEAD` exits successfully.
+5. `git log --oneline origin/main..HEAD` produces no output.
+
+If the plan expected repository changes but the diff is empty, the task is incomplete: report that mismatch and stop. If implementation discovered repository changes or topic commits, do not take this exit; create the deferred branch when needed and continue through Auto-Commit.
+
+When every condition passes, do not invoke `branch-create`, `commits-create`, `git push`, `pr-create`, `pr-update`, or `pr-monitor`. Set tasks 6–8 to `completed` as not applicable, then output:
+
+```
+Autopilot complete.
+Outcome: no_repository_change
+Summary: <what resolved the task>
+Evidence:
+- <verification or external-action receipt>
+```
+
+Otherwise continue with the repository-delivery steps below.
 
 #### Step 1: Auto-Commit
 
@@ -175,11 +211,12 @@ Status: <approved/merged>
 
 ## Phase 5: Implement and proceed
 
-Once the plan file carries `## Pre-Implementation` and `## Post-Implementation (Autopilot)`, proceed straight through with no approval gate:
+Once the plan file carries the applicable blocks, proceed straight through with no approval gate:
 
-1. Create the branch per the **Mechanics** paragraph beside the matching block in [branch-blocks.md](../plan/references/branch-blocks.md), using the run variant where one is noted. The plan file's `## Pre-Implementation` states the outcome; that paragraph carries the invocation.
+1. For a repository-delivery plan, create the branch per the **Mechanics** paragraph beside the matching block in [branch-blocks.md](../plan/references/branch-blocks.md), using the run variant where one is noted. The plan file's `## Pre-Implementation` states the outcome; that paragraph carries the invocation. For a no-repository-change candidate, defer this step.
 2. Implement every step in the plan, verifying each as you go.
-3. Execute the autopilot chain — commit → push → PR → monitor — per [Phase 4](#phase-4-embed-branch-creation-and-the-autopilot-chain)'s Step 1 through Completion, without prompting.
+3. Evaluate the [no-repository-change exit](#no-repository-change-exit). If it passes, report that outcome and stop. If it does not apply and branch creation was deferred, create the branch before repository files change; if files already changed, preserve them while invoking `branch-create` and confirm the worktree afterward.
+4. Execute the autopilot chain — commit → push → PR → monitor — per [Phase 4](#phase-4-embed-branch-creation-and-the-autopilot-chain)'s Step 1 through Completion, without prompting.
 
 Repository questions that come up while implementing step 2 are served from the plan's `## Context source` section — on the graph tier its shortlist first, since each entry already carries the relationship that put it there, and a further `graphify` query only when the shortlist does not cover the question. Reads outside it carry the `context-fallback:` line from the [shared block's taxonomy](../shared-rules/references/repomix-snapshot.md). The section exists because implementation frequently happens in a session that never ran the query, and a source name alone leaves that session re-collecting a repository someone already mapped. A plan with no such section is an unrecorded source: fall back to the taxonomy and carry on.
 

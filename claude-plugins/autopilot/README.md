@@ -200,7 +200,7 @@ Perform deep analysis and create a validated implementation plan. Detects tech s
 
 ### `/autopilot:run`
 
-Plan, implement, commit, create PR, and monitor until approved. Same as `/autopilot:plan` but after plan confirmation, automatically commits, creates a PR, and monitors for review approval. Uses the [codebase context snapshot](#codebase-context-snapshot). See [how the plan and run skills work](../../docs/05-plan-run-skills.md#how-run-differs-automated-post-implementation) for the automated post-implementation chain.
+Plan and implement without a plan-approval pause, then select one of two terminal paths. A task whose verified plan explicitly requires no repository edits reports `Outcome: no_repository_change`; a repository change is committed, opened as a PR, and monitored for review approval. Uses the [codebase context snapshot](#codebase-context-snapshot). See [how the plan and run skills work](../../docs/05-plan-run-skills.md#how-run-differs-automated-post-implementation) for the terminal-path contract.
 
 ```bash
 /autopilot:run #42                                                      # From GitHub issue
