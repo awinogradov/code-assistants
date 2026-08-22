@@ -2,6 +2,84 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [7.0.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v6.4.0...code-review-action@v7.0.0) (2026-08-22)
+
+## Release Notes
+
+Deterministic pre-session context loading replaces ad-hoc discovery in both the PR-review and react modes, making review startup faster and more predictable.
+
+## ✨ What's New
+
+### Faster, Predictable Review Startup
+
+Before each review session, PR context (diff, metadata, existing threads) is now gathered in a single deterministic builder step rather than being discovered on-the-fly during the session. This eliminates repeated API round-trips at the start of every run and makes session behaviour consistent across retries and re-runs. The review run-summary footer now reports the builder's duration, request count, payload size, truncation status, follow-up count, and fallback status — giving the delivery team clear visibility into what the action fetched before Claude touched the PR.
+
+<details><summary>Related issues</summary>
+
+- [#605: Build a deterministic startup context bundle for code review](https://github.com/awinogradov/code-assistants/issues/605)
+- [#608: Speed up code review startup with a deterministic context bundle](https://github.com/awinogradov/code-assistants/pull/608)
+</details>
+
+### Reliable Review-Thread Resolution
+
+The `react` mode and the `pr-review` skill now fetch existing PR review threads through a typed, bounded GraphQL query — the same path every time, with telemetry attached. Previously this relied on a delegated sub-agent whose results could vary. CI-triggered reviews in particular regain reliable access to open thread state, which means the bot can correctly resolve or respond to threads it previously may have missed.
+
+<details><summary>Related issues</summary>
+
+- [#604: Replace fetch-pr-reviews subagent with deterministic GitHub retrieval](https://github.com/awinogradov/code-assistants/issues/604)
+- [#606: Fetch PR review threads deterministically without a delegated agent](https://github.com/awinogradov/code-assistants/pull/606)
+</details>
+
+## ⚠️ Breaking Changes
+
+### `autopilot:fetch-pr-reviews` Agent Removed
+
+The `autopilot:fetch-pr-reviews` agent no longer exists. Any workflow, skill, or configuration that explicitly invokes or references this agent by name will fail silently or error at runtime.
+
+Review-thread retrieval now runs the bundled `lib/github/fetch-pr-reviews.ts` helper directly in a single Bash call — no agent delegation required. If you have custom skills or prompt chains that call `autopilot:fetch-pr-reviews`, remove those references. The functionality is now automatic and internal; no replacement call is needed.
+
+<details><summary>Related issues</summary>
+
+- [#604: Replace fetch-pr-reviews subagent with deterministic GitHub retrieval](https://github.com/awinogradov/code-assistants/issues/604)
+- [#606: Fetch PR review threads deterministically without a delegated agent](https://github.com/awinogradov/code-assistants/pull/606)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #605 | [#608](https://github.com/awinogradov/code-assistants/pull/608) | @awinogradov |
+| #604 | [#606](https://github.com/awinogradov/code-assistants/pull/606) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **autopilot:** the autopilot:fetch-pr-reviews agent is removed; review-thread
+retrieval now runs the bundled lib/github/fetch-pr-reviews.mjs helper.
+
+Entire-Checkpoint: 56c2bd6eacca
+
+### Features
+
+* **autopilot:** replace fetch-pr-reviews agent with bundled helper ([ca0450b](https://github.com/awinogradov/code-assistants/commit/ca0450baa5dc36692f8e6f1755fcb19c1ab891ae))
+* **code-review:** add deterministic startup context bundle ([bb0cd79](https://github.com/awinogradov/code-assistants/commit/bb0cd790b336e8dfa13dc378c23de16e265ce097))
+
+### Bug Fixes
+
+* **code-review:** anchor helper allowlist to the plugin-root path ([c4162a6](https://github.com/awinogradov/code-assistants/commit/c4162a6ddd0d3f27184364eb114bff6af20dd7e8))
+
+### Documentation
+
+* **code-review:** document startup context bundle ([1f68878](https://github.com/awinogradov/code-assistants/commit/1f688787123dcb45671294ff09fa6a62a0d4909d))
+
+### Refactoring
+
+* **autopilot:** convert review-thread helper to typescript ([fa26c1f](https://github.com/awinogradov/code-assistants/commit/fa26c1ffdb1dbb03d878c0211080a1cfda3a6804))
+* **code-review:** drop unused bundle section type ([2ad17b2](https://github.com/awinogradov/code-assistants/commit/2ad17b219d9e0bd104b9401fd65ddee77d9472e1))
+
+### Tests
+
+* **code-review:** cover context bundle builder and telemetry ([6777239](https://github.com/awinogradov/code-assistants/commit/6777239a83a575691f88f8c5e313368443c3f57b))
 ## [6.4.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v6.3.0...code-review-action@v6.4.0) (2026-08-15)
 
 ## Release Notes
