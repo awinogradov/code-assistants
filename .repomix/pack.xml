@@ -234,6 +234,7 @@ The content is organized as follows:
         0.2.1.md
         0.2.2.md
         1.0.0.md
+        1.1.0.md
       src/
         buildReport.test.ts
         buildReport.ts
@@ -501,6 +502,7 @@ claude-plugins/
       5.5.0.md
       5.6.0.md
       5.7.0.md
+      6.0.0.md
     agents/
       analyze-pr-commits.md
       analyze-staged-changes.md
@@ -22505,6 +22507,45 @@ Skill directories previously used colon-separated names (e.g., `skills/pr:review
 * **autopilot:** make skills the portable source layout ([e9859e9](https://github.com/awinogradov/code-assistants/commit/e9859e9477f3f199655f49d476b90b9a26ab6724))
 </file>
 
+<file path=".github/actions/code-review-cost-monitor/.release_notes/1.1.0.md">
+## [1.1.0](https://github.com/awinogradov/code-assistants/compare/code-review-cost-monitor-action@v1.0.0...code-review-cost-monitor-action@v1.1.0) (2026-08-22)
+
+## Release Notes
+
+The cost monitor's companion review action now assembles all PR context in a single, upfront step before the review session begins, replacing the scattered discovery work that previously happened during each run.
+
+## ✨ What's New
+
+### Deterministic Startup Context Bundle
+
+PR context — diff, metadata, related discussions — is now gathered once in a dedicated builder step that runs before the review session starts, rather than being discovered on-demand across multiple points during the run. This makes startup behaviour predictable and repeatable: the same PR produces the same context payload every time, with no variance from timing or ordering effects.
+
+The review run-summary footer (the data source the cost monitor reads from every PR) now includes six new fields from the builder: duration, request count, payload size, whether truncation occurred, follow-up count, and fallback status. This richer telemetry means the cost monitor has more signal to work with when evaluating a run — particularly for diagnosing why a high-cost run breached a threshold, which is exactly the kind of analysis the optional attribution step was designed to surface.
+
+From a deployment standpoint, no new configuration is required. The bundle step is built into the review action and runs automatically. Cost reports and baseline windows continue to work as before; the additional footer fields appear in new runs going forward.
+
+<details><summary>Related issues</summary>
+
+- [#605: Build a deterministic startup context bundle for code review](https://github.com/awinogradov/code-assistants/issues/605)
+- [#608: Speed up code review startup with a deterministic context bundle](https://github.com/awinogradov/code-assistants/pull/608)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #605 | [#608](https://github.com/awinogradov/code-assistants/pull/608) | @awinogradov |
+
+### Features
+
+* **code-review:** add deterministic startup context bundle ([bb0cd79](https://github.com/awinogradov/code-assistants/commit/bb0cd790b336e8dfa13dc378c23de16e265ce097))
+
+### Tests
+
+* **code-review:** cover context bundle builder and telemetry ([6777239](https://github.com/awinogradov/code-assistants/commit/6777239a83a575691f88f8c5e313368443c3f57b))
+</file>
+
 <file path=".github/actions/code-review-cost-monitor/src/buildReport.test.ts">
 /**
  * Tests for buildReport.ts.
@@ -24549,6 +24590,42 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.1.0](https://github.com/awinogradov/code-assistants/compare/code-review-cost-monitor-action@v1.0.0...code-review-cost-monitor-action@v1.1.0) (2026-08-22)
+
+## Release Notes
+
+The cost monitor's companion review action now assembles all PR context in a single, upfront step before the review session begins, replacing the scattered discovery work that previously happened during each run.
+
+## ✨ What's New
+
+### Deterministic Startup Context Bundle
+
+PR context — diff, metadata, related discussions — is now gathered once in a dedicated builder step that runs before the review session starts, rather than being discovered on-demand across multiple points during the run. This makes startup behaviour predictable and repeatable: the same PR produces the same context payload every time, with no variance from timing or ordering effects.
+
+The review run-summary footer (the data source the cost monitor reads from every PR) now includes six new fields from the builder: duration, request count, payload size, whether truncation occurred, follow-up count, and fallback status. This richer telemetry means the cost monitor has more signal to work with when evaluating a run — particularly for diagnosing why a high-cost run breached a threshold, which is exactly the kind of analysis the optional attribution step was designed to surface.
+
+From a deployment standpoint, no new configuration is required. The bundle step is built into the review action and runs automatically. Cost reports and baseline windows continue to work as before; the additional footer fields appear in new runs going forward.
+
+<details><summary>Related issues</summary>
+
+- [#605: Build a deterministic startup context bundle for code review](https://github.com/awinogradov/code-assistants/issues/605)
+- [#608: Speed up code review startup with a deterministic context bundle](https://github.com/awinogradov/code-assistants/pull/608)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #605 | [#608](https://github.com/awinogradov/code-assistants/pull/608) | @awinogradov |
+
+### Features
+
+* **code-review:** add deterministic startup context bundle ([bb0cd79](https://github.com/awinogradov/code-assistants/commit/bb0cd790b336e8dfa13dc378c23de16e265ce097))
+
+### Tests
+
+* **code-review:** cover context bundle builder and telemetry ([6777239](https://github.com/awinogradov/code-assistants/commit/6777239a83a575691f88f8c5e313368443c3f57b))
 ## [1.0.0](https://github.com/awinogradov/code-assistants/compare/code-review-cost-monitor-action@v0.2.2...code-review-cost-monitor-action@v1.0.0) (2026-08-10)
 
 ## Release Notes
@@ -24797,7 +24874,7 @@ If you're using the code-review upstream sync, the cost monitor workflow (`code-
 <file path=".github/actions/code-review-cost-monitor/package.json">
 {
   "name": "@code-assistants/code-review-cost-monitor-action",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Composite GitHub Action that watches the code-review run-summary footers for cost regressions and opens (or updates) a deduplicated cost-report issue.",
   "private": true,
   "type": "module",
@@ -24830,7 +24907,7 @@ If you're using the code-review upstream sync, the cost monitor workflow (`code-
 <file path=".github/actions/code-review-cost-monitor/README.md">
 # Code review cost monitor
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.1.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that watches the per-run cost of [`code-review-action`](../code-review-action/README.md) and opens (or updates) a single deduplicated cost-report issue when it regresses. The data source is the "Review run summary" footer the review action appends to every review comment — a durable, per-run record of cost, tokens, and round-trips — so the monitor needs no extra instrumentation and no time-series store.
@@ -24945,7 +25022,7 @@ GH_TOKEN=$(gh auth token) GITHUB_REPOSITORY=owner/repo \
 </file>
 
 <file path=".github/actions/code-review-cost-monitor/version">
-1.0.0
+1.1.0
 </file>
 
 <file path=".github/actions/code-review-sync/action.yml">
@@ -46118,7 +46195,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "5.7.0",
+  "version": "6.0.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -48527,6 +48604,74 @@ When Autopilot determines that a task is already done — either because an exte
 ### Features
 
 * **run:** add no-change completion path ([4135175](https://github.com/awinogradov/code-assistants/commit/41351755dbbff8c48270535748b5b14d650e869e))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/6.0.0.md">
+## [6.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v5.7.0...autopilot@v6.0.0) (2026-08-22)
+
+## Release Notes
+
+The most impactful change in this release is the replacement of the `autopilot:fetch-pr-reviews` sub-agent with a bundled TypeScript helper, making PR review-thread retrieval deterministic, typed, and telemetry-aware.
+
+## ✨ What's New
+
+### Deterministic Startup Context Bundle for Code Review
+
+Code review sessions now pre-fetch all PR context in a single builder step before the session starts, rather than discovering it on-the-fly during each run. This eliminates per-run discovery churn and makes review startup faster and more consistent. The review run-summary footer now reports the builder's duration, request count, payload size, truncation status, follow-up count, and fallback status — giving you clear visibility into what the agent fetched and how.
+
+<details><summary>Related issues</summary>
+
+- [#605: Build a deterministic startup context bundle for code review](https://github.com/awinogradov/code-assistants/issues/605)
+- [#608: Speed up code review startup with a deterministic context bundle](https://github.com/awinogradov/code-assistants/pull/608)
+</details>
+
+### Typed, Bounded Review-Thread Retrieval with Telemetry
+
+Review skills now fetch PR review threads via a bundled [`lib/github/fetch-pr-reviews.ts`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/lib/github/fetch-pr-reviews.ts) helper rather than delegating to a sub-agent. The helper runs as a single Bash call using a read-only GraphQL query, returns a typed and bounded payload, and emits telemetry so you can observe retrieval behavior. CI code reviews also regain review-thread resolution state through this same helper.
+
+<details><summary>Related issues</summary>
+
+- [#604: Replace fetch-pr-reviews subagent with deterministic GitHub retrieval](https://github.com/awinogradov/code-assistants/issues/604)
+- [#606: Fetch PR review threads deterministically without a delegated agent](https://github.com/awinogradov/code-assistants/pull/606)
+</details>
+
+## ⚠️ Breaking Changes
+
+### `autopilot:fetch-pr-reviews` Agent Removed
+
+The `autopilot:fetch-pr-reviews` sub-agent no longer exists. Any workflow, skill, or automation that invokes `/autopilot:fetch-pr-reviews` directly will fail silently or error after this upgrade.
+
+**Migration steps:**
+
+1. Identify any skills, agents, or scripts in your environment that call `autopilot:fetch-pr-reviews`.
+2. Replace those calls with a direct invocation of the bundled [`lib/github/fetch-pr-reviews.ts`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/lib/github/fetch-pr-reviews.ts) helper via a single Bash call.
+3. Review the helper's typed output shape — the payload is now bounded and includes telemetry fields, so any downstream parsing of the old agent's freeform output will need to be updated to match the structured response.
+4. Upgrade the plugin to v6.0.0 and verify that your review skills resolve review threads correctly before promoting to shared/project scope.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #605 | [#608](https://github.com/awinogradov/code-assistants/pull/608) | @awinogradov |
+| #604 | [#606](https://github.com/awinogradov/code-assistants/pull/606) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **autopilot:** the autopilot:fetch-pr-reviews agent is removed; review-thread
+retrieval now runs the bundled lib/github/fetch-pr-reviews.mjs helper.
+
+Entire-Checkpoint: 56c2bd6eacca
+
+### Features
+
+* **autopilot:** add github review-thread fetch helper ([39b5be7](https://github.com/awinogradov/code-assistants/commit/39b5be774be5682276f4b5acbc7eeff9bf01abc8))
+* **autopilot:** replace fetch-pr-reviews agent with bundled helper ([ca0450b](https://github.com/awinogradov/code-assistants/commit/ca0450baa5dc36692f8e6f1755fcb19c1ab891ae))
+* **code-review:** add deterministic startup context bundle ([bb0cd79](https://github.com/awinogradov/code-assistants/commit/bb0cd790b336e8dfa13dc378c23de16e265ce097))
+
+### Refactoring
+
+* **autopilot:** convert review-thread helper to typescript ([fa26c1f](https://github.com/awinogradov/code-assistants/commit/fa26c1ffdb1dbb03d878c0211080a1cfda3a6804))
 </file>
 
 <file path="claude-plugins/autopilot/agents/analyze-pr-commits.md">
@@ -62027,6 +62172,71 @@ Before writing any output that mentions a file, standard, section, commit, or is
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [6.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v5.7.0...autopilot@v6.0.0) (2026-08-22)
+
+## Release Notes
+
+The most impactful change in this release is the replacement of the `autopilot:fetch-pr-reviews` sub-agent with a bundled TypeScript helper, making PR review-thread retrieval deterministic, typed, and telemetry-aware.
+
+## ✨ What's New
+
+### Deterministic Startup Context Bundle for Code Review
+
+Code review sessions now pre-fetch all PR context in a single builder step before the session starts, rather than discovering it on-the-fly during each run. This eliminates per-run discovery churn and makes review startup faster and more consistent. The review run-summary footer now reports the builder's duration, request count, payload size, truncation status, follow-up count, and fallback status — giving you clear visibility into what the agent fetched and how.
+
+<details><summary>Related issues</summary>
+
+- [#605: Build a deterministic startup context bundle for code review](https://github.com/awinogradov/code-assistants/issues/605)
+- [#608: Speed up code review startup with a deterministic context bundle](https://github.com/awinogradov/code-assistants/pull/608)
+</details>
+
+### Typed, Bounded Review-Thread Retrieval with Telemetry
+
+Review skills now fetch PR review threads via a bundled [`lib/github/fetch-pr-reviews.ts`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/lib/github/fetch-pr-reviews.ts) helper rather than delegating to a sub-agent. The helper runs as a single Bash call using a read-only GraphQL query, returns a typed and bounded payload, and emits telemetry so you can observe retrieval behavior. CI code reviews also regain review-thread resolution state through this same helper.
+
+<details><summary>Related issues</summary>
+
+- [#604: Replace fetch-pr-reviews subagent with deterministic GitHub retrieval](https://github.com/awinogradov/code-assistants/issues/604)
+- [#606: Fetch PR review threads deterministically without a delegated agent](https://github.com/awinogradov/code-assistants/pull/606)
+</details>
+
+## ⚠️ Breaking Changes
+
+### `autopilot:fetch-pr-reviews` Agent Removed
+
+The `autopilot:fetch-pr-reviews` sub-agent no longer exists. Any workflow, skill, or automation that invokes `/autopilot:fetch-pr-reviews` directly will fail silently or error after this upgrade.
+
+**Migration steps:**
+
+1. Identify any skills, agents, or scripts in your environment that call `autopilot:fetch-pr-reviews`.
+2. Replace those calls with a direct invocation of the bundled [`lib/github/fetch-pr-reviews.ts`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/lib/github/fetch-pr-reviews.ts) helper via a single Bash call.
+3. Review the helper's typed output shape — the payload is now bounded and includes telemetry fields, so any downstream parsing of the old agent's freeform output will need to be updated to match the structured response.
+4. Upgrade the plugin to v6.0.0 and verify that your review skills resolve review threads correctly before promoting to shared/project scope.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #605 | [#608](https://github.com/awinogradov/code-assistants/pull/608) | @awinogradov |
+| #604 | [#606](https://github.com/awinogradov/code-assistants/pull/606) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **autopilot:** the autopilot:fetch-pr-reviews agent is removed; review-thread
+retrieval now runs the bundled lib/github/fetch-pr-reviews.mjs helper.
+
+Entire-Checkpoint: 56c2bd6eacca
+
+### Features
+
+* **autopilot:** add github review-thread fetch helper ([39b5be7](https://github.com/awinogradov/code-assistants/commit/39b5be774be5682276f4b5acbc7eeff9bf01abc8))
+* **autopilot:** replace fetch-pr-reviews agent with bundled helper ([ca0450b](https://github.com/awinogradov/code-assistants/commit/ca0450baa5dc36692f8e6f1755fcb19c1ab891ae))
+* **code-review:** add deterministic startup context bundle ([bb0cd79](https://github.com/awinogradov/code-assistants/commit/bb0cd790b336e8dfa13dc378c23de16e265ce097))
+
+### Refactoring
+
+* **autopilot:** convert review-thread helper to typescript ([fa26c1f](https://github.com/awinogradov/code-assistants/commit/fa26c1ffdb1dbb03d878c0211080a1cfda3a6804))
 ## [5.7.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v5.6.0...autopilot@v5.7.0) (2026-08-17)
 
 ## Release Notes
@@ -64363,6 +64573,12 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
 ### Breaking changes
 
 - _Document migration steps here._
+
+## From 5.7.0 to 6.0.0
+
+### Breaking changes
+
+- the autopilot:fetch-pr-reviews agent is removed; review-thread
 </file>
 
 <file path="claude-plugins/autopilot/package.json">
@@ -64380,14 +64596,14 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
     "test": "bun test lib",
     "clean": "rm -rf node_modules .turbo"
   },
-  "version": "5.7.0"
+  "version": "6.0.0"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v5.7.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v6.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -64871,7 +65087,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-5.7.0
+6.0.0
 </file>
 
 <file path="docs/01-workspace-structure.md">
