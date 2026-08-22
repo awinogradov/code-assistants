@@ -1,7 +1,7 @@
 ---
 name: pr-review
 description: Review a pull request and provide constructive feedback with structured verdict. Used by awinogradov/code-review-action
-argument-hint: "REPO: <owner/repo> PR_NUMBER: <number> REVIEWER: <bot-login> PR_AUTHOR: <author-login> RULES_DOC_URL: <url> (all but RULES_DOC_URL fall back to gh when omitted)"
+argument-hint: "REPO: <owner/repo> PR_NUMBER: <number> REVIEWER: <bot-login> PR_AUTHOR: <author-login> RULES_DOC_URL: <url> CONTEXT_BUNDLE: <path> (all but RULES_DOC_URL and CONTEXT_BUNDLE fall back to gh when omitted)"
 allowed-tools:
   - Read
   - Glob
@@ -25,7 +25,7 @@ Arguments: `$ARGUMENTS`
 
 Expected form (typically supplied by `awinogradov/code-review-action`):
 
-- `REPO: <owner/repo> PR_NUMBER: <number> REVIEWER: <bot-login> PR_AUTHOR: <author-login> RULES_DOC_URL: <url>`
+- `REPO: <owner/repo> PR_NUMBER: <number> REVIEWER: <bot-login> PR_AUTHOR: <author-login> RULES_DOC_URL: <url> CONTEXT_BUNDLE: <path>`
 
 ## Input resolution
 
@@ -34,6 +34,7 @@ Expected form (typically supplied by `awinogradov/code-review-action`):
 - **`REVIEWER`** — `$ARGUMENTS` → `gh api user --jq .login` (authenticated user).
 - **`PR_AUTHOR`** — `$ARGUMENTS` → `gh pr view --json author --jq .author.login`.
 - **`RULES_DOC_URL`** — `$ARGUMENTS` only. The action always supplies it (its `rules_doc_url` input default is the one canonical copy). When absent (e.g. a manual local run), do NOT fabricate a URL — render every `CHECK-` rule code as plain text (the bare code, no link) per [§2.5](#25-rule-codes).
+- **`CONTEXT_BUNDLE`** — `$ARGUMENTS` only; optional, supplied by the action's deterministic context-builder step. An empty value counts as absent. Never inferred or searched for — [§1.0](#10-consume-the-context-bundle-action-supplied) defines consumption and fallback.
 
 Do NOT prompt the user. Return structured output with an explicit error if inputs cannot be resolved.
 
@@ -47,7 +48,22 @@ You review the whole PR yourself in a single pass: load context, evaluate the di
 
 ## Phase 1: Context Loading
 
+### 1.0 Consume the Context Bundle (action-supplied)
+
+When `CONTEXT_BUNDLE` carries a non-empty path, Read that file once. It is valid when it parses as JSON and its `version` field equals `1` — the versioned contract lives in [`reviewContextBundle.ts`](https://github.com/awinogradov/code-assistants/blob/main/.github/actions/code-review-action/src/reviewContextBundle.ts). A valid bundle **substitutes for data acquisition only** — every decision procedure below runs unchanged over bundle-sourced data:
+
+- It replaces the [§1.1](#11-pr-context) `gh pr view` / `gh pr diff` calls and the [§1.2](#12-load-context-via-sub-agents) review-thread helper: `identity`/`refs` carry the PR metadata and SHAs, `changedFiles` the bounded file list (`totalFiles` stays exact when truncated), `checks` the check state, and `reviewState` the prior verdicts, review bodies, and unresolved inline threads.
+- Read the diff exactly once from the file `diff.path` references — the same never-embed-twice rule as [§1.1](#11-pr-context).
+- [§1.3](#13-review-round-handling) takes its round from `round`: `firstReview: true` is the first-review branch; otherwise `round.lastReviewedSha` and `round.delta` name what changed since the last review. A delta marked `available: false` (force-pushed ref, diverged history) means the full diff is the review surface — never assume "nothing changed".
+- The [§1.2](#12-load-context-via-sub-agents) codebase snapshot and the issue-linked agents still run — the bundle does not cover them; extract the linked issue from `identity.body`.
+
+**Targeted follow-ups are budgeted.** A concrete missing field, a section with `truncated: true`, or a section with `available: false` permits a targeted fetch — at most **3 per session**. Record each, before running it, as a machine-readable trace line: `bundle-followup: <field> <command>`. Past the budget, proceed on the bounded data and say so in the [§1.5](#15-context-map) Context Map. Never re-fetch data the bundle already carries — rediscovery is exactly the cost the bundle exists to remove.
+
+**Fallback.** When `CONTEXT_BUNDLE` is absent or empty, the file is unreadable, the JSON does not parse, or `version` is not `1`, record one machine-readable trace line — `bundle-fallback: <absent|unreadable|invalid-json|invalid-version>` — and run [§1.1](#11-pr-context)–[§1.2](#12-load-context-via-sub-agents) unchanged. Manual local runs take this path by design.
+
 ### 1.1 PR Context
+
+Skip this section's fetches when [§1.0](#10-consume-the-context-bundle-action-supplied) consumed a valid bundle — it already carries all of this data; the prose below still defines what the data means.
 
 Fetch PR metadata and the diff:
 
@@ -69,7 +85,7 @@ Extract the linked issue ID from PR metadata. Check in order, stop at first matc
 1. **PR body `Issues:` section** — lines starting with `Closes` or `Related to` followed by a ticket ID; the id may be bare (`#12`, `ENG-123`) or inside a tracker issue URL (`https://linear.app/<workspace>/issue/ENG-123/<slug>`) — extract the `#N` / `KEY-N` token either way
 2. **Branch name** — leading `[a-z]+-[0-9]+` segment, convert to UPPERCASE
 
-Load the remaining context in parallel — the codebase snapshot, the prior inline review threads, and (when an issue is linked) the linked-issue context plus the related TODOs / issue references in the codebase. Prior-review verdicts and summary bodies already come from the [§1.1](#11-pr-context) `gh pr view` output; the deterministic review-thread helper adds the per-line inline annotations in one bounded Bash call, returning a categorized payload (raw API output stays out of this context).
+Load the remaining context in parallel — the codebase snapshot, the prior inline review threads, and (when an issue is linked) the linked-issue context plus the related TODOs / issue references in the codebase. Prior-review verdicts and summary bodies already come from the [§1.1](#11-pr-context) `gh pr view` output; the deterministic review-thread helper adds the per-line inline annotations in one bounded Bash call, returning a categorized payload (raw API output stays out of this context). When [§1.0](#10-consume-the-context-bundle-action-supplied) consumed a valid bundle, skip the review-thread helper — `reviewState.unresolvedThreads` already carries the inline threads — and run only the snapshot and the issue-linked agents below.
 
 Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the ordered context-acquisition chain; this skill passes the review-scoped `includePatterns` (repomix tier only) shown below. Read [`github-review-fetch.md`](../shared-rules/references/github-review-fetch.md) for the review-thread helper invocation and its output contract.
 
@@ -102,6 +118,8 @@ After all calls complete, store the selected context source (and its `outputId` 
 **Read the pack, don't dump it.** The context source exists so you can pull _targeted_ context on demand — via its read contract: `graphify` queries on the graph tier, or `grep_repomix_output` (regex + `contextLines`) and `read_repomix_output` with a specific `startLine`/`endLine` slice on the repomix tier. NEVER `read_repomix_output` over the whole range (that loads the entire codebase into context). When the diff is self-contained and needs no cross-file lookup (the common case), don't read the pack at all — pull cross-file context only for checks that need it (e.g. architecture reuse, duplicated logic).
 
 ### 1.3 Review Round Handling
+
+This decision procedure is the same on both data paths: the bundle path sources "previous reviews by REVIEWER" from `round` and `reviewState` ([§1.0](#10-consume-the-context-bundle-action-supplied)), the legacy path from [§1.1](#11-pr-context)–[§1.2](#12-load-context-via-sub-agents). A bundle whose `reviewState` is `available: false` never means "no prior reviews" — that is a degraded fetch; verify with a budgeted follow-up before treating the round as a first review.
 
 **First review (no previous reviews by REVIEWER):**
 

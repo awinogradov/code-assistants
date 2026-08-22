@@ -23,6 +23,7 @@ import { assertExclusiveAnthropicAuth } from "@code-assistants/actions-core/anth
 
 import { setOutput } from "./actionsOutput.ts";
 import { logMessage } from "./logClaudeMessage.ts";
+import { contextBuilderTelemetrySchema } from "./reviewContextBundle.ts";
 
 /** Duration above which a Claude session is considered long-running (triggers artifact upload). */
 const longRunMs = 5 * 60 * 1000;
@@ -480,7 +481,13 @@ async function run(): Promise<void> {
   // Emit the run summary (log + step output) BEFORE emitOutputs, which may
   // process.exit(1) on a non-success result — keeping the footer data available
   // to the separate submitReview step even on a failed run.
-  const summary = buildRunSummary(resolveRunMode(config.prompt), messages, { modelMs }, config.model);
+  const summary = buildRunSummary(
+    resolveRunMode(config.prompt),
+    messages,
+    { modelMs },
+    config.model,
+    process.env.BUNDLE_TELEMETRY
+  );
   log.info(summary, "Run summary.");
   await setOutput("run_summary", JSON.stringify(summary));
 
@@ -569,6 +576,60 @@ export function countToolRoundTrips(messages: unknown[]): number {
   return count;
 }
 
+/**
+ * Count assistant text lines carrying a trace marker (e.g. `bundle-followup:`),
+ * the pr-review skill's machine-readable record of bundle follow-ups and
+ * fallbacks. Counted here so the run summary can report them per run — the
+ * issue #605 telemetry criterion the builder alone cannot satisfy, since
+ * follow-ups happen inside the session.
+ */
+export function countTraceMarker(messages: unknown[], marker: string): number {
+  let count = 0;
+  for (const message of messages) {
+    if (typeof message !== "object" || message === null) continue;
+    const record = message as Record<string, unknown>;
+    if (record.type !== "assistant") continue;
+    const content = (record.message as { content?: unknown } | undefined)?.content;
+    if (!Array.isArray(content)) continue;
+    for (const block of content) {
+      const text = (block as { type?: string; text?: string }).type === "text"
+        ? ((block as { text?: string }).text ?? "")
+        : "";
+      count += text.split("\n").filter((line) => line.includes(marker)).length;
+    }
+  }
+  return count;
+}
+
+/**
+ * Merge the builder's telemetry (the `BUNDLE_TELEMETRY` env, set from the
+ * bundle step's output) with the session-side follow-up/fallback counts.
+ * Fails open: absent or schema-invalid telemetry yields `undefined` and the
+ * run summary simply carries no `context_builder` block (react/preflight
+ * runs, or a builder that crashed before emitting telemetry).
+ */
+export function buildContextBuilderSummary(
+  raw: string | undefined,
+  messages: unknown[]
+): Record<string, number | boolean> | undefined {
+  if (!raw) return undefined;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+  const result = contextBuilderTelemetrySchema.safeParse(parsed);
+  if (!result.success) return undefined;
+
+  return {
+    ...result.data,
+    followup_count: countTraceMarker(messages, "bundle-followup:"),
+    fallback: countTraceMarker(messages, "bundle-fallback:") > 0,
+  };
+}
+
 /** Token and cost usage extracted from the SDK `result` message. */
 export interface UsageSummary {
   tokensIn: number;
@@ -617,11 +678,12 @@ export function buildRunSummary(
   mode: string,
   messages: unknown[],
   timings: PhaseTimings,
-  fallbackModel: string
-): Record<string, number | string> {
+  fallbackModel: string,
+  bundleTelemetryRaw?: string
+): Record<string, unknown> {
   const usage = extractUsage(findResultMessage(messages));
 
-  return {
+  const summary: Record<string, unknown> = {
     mode,
     model: findInitModel(messages) ?? fallbackModel,
     model_ms: timings.modelMs,
@@ -633,6 +695,10 @@ export function buildRunSummary(
     num_turns: usage.numTurns,
     tool_round_trips: countToolRoundTrips(messages),
   };
+
+  const contextBuilder = buildContextBuilderSummary(bundleTelemetryRaw, messages);
+  if (contextBuilder) summary.context_builder = contextBuilder;
+  return summary;
 }
 
 /**

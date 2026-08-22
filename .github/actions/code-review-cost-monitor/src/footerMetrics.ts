@@ -29,6 +29,23 @@ const footerDataSuffix = "-->";
  * comment. Strict numerics: a field that is not a finite non-negative number
  * rejects the whole payload rather than feeding NaN into a baseline.
  */
+/**
+ * Startup context-builder metrics (issue #605), present only on review runs
+ * from action versions that ship the bundle builder. Optional so footers from
+ * older action versions keep parsing unchanged.
+ */
+export const contextBuilderMetricsSchema = z.object({
+  builderMs: z.number().int().nonnegative(),
+  requestCount: z.number().int().nonnegative(),
+  bundleBytes: z.number().int().nonnegative(),
+  diffBytes: z.number().int().nonnegative(),
+  truncated: z.boolean(),
+  sectionsUnavailable: z.number().int().nonnegative(),
+  cacheUsed: z.boolean(),
+  followupCount: z.number().int().nonnegative(),
+  fallback: z.boolean(),
+});
+
 export const runMetricsSchema = z.object({
   mode: z.string().min(1),
   modelMs: z.number().int().nonnegative(),
@@ -39,6 +56,7 @@ export const runMetricsSchema = z.object({
   cacheReadTokens: z.number().int().nonnegative(),
   cacheCreationTokens: z.number().int().nonnegative(),
   costUsd: z.number().nonnegative(),
+  contextBuilder: contextBuilderMetricsSchema.optional(),
 });
 
 /** Metrics of one review run, as serialized in the footer data comment. */
