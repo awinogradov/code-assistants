@@ -1,0 +1,32 @@
+<task-notification>
+<task-id>bnhjcqizn</task-id>
+<summary>Monitor event: "PR #606 re-review/CI status"</summary>
+<event>state=OPEN decision=CHANGES_REQUESTED failing=none allcheckspass=no</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bsuxu0ifn</task-id>
+<summary>Monitor event: "PR #606 fresh re-review verdict"</summary>
+<event>state=OPEN freshverdict=none failing=none allpass=no</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bsuxu0ifn</task-id>
+<summary>Monitor event: "PR #606 fresh re-review verdict"</summary>
+<event>state=OPEN freshverdict=APPROVED failing=none allpass=no</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+Why mjs? Why not ts as all other modules?
+
+---
+
+update repo to latest lts
