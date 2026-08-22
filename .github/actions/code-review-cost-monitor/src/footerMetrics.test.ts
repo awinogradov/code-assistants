@@ -107,3 +107,31 @@ describe("hasRunSummaryData()", () => {
     expect(hasRunSummaryData("<!-- run-summary-start -->\n| Mode | review |")).toBe(false);
   });
 });
+
+describe("contextBuilder metrics (issue #605)", () => {
+  const contextBuilder = {
+    builderMs: 812,
+    requestCount: 6,
+    bundleBytes: 34917,
+    diffBytes: 1200,
+    truncated: false,
+    sectionsUnavailable: 0,
+    cacheUsed: false,
+    followupCount: 1,
+    fallback: false,
+  };
+
+  test("parses a payload carrying the optional contextBuilder block", () => {
+    const parsed = parseFooterMetrics(bodyWithData({ ...metrics, contextBuilder }));
+    expect(parsed?.contextBuilder).toEqual(contextBuilder);
+  });
+
+  test("still parses an old payload without the block (backward compat)", () => {
+    expect(parseFooterMetrics(bodyWithData(metrics))?.contextBuilder).toBeUndefined();
+  });
+
+  test("rejects the whole payload when the block is present but malformed", () => {
+    const bad = { ...metrics, contextBuilder: { ...contextBuilder, requestCount: "six" } };
+    expect(parseFooterMetrics(bodyWithData(bad))).toBeUndefined();
+  });
+});
