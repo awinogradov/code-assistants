@@ -56,6 +56,7 @@ Why `Read` and not the `Skill` tool: a skill loads its whole `SKILL.md`, so ther
 | Git history policy              | `git-history-policy.md`     | —                       |
 | PR title and branch grammar     | `pr-title-grammar.md`       | —                       |
 | PR body grammar                 | `pr-body-grammar.md`        | —                       |
+| GitHub review-thread retrieval  | `github-review-fetch.md`    | repo, PR number, author |
 
 ## Where a block is still inlined
 

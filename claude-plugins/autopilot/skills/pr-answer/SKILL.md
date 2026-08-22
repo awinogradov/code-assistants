@@ -56,20 +56,17 @@ gh pr diff <PR_NUMBER> -R <REPO>
 
 Launch 2 calls **in parallel** to load codebase context and review history:
 
-Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the ordered context-acquisition chain; this skill passes the review-scoped `includePatterns` (repomix tier only) shown below.
+Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the ordered context-acquisition chain; this skill passes the review-scoped `includePatterns` (repomix tier only) shown below. Read [`github-review-fetch.md`](../shared-rules/references/github-review-fetch.md) for the review-thread helper invocation and its output contract.
 
 ```
 Acquire codebase context: follow the shared repomix-snapshot chain,
   passing `includePatterns`: ".claude/**, **.md, **.yml, .github/**"
 
-Agent 1 (fetch-pr-reviews):
-  Use the Agent tool with:
-  - `subagent_type`: "autopilot:fetch-pr-reviews"
-  - `prompt`: "Fetch reviews for PR #<PR_NUMBER>. Repo: <REPO>. Author: <PR_AUTHOR>."
-  - `description`: "Fetch PR reviews"
+Fetch review threads: run the shared github-review-fetch helper via Bash
+  with <REPO>, <PR_NUMBER>, and <PR_AUTHOR>
 ```
 
-After all calls complete, store the selected context source (and its `outputId` when the repomix tier was selected). Use the review data from `fetch-pr-reviews` to understand the full review history, including REVIEWER-specific reviews and comments.
+After both complete, store the selected context source (and its `outputId` when the repomix tier was selected). Use the helper's JSON to understand the full review history, including REVIEWER-specific reviews and comments; surface a non-null `fetchError` per the shared block instead of treating the fetch as empty.
 
 **Read the pack, don't dump it.** Pull only targeted context via the selected source's read contract (`graphify` queries, or `grep_repomix_output` / sliced `read_repomix_output`); never read the whole pack. Most comment replies need no codebase lookup at all — skip the context reads entirely unless the comment points you at specific other code to verify.
 
