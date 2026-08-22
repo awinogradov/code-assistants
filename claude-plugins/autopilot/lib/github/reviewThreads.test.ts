@@ -5,19 +5,16 @@ import {
   buildReviewPayload,
   mergeReviewThreadPages,
   parseGhPaginatedJson,
-} from "./reviewThreads.mjs";
+} from "./reviewThreads.ts";
+import type {
+  RestComment,
+  Review,
+  ReviewMeta,
+  ReviewThread,
+  ThreadPage,
+} from "./reviewThreads.ts";
 
-interface RestCommentOverrides {
-  id?: number;
-  path?: string;
-  line?: number | null;
-  user?: { login: string };
-  body?: string;
-  in_reply_to_id?: number;
-  pull_request_review_id?: number;
-}
-
-const restComment = (overrides: RestCommentOverrides = {}) => ({
+const restComment = (overrides: Partial<RestComment> = {}): RestComment => ({
   id: 1,
   path: "src/a.ts",
   line: 5,
@@ -27,18 +24,7 @@ const restComment = (overrides: RestCommentOverrides = {}) => ({
   ...overrides,
 });
 
-interface ThreadOverrides {
-  path?: string;
-  line?: number | null;
-  isResolved?: boolean;
-  isOutdated?: boolean;
-  comments?: {
-    nodes: { author: { login: string } | null; body: string }[];
-    pageInfo: { hasNextPage: boolean };
-  };
-}
-
-const thread = (overrides: ThreadOverrides = {}) => ({
+const thread = (overrides: Partial<ReviewThread> = {}): ReviewThread => ({
   path: "src/a.ts",
   line: 5,
   isResolved: false,
@@ -50,7 +36,11 @@ const thread = (overrides: ThreadOverrides = {}) => ({
   ...overrides,
 });
 
-const gqlPage = (nodes: unknown[], hasNextPage = false, endCursor: string | null = null) => ({
+const gqlPage = (
+  nodes: ReviewThread[],
+  hasNextPage = false,
+  endCursor: string | null = null,
+): ThreadPage => ({
   data: {
     repository: {
       pullRequest: {
@@ -63,10 +53,10 @@ const gqlPage = (nodes: unknown[], hasNextPage = false, endCursor: string | null
 interface PayloadOverrides {
   pr?: number;
   author?: string;
-  meta?: { title: string | null; reviewDecision: string | null };
-  reviews?: { id: number; user: { login: string }; state: string }[];
-  comments?: ReturnType<typeof restComment>[];
-  threads?: ReturnType<typeof thread>[];
+  meta?: ReviewMeta;
+  reviews?: Review[];
+  comments?: RestComment[];
+  threads?: ReviewThread[];
 }
 
 const payload = (overrides: PayloadOverrides = {}) =>
@@ -180,7 +170,7 @@ describe("buildReviewPayload filtering", () => {
     const threads = comments.map((comment) =>
       thread({
         line: comment.line,
-        comments: { nodes: [{ author: { login: comment.user.login }, body: comment.body }], pageInfo: { hasNextPage: false } },
+        comments: { nodes: [{ author: { login: comment.user?.login ?? "unknown" }, body: comment.body }], pageInfo: { hasNextPage: false } },
       }),
     );
     const result = payload({ comments, threads });

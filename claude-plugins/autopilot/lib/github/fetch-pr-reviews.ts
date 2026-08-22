@@ -4,7 +4,10 @@
 // skills in place of the retired fetch-pr-reviews delegated agent — one bounded
 // Bash call instead of a model-driven loop.
 //
-// Usage:  node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.mjs" <owner/repo> <pr-number> <pr-author>
+// Runs under Node's native type stripping (Node >=24) — no build step; the file
+// ships as source at ${CLAUDE_PLUGIN_ROOT}/lib/github/.
+//
+// Usage:  node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.ts" <owner/repo> <pr-number> <pr-author>
 //
 // Always exits 0 and always prints a single JSON object. Reads degrade
 // independently: a failed GraphQL read never discards successful REST reads —
@@ -21,27 +24,49 @@ import {
   buildReviewPayload,
   mergeReviewThreadPages,
   parseGhPaginatedJson,
-} from "./reviewThreads.mjs";
+} from "./reviewThreads.ts";
+import type {
+  RestComment,
+  Review,
+  ReviewMeta,
+  ReviewPayload,
+  ThreadPage,
+} from "./reviewThreads.ts";
+
+interface Telemetry {
+  durationMs: number;
+  requestCount: number;
+  payloadBytes: number;
+  degradedReads: string[];
+}
+
+type HelperOutput = ReviewPayload & { fetchError: string | null; telemetry: Telemetry };
+
+interface ReadResult<T> {
+  documents: T[];
+  error: string | null;
+}
 
 const execFileAsync = promisify(execFile);
 const ghOptions = { maxBuffer: 32 * 1024 * 1024, timeout: 120_000 };
 
-const degradedReason = (error) => {
-  const stderr = (error.stderr ?? error.message ?? "").split("\n")[0].slice(0, 200);
-  const isRateLimit = /rate limit|secondary rate/i.test(error.stderr ?? "");
+const degradedReason = (error: unknown): string => {
+  const e = error as { stderr?: string; message?: string };
+  const stderr = (e.stderr ?? e.message ?? "").split("\n")[0].slice(0, 200);
+  const isRateLimit = /rate limit|secondary rate/i.test(e.stderr ?? "");
   return isRateLimit ? `rate limited — ${stderr}` : stderr || "gh invocation failed";
 };
 
-async function ghRead(args) {
+async function ghRead<T>(args: string[]): Promise<ReadResult<T>> {
   try {
     const { stdout } = await execFileAsync("gh", args, ghOptions);
-    return { documents: parseGhPaginatedJson(stdout), error: null };
+    return { documents: parseGhPaginatedJson<T>(stdout.toString()), error: null };
   } catch (error) {
     return { documents: [], error: degradedReason(error) };
   }
 }
 
-async function main() {
+async function main(): Promise<HelperOutput> {
   const startedAt = Date.now();
   const [repoArg, prArg, authorArg] = process.argv.slice(2);
   const [owner, repo] = (repoArg ?? "").split("/");
@@ -49,17 +74,27 @@ async function main() {
 
   if (!owner || !repo || Number.isNaN(pr) || !authorArg) {
     return {
-      ...buildReviewPayload({ pr: pr || 0, author: authorArg ?? "", meta: null, reviews: [], comments: [], threads: [] }),
+      ...buildReviewPayload({
+        pr: pr || 0,
+        author: authorArg ?? "",
+        meta: null,
+        reviews: [],
+        comments: [],
+        threads: [],
+      }),
       fetchError:
-        "usage: fetch-pr-reviews.mjs <owner/repo> <pr-number> <pr-author> — arguments missing or invalid",
+        "usage: fetch-pr-reviews.ts <owner/repo> <pr-number> <pr-author> — arguments missing or invalid",
       telemetry: { durationMs: 0, requestCount: 0, payloadBytes: 0, degradedReads: [] },
     };
   }
 
   const reads = buildGhReadCommands({ owner, repo, pr });
-  const [reviews, comments, meta, threads] = await Promise.all(
-    [reads.reviews, reads.comments, reads.meta, reads.threads].map(ghRead),
-  );
+  const [reviews, comments, meta, threads] = await Promise.all([
+    ghRead<Review[]>(reads.reviews),
+    ghRead<RestComment[]>(reads.comments),
+    ghRead<ReviewMeta>(reads.meta),
+    ghRead<ThreadPage>(reads.threads),
+  ]);
 
   const payload = buildReviewPayload({
     pr,
@@ -72,9 +107,15 @@ async function main() {
     threads: mergeReviewThreadPages(threads.documents),
   });
 
-  const failures = Object.entries({ reviews, comments, meta, reviewThreads: threads })
-    .filter(([, read]) => read.error !== null)
-    .map(([name, read]) => ({ name, error: read.error }));
+  const named: { name: string; read: ReadResult<unknown> }[] = [
+    { name: "reviews", read: reviews },
+    { name: "comments", read: comments },
+    { name: "meta", read: meta },
+    { name: "reviewThreads", read: threads },
+  ];
+  const failures = named
+    .filter(({ read }) => read.error !== null)
+    .map(({ name, read }) => ({ name, error: read.error }));
 
   const requestCount =
     reviews.documents.length + comments.documents.length + threads.documents.length + 1;

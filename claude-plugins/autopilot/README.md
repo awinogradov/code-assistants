@@ -450,7 +450,7 @@ Configure in `.mcp.json` at plugin root:
 
 The plugin ships one server: `wiretext` (ASCII wireframes). Linear connectivity is consumer-level: interactive skills use a user- or project-configured Linear MCP server (`claude mcp add --transport http linear https://mcp.linear.app/mcp`), while agents and headless runs use a bundled zero-dependency GraphQL helper (`lib/linear/`) keyed by `LINEAR_API_KEY`. See [Linear tracker support](../../docs/11-linear-tracker.md).
 
-GitHub review-thread retrieval is also a bundled zero-dependency helper rather than an agent: [`lib/github/fetch-pr-reviews.mjs`](./lib/github/fetch-pr-reviews.mjs) performs the four bounded, read-only `gh` reads (REST reviews and comments, PR metadata, GraphQL `reviewThreads` resolution state) deterministically and prints one typed JSON payload with telemetry, replacing the delegated `fetch-pr-reviews` agent the `pr-answer`, `pr-resolve`, and `pr-review` skills previously spawned. The invocation and output contract live in the [github-review-fetch shared block](./skills/shared-rules/references/github-review-fetch.md).
+GitHub review-thread retrieval is also a bundled zero-dependency helper rather than an agent: [`lib/github/fetch-pr-reviews.ts`](./lib/github/fetch-pr-reviews.ts) performs the four bounded, read-only `gh` reads (REST reviews and comments, PR metadata, GraphQL `reviewThreads` resolution state) deterministically and prints one typed JSON payload with telemetry, replacing the delegated `fetch-pr-reviews` agent the `pr-answer`, `pr-resolve`, and `pr-review` skills previously spawned. The invocation and output contract live in the [github-review-fetch shared block](./skills/shared-rules/references/github-review-fetch.md).
 
 ### Versioning
 

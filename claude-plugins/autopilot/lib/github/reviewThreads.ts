@@ -1,13 +1,93 @@
 // Pure transforms for PR review-thread retrieval: parse paginated `gh` output,
 // merge GraphQL pages, and reduce the four raw GitHub payloads to the typed
 // contract the pr-answer/pr-resolve/pr-review skills consume. No I/O lives here —
-// the CLI in fetch-pr-reviews.mjs is a thin shell around these functions, so the
+// the CLI in fetch-pr-reviews.ts is a thin shell around these functions, so the
 // fixture tests in reviewThreads.test.ts exercise the exact production paths.
 //
+// Runs under Node's native type stripping (Node >=24) and Bun without a build
+// step, so it ships as source at ${CLAUDE_PLUGIN_ROOT}/lib/github/.
+//
 // Usage:
-//   import { buildReviewPayload, parseGhPaginatedJson } from "./reviewThreads.mjs";
-//   const pages = parseGhPaginatedJson(ghStdout);
+//   import { buildReviewPayload, parseGhPaginatedJson } from "./reviewThreads.ts";
+//   const pages = parseGhPaginatedJson<RestComment[]>(ghStdout);
 //   const payload = buildReviewPayload({ pr, author, meta, reviews, comments, threads });
+
+/** Severity buckets a surviving comment is sorted into. */
+export type Severity = "blocker" | "suggestion" | "nitpick" | "question";
+
+/** A REST review comment from `pulls/:n/comments`. */
+export interface RestComment {
+  id: number;
+  path: string;
+  line?: number | null;
+  user?: { login: string };
+  body?: string;
+  pull_request_review_id?: number;
+  in_reply_to_id?: number;
+}
+
+/** A REST review from `pulls/:n/reviews`. */
+export interface Review {
+  id: number;
+  user?: { login: string };
+  state: string;
+}
+
+/** PR metadata from `gh pr view --json`. */
+export interface ReviewMeta {
+  title?: string | null;
+  reviewDecision?: string | null;
+}
+
+/** A GraphQL `reviewThreads` node, used only for resolution state. */
+export interface ReviewThread {
+  path: string;
+  line: number | null;
+  isResolved: boolean;
+  isOutdated: boolean;
+  comments?: {
+    nodes?: { author?: { login: string } | null; body?: string }[];
+    pageInfo?: { hasNextPage: boolean };
+  };
+}
+
+/** A reviewer and their latest review state. */
+export interface Reviewer {
+  login: string;
+  state: string;
+}
+
+/** One unresolved review comment in the output contract. */
+export interface ReviewComment {
+  commentId: number;
+  path: string;
+  line: number | null;
+  reviewer: string;
+  severity: Severity;
+  body: string;
+  authorReplied: boolean;
+  lastAuthorReply: string | null;
+}
+
+/** The typed, bounded payload the review skills consume. */
+export interface ReviewPayload {
+  pr: number;
+  title: string | null;
+  author: string;
+  reviewState: string;
+  reviewers: Reviewer[];
+  comments: ReviewComment[];
+  note: null | "no-comments" | "all-resolved";
+  truncated: boolean;
+}
+
+/** The four `gh` invocations as argv arrays. */
+export interface GhReadCommands {
+  reviews: string[];
+  comments: string[];
+  meta: string[];
+  threads: string[];
+}
 
 const ciBotDenylist = new Set([
   "github-actions[bot]",
@@ -18,7 +98,12 @@ const ciBotDenylist = new Set([
 
 const maxBodyLength = 400;
 const maxComments = 100;
-const severityRank = { blocker: 0, suggestion: 1, nitpick: 2, question: 3 };
+const severityRank: Record<Severity, number> = {
+  blocker: 0,
+  suggestion: 1,
+  nitpick: 2,
+  question: 3,
+};
 
 const blockerMarkers = /🚧|blocker|must fix|blocking/;
 const nitpickMarkers = /💡|nitpick|\bnit\b|minor|optional/;
@@ -41,15 +126,19 @@ export const reviewThreadsQuery = `query($owner: String!, $repo: String!, $pr: I
 }`;
 
 /**
- * The four `gh` invocations the CLI runs, as argv arrays. Exported so the
- * read-only property is an enforced test contract: the reads carry no write
- * flags, and `-f`/`-F` appear only as variable bindings on the fixed,
- * mutation-free threads query.
- *
- * @param {{ owner: string, repo: string, pr: number }} target
- * @returns {{ reviews: string[], comments: string[], meta: string[], threads: string[] }}
+ * The four `gh` invocations the CLI runs. Exported so the read-only property is
+ * an enforced test contract: the reads carry no write flags, and `-f`/`-F`
+ * appear only as variable bindings on the fixed, mutation-free threads query.
  */
-export function buildGhReadCommands({ owner, repo, pr }) {
+export function buildGhReadCommands({
+  owner,
+  repo,
+  pr,
+}: {
+  owner: string;
+  repo: string;
+  pr: number;
+}): GhReadCommands {
   return {
     reviews: ["api", `repos/${owner}/${repo}/pulls/${pr}/reviews`, "--paginate"],
     comments: ["api", `repos/${owner}/${repo}/pulls/${pr}/comments`, "--paginate"],
@@ -79,16 +168,13 @@ export function buildGhReadCommands({ owner, repo, pr }) {
 }
 
 /**
- * Split `gh --paginate` stdout into parsed documents. gh emits one JSON
- * document per page concatenated on stdout (arrays for REST endpoints, objects
- * for GraphQL), so a plain JSON.parse throws on any multi-page result — this
- * scanner tracks brace depth outside strings instead.
- *
- * @param {string} stdout - Raw stdout from a paginated `gh` invocation.
- * @returns {unknown[]} One parsed value per page, in page order.
+ * Split `gh --paginate` stdout into parsed documents. gh emits one JSON document
+ * per page concatenated on stdout (arrays for REST endpoints, objects for
+ * GraphQL), so a plain JSON.parse throws on any multi-page result — this scanner
+ * tracks brace depth outside strings instead.
  */
-export function parseGhPaginatedJson(stdout) {
-  const documents = [];
+export function parseGhPaginatedJson<T = unknown>(stdout: string): T[] {
+  const documents: T[] = [];
   let depth = 0;
   let start = -1;
   let inString = false;
@@ -106,7 +192,7 @@ export function parseGhPaginatedJson(stdout) {
       depth += 1;
     } else if (char === "}" || char === "]") {
       depth -= 1;
-      if (depth === 0) documents.push(JSON.parse(stdout.slice(start, index + 1)));
+      if (depth === 0) documents.push(JSON.parse(stdout.slice(start, index + 1)) as T);
     }
     // Advance by code units, not code points: `char` may be an astral pair
     // (emoji in comment bodies), and slice() indexes UTF-16 code units.
@@ -115,21 +201,28 @@ export function parseGhPaginatedJson(stdout) {
   return documents;
 }
 
-/**
- * Flatten the thread nodes out of parsed GraphQL pages, in page order.
- *
- * @param {unknown[]} pages - Parsed page objects from parseGhPaginatedJson.
- * @returns {object[]} All reviewThreads nodes across pages.
- */
-export function mergeReviewThreadPages(pages) {
-  return pages.flatMap(
-    (page) => page?.data?.repository?.pullRequest?.reviewThreads?.nodes ?? [],
-  );
+/** A parsed page of the GraphQL `reviewThreads` query. */
+export interface ThreadPage {
+  data?: {
+    repository?: {
+      pullRequest?: {
+        reviewThreads?: {
+          nodes?: ReviewThread[];
+          pageInfo?: { hasNextPage: boolean; endCursor: string | null };
+        };
+      };
+    };
+  };
 }
 
-const excerpt = (body) => (body ?? "").slice(0, maxBodyLength);
+/** Flatten the thread nodes out of parsed GraphQL pages, in page order. */
+export function mergeReviewThreadPages(pages: ThreadPage[]): ReviewThread[] {
+  return pages.flatMap((page) => page?.data?.repository?.pullRequest?.reviewThreads?.nodes ?? []);
+}
 
-const matchThread = (comment, threads) => {
+const excerpt = (body: string | undefined | null): string => (body ?? "").slice(0, maxBodyLength);
+
+const matchThread = (comment: RestComment, threads: ReviewThread[]): ReviewThread | null => {
   const inFile = threads.filter((node) => node.path === comment.path);
   if (comment.line !== null && comment.line !== undefined) {
     const byLine = inFile.filter((node) => node.line === comment.line);
@@ -145,8 +238,14 @@ const matchThread = (comment, threads) => {
   );
 };
 
-const classifySeverity = (comment, reviewStateById) => {
-  if (reviewStateById.get(comment.pull_request_review_id) === "CHANGES_REQUESTED") {
+const classifySeverity = (
+  comment: RestComment,
+  reviewStateById: Map<number, string>,
+): Severity => {
+  if (
+    comment.pull_request_review_id !== undefined &&
+    reviewStateById.get(comment.pull_request_review_id) === "CHANGES_REQUESTED"
+  ) {
     return "blocker";
   }
   const body = (comment.body ?? "").toLowerCase();
@@ -157,8 +256,8 @@ const classifySeverity = (comment, reviewStateById) => {
   return "suggestion";
 };
 
-const latestReviewers = (reviews, author) => {
-  const lastStateByLogin = new Map();
+const latestReviewers = (reviews: Review[], author: string): Reviewer[] => {
+  const lastStateByLogin = new Map<string, string>();
   for (const review of reviews) {
     const login = review.user?.login;
     if (login && login !== author) lastStateByLogin.set(login, review.state);
@@ -166,14 +265,17 @@ const latestReviewers = (reviews, author) => {
   return [...lastStateByLogin].map(([login, state]) => ({ login, state }));
 };
 
-const orderForOutput = (surviving) => {
+const orderForOutput = (
+  surviving: ReviewComment[],
+): { ordered: ReviewComment[]; truncated: boolean } => {
   const capped =
     surviving.length > maxComments
       ? [...surviving]
           .sort((a, b) => severityRank[a.severity] - severityRank[b.severity])
           .slice(0, maxComments)
       : surviving;
-  const lineKey = (comment) => (comment.line === null ? Number.POSITIVE_INFINITY : comment.line);
+  const lineKey = (comment: ReviewComment): number =>
+    comment.line === null ? Number.POSITIVE_INFINITY : comment.line;
   const ordered = [...capped].sort(
     (a, b) => a.path.localeCompare(b.path) || lineKey(a) - lineKey(b),
   );
@@ -186,33 +288,28 @@ const orderForOutput = (surviving) => {
  * else is categorized, grouped by file, and bounded. `authorReplied` comes from
  * the complete REST reply set, so nested GraphQL page truncation can never
  * produce a false negative.
- *
- * @param {{
- *   pr: number,
- *   author: string,
- *   meta: { title?: string | null, reviewDecision?: string | null } | null,
- *   reviews: object[],
- *   comments: object[],
- *   threads: object[],
- * }} input - PR number, PR author login, and the merged `gh` payloads.
- * @returns {{
- *   pr: number,
- *   title: string | null,
- *   author: string,
- *   reviewState: string,
- *   reviewers: { login: string, state: string }[],
- *   comments: object[],
- *   note: null | "no-comments" | "all-resolved",
- *   truncated: boolean,
- * }}
  */
-export function buildReviewPayload({ pr, author, meta, reviews, comments, threads }) {
+export function buildReviewPayload({
+  pr,
+  author,
+  meta,
+  reviews,
+  comments,
+  threads,
+}: {
+  pr: number;
+  author: string;
+  meta: ReviewMeta | null;
+  reviews: Review[];
+  comments: RestComment[];
+  threads: ReviewThread[];
+}): ReviewPayload {
   const reviewStateById = new Map(reviews.map((review) => [review.id, review.state]));
   const roots = comments.filter((comment) => !comment.in_reply_to_id);
   const replies = comments.filter((comment) => comment.in_reply_to_id);
 
   let resolvedRoots = 0;
-  const surviving = [];
+  const surviving: ReviewComment[] = [];
   for (const root of roots) {
     const login = root.user?.login ?? "unknown";
     if (matchThread(root, threads)?.isResolved) {
@@ -223,6 +320,7 @@ export function buildReviewPayload({ pr, author, meta, reviews, comments, thread
     const authorReplies = replies.filter(
       (reply) => reply.in_reply_to_id === root.id && reply.user?.login === author,
     );
+    const lastReply = authorReplies.at(-1);
     surviving.push({
       commentId: root.id,
       path: root.path,
@@ -231,7 +329,7 @@ export function buildReviewPayload({ pr, author, meta, reviews, comments, thread
       severity: classifySeverity(root, reviewStateById),
       body: excerpt(root.body),
       authorReplied: authorReplies.length > 0,
-      lastAuthorReply: authorReplies.length > 0 ? excerpt(authorReplies.at(-1).body) : null,
+      lastAuthorReply: lastReply ? excerpt(lastReply.body) : null,
     });
   }
 
