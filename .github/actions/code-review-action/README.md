@@ -102,6 +102,14 @@ The `pr-review` skill carries the full review rubric (all `CHECK-*` rules) inlin
 
 To run a different repo's skills instead — e.g. a consumer's own `pr-review` — point `review_prompt` / `react_prompt` at them and install the plugin that provides them (see below).
 
+## Startup context bundle
+
+Review mode runs one deterministic **Build review context** step ([`buildReviewContext.ts`](src/buildReviewContext.ts)) before the Claude session. It fetches the PR metadata, refs, changed files, bounded diff, check state, prior reviews, and unresolved threads in a single concurrent pass — paginated past every GitHub page cap — and writes a versioned, Zod-typed bundle to the runner temp dir. The review prompt receives its path as `CONTEXT_BUNDLE:` and the `pr-review` skill consumes it instead of rediscovering the same data through many small `gh` calls, which is what dominated review wall-clock (issue [#605](https://github.com/awinogradov/code-assistants/issues/605)).
+
+The version-1 contract lives in [`reviewContextBundle.ts`](src/reviewContextBundle.ts): every bound (file entries, diff bytes, threads, review bodies) is an exported constant, every truncation is flagged in the payload, and each fallible section is either complete data or an explicit `{ available: false, reason }` — rate limits (`rate-limited`) are distinguished from endpoint failures. Re-reviews carry an explicit delta from the last-reviewed SHA (the reviewer's latest review commit); a force-pushed or diverged ref degrades the delta explicitly rather than pretending nothing changed. The diff is streamed to a separate file with the byte cap enforced mid-stream, never buffered.
+
+The step is fail-open: it always writes its `path` output (empty on any failure, with a warning annotation), and the skill treats an empty or invalid bundle as `bundle-fallback:` — running its legacy in-session discovery unchanged, so manual local runs and builder outages degrade instead of breaking. In-session follow-ups for missing or truncated fields are budgeted (3 per session) and trace-recorded as `bundle-followup:` lines. Builder telemetry (duration, request count, payload bytes, truncation, cache use) flows through the `BUNDLE_TELEMETRY` env into the run summary, where the session's follow-up count and fallback status join it — see the run-summary footer below and the post-merge verification tracked on issue [#605](https://github.com/awinogradov/code-assistants/issues/605).
+
 ## Repository standards (rfc/, docs/, and principles/)
 
 When the reviewed repository carries an `rfc/` folder (versioned standards with `status` frontmatter), a `docs/` folder, or a root-level `principles/` folder (long-lived values), the review enforces those standards on the diff — no input or config needed; the folders are the opt-in. Severity follows source stability: an Accepted RFC violation blocks (`CHECK-RFC-001`), while a Draft RFC conflict, a `docs/` convention contradiction, and a conflict with a stated principle are non-blocking suggestions (`CHECK-RFC-002`, `CHECK-DOC-005`, `CHECK-PRINCIPLE-001`), and two hygiene checks protect the `rfc/` contract itself (`CHECK-RFC-003/004`).
@@ -126,7 +134,7 @@ with:
 
 ## Review run-summary footer
 
-Every review comment carries a collapsed **"Review run summary 🤖"** footer ("under the cut") with the run's latency, token usage, cache hits, cost, and tool round-trips. The metrics are computed in `runClaude.ts`, passed to `submitReview.ts` via the `run_summary` step output, and appended to the **main review comment only** (never inline, never on `react`-mode replies). The footer is wrapped in HTML-comment markers so it is stripped before duplicate-review detection, keeping run-varying numbers from defeating dedup.
+Every review comment carries a collapsed **"Review run summary 🤖"** footer ("under the cut") with the run's latency, token usage, cache hits, cost, and tool round-trips. The metrics are computed in `runClaude.ts`, passed to `submitReview.ts` via the `run_summary` step output, and appended to the **main review comment only** (never inline, never on `react`-mode replies). The footer is wrapped in HTML-comment markers so it is stripped before duplicate-review detection, keeping run-varying numbers from defeating dedup. Review runs that built a context bundle add a **Context bundle** row (consumed vs fallback, request count, payload size, follow-ups) and an optional `contextBuilder` block in the machine-readable data comment, which the cost monitor parses.
 
 See [Review run-summary footer](../../../docs/03-code-review-run-summary.md) for the full data flow and diagram.
 
