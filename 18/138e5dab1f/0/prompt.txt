@@ -1,0 +1,15 @@
+<task-notification>
+<task-id>b49npyjnn</task-id>
+<summary>Monitor event: "PR #606 review/CI status"</summary>
+<event>state=OPEN decision=REVIEW_REQUIRED failing=none</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>b49npyjnn</task-id>
+<summary>Monitor event: "PR #606 review/CI status"</summary>
+<event>state=OPEN decision=CHANGES_REQUESTED failing=none</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
