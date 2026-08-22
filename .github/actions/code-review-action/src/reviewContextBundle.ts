@@ -230,9 +230,6 @@ export const reviewContextBundleSchema = z
 /** Validated version-1 bundle. */
 export type ReviewContextBundle = z.infer<typeof reviewContextBundleSchema>;
 
-/** One fallible section of the bundle (any of the discriminated unions above). */
-export type BundleSection = { available: boolean };
-
 /**
  * Builder telemetry emitted as the `telemetry` step output and merged into the
  * run summary by `runClaude.ts` (issue #605 acceptance: duration, request
