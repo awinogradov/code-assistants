@@ -1,0 +1,69 @@
+/run #605
+
+---
+
+<task-notification>
+<task-id>a2dd666a18211bf27</task-id>
+<tool-use-id>toolu_01UmkcPjR8xgo5zUekjXSrra</tool-use-id>
+<output-file>/tmp/claude-0/REDACTED/c4695859-6134-41d8-896a-a9d71648d14b/tasks/a2dd666a18211bf27.output</output-file>
+<status>completed</status>
+<summary>Agent "Expert review: Bun engineer" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>{
+  "expertRole": "Principal Bun/NodeJS Engineer",
+  "score": 84,
+  "dimensions": {
+    "alignment": 18,
+    "completeness": 15,
+    "typeSafety": 16,
+    "testability": 17,
+    "simplicity": 18
+  },
+  "verdict": "needs-revision",
+  "findings": [
+    "Diff acquisition and bounding are unspecified and this is the main memory risk in the whole builder. Step 2 says 'writes bounded diff to RUNNER_TEMP file' but never says how the diff is fetched or where the byte cap is enforced. A generated-file-heavy PR can produce a diff in the hundreds of MB; buffering `gh pr diff` stdout into a string before truncating violates the repo's own file-operations standard (streams for &gt;100MB) and can OOM the runner. The plan should state the diff is streamed from the subprocess stdout to the temp file with the byte bound enforced during the stream (stop reading/kill the child once the cap is hit), and that recorded 'byte size' is bytes-written plus a truncated flag — not the unknown full size.",
+    "Pagination is handled for exactly one of the three list endpoints. Step 2 paginates `pulls/&lt;n&gt;/files` (per_page=100) but fetches reviews via a single `gh pr view` and inline threads via a single `gh api .../pulls/&lt;n&gt;/comments` call — both endpoints default to 30 items per page. On a long-lived PR, lastReviewedSha is derived from 'the reviewer's latest review commit_id' out of a possibly-truncated review list, which can silently select the wrong SHA and corrupt the re-review delta; unresolved-thread bounds likewise become nondeterministic (bounded from an incomplete page, not from the true set). This directly misses the issue #605 criterion of 'deterministic handling of GitHub pagination'. Reviews and comments need the same paginated loop, or an explicit availability degradation when pagination fails partway.",
+    "No snapshot-consistency guard across the multi-request build, and no stated ordering before truncation. The builder issues several sequential requests (pr view, files pages, comments, compare); a push landing mid-build yields a bundle whose headSha, file list, and diff describe different commits — the skill would then review a coherent-looking but internally inconsistent bundle with no signal. Cheap fix consistent with existing preflight patterns: capture headSha first, re-read it after the last fetch, and on mismatch either rebuild once or emit empty path (fallback). Relatedly, 'bounded list ... truncated flag' for changed files never states the sort order applied before cutting at the bound; without a declared deterministic ordering (e.g., the API's path order, stated explicitly) the truncated subset is not reproducible, which the tests in step 3 cannot pin down.",
+    "The version-1 contract needs an in-payload discriminator and a concrete shape for availability, or the SKILL.md consumption gate is unenforceable. §1.0 says consume 'when present and valid version-1', but the skill is a prompt consuming raw JSON — it can only check a field, so the schema must carry `version: z.literal(1)` in the payload (the contract test pinning 'the version the schema exports' implies but does not require this). Likewise 'per-section availability markers' as parallel flags can drift from section contents; a per-section discriminated union (`{ available: true, ...data } | { available: false, reason }` via z.discriminatedUnion) makes partial failure unrepresentable-wrong and gives the skill one uniform check. The plan should also state whether the schema is .strict() like runSummarySchema, since strict + versioned means every additive field is a version bump — a deliberate choice worth writing down.",
+    "Minor, stacked: (a) the sequential gh call chain inflates the builder-duration telemetry it exists to report — pr view, files pagination, and comments are independent and can run under Promise.all, keeping the request count identical; (b) telemetry surfaces only as a step output plus a notice log line, which satisfies #605 but leaves no machine-readable trail once logs expire — worth one sentence on whether it should also land in the run summary; (c) 'cache use — false until a cache exists' is a speculative field, acceptable only because the origin issue names it."
+  ],
+  "grounding": [
+    "plan text",
+    "Context Map excerpt: relevant files, test conventions, issue #605 acceptance criteria, action.yml review-mode prompt composition",
+    "/root/Sources/awinogradov/code-assistants/.claude/worktrees/REDACTED/.github/actions/code-review-action/src/runSummaryFooter.ts (worktree copy is truncated mid-file; the runSummarySchema strict-Zod pattern cited by the plan is visible and matches the excerpt)",
+    "/root/Sources/awinogradov/code-assistants/.claude/worktrees/REDACTED/.github/actions/code-review-action/src/preflightChecks.ts (worktree copy is a corrupted/truncated stub — env-driven pattern visible but not fully verifiable; I graded pattern claims against the Context Map excerpt instead)",
+    "/root/Sources/awinogradov/code-assistants/.claude/worktrees/REDACTED/.github/actions/code-review-action/src/contextSourceContract.test.ts (worktree copy is a truncated stub — the vacuous-pass-defence convention the plan mirrors is named in its header comment but the full mechanism is unverifiable from this worktree)"
+  ],
+  "revision": {
+    "changed": "Step 2: specify diff fetch as a streamed subprocess pipe to the RUNNER_TEMP file with the byte cap enforced mid-stream (never buffer the full diff); extend the per_page=100 pagination loop to the reviews and inline-comments endpoints before deriving lastReviewedSha and thread bounds; add a headSha consistency check (capture first, re-verify after last fetch, degrade to empty-path fallback on mismatch); state the deterministic ordering applied to the changed-files list before truncation. Step 1: make `version: z.literal(1)` an in-payload field, model per-section availability as z.discriminatedUnion instead of parallel markers, and state whether the schema is .strict(). Step 3: add fixtures for reviews/comments pagination (&gt;30 items) and for head movement mid-build. Step 5: define 'valid version-1' concretely as checking the payload version field."
+  }
+}</result>
+<usage><subagent_tokens>10964</subagent_tokens><tool_uses>0</tool_uses><duration_ms>123518</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bjr9sylz9</task-id>
+<summary>Monitor event: "PR #608 review decision and CI status"</summary>
+<event>state=OPEN decision=REVIEW_REQUIRED failed= pending=4</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bjr9sylz9</task-id>
+<summary>Monitor event: "PR #608 review decision and CI status"</summary>
+<event>state=OPEN decision=REVIEW_REQUIRED failed= pending=1</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bjr9sylz9</task-id>
+<summary>Monitor event: "PR #608 review decision and CI status"</summary>
+<event>state=OPEN decision=APPROVED failed= pending=0</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
