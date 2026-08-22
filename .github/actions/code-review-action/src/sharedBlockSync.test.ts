@@ -55,6 +55,7 @@ const blockSentinels: Record<string, string> = {
   "git-history-policy.md": "git-history",
   "pr-title-grammar.md": "pr-title-grammar",
   "pr-body-grammar.md": "pr-body-grammar",
+  "github-review-fetch.md": "github-review-fetch",
 };
 
 /**
@@ -72,7 +73,6 @@ const retainedCopies: { block: string; file: string; unescapeBackticks?: boolean
     "digest-repo-standards.md",
     "digest-session-history.md",
     "expert-review.md",
-    "fetch-pr-reviews.md",
     "resolve-alert-context.md",
     "resolve-assignees.md",
     "resolve-issue-context.md",

@@ -47,6 +47,7 @@ const removedBlockPhrases: Record<string, string> = {
   "git-history-policy": "Recovering from a base-branch merge",
   "pr-title-grammar": "Release keyword is required, capitalized exactly as shown",
   "pr-body-grammar": "DO NOT use `**Release Notes:**` (capital",
+  "github-review-fetch": "a degraded fetch is NEVER",
 };
 
 const skillDirs = (await readdir(skillsDir, { withFileTypes: true }))

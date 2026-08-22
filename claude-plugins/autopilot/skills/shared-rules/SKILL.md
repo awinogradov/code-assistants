@@ -1,6 +1,6 @@
 ---
 name: shared-rules
-description: Canonical home for instruction blocks shared by several autopilot skills and agents — reference formatting (RFC-0001), AskUserQuestion formatting and content-preview contract, codebase context acquisition (graphify → repomix → default tools), agent structured output, issue body grammar, Linear MCP access, peer CLI delegation, git history policy, and PR title/body grammar. Read the one block you need instead of carrying a copy.
+description: Canonical home for instruction blocks shared by several autopilot skills and agents — reference formatting (RFC-0001), AskUserQuestion formatting and content-preview contract, codebase context acquisition (graphify → repomix → default tools), agent structured output, issue body grammar, Linear MCP access, peer CLI delegation, git history policy, PR title/body grammar, and GitHub review-thread retrieval. Read the one block you need instead of carrying a copy.
 ---
 
 # Shared Rules
@@ -34,5 +34,6 @@ Apply the block's content **verbatim**. It is an instruction, not a summary to p
 | Git history policy               | [git-history-policy.md](./references/git-history-policy.md)             | before running any command that changes history or rewrites a remote branch         |
 | PR title and branch grammar      | [pr-title-grammar.md](./references/pr-title-grammar.md)                 | before generating or validating a PR title or branch name                           |
 | PR body grammar                  | [pr-body-grammar.md](./references/pr-body-grammar.md)                   | before generating or updating a PR description                                      |
+| GitHub review-thread retrieval   | [github-review-fetch.md](./references/github-review-fetch.md)           | before fetching a PR's review threads (invocation and output contract)              |
 
 Blocks are parameterised by the caller where noted (the repomix `includePatterns` value, the Linear tool-name list, the peer CLI specifics, the AskUserQuestion strings): each block file states what the caller supplies.

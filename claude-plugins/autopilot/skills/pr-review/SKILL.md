@@ -58,9 +58,9 @@ gh pr diff <PR_NUMBER> -R <REPO>
 
 Fetch the diff exactly once and review it in-model. Never embed the diff more than once.
 
-This `gh pr view` output is the authoritative source for the PR title/body/diff and prior-review verdicts: `reviews`/`latestReviews` carry each prior review's verdict and summary body (the body lists that round's findings). Per-line inline annotations are NOT in any `gh pr view` field — load them via the read-only `gh api` call the `fetch-pr-reviews` agent makes in [§1.2](#12-load-context-via-sub-agents) (the review action now permits `gh api` GETs; only write forms are blocked). A denied or empty fetch must never be silently treated as "no prior findings" (that path produces an empty, content-free approval).
+This `gh pr view` output is the authoritative source for the PR title/body/diff and prior-review verdicts: `reviews`/`latestReviews` carry each prior review's verdict and summary body (the body lists that round's findings). Per-line inline annotations are NOT in any `gh pr view` field — load them via the deterministic review-thread helper run in [§1.2](#12-load-context-via-sub-agents). A denied or empty fetch must never be silently treated as "no prior findings" (that path produces an empty, content-free approval).
 
-Treat the prior review **bodies** ([§1.1](#11-pr-context)) plus the inline threads loaded by `fetch-pr-reviews` ([§1.2](#12-load-context-via-sub-agents)) as the record of past findings: the review skill writes a self-contained summary body for every non-empty review (see [reviewComment Format](#reviewcomment-format-30-lines-max)), and the inline threads carry the per-line detail. With both loaded, a follow-up review sees exactly what each prior round flagged and where — do not bail when one source is empty; cross-check the other.
+Treat the prior review **bodies** ([§1.1](#11-pr-context)) plus the inline threads loaded by the helper ([§1.2](#12-load-context-via-sub-agents)) as the record of past findings: the review skill writes a self-contained summary body for every non-empty review (see [reviewComment Format](#reviewcomment-format-30-lines-max)), and the inline threads carry the per-line detail. With both loaded, a follow-up review sees exactly what each prior round flagged and where — do not bail when one source is empty; cross-check the other.
 
 ### 1.2 Load Context via Sub-Agents
 
@@ -69,19 +69,16 @@ Extract the linked issue ID from PR metadata. Check in order, stop at first matc
 1. **PR body `Issues:` section** — lines starting with `Closes` or `Related to` followed by a ticket ID; the id may be bare (`#12`, `ENG-123`) or inside a tracker issue URL (`https://linear.app/<workspace>/issue/ENG-123/<slug>`) — extract the `#N` / `KEY-N` token either way
 2. **Branch name** — leading `[a-z]+-[0-9]+` segment, convert to UPPERCASE
 
-Load the remaining context in parallel — the codebase snapshot, the prior inline review threads, and (when an issue is linked) the linked-issue context plus the related TODOs / issue references in the codebase. Prior-review verdicts and summary bodies already come from the [§1.1](#11-pr-context) `gh pr view` output; the `fetch-pr-reviews` agent adds the per-line inline annotations via read-only `gh api`, returning a categorized summary (raw API output stays out of this context).
+Load the remaining context in parallel — the codebase snapshot, the prior inline review threads, and (when an issue is linked) the linked-issue context plus the related TODOs / issue references in the codebase. Prior-review verdicts and summary bodies already come from the [§1.1](#11-pr-context) `gh pr view` output; the deterministic review-thread helper adds the per-line inline annotations in one bounded Bash call, returning a categorized payload (raw API output stays out of this context).
 
-Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the ordered context-acquisition chain; this skill passes the review-scoped `includePatterns` (repomix tier only) shown below.
+Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the ordered context-acquisition chain; this skill passes the review-scoped `includePatterns` (repomix tier only) shown below. Read [`github-review-fetch.md`](../shared-rules/references/github-review-fetch.md) for the review-thread helper invocation and its output contract.
 
 ```
 Acquire codebase context: follow the shared repomix-snapshot chain,
   passing `includePatterns`: ".claude/**, **.md, **.yml, .github/**"
 
-Agent (fetch-pr-reviews):
-  Use the Agent tool with:
-  - `subagent_type`: "autopilot:fetch-pr-reviews"
-  - `prompt`: "Fetch reviews for PR #[PR_NUMBER]. Repo: <REPO>. Author: <PR_AUTHOR>."
-  - `description`: "Fetch PR review threads"
+Fetch review threads: run the shared github-review-fetch helper via Bash
+  with <REPO>, <PR_NUMBER>, and <PR_AUTHOR>
 
 Agent (resolve-issue-context) — only if linked issue found:
   Use the Agent tool with:
@@ -98,9 +95,9 @@ Agent (search-codebase-todos) — only if linked issue found:
 
 If no issue number found, output: "No linked issue — skipping issue comparison" and skip the issue-context agent.
 
-If a `gh` call fails (auth/network error) inside an agent, continue with whatever context loaded — never treat a failed `fetch-pr-reviews` as "no prior findings", and skip issue comparison only when `resolve-issue-context` itself found no issue.
+If a `gh` call fails (auth/network error) inside an agent or the helper reports a non-null `fetchError`, continue with whatever context loaded — never treat a degraded review-thread fetch as "no prior findings" (the shared block defines the degradation fields), and skip issue comparison only when `resolve-issue-context` itself found no issue.
 
-After all calls complete, store the selected context source (and its `outputId` when the repomix tier was selected), the categorized review threads from `fetch-pr-reviews`, the issue context from `resolve-issue-context`, and the TODOs / issue references from `search-codebase-todos`. Use these plus the prior-review verdicts from [§1.1](#11-pr-context) for the round handling below.
+After all calls complete, store the selected context source (and its `outputId` when the repomix tier was selected), the categorized review threads from the helper, the issue context from `resolve-issue-context`, and the TODOs / issue references from `search-codebase-todos`. Use these plus the prior-review verdicts from [§1.1](#11-pr-context) for the round handling below.
 
 **Read the pack, don't dump it.** The context source exists so you can pull _targeted_ context on demand — via its read contract: `graphify` queries on the graph tier, or `grep_repomix_output` (regex + `contextLines`) and `read_repomix_output` with a specific `startLine`/`endLine` slice on the repomix tier. NEVER `read_repomix_output` over the whole range (that loads the entire codebase into context). When the diff is self-contained and needs no cross-file lookup (the common case), don't read the pack at all — pull cross-file context only for checks that need it (e.g. architecture reuse, duplicated logic).
 
@@ -113,7 +110,7 @@ After all calls complete, store the selected context source (and its `outputId` 
 
 **Follow-up review (previous review by REVIEWER exists):**
 
-1. Read all previous review findings from the `reviews`/`latestReviews` bodies ([§1.1](#11-pr-context)) and the per-line inline threads from `fetch-pr-reviews` ([§1.2](#12-load-context-via-sub-agents))
+1. Read all previous review findings from the `reviews`/`latestReviews` bodies ([§1.1](#11-pr-context)) and the per-line inline threads from the review-thread helper ([§1.2](#12-load-context-via-sub-agents))
 2. Check if issues were addressed by re-examining the current diff for each finding named in those bodies
 3. Compare current findings against previous review
 4. **SKIP (no structured JSON)** if: all findings are identical to previous review, OR no new findings and no unresolved issues
@@ -153,7 +150,7 @@ Read the project's own conventions before judging the diff — you enforce them,
 - **PR diff** — changed files and the one-line role of each change ([§1.1](#11-pr-context)).
 - **Linked-issue requirements** — acceptance criteria from `resolve-issue-context` ([§1.2](#12-load-context-via-sub-agents)), or "no linked issue".
 - **Related work** — TODOs and `#<issue>` references in the codebase from `search-codebase-todos` ([§1.2](#12-load-context-via-sub-agents)): flag whether the diff resolves or conflicts with a related TODO, leaves a referenced issue half-addressed, or duplicates work tracked elsewhere; "none" when no issue is linked or none found.
-- **Prior-review findings** — unresolved findings from prior review bodies ([§1.1](#11-pr-context)) and inline threads from `fetch-pr-reviews` ([§1.2](#12-load-context-via-sub-agents)); empty on first review.
+- **Prior-review findings** — unresolved findings from prior review bodies ([§1.1](#11-pr-context)) and inline threads from the review-thread helper ([§1.2](#12-load-context-via-sub-agents)); empty on first review.
 - **Project conventions** — the CLAUDE.md / README / `docs/*` points that bear on the diff ([§1.4](#14-project-context-read-before-reviewing)).
 - **Applicable standards** — name the source first. When the [§1.4](#14-project-context-read-before-reviewing) check-first tier fired: `CODE_REVIEW.md`, plus the rule ids that bear on the diff. Otherwise the discovered inventory: the standards and any `principles/` values selected in [§1.4](#14-project-context-read-before-reviewing), each as id + status (marked "defaulted" when the status was inferred) with a one-line why, plus any dropped candidates; "none" when nothing matched or the sources are absent. This map is the audit log of what was loaded and why.
 - **Codebase pointers** — only the targeted pack-`grep` hits pulled for cross-file checks; "none" when the diff is self-contained.

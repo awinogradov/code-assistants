@@ -67,7 +67,6 @@ code-assistants/
         │   ├── digest-branch-diff.md
         │   ├── digest-repo-standards.md
         │   ├── expert-review.md
-        │   ├── fetch-pr-reviews.md
         │   ├── resolve-alert-context.md
         │   ├── resolve-assignees.md
         │   ├── digest-session-history.md
@@ -370,24 +369,23 @@ The canonical home for instruction blocks several skills need — reference form
 
 ## Agents
 
-### Helper sub-agents (12 agents)
+### Helper sub-agents (11 agents)
 
 Context-isolating workers invoked by other skills to keep the parent conversation small. Each returns a structured summary only.
 
-| Agent                    | Model   | Used by                                | Purpose                                                                                      |
-| ------------------------ | ------- | -------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `analyze-pr-commits`     | sonnet  | `pr-create`, `pr-update`               | Summarize branch commits, diff, and linked issue for PR context                              |
-| `digest-branch-diff`     | haiku   | `gather-context`                       | Summarize a branch's commits and diff against main; detect a stale-merged branch             |
-| `digest-repo-standards`  | sonnet  | `gather-context`                       | Digest the repo's README, docs/, rfc/, and principles/ into a bounded standards summary      |
-| `analyze-staged-changes` | haiku   | `commits-create`                       | Categorize staged files and recommend a commit strategy                                      |
-| `digest-session-history` | haiku   | `plan`, `run`, `explore`               | Map task files and commits to the Entire sessions and checkpoints that produced them         |
-| `expert-review`          | inherit | `plan`, `plan-*`                       | Score an implementation plan as a domain expert                                              |
-| `fetch-pr-reviews`       | sonnet  | `pr-answer`, `pr-resolve`, `pr-review` | Fetch, filter, and categorize PR review comments by severity                                 |
-| `resolve-alert-context`  | sonnet  | `plan`, `run`                          | Fetch GitHub code-scanning alert context via the code-scanning API                           |
-| `resolve-assignees`      | sonnet  | `linear-create`                        | Resolve candidate assignees from CODEOWNERS and Linear team members, current user first      |
-| `resolve-issue-context`  | sonnet  | `plan`, `run`, `pr-review`             | Fetch GitHub/Linear issue context; optionally auto-assign current user (idempotent) via `gh` |
-| `scan-and-analyze-todos` | sonnet  | `todo-cleanup`                         | Scan codebase for TODOs and check linked GitHub issue statuses                               |
-| `search-codebase-todos`  | haiku   | `plan`, `run`, `pr-review`             | Search the codebase for TODOs and references to a specific issue                             |
+| Agent                    | Model   | Used by                    | Purpose                                                                                      |
+| ------------------------ | ------- | -------------------------- | -------------------------------------------------------------------------------------------- |
+| `analyze-pr-commits`     | sonnet  | `pr-create`, `pr-update`   | Summarize branch commits, diff, and linked issue for PR context                              |
+| `digest-branch-diff`     | haiku   | `gather-context`           | Summarize a branch's commits and diff against main; detect a stale-merged branch             |
+| `digest-repo-standards`  | sonnet  | `gather-context`           | Digest the repo's README, docs/, rfc/, and principles/ into a bounded standards summary      |
+| `analyze-staged-changes` | haiku   | `commits-create`           | Categorize staged files and recommend a commit strategy                                      |
+| `digest-session-history` | haiku   | `plan`, `run`, `explore`   | Map task files and commits to the Entire sessions and checkpoints that produced them         |
+| `expert-review`          | inherit | `plan`, `plan-*`           | Score an implementation plan as a domain expert                                              |
+| `resolve-alert-context`  | sonnet  | `plan`, `run`              | Fetch GitHub code-scanning alert context via the code-scanning API                           |
+| `resolve-assignees`      | sonnet  | `linear-create`            | Resolve candidate assignees from CODEOWNERS and Linear team members, current user first      |
+| `resolve-issue-context`  | sonnet  | `plan`, `run`, `pr-review` | Fetch GitHub/Linear issue context; optionally auto-assign current user (idempotent) via `gh` |
+| `scan-and-analyze-todos` | sonnet  | `todo-cleanup`             | Scan codebase for TODOs and check linked GitHub issue statuses                               |
+| `search-codebase-todos`  | haiku   | `plan`, `run`, `pr-review` | Search the codebase for TODOs and references to a specific issue                             |
 
 ## Internal Skills (not in slash menu)
 
@@ -451,6 +449,8 @@ Configure in `.mcp.json` at plugin root:
 ```
 
 The plugin ships one server: `wiretext` (ASCII wireframes). Linear connectivity is consumer-level: interactive skills use a user- or project-configured Linear MCP server (`claude mcp add --transport http linear https://mcp.linear.app/mcp`), while agents and headless runs use a bundled zero-dependency GraphQL helper (`lib/linear/`) keyed by `LINEAR_API_KEY`. See [Linear tracker support](../../docs/11-linear-tracker.md).
+
+GitHub review-thread retrieval is also a bundled zero-dependency helper rather than an agent: [`lib/github/fetch-pr-reviews.mjs`](./lib/github/fetch-pr-reviews.mjs) performs the four bounded, read-only `gh` reads (REST reviews and comments, PR metadata, GraphQL `reviewThreads` resolution state) deterministically and prints one typed JSON payload with telemetry, replacing the delegated `fetch-pr-reviews` agent the `pr-answer`, `pr-resolve`, and `pr-review` skills previously spawned. The invocation and output contract live in the [github-review-fetch shared block](./skills/shared-rules/references/github-review-fetch.md).
 
 ### Versioning
 

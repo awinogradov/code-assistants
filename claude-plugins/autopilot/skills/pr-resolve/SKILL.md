@@ -90,23 +90,20 @@ gh pr diff <PR_NUMBER>
 
 Launch 2 calls **in parallel** to load codebase context and fetch review comments:
 
-Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the ordered context-acquisition chain; this skill passes the review-scoped `includePatterns` (repomix tier only) shown below.
+Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the ordered context-acquisition chain; this skill passes the review-scoped `includePatterns` (repomix tier only) shown below. Read [`github-review-fetch.md`](../shared-rules/references/github-review-fetch.md) for the review-thread helper invocation and its output contract.
 
 ```
 Acquire codebase context: follow the shared repomix-snapshot chain,
   passing `includePatterns`: ".claude/**, **.md, **.yml, .github/**"
 
-Agent 1 (fetch-pr-reviews):
-  Use the Agent tool with:
-  - `subagent_type`: "autopilot:fetch-pr-reviews"
-  - `prompt`: "Fetch reviews for PR #<PR_NUMBER>. Repo: <OWNER>/<REPO>. Author: <AUTHOR_LOGIN>."
-  - `description`: "Fetch PR reviews"
+Fetch review threads: run the shared github-review-fetch helper via Bash
+  with <OWNER>/<REPO>, <PR_NUMBER>, and <AUTHOR_LOGIN>
 ```
 
-After all calls complete:
+After both complete:
 
 - Store the selected context source (and its `outputId` when the repomix tier was selected) — search and read codebase content via that source's read contract during [Phase 3](#phase-3-address-comments-code-fixes) (code fixes)
-- Store the `fetch-pr-reviews` JSON — `reviewState`, the severity-tagged `comments` (each carrying the `commentId` used for replies in [Phase 5](#phase-5-reply-to-review-threads)), and `note` — use in [Phase 2](#phase-2-present-findings-to-user)
+- Store the helper's JSON — `reviewState`, the severity-tagged `comments` (each carrying the `commentId` used for replies in [Phase 5](#phase-5-reply-to-review-threads) and the `authorReplied`/`lastAuthorReply` fields for judging in-model whether a comment is already addressed), and `note` — use in [Phase 2](#phase-2-present-findings-to-user); surface a non-null `fetchError` per the shared block instead of treating the fetch as empty
 
 ### 1.5 Project Rules
 
