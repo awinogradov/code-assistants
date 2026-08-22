@@ -22,6 +22,7 @@
 import { z } from "zod";
 
 import { buildMarkedDetailsBlock } from "./markedDetailsBlock.ts";
+import { contextBuilderTelemetrySchema } from "./reviewContextBundle.ts";
 
 /** Opening marker bounding the run-summary footer, used for dedup stripping. */
 const footerStartMarker = "<!-- run-summary-start -->";
@@ -35,6 +36,18 @@ const footerEndMarker = "<!-- run-summary-end -->";
  * string, and `mode` a known literal, so a malformed value can never reach
  * the rendered markdown.
  */
+/**
+ * Builder telemetry merged with the session-side follow-up/fallback counts by
+ * `runClaude.ts` (issue #605). Optional in the run summary: react/preflight
+ * runs and pre-bundle action versions carry no `context_builder` block.
+ */
+export const contextBuilderSummarySchema = contextBuilderTelemetrySchema
+  .extend({
+    followup_count: z.number().int().nonnegative(),
+    fallback: z.boolean(),
+  })
+  .strict();
+
 export const runSummarySchema = z.object({
   mode: z.enum(["review", "react", "unknown", "preflight"]),
   model: z.string(),
@@ -46,6 +59,7 @@ export const runSummarySchema = z.object({
   cost_usd: z.number(),
   num_turns: z.number(),
   tool_round_trips: z.number(),
+  context_builder: contextBuilderSummarySchema.optional(),
 });
 
 /** Validated per-run summary rendered into the review footer. */
@@ -88,6 +102,16 @@ function buildRows(summary: RunSummary): string[] {
     ["Cost (USD)", `$${summary.cost_usd.toFixed(2)}`],
   ];
 
+  const builder = summary.context_builder;
+  if (builder) {
+    rows.push([
+      "Context bundle",
+      builder.fallback
+        ? "fallback"
+        : `consumed · ${builder.request_count} req · ${(builder.bundle_bytes / 1024).toFixed(1)} kB · ${builder.followup_count} follow-up(s)`,
+    ]);
+  }
+
   return rows.map(([label, value]) => `| ${label} | ${value} |`);
 }
 
@@ -102,6 +126,7 @@ const footerDataPrefix = "<!-- run-summary-data:";
  * `model_ms` is rounded to whole milliseconds to satisfy the integer contract.
  */
 function renderDataComment(summary: RunSummary): string {
+  const builder = summary.context_builder;
   const data = {
     mode: summary.mode,
     modelMs: Math.round(summary.model_ms),
@@ -112,6 +137,23 @@ function renderDataComment(summary: RunSummary): string {
     cacheReadTokens: summary.cache_read_tokens,
     cacheCreationTokens: summary.cache_creation_tokens,
     costUsd: summary.cost_usd,
+    // camelCase like the other keys; absent on runs without a bundle builder
+    // (react/preflight, builder crash) so old footers stay byte-identical.
+    ...(builder
+      ? {
+          contextBuilder: {
+            builderMs: builder.builder_ms,
+            requestCount: builder.request_count,
+            bundleBytes: builder.bundle_bytes,
+            diffBytes: builder.diff_bytes,
+            truncated: builder.truncated,
+            sectionsUnavailable: builder.sections_unavailable,
+            cacheUsed: builder.cache_used,
+            followupCount: builder.followup_count,
+            fallback: builder.fallback,
+          },
+        }
+      : {}),
   };
   return `${footerDataPrefix} ${JSON.stringify(data)} -->`;
 }

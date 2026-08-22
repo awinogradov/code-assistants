@@ -84,7 +84,7 @@ inputs:
     required: false
     default: "https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/pr-review/SKILL.md"
   review_prompt:
-    description: "Leading slash command / prompt for review mode. The action appends the runtime arguments block (REPO, PR_NUMBER, REVIEWER, PR_AUTHOR, RULES_DOC_URL) after this value, so a custom prompt still receives them. Override to run a different review skill without forking the action."
+    description: "Leading slash command / prompt for review mode. The action appends the runtime arguments block (REPO, PR_NUMBER, REVIEWER, PR_AUTHOR, RULES_DOC_URL, CONTEXT_BUNDLE) after this value, so a custom prompt still receives them. Override to run a different review skill without forking the action."
     required: false
     default: "/autopilot:pr-review"
   react_prompt:
@@ -556,6 +556,24 @@ runs:
         RUN_SUMMARY: ${{ steps.explain.outputs.run_summary }}
       run: bun run "${{ github.action_path }}/src/preflightSkipComment.ts"
 
+    # Deterministic startup context bundle (issue #605): one fetch pass replaces the
+    # review session's many small discovery calls. Runs after preflight so check
+    # state is settled. Fail-open — the builder always writes its `path` output
+    # (empty on any failure), and an empty/invalid CONTEXT_BUNDLE value makes the
+    # pr-review skill fall back to its legacy in-session discovery.
+    - name: Build review context
+      id: bundle
+      if: steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.mode == 'review' && steps.preflight.outputs.skip_review != 'true'
+      continue-on-error: true
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.bot_token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ steps.ctx.outputs.pr_number }}
+        REVIEWER: ${{ inputs.reviewer }}
+        JOB_NAME: ${{ github.job }}
+      run: bun run "${{ github.action_path }}/src/buildReviewContext.ts"
+
     - name: Code Review
       id: review
       if: steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.mode == 'review' && steps.preflight.outputs.skip_review != 'true'
@@ -568,7 +586,7 @@ runs:
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude_oauth_token }}
         GH_TOKEN: ${{ inputs.bot_token }}
         CLAUDE_PROMPT: |
-          ${{ inputs.review_prompt }} REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} PR_AUTHOR: ${{ steps.pr.outputs.author }} RULES_DOC_URL: ${{ inputs.rules_doc_url }}
+          ${{ inputs.review_prompt }} REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} PR_AUTHOR: ${{ steps.pr.outputs.author }} RULES_DOC_URL: ${{ inputs.rules_doc_url }} CONTEXT_BUNDLE: ${{ steps.bundle.outputs.path }}
         CLAUDE_RUN_MODE: review
         CLAUDE_MODEL: ${{ inputs.model }}
         # The single Bash(node …) rule permits ONLY the bundled read-only review-thread helper at the
@@ -589,6 +607,9 @@ runs:
         CLAUDE_INSTALL_PLUGINS: ${{ inputs.plugins }}
         CLAUDE_MCP_CONFIG: ${{ steps.mcp.outputs.path }}
         CLAUDE_SETTINGS: ${{ inputs.settings }}
+        # Builder telemetry merged into the run summary (and its footer) so the
+        # cost monitor sees bundle duration/size/truncation per run (issue #605).
+        BUNDLE_TELEMETRY: ${{ steps.bundle.outputs.telemetry }}
         EXECUTION_OUTPUT_FILE: ${{ runner.temp }}/claude-execution-output.json
         LOG_LEVEL: ${{ inputs.debug_logs == 'true' && 'debug' || 'info' }}
       run: bun run "${{ github.action_path }}/src/runClaude.ts"
