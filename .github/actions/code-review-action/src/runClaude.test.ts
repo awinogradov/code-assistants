@@ -9,9 +9,11 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import {
+  buildContextBuilderSummary,
   buildRunSummary,
   buildSdkEnv,
   countToolRoundTrips,
+  countTraceMarker,
   deriveMode,
   detectLinuxLibc,
   extractUsage,
@@ -507,5 +509,70 @@ describe("buildSdkEnv", () => {
     const env = buildSdkEnv({ ANTHROPIC_API_KEY: "k" });
     expect(env.ANTHROPIC_API_KEY).toBe("k");
     expect("ANTHROPIC_AUTH_TOKEN" in env).toBe(false);
+  });
+});
+
+describe("countTraceMarker", () => {
+  const assistantText = (text: string) => ({
+    type: "assistant",
+    message: { content: [{ type: "text", text }] },
+  });
+
+  test("counts marker lines across assistant text blocks", () => {
+    const messages = [
+      assistantText("bundle-followup: diff gh pr diff 5\nprose"),
+      assistantText("more prose\nbundle-followup: threads gh api ..."),
+      { type: "user" },
+      assistantText("no markers here"),
+    ];
+    expect(countTraceMarker(messages, "bundle-followup:")).toBe(2);
+    expect(countTraceMarker(messages, "bundle-fallback:")).toBe(0);
+  });
+
+  test("ignores non-text blocks and malformed messages", () => {
+    expect(
+      countTraceMarker([null, 42, { type: "assistant" }, { type: "assistant", message: {} }], "x"),
+    ).toBe(0);
+  });
+});
+
+describe("buildContextBuilderSummary", () => {
+  const telemetry = {
+    builder_ms: 812,
+    request_count: 6,
+    bundle_bytes: 2048,
+    diff_bytes: 120,
+    truncated: false,
+    sections_unavailable: 0,
+    cache_used: false,
+  };
+  const fallbackMessage = {
+    type: "assistant",
+    message: { content: [{ type: "text", text: "bundle-fallback: invalid-version" }] },
+  };
+
+  test("merges builder telemetry with session follow-up and fallback counts", () => {
+    expect(buildContextBuilderSummary(JSON.stringify(telemetry), [fallbackMessage])).toEqual({
+      ...telemetry,
+      followup_count: 0,
+      fallback: true,
+    });
+  });
+
+  test("fails open on absent, malformed, or schema-invalid telemetry", () => {
+    expect(buildContextBuilderSummary(undefined, [])).toBeUndefined();
+    expect(buildContextBuilderSummary("", [])).toBeUndefined();
+    expect(buildContextBuilderSummary("{not json", [])).toBeUndefined();
+    expect(
+      buildContextBuilderSummary(JSON.stringify({ ...telemetry, builder_ms: "1s" }), []),
+    ).toBeUndefined();
+  });
+
+  test("buildRunSummary carries the block only when telemetry is present", () => {
+    const withBlock = buildRunSummary("review", [], { modelMs: 5 }, "m", JSON.stringify(telemetry));
+    expect(withBlock.context_builder).toEqual({ ...telemetry, followup_count: 0, fallback: false });
+
+    const without = buildRunSummary("review", [], { modelMs: 5 }, "m");
+    expect(without.context_builder).toBeUndefined();
   });
 });

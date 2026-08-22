@@ -203,3 +203,45 @@ describe("buildReviewBody", () => {
     expect(buildReviewBody("", "", false)).toBe(cleanApprovalBody);
   });
 });
+
+describe("context_builder block (issue #605)", () => {
+  const builderSummary: RunSummary = {
+    ...coreSummary,
+    context_builder: {
+      builder_ms: 812,
+      request_count: 6,
+      bundle_bytes: 34917,
+      diff_bytes: 1200,
+      truncated: false,
+      sections_unavailable: 0,
+      cache_used: false,
+      followup_count: 1,
+      fallback: false,
+    },
+  };
+
+  test("parseRunSummary accepts a summary carrying the optional block", () => {
+    expect(parseRunSummary(JSON.stringify(builderSummary))).toEqual(builderSummary);
+  });
+
+  test("parseRunSummary still accepts an old summary without the block", () => {
+    expect(parseRunSummary(JSON.stringify(coreSummary))).toEqual(coreSummary);
+  });
+
+  test("footer renders a Context bundle row and camelCase data-comment fields", () => {
+    const footer = renderRunSummaryFooter(builderSummary);
+    expect(footer).toContain("| Context bundle | consumed · 6 req · 34.1 kB · 1 follow-up(s) |");
+    expect(footer).toContain('"contextBuilder":{"builderMs":812,"requestCount":6');
+    expect(footer).toContain('"followupCount":1,"fallback":false}');
+  });
+
+  test("a fallback run renders as fallback and old summaries add no row", () => {
+    const fallbackSummary: RunSummary = {
+      ...builderSummary,
+      context_builder: { ...builderSummary.context_builder!, fallback: true },
+    };
+    expect(renderRunSummaryFooter(fallbackSummary)).toContain("| Context bundle | fallback |");
+    expect(renderRunSummaryFooter(coreSummary)).not.toContain("Context bundle");
+    expect(renderRunSummaryFooter(coreSummary)).not.toContain("contextBuilder");
+  });
+});
