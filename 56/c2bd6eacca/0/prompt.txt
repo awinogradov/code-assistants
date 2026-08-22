@@ -1,0 +1,340 @@
+/autopilot:run  #604
+
+---
+
+<task-notification>
+<task-id>a51a8657fbedb40f1</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-0/REDACTED/c15cb1a6-ac99-47a5-8613-8d3182569468/tasks/a51a8657fbedb40f1.output</output-file>
+<status>completed</status>
+<summary>Agent "Search codebase TODOs" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>```json
+{
+  "todos": [],
+  "total": 0
+}
+```</result>
+<usage><subagent_tokens>9738</subagent_tokens><tool_uses>3</tool_uses><duration_ms>9458</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>abffcb8d136bd25ac</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-0/REDACTED/c15cb1a6-ac99-47a5-8613-8d3182569468/tasks/abffcb8d136bd25ac.output</output-file>
+<status>completed</status>
+<summary>Agent "Digest branch diff" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>```json
+{
+  "branch": "REDACTED",
+  "commits": [],
+  "files": [],
+  "summary": "Branch is synchronized with origin/main; no unmerged work pending.",
+  "isStaleMerged": false,
+  "baseAhead": 0,
+  "digestError": null
+}
+```</result>
+<usage><subagent_tokens>12482</subagent_tokens><tool_uses>5</tool_uses><duration_ms>12910</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>adfb2d21eafa376e5</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-0/REDACTED/c15cb1a6-ac99-47a5-8613-8d3182569468/tasks/adfb2d21eafa376e5.output</output-file>
+<status>completed</status>
+<summary>Agent "Resolve issue context" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>Assignment verified: `awinogradov` is now assigned.
+
+```json
+{
+  "source": "GitHub Issue #604",
+  "issueId": 604,
+  "title": "Replace fetch-pr-reviews subagent with deterministic GitHub retrieval",
+  "status": "OPEN",
+  "labels": [],
+  "assignee": "@awinogradov (just assigned)",
+  "url": "https://github.com/awinogradov/code-assistants/issues/604",
+  "description": "## Problem\n\nThe code-review path uses the `autopilot:fetch-pr-reviews` delegated agent for deterministic GitHub review-thread retrieval. This adds a separate agent loop for data that can be fetched directly.\n\nIn a seven-day production sample of 394 reviewer sessions:\n\n- 191 delegated `Agent` calls occurred across 114 sessions;\n- delegated-call median was 29.6 seconds and p95 was 127.1 seconds;\n- one representative `fetch-pr-reviews` call took 75 seconds and 13 internal tool calls;\n- sessions using an agent had a 6:03 wall-clock median versus 2:47 without one (association, not a causal estimate).\n\n## Proposed change\n\nReplace the default-path `fetch-pr-reviews` subagent with a typed, bounded GitHub GraphQL/REST helper.\n\nPreserve the information and behavior required by code review:\n\n- unresolved/resolved state;\n- reviewer and author identity;\n- author replies;\n- bot/author filtering;\n- file and line location;\n- pagination;\n- first-review and re-review behavior.\n\nKeep an explicit bounded fallback only if the deterministic API cannot represent a required case. Do not silently fall back to an unbounded agent loop.\n\n## Acceptance criteria\n\n- Normal review-thread retrieval performs no delegated-agent call.\n- The helper returns a typed, bounded payload containing all fields required by the reviewer.\n- Pagination, rate limits, API failures, deleted/outdated comments, and resolved/unresolved threads are covered.\n- Tests prove equivalent review decisions for representative fixtures.\n- Telemetry exposes helper duration, request count, payload size, and fallback use.\n- A production before/after comparison reports review latency and quality guardrails with exact cohort boundaries.\n\n## Target\n\nContribute to a code-review median of 3 minutes or less without reducing review quality.\n\n_Reported from FortuneOS production measurements on behalf of Art._",
+  "comments": []
+}
+```</result>
+<usage><subagent_tokens>18689</subagent_tokens><tool_uses>4</tool_uses><duration_ms>24606</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a5470b5d33853fdcd</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-0/REDACTED/c15cb1a6-ac99-47a5-8613-8d3182569468/tasks/a5470b5d33853fdcd.output</output-file>
+<status>completed</status>
+<summary>Agent "Expert review: Bun engineer" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>{
+  "expertRole": "Principal Bun/NodeJS Engineer",
+  "score": 79,
+  "dimensions": {
+    "completeness": 17,
+    "correctness": 14,
+    "simplicity": 18,
+    "testability": 15,
+    "robustness": 15
+  },
+  "verdict": "revise",
+  "findings": [
+    {
+      "title": "Concatenated-JSON pagination parsing is unspecified — the known core pitfall of this task",
+      "severity": "high",
+      "detail": "The Context Map explicitly flags that `gh api graphql --paginate` emits one JSON object per page concatenated on stdout (not an array), and REST `--paginate` concatenates arrays unless `--slurp` is available. Step 3 just says 'runs the four gh reads via child_process.execFile' and step 1 asserts 'multi-page GraphQL/REST fixtures merge completely', but no step says HOW the helper turns concatenated stdout into merged data. A naive `JSON.parse(stdout)` throws on any multi-page PR, which would silently route every large PR into the degraded `fetchError` path — exactly the PRs where prior-findings fidelity matters most. The GraphQL query also must declare the `$endCursor` variable and thread it into `reviewThreads(first:100, after:$endCursor)` for `--paginate` to work at all; the plan copies the old query shape without stating this.",
+      "suggestion": "Add to step 3 (and mirror in step 1 fixtures): use `gh api --paginate --slurp` where supported with a documented fallback of splitting concatenated top-level JSON values (brace-depth scanner or repeated JSON.parse on remaining input); for GraphQL, state the `$endCursor`-parameterized query and merge `data.repository.pullRequest.reviewThreads.nodes` across page objects."
+    },
+    {
+      "title": "Page-merge logic risks living in the untested CLI layer",
+      "severity": "high",
+      "detail": "Step 2 says the pure module 'takes the four raw payloads' — ambiguous between already-merged data and raw multi-page stdout. If merging happens in `fetch-pr-reviews.mjs` (step 3), the step-1 'multi-page fixtures merge completely' tests cannot exercise the code path the CLI actually runs, since tests import only `reviewThreads.mjs`. The plan's own verify for step 3 is a manual run, so pagination merging — the hardest part — would ship without automated coverage.",
+      "suggestion": "Specify that page-splitting/merging functions (e.g. `parseGhPaginatedJson`, `mergeReviewThreadPages`) are exported from the pure module (or a sibling pure `ghPagination.mjs`) and that the CLI is a thin I/O shell; the multi-page fixtures then test the exact production merge path."
+    },
+    {
+      "title": "execFile defaults will truncate large PRs; no maxBuffer, timeout, or parallelism specified",
+      "severity": "medium",
+      "detail": "`child_process.execFile` defaults to maxBuffer 1 MiB; paginated REST comments plus GraphQL threads on a busy PR can exceed that, throwing ERR_CHILD_PROCESS_STDOUT_MAXBUFFER and needlessly triggering the degraded shape. The plan also implies sequential execution of four independent `gh` reads and sets no timeout, so a hung `gh` (auth prompt, network stall) hangs the skill indefinitely. The linear helpers use global fetch and don't face this, so the pattern being mirrored gives no guidance here.",
+      "suggestion": "In step 3, use `promisify(execFile)` with explicit `maxBuffer` (e.g. 16–32 MiB) and a `timeout`, run the four reads via `Promise.all` (each failure caught into the degraded/fetchError path), and note that only `process.stdout.write` emits output so the single-JSON-object contract holds."
+    },
+    {
+      "title": "telemetry.requestCount is unmeasurable as planned",
+      "severity": "low",
+      "detail": "With `gh --paginate` handling pagination internally, the helper cannot observe per-page HTTP requests; `requestCount` can only honestly mean 'child-process invocations' (4) unless pages are counted from the concatenated output. Issue #604's telemetry acceptance criterion should not be satisfied with a misleading constant.",
+      "suggestion": "Define requestCount as pages observed (count of concatenated top-level JSON values across the paginated calls, plus the two single calls), and state that in step 3 so the metric is deterministic and testable."
+    }
+  ],
+  "grounding": [
+    "plan text (all 10 steps and their verify clauses)",
+    "Context Map excerpt: pagination pitfall note on gh --paginate concatenated output and --slurp behavior",
+    "Context Map excerpt: linear helper pattern (single JSON object on stdout, exit 0, degraded shape with non-null error)",
+    "Context Map excerpt: old agent's output contract, REST/GraphQL matching rules, bot denylist, and test conventions (new reviewThreads.test.ts importing the .mjs module)"
+  ],
+  "revision": "Step 1: add fixtures that are raw concatenated multi-page gh stdout strings (GraphQL page objects and REST array pages), exercising exported parse/merge functions. Step 2: rename input contract to 'four merged payloads' and additionally export `parseGhPaginatedJson(stdout)` and `mergeReviewThreadPages(pages)` (or place them in a sibling pure module) so the CLI contains no parsing logic. Step 3: specify `promisify(execFile)` with explicit maxBuffer (&gt;=16 MiB) and timeout, `Promise.all` across the four reads, the `$endCursor`-parameterized GraphQL query required by `--paginate`, `--slurp` usage with concatenated-output fallback, and define telemetry.requestCount as observed page count. Note: the plan cannot be verified against actual file contents (agents/fetch-pr-reviews.md, sharedBlockSync.test.ts, action.yml) from the provided excerpt; those steps are taken at face value."
+}</result>
+<usage><subagent_tokens>10446</subagent_tokens><tool_uses>0</tool_uses><duration_ms>58633</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a02ef9467ebad614c</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-0/REDACTED/c15cb1a6-ac99-47a5-8613-8d3182569468/tasks/a02ef9467ebad614c.output</output-file>
+<status>completed</status>
+<summary>Agent "Expert review: Pre-mortem" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>{
+  "expertRole": "Pre-mortem Analyst",
+  "score": 78,
+  "dimensions": {
+    "completeness": 16,
+    "correctness": 14,
+    "simplicity": 18,
+    "testability": 17,
+    "robustness": 13
+  },
+  "verdict": "revise",
+  "findings": [
+    {
+      "title": "Failure narrative 1: helper never actually runs inside the code-review action",
+      "severity": "high",
+      "detail": "Six months out, local runs are fast but every CI review round reports fetchError, and because the plan correctly keeps the 'never treat a failed fetch as no prior findings' rule, CI reviews stall or repeat findings. Two independent causes, both unresolved in the plan: (a) the sharedBlockSync retainedCopies mechanism implies the action ships file COPIES of plugin assets rather than installing the plugin, so `${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.mjs` may simply not exist in the action environment — step 7 removes the retainedCopies entry for the old agent but never adds the new helper (and its transform module) to whatever sync/bundle mechanism the action uses; (b) step 8's permission rule hinges on a 'mid-command wildcard form' whose existence the plan itself admits is unvalidated — the cited existing rules (e.g. `Bash(gh api graphql:*)`) are prefix rules, not mid-command wildcards, and permission matching happens against the literal command string, so quoting and the unexpanded-vs-expanded `${CLAUDE_PLUGIN_ROOT}` variants can each fail to match. Early warning sign: step 8's verify (`bun test` on the action) only exercises string config, never a live permission match, so this ships green.",
+      "suggestion": "Add an explicit step: trace how fetch-pr-reviews.md currently reaches the action runtime (the retainedCopies mechanism) and route the new .mjs files through the same channel; make step 8's verify include a real permission-evaluation check or a smoke invocation in the action's test harness, and specify the exact literal command string the skills will emit so the rule can be written against it. If no scoped rule is expressible in the permission grammar, decide the fallback now (e.g. a wrapper invoked via the already-allowed `gh` surface, or an action-local script) rather than discovering it post-merge."
+    },
+    {
+      "title": "Failure narrative 2: 'verbatim' deterministic port of rules that were partly model judgment",
+      "severity": "high",
+      "detail": "The old agent was model-driven; severity mapping (blocker/suggestion/nitpick/question) and comment summarization plausibly relied on model judgment for comments without explicit markers (human reviewers, surviving bots like cubic-dev-ai[bot] don't all emit parseable severity markers). Step 2 says 'port the filter/categorize/match rules verbatim from the agent definition', but the Context Map excerpt does not establish that those rules are fully deterministic, so the plan is unverifiable on this point. Failure mode: months later, unmarked human blockers land as 'question' or a default bucket, pr-resolve deprioritizes them, and nobody notices because fixture tests only cover marked comments. Early warning sign: fixtures in step 1 enumerate marker-mapped cases but no explicit default-severity case for an unmarked comment.",
+      "suggestion": "Before implementation, audit fetch-pr-reviews.md and classify each rule as mechanical vs semantic. Define an explicit default-severity rule for unmarked comments (and a fixture for it), or move severity judgment in-model alongside 'already-addressed' by shipping the raw body and letting the consuming skill classify — mirroring the plan's own authorReplied approach."
+    },
+    {
+      "title": "Failure narrative 3: nested GraphQL pagination and all-or-nothing degradation corrupt resolution/authorReplied on big PRs",
+      "severity": "medium",
+      "detail": "`gh api graphql --paginate` paginates only the top-level connection; comments nested inside each reviewThread node are silently truncated at the requested page size. On long threads the author's acknowledging reply or the resolving context falls outside the first page, so authorReplied is falsely false and path+line matching can misfire — exactly on the large, contentious PRs where correctness matters most. Separately, step 3 makes ANY of the four gh reads failing collapse the entire payload to the degraded shape: one secondary-rate-limit hiccup on the GraphQL read discards three successful REST reads, which is strictly worse partial behavior than the agent it replaces. The acceptance criteria explicitly name pagination and rate limits, so this is in scope, and step 1's 'multi-page GraphQL/REST fixtures merge completely' does not cover nested truncation.",
+      "suggestion": "Add a fixture where a thread's nested comment list is truncated (hasNextPage on the inner connection) and require the helper to either fetch the remainder or mark the thread's derived fields as unknown rather than false. Specify per-read degradation: on GraphQL failure, emit comments from REST with `threadStateUnknown`-style flags and a non-null fetchError scoped to the failed read, instead of an empty payload."
+    },
+    {
+      "title": "Failure narrative 4: 'bounded payload' bounds bodies but not the payload; fallbackUsed is a dead telemetry field",
+      "severity": "medium",
+      "detail": "The acceptance requires a typed BOUNDED payload; the plan bounds each body to 400 chars but places no cap on comment count, so a 400-comment PR yields a payload that bloats the consuming skill's context — the same class of cost the change exists to eliminate, just moved. Meanwhile step 3 hardcodes `fallbackUsed: false`; with the delegated fallback removed there is no code path that ever sets it true, so the telemetry field the issue asks for is unfalsifiable noise, and six months of dashboards will show 0% fallback while fetchError-driven degradation goes unmeasured.",
+      "suggestion": "Add a total cap (comment count or serialized bytes) with an explicit `truncated: true` marker and a fixture proving it, prioritizing unresolved blockers when truncating. Replace fallbackUsed with a field that measures what can actually happen (e.g. degradedReads: string[] or fetchErrorKind), or document why the field exists at all."
+    },
+    {
+      "title": "Failure narrative 5: the allowlist entry quietly re-enables a policy the action explicitly disallows",
+      "severity": "low",
+      "detail": "CLAUDE_DISALLOWED_TOOLS blocks `Bash(gh api graphql:*)`, but the helper runs `gh api graphql` as a child process of an allowed `node` command — permission checks see only the parent command, so the disallow is bypassed by construction. The plan frames this as restoring fidelity (defensible), but it is undocumented policy laundering: a future security tightening pass that audits the disallow list will either miss the bypass or 'fix' it by blocking the helper, silently re-breaking CI thread resolution with no test to catch it.",
+      "suggestion": "In step 8, add a comment in action.yml (and a line in the action's docs) stating that the helper intentionally performs the read-only reviewThreads GraphQL query the direct disallow blocks, so the exception is a reviewed decision rather than an accident."
+    }
+  ],
+  "grounding": [
+    "plan text (all 10 steps, summary, and pre-implementation section)",
+    "Context Map excerpt: issue #604 acceptance criteria (pagination, rate limits, bounded payload, telemetry incl. fallback use)",
+    "Context Map excerpt: lib/linear helper pattern (single JSON, exit 0, degraded shape)",
+    "Context Map excerpt: code-review-action CLAUDE_ALLOWED_TOOLS/CLAUDE_DISALLOWED_TOOLS (Bash(gh api graphql:*) disallowed, no bare node allowed)",
+    "Context Map excerpt: sharedBlockSync.test.ts retainedCopies naming fetch-pr-reviews.md",
+    "Context Map excerpt: agent output contract (severity taxonomy, commentId semantics, path+line matching, denylist, note values)"
+  ],
+  "revision": "1) Insert a new step before step 8: identify the mechanism by which the action obtains plugin files (per sharedBlockSync retainedCopies) and add reviewThreads.mjs + fetch-pr-reviews.mjs to it; extend the action's tests to assert their presence. 2) Rewrite step 8 to name the exact literal command string the skills emit and validate the permission rule against a real permission evaluation (or choose a fallback invocation path now if the grammar cannot scope it); add an action.yml comment documenting the intentional read-only GraphQL exception. 3) Extend step 1 fixtures with: an unmarked human comment (explicit default-severity rule), a reviewThread with a truncated nested comment page, and a payload-cap truncation case. 4) Amend step 3 to degrade per-read (partial payload + scoped fetchError) instead of all-or-nothing, and replace the hardcoded fallbackUsed: false with a field that can actually vary (e.g. degradedReads). 5) In step 2, precede the port with an audit of fetch-pr-reviews.md classifying each rule as mechanical vs semantic, moving any semantic ones in-model alongside authorReplied."
+}</result>
+<usage><subagent_tokens>11650</subagent_tokens><tool_uses>0</tool_uses><duration_ms>87142</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a7af1ba53759e5194</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-0/REDACTED/c15cb1a6-ac99-47a5-8613-8d3182569468/tasks/a7af1ba53759e5194.output</output-file>
+<status>completed</status>
+<summary>Agent "Expert review: DevOps" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>{
+  "expertRole": "Principal DevOps Engineer",
+  "score": 78,
+  "dimensions": {
+    "completeness": 16,
+    "correctness": 14,
+    "simplicity": 18,
+    "testability": 16,
+    "robustness": 14
+  },
+  "verdict": "revise",
+  "findings": [
+    {
+      "title": "Proposed allowlist rule with wildcard before the script path permits arbitrary code execution via node flags",
+      "severity": "high",
+      "detail": "Step 8's example rule `Bash(node * lib/github/fetch-pr-reviews.mjs *:*)` matches any tokens between `node` and the script path. That includes `node -e '&lt;arbitrary js&gt;' lib/github/fetch-pr-reviews.mjs x` or `--require`/`--eval` variants, where the trailing 'script path' is just inert argv — the wildcard rule effectively re-grants general code execution that the current allowlist deliberately withholds (a bare `node` command is not allowed today, per the Context Map). The plan hedges with 'exact syntax validated against the action's permission grammar' but does not commit to a shape that excludes flag injection.",
+      "suggestion": "Pin the rule so no wildcard sits between `node` and the script path; only the trailing arguments should be wildcarded (e.g. a rule anchored on the literal invocation the skill emits, with `:*` for args). Add an action.yml contract test (alongside sharedBlockSync.test.ts-style tests) asserting the allow rule's exact string, so a future 'loosen the glob' edit fails CI."
+    },
+    {
+      "title": "Permission matching is on the literal command string, but the plan never fixes which literal the skills emit in headless CI (CLAUDE_PLUGIN_ROOT vs CLAUDE_PLUGIN_DIR)",
+      "severity": "high",
+      "detail": "Per the Context Map, the helper is invoked as `node \"${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.mjs\" ...` interactively, while the action env sets CLAUDE_PLUGIN_DIR from a plugin-install step output. The Bash permission layer matches the command text as issued, so the allow rule must match whatever literal (unexpanded var reference, quoting included) the pr-review skill instructs in CI — and the plan does not state whether CLAUDE_PLUGIN_ROOT even resolves inside the SDK headless run. If it doesn't, the helper call either fails to match the allow rule or expands to an empty path at runtime. This is unverifiable from the excerpt and is exactly the kind of gap that only surfaces as a silently degraded CI review (helper blocked → skills see no fetch → 'denied fetch is never no prior findings' path).",
+      "suggestion": "Steps 5–6/8 should specify the exact invocation string per environment (or have the skill normalize on one env var the action guarantees, e.g. export CLAUDE_PLUGIN_ROOT=CLAUDE_PLUGIN_DIR in runClaude.ts), and the step-8 verification should include a headless smoke assertion that the allow rule matches that literal."
+    },
+    {
+      "title": "Deliberate permission-layer bypass via child processes is unguarded by any read-only contract test",
+      "severity": "medium",
+      "detail": "The design knowingly exploits that gh calls inside the helper are invisible to the Bash permission layer, tunneling `gh api graphql` past the deny list. That is acceptable for the four read-only calls listed, but nothing in the plan prevents drift: a future edit adding a mutating gh call (`-X POST`, `-f`, `gh pr comment`) inside the helper would silently escape the deny rules whose entire rationale is that submitReview.ts/reactToComment.ts own the submission pipeline.",
+      "suggestion": "Add a test in reviewThreads.test.ts/fetch-pr-reviews scope that asserts every execFile invocation is one of the four whitelisted read commands (or statically greps the helper for write flags), making the read-only property an enforced contract rather than a comment."
+    },
+    {
+      "title": "gh GraphQL pagination and rate-limit behavior unaddressed",
+      "severity": "medium",
+      "detail": "`gh api graphql --paginate` requires the query to declare an `$endCursor` variable and select pageInfo, and it emits concatenated JSON documents per page (needing `--slurp` on modern gh or manual merging) rather than one object — the plan's step 3 treats it as a single JSON read. On large PRs the four paginated reads can also hit GitHub secondary rate limits in CI; the telemetry field records requestCount but the plan specifies no backoff or cap, and 'always exit 0 with fetchError' will mask throttling as a generic degraded fetch.",
+      "suggestion": "Specify the pagination handling (pageInfo/$endCursor in the query, `--slurp` or page-merge logic, covered by a fixture test with a multi-page reviewThreads response) and distinguish rate-limit errors in fetchError so operators can tell throttling from auth failure."
+    },
+    {
+      "title": "Telemetry has no sink in the action, undermining the stated before/after follow-up",
+      "severity": "low",
+      "detail": "Telemetry is printed in the helper's stdout JSON, which is consumed by the model as tool output; nothing in the plan routes it to action logs or the step summary, so the 'production before/after comparison' the summary promises has no data source in CI.",
+      "suggestion": "Have the helper mirror the telemetry line to stderr (visible in Actions logs) or document in step 8 how it will be harvested; otherwise drop the claim from the summary."
+    }
+  ],
+  "grounding": [
+    "plan text (all 10 steps and summary)",
+    "Context Map excerpt: action.yml CLAUDE_ALLOWED_TOOLS/CLAUDE_DISALLOWED_TOOLS values and rationale comment",
+    "Context Map excerpt: CLAUDE_PLUGIN_DIR (action env) vs ${CLAUDE_PLUGIN_ROOT} (interactive) note",
+    "Context Map excerpt: helper description (four gh reads, --paginate REST + graphql, exit-0 degraded shape, telemetry fields)",
+    "Context Map excerpt: action TS test conventions (sharedBlockSync.test.ts retainedCopies listing fetch-pr-reviews.md)"
+  ],
+  "revision": "Step 8: replace the example glob with a committed exact rule containing no wildcard between `node` and the script path, plus an action.yml contract test pinning the rule string. Steps 5–6: state the exact helper invocation literal per environment and resolve the CLAUDE_PLUGIN_ROOT/CLAUDE_PLUGIN_DIR discrepancy (normalize in runClaude.ts env if needed). Step 3: specify GraphQL pagination mechanics ($endCursor/pageInfo, page merging) with a multi-page fixture, classify rate-limit errors distinctly in fetchError, and mirror telemetry to stderr for CI log capture. Steps 1–3: add a read-only contract test over the helper's gh invocations."
+}</result>
+<usage><subagent_tokens>9968</subagent_tokens><tool_uses>0</tool_uses><duration_ms>63988</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a78ff510fd3d19465</task-id>
+<tool-use-id>toolu_01MRCUKPpActQRzsmQ8TagQz</tool-use-id>
+<output-file>/tmp/claude-0/REDACTED/c15cb1a6-ac99-47a5-8613-8d3182569468/tasks/a78ff510fd3d19465.output</output-file>
+<status>completed</status>
+<summary>Agent "Expert review: Tech writer" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>{
+  "expertRole": "Boring Tech Writer",
+  "score": 82,
+  "dimensions": {
+    "completeness": 15,
+    "correctness": 17,
+    "simplicity": 17,
+    "testability": 17,
+    "robustness": 16
+  },
+  "verdict": "revise",
+  "findings": [
+    {
+      "title": "Contract semantics under-specified in the three SKILL.md updates, and only pr-review is keyed on fetchError",
+      "severity": "high",
+      "detail": "The context map states the consuming skills must explain severity meanings, the note enum (null / \"no-comments\" / \"all-resolved\"), and that a non-null fetchError must be surfaced and never read as \"no prior findings\". Steps 5-6 only promise to \"rename contract mentions\" and document authorReplied/lastAuthorReply judgment; the fetchError-never-means-empty rule appears only in step 6 (pr-review). Because the helper always exits 0, the exit code carries no failure signal, so pr-answer and pr-resolve readers get no documented cue that a degraded payload occurred. The plan also never says whether the skills should tell the agent to ignore the telemetry block, leaving three files free to drift into three different partial explanations of one contract.",
+      "suggestion": "In steps 5 and 6, enumerate the exact contract prose each SKILL.md must carry: severity value meanings, the three note states and what each implies for the workflow, the non-null fetchError rule (in all three skills, not just pr-review), and a one-line note that telemetry is diagnostic and not acted on."
+    },
+    {
+      "title": "Duplicated helper-invocation/contract text across three skills instead of routing through the shared-block mechanism",
+      "severity": "medium",
+      "detail": "Step 7 updates sharedBlockSync.test.ts, which implies the repo already synchronizes shared blocks across skill files. Yet steps 5-6 describe hand-editing the same invocation block and contract wording in pr-answer, pr-resolve, and pr-review independently. That is exactly the drift the sync test exists to prevent; the plan does not say whether the new Bash invocation + output-contract section becomes a shared block or three near-copies with per-skill deltas.",
+      "suggestion": "State explicitly that the helper invocation and output-contract description are authored once as a shared block (validated by sharedBlockSync.test.ts), with only the skill-specific interpretation guidance (e.g., already-addressed judgment, round handling) written per file."
+    },
+    {
+      "title": "RFC-0001 link requirements not addressed for the new prose references",
+      "severity": "medium",
+      "detail": "RFC-0001 requires every prose mention of a real repo file to be a resolvable markdown link (fenced command blocks are exempt as code specimens). Steps 5, 6, and 9 add prose mentions of lib/github/fetch-pr-reviews.mjs to three SKILL.md files and the autopilot README, but the plan never states these mentions will be resolvable links, nor that the ${CLAUDE_PLUGIN_ROOT} invocation itself belongs in a fenced block to stay exempt.",
+      "suggestion": "Add to steps 5, 6, and 9: prose references to the helper are markdown links resolvable from each file's location; the invocation command lives in a fenced block."
+    },
+    {
+      "title": "No JSDoc commitment for the two new modules",
+      "severity": "medium",
+      "detail": "CLAUDE.md requires top-level module JSDoc with a usage example on all modules and JSDoc on every exported function (why/how, not what). Steps 2-3 create lib/github/reviewThreads.mjs (exported pure functions) and lib/github/fetch-pr-reviews.mjs (a CLI whose argv contract &lt;owner/repo&gt; &lt;pr&gt; &lt;author&gt; is exactly what a usage example should show) without mentioning documentation at all.",
+      "suggestion": "Add JSDoc deliverables to steps 2-3: module-level JSDoc with a usage example (the CLI's example being the exact invocation line the skills embed), plus JSDoc on each exported transform function."
+    },
+    {
+      "title": "Documentation home for the GitHub helper is unverifiable and possibly asymmetric with the Linear helpers",
+      "severity": "low",
+      "detail": "Step 9 says the README will document the helper \"beside the existing Linear helper description\", but the excerpt only shows the Linear helpers documented in docs/11-linear-tracker.md; I cannot verify the README has such a section. If the Linear helpers' primary documentation lives in docs/, adding the GitHub helper only to the README breaks the parallel structure readers rely on, and step 7's docs sweep only removes stale agent references without adding replacement docs coverage.",
+      "suggestion": "Verify where the Linear helpers are actually described in the README; mirror the Linear pattern for the GitHub helper (README summary plus a docs entry if that is the existing convention), rather than assuming a README-only home."
+    }
+  ],
+  "grounding": [
+    "plan text (steps 1-10 as provided)",
+    "Context Map excerpt: issue #604 task summary and old-agent output-contract field list (body, authorReplied, lastAuthorReply, fetchError, telemetry, note values)",
+    "Context Map excerpt: autopilot README agents-table row for fetch-pr-reviews",
+    "Context Map excerpt: docs/11-linear-tracker.md ${CLAUDE_PLUGIN_ROOT} fallback wording",
+    "Context Map excerpt: RFC-0001 reference-formatting rule",
+    "Context Map excerpt: repo CLAUDE.md JSDoc requirements"
+  ],
+  "revision": "Step 5: expand to 'replace Agent block with a shared fenced Bash invocation block; document severity meanings, all three note states, telemetry-is-diagnostic, and the non-null fetchError rule in pr-answer and pr-resolve as well; all prose file mentions are resolvable markdown links per RFC-0001'. Step 6: note the shared block is reused, with pr-review-specific round-handling text kept local. Steps 2-3: add 'module-level JSDoc with usage example and JSDoc on exported functions'. Step 9: add 'confirm the README's existing Linear-helper location first; mirror that pattern (README plus docs/ entry if that is where Linear helpers are documented), linking lib/github/fetch-pr-reviews.mjs per RFC-0001'."
+}</result>
+<usage><subagent_tokens>9128</subagent_tokens><tool_uses>0</tool_uses><duration_ms>53510</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>byy94gwh2</task-id>
+<tool-use-id>toolu_01XQ17yKT3Qvce4tnEmtXtyS</tool-use-id>
+<output-file>/tmp/claude-0/REDACTED/c15cb1a6-ac99-47a5-8613-8d3182569468/tasks/byy94gwh2.output</output-file>
+<status>completed</status>
+<summary>Background command "Run repo-wide test suite via turbo" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>by70w0m4p</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-0/REDACTED/c15cb1a6-ac99-47a5-8613-8d3182569468/tasks/by70w0m4p.output</output-file>
+<status>completed</status>
+<summary>Background command "Rerun full turbo test suite with neutral git config" completed (exit code 0)</summary>
+</task-notification>

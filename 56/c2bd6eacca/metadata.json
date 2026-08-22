@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "56c2bd6eacca",
+  "strategy": "manual-commit",
+  "branch": "issue-604-deterministic-review-fetch",
+  "checkpoints_count": 9,
+  "files_touched": [
+    ".github/actions/code-review-action/action.yml",
+    ".github/actions/code-review-action/src/helperAllowlist.test.ts",
+    ".github/actions/code-review-action/src/sharedBlockSync.test.ts",
+    ".github/actions/code-review-action/src/sharedRulesInvocation.test.ts",
+    "claude-plugins/autopilot/README.md",
+    "claude-plugins/autopilot/skills/pr-answer/SKILL.md",
+    "claude-plugins/autopilot/skills/pr-resolve/SKILL.md",
+    "claude-plugins/autopilot/skills/pr-review/SKILL.md",
+    "claude-plugins/autopilot/skills/shared-rules/SKILL.md",
+    "claude-plugins/autopilot/skills/shared-rules/references/github-review-fetch.md",
+    "docs/13-shared-rules-skill.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/56/c2bd6eacca/0/metadata.json",
+      "transcript": "/56/c2bd6eacca/0/full.jsonl",
+      "compact_transcript": "/56/c2bd6eacca/0/transcript.jsonl",
+      "content_hash": "/56/c2bd6eacca/0/content_hash.txt",
+      "prompt": "/56/c2bd6eacca/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 266,
+    "cache_creation_tokens": 321016,
+    "cache_read_tokens": 28217514,
+    "output_tokens": 119091,
+    "api_call_count": 134
+  }
+}
