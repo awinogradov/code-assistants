@@ -1,0 +1,38 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "a0b8dae2cc65",
+  "strategy": "manual-commit",
+  "branch": "issue-604-deterministic-review-fetch",
+  "checkpoints_count": 9,
+  "files_touched": [
+    "claude-plugins/autopilot/lib/github/fetch-pr-reviews.mjs",
+    "claude-plugins/autopilot/lib/github/reviewThreads.mjs",
+    "claude-plugins/autopilot/lib/github/reviewThreads.test.ts",
+    "claude-plugins/autopilot/package.json",
+    "docs/01-workspace-structure.md",
+    "turbo.json"
+  ],
+  "sessions": [
+    {
+      "metadata": "/a0/b8dae2cc65/0/metadata.json",
+      "transcript": "/a0/b8dae2cc65/0/full.jsonl",
+      "compact_transcript": "/a0/b8dae2cc65/0/transcript.jsonl",
+      "content_hash": "/a0/b8dae2cc65/0/content_hash.txt",
+      "prompt": "/a0/b8dae2cc65/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 264,
+    "cache_creation_tokens": 320380,
+    "cache_read_tokens": 27897134,
+    "output_tokens": 118710,
+    "api_call_count": 133,
+    "subagent_tokens": {
+      "input_tokens": 88,
+      "cache_creation_tokens": 98627,
+      "cache_read_tokens": 187042,
+      "output_tokens": 8086,
+      "api_call_count": 21
+    }
+  }
+}
