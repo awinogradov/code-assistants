@@ -180,6 +180,7 @@ The content is organized as follows:
         graphifyEvidenceContract.test.ts
         graphifyEvidenceFixture.test.ts
         graphifyRefinementContract.test.ts
+        helperAllowlist.test.ts
         linearPlanContract.test.ts
         linkResolution.test.ts
         logClaudeMessage.test.ts
@@ -501,13 +502,16 @@ claude-plugins/
       digest-repo-standards.md
       digest-session-history.md
       expert-review.md
-      fetch-pr-reviews.md
       resolve-alert-context.md
       resolve-assignees.md
       resolve-issue-context.md
       scan-and-analyze-todos.md
       search-codebase-todos.md
     lib/
+      github/
+        fetch-pr-reviews.ts
+        reviewThreads.test.ts
+        reviewThreads.ts
       linear/
         fetch-issue.mjs
         fetch-team-members.mjs
@@ -675,6 +679,7 @@ claude-plugins/
           askuserquestion-contract.md
           askuserquestion-format.md
           git-history-policy.md
+          github-review-fetch.md
           issue-body-grammar.md
           linear-mcp-access.md
           peer-cli-delegation.md
@@ -691,6 +696,7 @@ claude-plugins/
     MIGRATING.md
     package.json
     README.md
+    tsconfig.json
     version
 docs/
   01-workspace-structure.md
@@ -11469,6 +11475,74 @@ describe("consumers record the shortlist", () => {
 });
 </file>
 
+<file path=".github/actions/code-review-action/src/helperAllowlist.test.ts">
+/**
+ * Pins the review-thread helper's Bash allow rule in action.yml. The helper
+ * (claude-plugins/autopilot/lib/github/fetch-pr-reviews.ts) tunnels a read-only
+ * `gh api graphql` reviewThreads query past the Bash-layer graphql disallow — a
+ * deliberate exception that stays safe only while the single allow rule pins the
+ * script to the literal `${CLAUDE_PLUGIN_ROOT}` path (the trusted installed
+ * plugin, set from steps.plugin.outputs.dir). An absolute-path wildcard such as
+ * `node /*…/fetch-pr-reviews.ts` would also match the reviewed PR's own untrusted
+ * checkout of that file, granting arbitrary Node execution with secrets in scope
+ * (CHECK-SEC-003); this test fails the moment such a rule reappears.
+ */
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
+import { describe, expect, test } from "bun:test";
+
+const actionYmlPath = join(import.meta.dirname, "..", "action.yml");
+const actionYml = await readFile(actionYmlPath, "utf8");
+
+const allowedToolsLines = actionYml
+  .split("\n")
+  .filter((line) => line.includes("CLAUDE_ALLOWED_TOOLS:"));
+
+/** The one safe rule — the script is pinned to the literal ${CLAUDE_PLUGIN_ROOT} path. */
+const pinnedHelperRule =
+  'Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.ts":*)';
+
+describe("review-thread helper allowlist", () => {
+  test("both Claude steps declare an allowlist", () => {
+    expect(allowedToolsLines).toHaveLength(2);
+  });
+
+  test.each(allowedToolsLines.map((line, index) => [index, line] as const))(
+    "allowlist %d carries the pinned helper rule",
+    (_index, line) => {
+      expect(line).toContain(pinnedHelperRule);
+    },
+  );
+
+  test("every step that allows the helper also exports CLAUDE_PLUGIN_ROOT", () => {
+    // The literal ${CLAUDE_PLUGIN_ROOT} in the rule only resolves to the trusted
+    // installed plugin when the env var is set; without it the helper path would
+    // fall back to an untrusted location.
+    const rootExports = actionYml
+      .split("\n")
+      .filter((line) => line.includes("CLAUDE_PLUGIN_ROOT:")).length;
+    expect(rootExports).toBe(allowedToolsLines.length);
+  });
+
+  test("no absolute-path or wildcard node rule exists in any tools declaration", () => {
+    const toolsLines = actionYml
+      .split("\n")
+      .filter(
+        (line) =>
+          line.includes("CLAUDE_ALLOWED_TOOLS:") || line.includes("CLAUDE_DISALLOWED_TOOLS:"),
+      );
+    const nodeRules = toolsLines.flatMap((line) => line.match(/Bash\(node[^)]*\)/g) ?? []);
+    // The ONLY permitted node rule is the ${CLAUDE_PLUGIN_ROOT}-anchored one. An
+    // absolute-path (`node /…`) or wildcard (`node /*…`) rule would also match the
+    // reviewed PR's own checkout of the helper file — CHECK-SEC-003.
+    for (const rule of nodeRules) {
+      expect(rule).toBe(pinnedHelperRule);
+    }
+  });
+});
+</file>
+
 <file path=".github/actions/code-review-action/src/linearPlanContract.test.ts">
 /**
  * Guards the contract between `linear-plan`, which stores an implementation plan in a
@@ -16482,6 +16556,7 @@ const blockSentinels: Record<string, string> = {
   "git-history-policy.md": "git-history",
   "pr-title-grammar.md": "pr-title-grammar",
   "pr-body-grammar.md": "pr-body-grammar",
+  "github-review-fetch.md": "github-review-fetch",
 };
 
 /**
@@ -16499,7 +16574,6 @@ const retainedCopies: { block: string; file: string; unescapeBackticks?: boolean
     "digest-repo-standards.md",
     "digest-session-history.md",
     "expert-review.md",
-    "fetch-pr-reviews.md",
     "resolve-alert-context.md",
     "resolve-assignees.md",
     "resolve-issue-context.md",
@@ -16622,6 +16696,7 @@ const removedBlockPhrases: Record<string, string> = {
   "git-history-policy": "Recovering from a base-branch merge",
   "pr-title-grammar": "Release keyword is required, capitalized exactly as shown",
   "pr-body-grammar": "DO NOT use `**Release Notes:**` (capital",
+  "github-review-fetch": "a degraded fetch is NEVER",
 };
 
 const skillDirs = (await readdir(skillsDir, { withFileTypes: true }))
@@ -18085,10 +18160,18 @@ runs:
           ${{ inputs.review_prompt }} REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} PR_AUTHOR: ${{ steps.pr.outputs.author }} RULES_DOC_URL: ${{ inputs.rules_doc_url }}
         CLAUDE_RUN_MODE: review
         CLAUDE_MODEL: ${{ inputs.model }}
-        CLAUDE_ALLOWED_TOOLS: "Bash(gh:*),mcp__repomix__*,mcp__context7__*,mcp__Ref__*,mcp__exa__*,mcp__perplexity__*,Read,Glob,Grep"
+        # The single Bash(node …) rule permits ONLY the bundled read-only review-thread helper at the
+        # literal ${CLAUDE_PLUGIN_ROOT} path (set below from the trusted plugin-install output), so it can
+        # never match the reviewed PR's own checkout of that file — no absolute-path wildcard, no -e/--require
+        # flag injection. The helper intentionally performs the read-only reviewThreads GraphQL query that the
+        # direct Bash(gh api graphql:*) disallow blocks — a reviewed exception, not an accident.
+        CLAUDE_ALLOWED_TOOLS: 'Bash(gh:*),Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.ts":*),mcp__repomix__*,mcp__context7__*,mcp__Ref__*,mcp__exa__*,mcp__perplexity__*,Read,Glob,Grep'
         CLAUDE_DISALLOWED_TOOLS: "Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh issue comment:*),Bash(gh api * -X *:*),Bash(gh api * --method *:*),Bash(gh api * -f *:*),Bash(gh api * -F *:*),Bash(gh api * --field *:*),Bash(gh api * --raw-field *:*),Bash(gh api * --input *:*),Bash(gh api graphql:*)"
         CLAUDE_JSON_SCHEMA: '{"type":"object","properties":{"verdict":{"type":"string","enum":["approve","requestChanges","comment"]},"reviewComment":{"type":"string"},"inlineComments":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"},"body":{"type":"string"},"startLine":{"type":"integer"},"suggestion":{"type":"string"}},"required":["path","line","body"]}}},"required":["verdict","reviewComment"]}'
         CLAUDE_PLUGIN_DIR: ${{ steps.plugin.outputs.dir }}
+        # Resolve ${CLAUDE_PLUGIN_ROOT} in the helper invocation to the trusted installed plugin dir so the
+        # anchored allowlist rule matches and the path never falls back to an untrusted checkout.
+        CLAUDE_PLUGIN_ROOT: ${{ steps.plugin.outputs.dir }}
         # Register/install the marketplaces + plugins requested via inputs; the SDK is cache-only without this.
         CLAUDE_CODE_SYNC_PLUGIN_INSTALL: "1"
         CLAUDE_INSTALL_MARKETPLACES: ${{ inputs.marketplaces }}
@@ -18196,10 +18279,18 @@ runs:
           ${{ inputs.react_prompt }} REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} PR_AUTHOR: ${{ github.event.pull_request.user.login || github.event.issue.user.login }} COMMENT_BODY: ${{ steps.ctx.outputs.comment_body }} COMMENT_PATH: ${{ steps.ctx.outputs.comment_path }} COMMENT_LINE: ${{ steps.ctx.outputs.comment_line }} NEEDS_REVERDICT: ${{ steps.classify.outputs.needs_reverdict }} RULES_DOC_URL: ${{ inputs.rules_doc_url }}
         CLAUDE_RUN_MODE: react
         CLAUDE_MODEL: ${{ inputs.model }}
-        CLAUDE_ALLOWED_TOOLS: "Bash(gh:*),mcp__repomix__*,mcp__context7__*,mcp__Ref__*,mcp__exa__*,mcp__perplexity__*,Read,Glob,Grep"
+        # The single Bash(node …) rule permits ONLY the bundled read-only review-thread helper at the
+        # literal ${CLAUDE_PLUGIN_ROOT} path (set below from the trusted plugin-install output), so it can
+        # never match the reviewed PR's own checkout of that file — no absolute-path wildcard, no -e/--require
+        # flag injection. The helper intentionally performs the read-only reviewThreads GraphQL query that the
+        # direct Bash(gh api graphql:*) disallow blocks — a reviewed exception, not an accident.
+        CLAUDE_ALLOWED_TOOLS: 'Bash(gh:*),Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.ts":*),mcp__repomix__*,mcp__context7__*,mcp__Ref__*,mcp__exa__*,mcp__perplexity__*,Read,Glob,Grep'
         CLAUDE_DISALLOWED_TOOLS: "Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh issue comment:*),Bash(gh api * -X *:*),Bash(gh api * --method *:*),Bash(gh api * -f *:*),Bash(gh api * -F *:*),Bash(gh api * --field *:*),Bash(gh api * --raw-field *:*),Bash(gh api * --input *:*),Bash(gh api graphql:*)"
         CLAUDE_JSON_SCHEMA: '{"type":"object","properties":{"reply":{"type":"string"},"resolveComments":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"}},"required":["path","line"]}},"updatedVerdict":{"type":["string","null"],"enum":["approve","requestChanges","comment",null]},"updatedReviewComment":{"type":["string","null"]}},"required":["reply"]}'
         CLAUDE_PLUGIN_DIR: ${{ steps.plugin.outputs.dir }}
+        # Resolve ${CLAUDE_PLUGIN_ROOT} in the helper invocation to the trusted installed plugin dir so the
+        # anchored allowlist rule matches and the path never falls back to an untrusted checkout.
+        CLAUDE_PLUGIN_ROOT: ${{ steps.plugin.outputs.dir }}
         # Register/install the marketplaces + plugins requested via inputs; the SDK is cache-only without this.
         CLAUDE_CODE_SYNC_PLUGIN_INSTALL: "1"
         CLAUDE_INSTALL_MARKETPLACES: ${{ inputs.marketplaces }}
@@ -47187,140 +47278,6 @@ Do not output intermediate reasoning, analysis steps, or commentary — only the
 The parent [discards a review whose grounding does not support its findings](../skills/plan/references/pipeline.md#review-and-score-task-4) rather than averaging it into the score, so an invented source costs the whole review rather than passing unnoticed.
 </file>
 
-<file path="claude-plugins/autopilot/agents/fetch-pr-reviews.md">
----
-name: fetch-pr-reviews
-description: Fetch, filter, and categorize PR review comments by severity. Use when PR skills need categorized review feedback without raw API output in context.
-tools: Bash
-model: sonnet
----
-
-You are a PR review fetcher. Fetch review comments from GitHub, filter out noise, categorize by severity, and return a structured summary. Do not output intermediate steps — only the final structured block.
-
-## Input
-
-The invoking skill provides in the prompt:
-
-- **Repository** in `owner/repo` format (e.g., `awinogradov/code-assistants`)
-- **PR number**
-- **PR author login** (for filtering author's own comments)
-
-## Phase 1: Fetch
-
-Run in parallel:
-
-```bash
-# Get all reviews
-gh api repos/<OWNER>/<REPO>/pulls/<PR_NUMBER>/reviews
-
-# Get all inline review comments
-gh api repos/<OWNER>/<REPO>/pulls/<PR_NUMBER>/comments
-```
-
-Also fetch PR metadata:
-
-```bash
-gh pr view <PR_NUMBER> -R <OWNER>/<REPO> --json title,author,reviewDecision,reviewRequests
-```
-
-Fetch review-thread resolution state — this is the source of truth for "is this comment resolved", paginating past the 100-node page so long PRs don't silently drop threads (`--paginate` follows `$endCursor` automatically):
-
-```bash
-gh api graphql --paginate -F owner=<OWNER> -F repo=<REPO> -F pr=<PR_NUMBER> -f query='
-  query($owner: String!, $repo: String!, $pr: Int!, $endCursor: String) {
-    repository(owner: $owner, name: $repo) {
-      pullRequest(number: $pr) {
-        reviewThreads(first: 100, after: $endCursor) {
-          nodes { path line isResolved isOutdated comments(first: 1) { nodes { author { login } body } } }
-          pageInfo { hasNextPage endCursor }
-        }
-      }
-    }
-  }'
-```
-
-## Phase 2: Filter
-
-Remove from processing:
-
-- **Resolved threads** — drop a comment when its review thread has `isResolved: true`. Match the REST comment to a `reviewThreads` node by `path` + `line`, disambiguating with the thread's first-comment author/body when several threads share a file (outdated threads report `line: null`, so never merge distinct threads on a `(path, null)` key). Treat `isOutdated: true` as **informational only** — the diff line moved, but an unresolved outdated comment is still actionable, so keep it. Do NOT use REST `position: null` as a resolved signal (it only means the line is outdated).
-- **CI/automation bots only** — drop a comment only when its author login is in the CI-bot denylist: `github-actions[bot]`, `dependabot[bot]`, `codecov[bot]`, `coderabbitai[bot]` (extend as the repo needs). Do NOT drop by the generic `[bot]` suffix — real review bots such as `cubic-dev-ai[bot]` and `symbiot-bot` must survive.
-- **PR author's own comments** — these are responses, not review items
-- **Already-addressed comments** — threads where the PR author has replied acknowledging the fix
-
-## Phase 3: Categorize
-
-Parse each remaining comment and categorize by severity:
-
-**Blockers:**
-
-- Comments from reviews with `state: "CHANGES_REQUESTED"`
-- Comments containing blocker markers: `🚧`, `blocker`, `must fix`, `blocking`
-- Comments explicitly requesting changes
-
-**Suggestions:**
-
-- Comments containing suggestion markers: `🙋‍♂️`, `suggestion`, `consider`, `should`
-- Non-blocking improvement requests
-
-**Nitpicks:**
-
-- Comments containing nitpick markers: `💡`, `nitpick`, `nit`, `minor`, `optional`
-- Style or naming preferences
-
-**Questions:**
-
-- Comments that ask a question or request explanation
-- Comments that don't request a code change
-
-Group comments by file path and sort within each file by line number.
-
-## Phase 4: Output
-
-<!-- agent-json:start -->
-
-Output ONLY a single JSON object matching the schema below — no preamble, no surrounding code fence, no commentary. The parent parses it directly, so any extra text breaks consumption.
-
-<!-- agent-json:end -->
-
-| Field         | Type           | Constraint                                                                                                                                                                                                                                                                                  |
-| ------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pr`          | integer        | PR number                                                                                                                                                                                                                                                                                   |
-| `title`       | string         | PR title                                                                                                                                                                                                                                                                                    |
-| `author`      | string         | PR author login, without `@`                                                                                                                                                                                                                                                                |
-| `reviewState` | string         | `APPROVED` \| `CHANGES_REQUESTED` \| `REVIEW_REQUIRED` \| `PENDING`                                                                                                                                                                                                                         |
-| `reviewers`   | object[]       | `{ "login": string, "state": string }` per reviewer; `[]` when none                                                                                                                                                                                                                         |
-| `comments`    | object[]       | `{ "commentId": number, "path": string, "line": number \| null, "reviewer": string, "severity": "blocker" \| "suggestion" \| "nitpick" \| "question", "summary": string }` per surviving comment, grouped by `path` and sorted by `line` per [Phase 3](#phase-3-categorize); `[]` when none |
-| `note`        | string \| null | `null` when `comments` is non-empty; `"no-comments"` when no unresolved comments were found; `"all-resolved"` when every review comment is resolved                                                                                                                                         |
-
-`commentId` is the REST review-comment `id` from the `/comments` payload — the parent replies to specific threads with it; the GraphQL `reviewThreads` query is used only to read `isResolved`/`isOutdated`, not for comment IDs. `line` is `null` for an outdated thread whose diff line moved.
-
-Example:
-
-```json
-{
-  "pr": 238,
-  "title": "Rerun review on PR description edits",
-  "author": "awinogradov",
-  "reviewState": "CHANGES_REQUESTED",
-  "reviewers": [{ "login": "symbiot-bot", "state": "CHANGES_REQUESTED" }],
-  "comments": [
-    {
-      "commentId": 2154433001,
-      "path": ".github/workflows/code-review.yml",
-      "line": 12,
-      "reviewer": "symbiot-bot",
-      "severity": "blocker",
-      "summary": "Scope cancel-in-progress to non-edited events"
-    }
-  ],
-  "note": null
-}
-```
-
-Emit the raw object, not the fenced form.
-</file>
-
 <file path="claude-plugins/autopilot/agents/resolve-alert-context.md">
 ---
 name: resolve-alert-context
@@ -47785,6 +47742,861 @@ Example:
 ```
 
 When no matches are found, emit `{ "todos": [], "total": 0 }`. Emit the raw object, not the fenced form.
+</file>
+
+<file path="claude-plugins/autopilot/lib/github/fetch-pr-reviews.ts">
+#!/usr/bin/env node
+// Fetches a PR's review threads deterministically and prints the typed review
+// contract to stdout. Invoked by the pr-answer, pr-resolve, and pr-review
+// skills in place of the retired fetch-pr-reviews delegated agent — one bounded
+// Bash call instead of a model-driven loop.
+//
+// Runs under Node's native type stripping (Node >=24) — no build step; the file
+// ships as source at ${CLAUDE_PLUGIN_ROOT}/lib/github/.
+//
+// Usage:  node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.ts" <owner/repo> <pr-number> <pr-author>
+//
+// Always exits 0 and always prints a single JSON object. Reads degrade
+// independently: a failed GraphQL read never discards successful REST reads —
+// the payload is built from whatever loaded, `fetchError` names what failed
+// (distinguishing rate limiting), and `telemetry.degradedReads` lists the
+// failed reads so consumers never mistake a degraded fetch for "no findings".
+// The one-line telemetry summary is mirrored to stderr for CI logs.
+
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+import {
+  buildGhReadCommands,
+  buildReviewPayload,
+  mergeReviewThreadPages,
+  parseGhPaginatedJson,
+} from "./reviewThreads.ts";
+import type {
+  RestComment,
+  Review,
+  ReviewMeta,
+  ReviewPayload,
+  ThreadPage,
+} from "./reviewThreads.ts";
+
+interface Telemetry {
+  durationMs: number;
+  requestCount: number;
+  payloadBytes: number;
+  degradedReads: string[];
+}
+
+type HelperOutput = ReviewPayload & { fetchError: string | null; telemetry: Telemetry };
+
+interface ReadResult<T> {
+  documents: T[];
+  error: string | null;
+}
+
+const execFileAsync = promisify(execFile);
+const ghOptions = { maxBuffer: 32 * 1024 * 1024, timeout: 120_000 };
+
+const degradedReason = (error: unknown): string => {
+  const e = error as { stderr?: string; message?: string };
+  const stderr = (e.stderr ?? e.message ?? "").split("\n")[0].slice(0, 200);
+  const isRateLimit = /rate limit|secondary rate/i.test(e.stderr ?? "");
+  return isRateLimit ? `rate limited — ${stderr}` : stderr || "gh invocation failed";
+};
+
+async function ghRead<T>(args: string[]): Promise<ReadResult<T>> {
+  try {
+    const { stdout } = await execFileAsync("gh", args, ghOptions);
+    return { documents: parseGhPaginatedJson<T>(stdout.toString()), error: null };
+  } catch (error) {
+    return { documents: [], error: degradedReason(error) };
+  }
+}
+
+async function main(): Promise<HelperOutput> {
+  const startedAt = Date.now();
+  const [repoArg, prArg, authorArg] = process.argv.slice(2);
+  const [owner, repo] = (repoArg ?? "").split("/");
+  const pr = Number.parseInt(prArg ?? "", 10);
+
+  if (!owner || !repo || Number.isNaN(pr) || !authorArg) {
+    return {
+      ...buildReviewPayload({
+        pr: pr || 0,
+        author: authorArg ?? "",
+        meta: null,
+        reviews: [],
+        comments: [],
+        threads: [],
+      }),
+      fetchError:
+        "usage: fetch-pr-reviews.ts <owner/repo> <pr-number> <pr-author> — arguments missing or invalid",
+      telemetry: { durationMs: 0, requestCount: 0, payloadBytes: 0, degradedReads: [] },
+    };
+  }
+
+  const reads = buildGhReadCommands({ owner, repo, pr });
+  const [reviews, comments, meta, threads] = await Promise.all([
+    ghRead<Review[]>(reads.reviews),
+    ghRead<RestComment[]>(reads.comments),
+    ghRead<ReviewMeta>(reads.meta),
+    ghRead<ThreadPage>(reads.threads),
+  ]);
+
+  const payload = buildReviewPayload({
+    pr,
+    author: authorArg,
+    meta: meta.documents[0] ?? null,
+    reviews: reviews.documents.flat(),
+    comments: comments.documents.flat(),
+    // A failed threads read leaves resolution state unknown: comments are kept
+    // (never silently dropped as resolved) and the degradation is reported.
+    threads: mergeReviewThreadPages(threads.documents),
+  });
+
+  const named: { name: string; read: ReadResult<unknown> }[] = [
+    { name: "reviews", read: reviews },
+    { name: "comments", read: comments },
+    { name: "meta", read: meta },
+    { name: "reviewThreads", read: threads },
+  ];
+  const failures = named
+    .filter(({ read }) => read.error !== null)
+    .map(({ name, read }) => ({ name, error: read.error }));
+
+  const requestCount =
+    reviews.documents.length + comments.documents.length + threads.documents.length + 1;
+
+  return {
+    ...payload,
+    fetchError: failures.length
+      ? failures.map(({ name, error }) => `${name}: ${error}`).join("; ")
+      : null,
+    telemetry: {
+      durationMs: Date.now() - startedAt,
+      requestCount,
+      payloadBytes: Buffer.byteLength(JSON.stringify(payload)),
+      degradedReads: failures.map(({ name }) => name),
+    },
+  };
+}
+
+const output = await main();
+process.stderr.write(`fetch-pr-reviews telemetry: ${JSON.stringify(output.telemetry)}\n`);
+process.stdout.write(JSON.stringify(output));
+</file>
+
+<file path="claude-plugins/autopilot/lib/github/reviewThreads.test.ts">
+import { describe, expect, test } from "bun:test";
+
+import {
+  buildGhReadCommands,
+  buildReviewPayload,
+  mergeReviewThreadPages,
+  parseGhPaginatedJson,
+} from "./reviewThreads.ts";
+import type {
+  RestComment,
+  Review,
+  ReviewMeta,
+  ReviewThread,
+  ThreadPage,
+} from "./reviewThreads.ts";
+
+const restComment = (overrides: Partial<RestComment> = {}): RestComment => ({
+  id: 1,
+  path: "src/a.ts",
+  line: 5,
+  user: { login: "reviewer" },
+  body: "plain remark",
+  pull_request_review_id: 10,
+  ...overrides,
+});
+
+const thread = (overrides: Partial<ReviewThread> = {}): ReviewThread => ({
+  path: "src/a.ts",
+  line: 5,
+  isResolved: false,
+  isOutdated: false,
+  comments: {
+    nodes: [{ author: { login: "reviewer" }, body: "plain remark" }],
+    pageInfo: { hasNextPage: false },
+  },
+  ...overrides,
+});
+
+const gqlPage = (
+  nodes: ReviewThread[],
+  hasNextPage = false,
+  endCursor: string | null = null,
+): ThreadPage => ({
+  data: {
+    repository: {
+      pullRequest: {
+        reviewThreads: { nodes, pageInfo: { hasNextPage, endCursor } },
+      },
+    },
+  },
+});
+
+interface PayloadOverrides {
+  pr?: number;
+  author?: string;
+  meta?: ReviewMeta;
+  reviews?: Review[];
+  comments?: RestComment[];
+  threads?: ReviewThread[];
+}
+
+const payload = (overrides: PayloadOverrides = {}) =>
+  buildReviewPayload({
+    pr: 604,
+    author: "prauthor",
+    meta: { title: "Test PR", reviewDecision: "REVIEW_REQUIRED" },
+    reviews: [{ id: 10, user: { login: "reviewer" }, state: "COMMENTED" }],
+    comments: [],
+    threads: [],
+    ...overrides,
+  });
+
+describe("parseGhPaginatedJson", () => {
+  test("splits concatenated top-level JSON documents (gh --paginate page-per-document output)", () => {
+    const stdout = `[{"id":1},{"id":2}]\n[{"id":3}]`;
+    expect(parseGhPaginatedJson(stdout)).toEqual([[{ id: 1 }, { id: 2 }], [{ id: 3 }]]);
+  });
+
+  test("splits concatenated objects and ignores braces inside strings", () => {
+    const stdout = `{"a":"}{"}{"b":"[not json]"}`;
+    expect(parseGhPaginatedJson(stdout)).toEqual([{ a: "}{" }, { b: "[not json]" }]);
+  });
+
+  test("returns empty array for blank stdout", () => {
+    expect(parseGhPaginatedJson("  \n")).toEqual([]);
+  });
+
+  test("survives astral characters (emoji) inside string values", () => {
+    const stdout = `{"body":"🚧 must fix 🙋‍♂️"}{"body":"plain"}`;
+    expect(parseGhPaginatedJson(stdout)).toEqual([
+      { body: "🚧 must fix 🙋‍♂️" },
+      { body: "plain" },
+    ]);
+  });
+});
+
+describe("mergeReviewThreadPages", () => {
+  test("merges thread nodes across GraphQL pages", () => {
+    const pageOne = gqlPage([thread({ path: "src/a.ts" })], true, "c1");
+    const pageTwo = gqlPage([thread({ path: "src/b.ts" })]);
+    const merged = mergeReviewThreadPages([pageOne, pageTwo]);
+    expect(merged.map((node) => node.path)).toEqual(["src/a.ts", "src/b.ts"]);
+  });
+});
+
+describe("buildReviewPayload filtering", () => {
+  test("keeps an unresolved comment and reports PR metadata", () => {
+    const result = payload({
+      comments: [restComment({ body: "must fix: broken null check" })],
+      threads: [thread({ comments: { nodes: [{ author: { login: "reviewer" }, body: "must fix: broken null check" }], pageInfo: { hasNextPage: false } } })],
+    });
+    expect(result.pr).toBe(604);
+    expect(result.reviewState).toBe("REVIEW_REQUIRED");
+    expect(result.comments).toHaveLength(1);
+    expect(result.comments[0].commentId).toBe(1);
+    expect(result.note).toBeNull();
+  });
+
+  test("drops a comment whose thread is resolved, matched by path+line", () => {
+    const result = payload({
+      comments: [restComment()],
+      threads: [thread({ isResolved: true })],
+    });
+    expect(result.comments).toHaveLength(0);
+    expect(result.note).toBe("all-resolved");
+  });
+
+  test("never merges two outdated (line: null) threads in one file on a (path, null) key", () => {
+    const keep = restComment({ id: 1, line: null, body: "first outdated finding" });
+    const drop = restComment({ id: 2, line: null, body: "second outdated finding" });
+    const result = payload({
+      comments: [keep, drop],
+      threads: [
+        thread({
+          line: null,
+          isOutdated: true,
+          isResolved: false,
+          comments: { nodes: [{ author: { login: "reviewer" }, body: "first outdated finding" }], pageInfo: { hasNextPage: false } },
+        }),
+        thread({
+          line: null,
+          isOutdated: true,
+          isResolved: true,
+          comments: { nodes: [{ author: { login: "reviewer" }, body: "second outdated finding" }], pageInfo: { hasNextPage: false } },
+        }),
+      ],
+    });
+    expect(result.comments).toHaveLength(1);
+    expect(result.comments[0].body).toBe("first outdated finding");
+    expect(result.comments[0].line).toBeNull();
+  });
+
+  test("keeps an unresolved outdated thread — isOutdated is informational only", () => {
+    const result = payload({
+      comments: [restComment()],
+      threads: [thread({ isOutdated: true })],
+    });
+    expect(result.comments).toHaveLength(1);
+  });
+
+  test("drops CI bots but keeps real review bots", () => {
+    const bots = ["github-actions[bot]", "dependabot[bot]", "codecov[bot]", "coderabbitai[bot]"];
+    const comments = [
+      ...bots.map((login, index) =>
+        restComment({ id: index + 1, line: index + 10, user: { login }, body: `bot noise ${index}` }),
+      ),
+      restComment({ id: 90, line: 90, user: { login: "cubic-dev-ai[bot]" }, body: "real finding" }),
+      restComment({ id: 91, line: 91, user: { login: "symbiot-bot" }, body: "another real finding" }),
+    ];
+    const threads = comments.map((comment) =>
+      thread({
+        line: comment.line,
+        comments: { nodes: [{ author: { login: comment.user?.login ?? "unknown" }, body: comment.body }], pageInfo: { hasNextPage: false } },
+      }),
+    );
+    const result = payload({ comments, threads });
+    expect(result.comments.map((comment) => comment.reviewer).sort()).toEqual([
+      "cubic-dev-ai[bot]",
+      "symbiot-bot",
+    ]);
+  });
+
+  test("drops the PR author's own root comments", () => {
+    const result = payload({
+      comments: [restComment({ user: { login: "prauthor" } })],
+      threads: [thread({ comments: { nodes: [{ author: { login: "prauthor" }, body: "plain remark" }], pageInfo: { hasNextPage: false } } })],
+    });
+    expect(result.comments).toHaveLength(0);
+    expect(result.note).toBe("no-comments");
+  });
+});
+
+describe("author replies", () => {
+  test("author reply sets authorReplied and lastAuthorReply from REST replies", () => {
+    const result = payload({
+      comments: [
+        restComment({ id: 1, body: "must fix: broken" }),
+        restComment({ id: 2, user: { login: "prauthor" }, body: "Fixed in abc123, thanks!", in_reply_to_id: 1 }),
+      ],
+      threads: [thread({ comments: { nodes: [{ author: { login: "reviewer" }, body: "must fix: broken" }], pageInfo: { hasNextPage: false } } })],
+    });
+    expect(result.comments).toHaveLength(1);
+    expect(result.comments[0].authorReplied).toBe(true);
+    expect(result.comments[0].lastAuthorReply).toBe("Fixed in abc123, thanks!");
+  });
+
+  test("authorReplied stays correct when the GraphQL nested comment page is truncated", () => {
+    const result = payload({
+      comments: [
+        restComment({ id: 1 }),
+        restComment({ id: 2, user: { login: "prauthor" }, body: "done", in_reply_to_id: 1 }),
+      ],
+      threads: [
+        thread({
+          comments: {
+            nodes: [{ author: { login: "reviewer" }, body: "plain remark" }],
+            pageInfo: { hasNextPage: true },
+          },
+        }),
+      ],
+    });
+    expect(result.comments[0].authorReplied).toBe(true);
+  });
+
+  test("no author reply yields authorReplied false and null lastAuthorReply", () => {
+    const result = payload({
+      comments: [restComment()],
+      threads: [thread()],
+    });
+    expect(result.comments[0].authorReplied).toBe(false);
+    expect(result.comments[0].lastAuthorReply).toBeNull();
+  });
+});
+
+describe("severity", () => {
+  const severityCase = (body: string, reviewState = "COMMENTED") => {
+    const result = payload({
+      reviews: [{ id: 10, user: { login: "reviewer" }, state: reviewState }],
+      comments: [restComment({ body })],
+      threads: [thread({ comments: { nodes: [{ author: { login: "reviewer" }, body }], pageInfo: { hasNextPage: false } } })],
+    });
+    return result.comments[0].severity;
+  };
+
+  test("maps marker vocabulary to severities", () => {
+    expect(severityCase("🚧 must fix before merge")).toBe("blocker");
+    expect(severityCase("suggestion: consider extracting this")).toBe("suggestion");
+    expect(severityCase("nit: rename this variable")).toBe("nitpick");
+    expect(severityCase("💡 optional: could memoize")).toBe("nitpick");
+  });
+
+  test("a comment from a CHANGES_REQUESTED review is a blocker even without markers", () => {
+    expect(severityCase("this branch drops the error", "CHANGES_REQUESTED")).toBe("blocker");
+  });
+
+  test("an unmarked comment ending in a question mark is a question", () => {
+    expect(severityCase("why does this loop twice?")).toBe("question");
+  });
+
+  test("an unmarked comment defaults to suggestion", () => {
+    expect(severityCase("this could use the shared parser")).toBe("suggestion");
+  });
+});
+
+describe("output shape", () => {
+  test("groups by path and sorts by line, null lines last within a file", () => {
+    const comments = [
+      restComment({ id: 1, path: "src/b.ts", line: 3, body: "b3" }),
+      restComment({ id: 2, path: "src/a.ts", line: null, body: "a-null" }),
+      restComment({ id: 3, path: "src/a.ts", line: 7, body: "a7" }),
+      restComment({ id: 4, path: "src/a.ts", line: 2, body: "a2" }),
+    ];
+    const threads = comments.map((comment) =>
+      thread({
+        path: comment.path,
+        line: comment.line,
+        comments: { nodes: [{ author: { login: "reviewer" }, body: comment.body }], pageInfo: { hasNextPage: false } },
+      }),
+    );
+    const result = payload({ comments, threads });
+    expect(result.comments.map((comment) => comment.body)).toEqual(["a2", "a7", "a-null", "b3"]);
+  });
+
+  test("bounds comment bodies to 400 characters", () => {
+    const longBody = `x${"y".repeat(600)}`;
+    const result = payload({
+      comments: [restComment({ body: longBody })],
+      threads: [thread({ comments: { nodes: [{ author: { login: "reviewer" }, body: longBody }], pageInfo: { hasNextPage: false } } })],
+    });
+    expect(result.comments[0].body).toHaveLength(400);
+  });
+
+  test("caps the payload at 100 comments keeping blockers first and flags truncation", () => {
+    const comments = Array.from({ length: 120 }, (_, index) =>
+      restComment({
+        id: index + 1,
+        line: index + 1,
+        body: index < 110 ? `plain remark ${index}` : `must fix: blocker ${index}`,
+      }),
+    );
+    const threads = comments.map((comment) =>
+      thread({
+        line: comment.line,
+        comments: { nodes: [{ author: { login: "reviewer" }, body: comment.body }], pageInfo: { hasNextPage: false } },
+      }),
+    );
+    const result = payload({ comments, threads });
+    expect(result.comments).toHaveLength(100);
+    expect(result.truncated).toBe(true);
+    const blockers = result.comments.filter((comment) => comment.severity === "blocker");
+    expect(blockers).toHaveLength(10);
+  });
+
+  test("reports reviewers with their latest review state", () => {
+    const result = payload({
+      reviews: [
+        { id: 10, user: { login: "reviewer" }, state: "CHANGES_REQUESTED" },
+        { id: 11, user: { login: "reviewer" }, state: "APPROVED" },
+        { id: 12, user: { login: "prauthor" }, state: "COMMENTED" },
+      ],
+    });
+    expect(result.reviewers).toEqual([{ login: "reviewer", state: "APPROVED" }]);
+  });
+
+  test("note is no-comments when nothing was ever unresolved", () => {
+    expect(payload().note).toBe("no-comments");
+  });
+});
+
+describe("buildGhReadCommands", () => {
+  test("defines exactly four read-only gh invocations", () => {
+    const reads = buildGhReadCommands({ owner: "octo", repo: "demo", pr: 42 });
+    const writeFlags = ["-X", "--method", "--input"];
+    expect(Object.keys(reads).sort()).toEqual(["comments", "meta", "reviews", "threads"]);
+    for (const args of Object.values(reads)) {
+      for (const flag of writeFlags) {
+        expect(args).not.toContain(flag);
+      }
+    }
+    // -f/-F are GraphQL variable flags, permitted only on the fixed threads query.
+    for (const [name, args] of Object.entries(reads)) {
+      if (name === "threads") continue;
+      expect(args).not.toContain("-f");
+      expect(args).not.toContain("-F");
+      expect(args).not.toContain("--field");
+      expect(args).not.toContain("--raw-field");
+    }
+    expect(reads.threads).toContain("graphql");
+    const threadsQuery = reads.threads.join(" ");
+    expect(threadsQuery).toContain("$endCursor");
+    expect(threadsQuery).not.toContain("mutation");
+  });
+});
+</file>
+
+<file path="claude-plugins/autopilot/lib/github/reviewThreads.ts">
+// Pure transforms for PR review-thread retrieval: parse paginated `gh` output,
+// merge GraphQL pages, and reduce the four raw GitHub payloads to the typed
+// contract the pr-answer/pr-resolve/pr-review skills consume. No I/O lives here —
+// the CLI in fetch-pr-reviews.ts is a thin shell around these functions, so the
+// fixture tests in reviewThreads.test.ts exercise the exact production paths.
+//
+// Runs under Node's native type stripping (Node >=24) and Bun without a build
+// step, so it ships as source at ${CLAUDE_PLUGIN_ROOT}/lib/github/.
+//
+// Usage:
+//   import { buildReviewPayload, parseGhPaginatedJson } from "./reviewThreads.ts";
+//   const pages = parseGhPaginatedJson<RestComment[]>(ghStdout);
+//   const payload = buildReviewPayload({ pr, author, meta, reviews, comments, threads });
+
+/** Severity buckets a surviving comment is sorted into. */
+export type Severity = "blocker" | "suggestion" | "nitpick" | "question";
+
+/** A REST review comment from `pulls/:n/comments`. */
+export interface RestComment {
+  id: number;
+  path: string;
+  line?: number | null;
+  user?: { login: string };
+  body?: string;
+  pull_request_review_id?: number;
+  in_reply_to_id?: number;
+}
+
+/** A REST review from `pulls/:n/reviews`. */
+export interface Review {
+  id: number;
+  user?: { login: string };
+  state: string;
+}
+
+/** PR metadata from `gh pr view --json`. */
+export interface ReviewMeta {
+  title?: string | null;
+  reviewDecision?: string | null;
+}
+
+/** A GraphQL `reviewThreads` node, used only for resolution state. */
+export interface ReviewThread {
+  path: string;
+  line: number | null;
+  isResolved: boolean;
+  isOutdated: boolean;
+  comments?: {
+    nodes?: { author?: { login: string } | null; body?: string }[];
+    pageInfo?: { hasNextPage: boolean };
+  };
+}
+
+/** A reviewer and their latest review state. */
+export interface Reviewer {
+  login: string;
+  state: string;
+}
+
+/** One unresolved review comment in the output contract. */
+export interface ReviewComment {
+  commentId: number;
+  path: string;
+  line: number | null;
+  reviewer: string;
+  severity: Severity;
+  body: string;
+  authorReplied: boolean;
+  lastAuthorReply: string | null;
+}
+
+/** The typed, bounded payload the review skills consume. */
+export interface ReviewPayload {
+  pr: number;
+  title: string | null;
+  author: string;
+  reviewState: string;
+  reviewers: Reviewer[];
+  comments: ReviewComment[];
+  note: null | "no-comments" | "all-resolved";
+  truncated: boolean;
+}
+
+/** The four `gh` invocations as argv arrays. */
+export interface GhReadCommands {
+  reviews: string[];
+  comments: string[];
+  meta: string[];
+  threads: string[];
+}
+
+const ciBotDenylist = new Set([
+  "github-actions[bot]",
+  "dependabot[bot]",
+  "codecov[bot]",
+  "coderabbitai[bot]",
+]);
+
+const maxBodyLength = 400;
+const maxComments = 100;
+const severityRank: Record<Severity, number> = {
+  blocker: 0,
+  suggestion: 1,
+  nitpick: 2,
+  question: 3,
+};
+
+const blockerMarkers = /🚧|blocker|must fix|blocking/;
+const nitpickMarkers = /💡|nitpick|\bnit\b|minor|optional/;
+const suggestionMarkers = /🙋‍♂️|suggestion|consider|\bshould\b/;
+
+/**
+ * The read-only GraphQL query for review-thread resolution state. `$endCursor`
+ * and `pageInfo` are required by `gh api graphql --paginate`; the nested
+ * comments connection carries `pageInfo` so inner truncation stays detectable.
+ */
+export const reviewThreadsQuery = `query($owner: String!, $repo: String!, $pr: Int!, $endCursor: String) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $pr) {
+      reviewThreads(first: 100, after: $endCursor) {
+        nodes { path line isResolved isOutdated comments(first: 50) { nodes { author { login } body } pageInfo { hasNextPage } } }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+}`;
+
+/**
+ * The four `gh` invocations the CLI runs. Exported so the read-only property is
+ * an enforced test contract: the reads carry no write flags, and `-f`/`-F`
+ * appear only as variable bindings on the fixed, mutation-free threads query.
+ */
+export function buildGhReadCommands({
+  owner,
+  repo,
+  pr,
+}: {
+  owner: string;
+  repo: string;
+  pr: number;
+}): GhReadCommands {
+  return {
+    reviews: ["api", `repos/${owner}/${repo}/pulls/${pr}/reviews`, "--paginate"],
+    comments: ["api", `repos/${owner}/${repo}/pulls/${pr}/comments`, "--paginate"],
+    meta: [
+      "pr",
+      "view",
+      String(pr),
+      "-R",
+      `${owner}/${repo}`,
+      "--json",
+      "title,author,reviewDecision,reviewRequests",
+    ],
+    threads: [
+      "api",
+      "graphql",
+      "--paginate",
+      "-F",
+      `owner=${owner}`,
+      "-F",
+      `repo=${repo}`,
+      "-F",
+      `pr=${pr}`,
+      "-f",
+      `query=${reviewThreadsQuery}`,
+    ],
+  };
+}
+
+/**
+ * Split `gh --paginate` stdout into parsed documents. gh emits one JSON document
+ * per page concatenated on stdout (arrays for REST endpoints, objects for
+ * GraphQL), so a plain JSON.parse throws on any multi-page result — this scanner
+ * tracks brace depth outside strings instead.
+ */
+export function parseGhPaginatedJson<T = unknown>(stdout: string): T[] {
+  const documents: T[] = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escaped = false;
+  let index = 0;
+  for (const char of stdout) {
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
+    } else if (char === '"') {
+      inString = true;
+    } else if (char === "{" || char === "[") {
+      if (depth === 0) start = index;
+      depth += 1;
+    } else if (char === "}" || char === "]") {
+      depth -= 1;
+      if (depth === 0) documents.push(JSON.parse(stdout.slice(start, index + 1)) as T);
+    }
+    // Advance by code units, not code points: `char` may be an astral pair
+    // (emoji in comment bodies), and slice() indexes UTF-16 code units.
+    index += char.length;
+  }
+  return documents;
+}
+
+/** A parsed page of the GraphQL `reviewThreads` query. */
+export interface ThreadPage {
+  data?: {
+    repository?: {
+      pullRequest?: {
+        reviewThreads?: {
+          nodes?: ReviewThread[];
+          pageInfo?: { hasNextPage: boolean; endCursor: string | null };
+        };
+      };
+    };
+  };
+}
+
+/** Flatten the thread nodes out of parsed GraphQL pages, in page order. */
+export function mergeReviewThreadPages(pages: ThreadPage[]): ReviewThread[] {
+  return pages.flatMap((page) => page?.data?.repository?.pullRequest?.reviewThreads?.nodes ?? []);
+}
+
+const excerpt = (body: string | undefined | null): string => (body ?? "").slice(0, maxBodyLength);
+
+const matchThread = (comment: RestComment, threads: ReviewThread[]): ReviewThread | null => {
+  const inFile = threads.filter((node) => node.path === comment.path);
+  if (comment.line !== null && comment.line !== undefined) {
+    const byLine = inFile.filter((node) => node.line === comment.line);
+    if (byLine.length === 1) return byLine[0];
+  }
+  // Several threads share the file (or the diff line moved and line is null):
+  // fall back to first-comment identity, never to a (path, null) key.
+  return (
+    inFile.find((node) => {
+      const first = node.comments?.nodes?.[0];
+      return first?.author?.login === comment.user?.login && first?.body === comment.body;
+    }) ?? null
+  );
+};
+
+const classifySeverity = (
+  comment: RestComment,
+  reviewStateById: Map<number, string>,
+): Severity => {
+  if (
+    comment.pull_request_review_id !== undefined &&
+    reviewStateById.get(comment.pull_request_review_id) === "CHANGES_REQUESTED"
+  ) {
+    return "blocker";
+  }
+  const body = (comment.body ?? "").toLowerCase();
+  if (blockerMarkers.test(body)) return "blocker";
+  if (suggestionMarkers.test(body)) return "suggestion";
+  if (nitpickMarkers.test(body)) return "nitpick";
+  if (body.trim().endsWith("?")) return "question";
+  return "suggestion";
+};
+
+const latestReviewers = (reviews: Review[], author: string): Reviewer[] => {
+  const lastStateByLogin = new Map<string, string>();
+  for (const review of reviews) {
+    const login = review.user?.login;
+    if (login && login !== author) lastStateByLogin.set(login, review.state);
+  }
+  return [...lastStateByLogin].map(([login, state]) => ({ login, state }));
+};
+
+const orderForOutput = (
+  surviving: ReviewComment[],
+): { ordered: ReviewComment[]; truncated: boolean } => {
+  const capped =
+    surviving.length > maxComments
+      ? [...surviving]
+          .sort((a, b) => severityRank[a.severity] - severityRank[b.severity])
+          .slice(0, maxComments)
+      : surviving;
+  const lineKey = (comment: ReviewComment): number =>
+    comment.line === null ? Number.POSITIVE_INFINITY : comment.line;
+  const ordered = [...capped].sort(
+    (a, b) => a.path.localeCompare(b.path) || lineKey(a) - lineKey(b),
+  );
+  return { ordered, truncated: surviving.length > maxComments };
+};
+
+/**
+ * Reduce the four raw GitHub payloads to the review contract: resolved threads,
+ * CI-bot noise, and the PR author's own root comments are dropped; everything
+ * else is categorized, grouped by file, and bounded. `authorReplied` comes from
+ * the complete REST reply set, so nested GraphQL page truncation can never
+ * produce a false negative.
+ */
+export function buildReviewPayload({
+  pr,
+  author,
+  meta,
+  reviews,
+  comments,
+  threads,
+}: {
+  pr: number;
+  author: string;
+  meta: ReviewMeta | null;
+  reviews: Review[];
+  comments: RestComment[];
+  threads: ReviewThread[];
+}): ReviewPayload {
+  const reviewStateById = new Map(reviews.map((review) => [review.id, review.state]));
+  const roots = comments.filter((comment) => !comment.in_reply_to_id);
+  const replies = comments.filter((comment) => comment.in_reply_to_id);
+
+  let resolvedRoots = 0;
+  const surviving: ReviewComment[] = [];
+  for (const root of roots) {
+    const login = root.user?.login ?? "unknown";
+    if (matchThread(root, threads)?.isResolved) {
+      resolvedRoots += 1;
+      continue;
+    }
+    if (ciBotDenylist.has(login) || login === author) continue;
+    const authorReplies = replies.filter(
+      (reply) => reply.in_reply_to_id === root.id && reply.user?.login === author,
+    );
+    const lastReply = authorReplies.at(-1);
+    surviving.push({
+      commentId: root.id,
+      path: root.path,
+      line: root.line ?? null,
+      reviewer: login,
+      severity: classifySeverity(root, reviewStateById),
+      body: excerpt(root.body),
+      authorReplied: authorReplies.length > 0,
+      lastAuthorReply: lastReply ? excerpt(lastReply.body) : null,
+    });
+  }
+
+  const { ordered, truncated } = orderForOutput(surviving);
+  const note =
+    ordered.length > 0
+      ? null
+      : roots.length > 0 && resolvedRoots === roots.length
+        ? "all-resolved"
+        : "no-comments";
+
+  return {
+    pr,
+    title: meta?.title ?? null,
+    author,
+    reviewState: meta?.reviewDecision || "PENDING",
+    reviewers: latestReviewers(reviews, author),
+    comments: ordered,
+    note,
+    truncated,
+  };
+}
 </file>
 
 <file path="claude-plugins/autopilot/lib/linear/fetch-issue.mjs">
@@ -54973,20 +55785,17 @@ gh pr diff <PR_NUMBER> -R <REPO>
 
 Launch 2 calls **in parallel** to load codebase context and review history:
 
-Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the ordered context-acquisition chain; this skill passes the review-scoped `includePatterns` (repomix tier only) shown below.
+Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the ordered context-acquisition chain; this skill passes the review-scoped `includePatterns` (repomix tier only) shown below. Read [`github-review-fetch.md`](../shared-rules/references/github-review-fetch.md) for the review-thread helper invocation and its output contract.
 
 ```
 Acquire codebase context: follow the shared repomix-snapshot chain,
   passing `includePatterns`: ".claude/**, **.md, **.yml, .github/**"
 
-Agent 1 (fetch-pr-reviews):
-  Use the Agent tool with:
-  - `subagent_type`: "autopilot:fetch-pr-reviews"
-  - `prompt`: "Fetch reviews for PR #<PR_NUMBER>. Repo: <REPO>. Author: <PR_AUTHOR>."
-  - `description`: "Fetch PR reviews"
+Fetch review threads: run the shared github-review-fetch helper via Bash
+  with <REPO>, <PR_NUMBER>, and <PR_AUTHOR>
 ```
 
-After all calls complete, store the selected context source (and its `outputId` when the repomix tier was selected). Use the review data from `fetch-pr-reviews` to understand the full review history, including REVIEWER-specific reviews and comments.
+After both complete, store the selected context source (and its `outputId` when the repomix tier was selected). Use the helper's JSON to understand the full review history, including REVIEWER-specific reviews and comments; surface a non-null `fetchError` per the shared block instead of treating the fetch as empty.
 
 **Read the pack, don't dump it.** Pull only targeted context via the selected source's read contract (`graphify` queries, or `grep_repomix_output` / sliced `read_repomix_output`); never read the whole pack. Most comment replies need no codebase lookup at all — skip the context reads entirely unless the comment points you at specific other code to verify.
 
@@ -55906,23 +56715,20 @@ gh pr diff <PR_NUMBER>
 
 Launch 2 calls **in parallel** to load codebase context and fetch review comments:
 
-Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the ordered context-acquisition chain; this skill passes the review-scoped `includePatterns` (repomix tier only) shown below.
+Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the ordered context-acquisition chain; this skill passes the review-scoped `includePatterns` (repomix tier only) shown below. Read [`github-review-fetch.md`](../shared-rules/references/github-review-fetch.md) for the review-thread helper invocation and its output contract.
 
 ```
 Acquire codebase context: follow the shared repomix-snapshot chain,
   passing `includePatterns`: ".claude/**, **.md, **.yml, .github/**"
 
-Agent 1 (fetch-pr-reviews):
-  Use the Agent tool with:
-  - `subagent_type`: "autopilot:fetch-pr-reviews"
-  - `prompt`: "Fetch reviews for PR #<PR_NUMBER>. Repo: <OWNER>/<REPO>. Author: <AUTHOR_LOGIN>."
-  - `description`: "Fetch PR reviews"
+Fetch review threads: run the shared github-review-fetch helper via Bash
+  with <OWNER>/<REPO>, <PR_NUMBER>, and <AUTHOR_LOGIN>
 ```
 
-After all calls complete:
+After both complete:
 
 - Store the selected context source (and its `outputId` when the repomix tier was selected) — search and read codebase content via that source's read contract during [Phase 3](#phase-3-address-comments-code-fixes) (code fixes)
-- Store the `fetch-pr-reviews` JSON — `reviewState`, the severity-tagged `comments` (each carrying the `commentId` used for replies in [Phase 5](#phase-5-reply-to-review-threads)), and `note` — use in [Phase 2](#phase-2-present-findings-to-user)
+- Store the helper's JSON — `reviewState`, the severity-tagged `comments` (each carrying the `commentId` used for replies in [Phase 5](#phase-5-reply-to-review-threads) and the `authorReplied`/`lastAuthorReply` fields for judging in-model whether a comment is already addressed), and `note` — use in [Phase 2](#phase-2-present-findings-to-user); surface a non-null `fetchError` per the shared block instead of treating the fetch as empty
 
 ### 1.5 Project Rules
 
@@ -56817,9 +57623,9 @@ gh pr diff <PR_NUMBER> -R <REPO>
 
 Fetch the diff exactly once and review it in-model. Never embed the diff more than once.
 
-This `gh pr view` output is the authoritative source for the PR title/body/diff and prior-review verdicts: `reviews`/`latestReviews` carry each prior review's verdict and summary body (the body lists that round's findings). Per-line inline annotations are NOT in any `gh pr view` field — load them via the read-only `gh api` call the `fetch-pr-reviews` agent makes in [§1.2](#12-load-context-via-sub-agents) (the review action now permits `gh api` GETs; only write forms are blocked). A denied or empty fetch must never be silently treated as "no prior findings" (that path produces an empty, content-free approval).
+This `gh pr view` output is the authoritative source for the PR title/body/diff and prior-review verdicts: `reviews`/`latestReviews` carry each prior review's verdict and summary body (the body lists that round's findings). Per-line inline annotations are NOT in any `gh pr view` field — load them via the deterministic review-thread helper run in [§1.2](#12-load-context-via-sub-agents). A denied or empty fetch must never be silently treated as "no prior findings" (that path produces an empty, content-free approval).
 
-Treat the prior review **bodies** ([§1.1](#11-pr-context)) plus the inline threads loaded by `fetch-pr-reviews` ([§1.2](#12-load-context-via-sub-agents)) as the record of past findings: the review skill writes a self-contained summary body for every non-empty review (see [reviewComment Format](#reviewcomment-format-30-lines-max)), and the inline threads carry the per-line detail. With both loaded, a follow-up review sees exactly what each prior round flagged and where — do not bail when one source is empty; cross-check the other.
+Treat the prior review **bodies** ([§1.1](#11-pr-context)) plus the inline threads loaded by the helper ([§1.2](#12-load-context-via-sub-agents)) as the record of past findings: the review skill writes a self-contained summary body for every non-empty review (see [reviewComment Format](#reviewcomment-format-30-lines-max)), and the inline threads carry the per-line detail. With both loaded, a follow-up review sees exactly what each prior round flagged and where — do not bail when one source is empty; cross-check the other.
 
 ### 1.2 Load Context via Sub-Agents
 
@@ -56828,19 +57634,16 @@ Extract the linked issue ID from PR metadata. Check in order, stop at first matc
 1. **PR body `Issues:` section** — lines starting with `Closes` or `Related to` followed by a ticket ID; the id may be bare (`#12`, `ENG-123`) or inside a tracker issue URL (`https://linear.app/<workspace>/issue/ENG-123/<slug>`) — extract the `#N` / `KEY-N` token either way
 2. **Branch name** — leading `[a-z]+-[0-9]+` segment, convert to UPPERCASE
 
-Load the remaining context in parallel — the codebase snapshot, the prior inline review threads, and (when an issue is linked) the linked-issue context plus the related TODOs / issue references in the codebase. Prior-review verdicts and summary bodies already come from the [§1.1](#11-pr-context) `gh pr view` output; the `fetch-pr-reviews` agent adds the per-line inline annotations via read-only `gh api`, returning a categorized summary (raw API output stays out of this context).
+Load the remaining context in parallel — the codebase snapshot, the prior inline review threads, and (when an issue is linked) the linked-issue context plus the related TODOs / issue references in the codebase. Prior-review verdicts and summary bodies already come from the [§1.1](#11-pr-context) `gh pr view` output; the deterministic review-thread helper adds the per-line inline annotations in one bounded Bash call, returning a categorized payload (raw API output stays out of this context).
 
-Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the ordered context-acquisition chain; this skill passes the review-scoped `includePatterns` (repomix tier only) shown below.
+Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the ordered context-acquisition chain; this skill passes the review-scoped `includePatterns` (repomix tier only) shown below. Read [`github-review-fetch.md`](../shared-rules/references/github-review-fetch.md) for the review-thread helper invocation and its output contract.
 
 ```
 Acquire codebase context: follow the shared repomix-snapshot chain,
   passing `includePatterns`: ".claude/**, **.md, **.yml, .github/**"
 
-Agent (fetch-pr-reviews):
-  Use the Agent tool with:
-  - `subagent_type`: "autopilot:fetch-pr-reviews"
-  - `prompt`: "Fetch reviews for PR #[PR_NUMBER]. Repo: <REPO>. Author: <PR_AUTHOR>."
-  - `description`: "Fetch PR review threads"
+Fetch review threads: run the shared github-review-fetch helper via Bash
+  with <REPO>, <PR_NUMBER>, and <PR_AUTHOR>
 
 Agent (resolve-issue-context) — only if linked issue found:
   Use the Agent tool with:
@@ -56857,9 +57660,9 @@ Agent (search-codebase-todos) — only if linked issue found:
 
 If no issue number found, output: "No linked issue — skipping issue comparison" and skip the issue-context agent.
 
-If a `gh` call fails (auth/network error) inside an agent, continue with whatever context loaded — never treat a failed `fetch-pr-reviews` as "no prior findings", and skip issue comparison only when `resolve-issue-context` itself found no issue.
+If a `gh` call fails (auth/network error) inside an agent or the helper reports a non-null `fetchError`, continue with whatever context loaded — never treat a degraded review-thread fetch as "no prior findings" (the shared block defines the degradation fields), and skip issue comparison only when `resolve-issue-context` itself found no issue.
 
-After all calls complete, store the selected context source (and its `outputId` when the repomix tier was selected), the categorized review threads from `fetch-pr-reviews`, the issue context from `resolve-issue-context`, and the TODOs / issue references from `search-codebase-todos`. Use these plus the prior-review verdicts from [§1.1](#11-pr-context) for the round handling below.
+After all calls complete, store the selected context source (and its `outputId` when the repomix tier was selected), the categorized review threads from the helper, the issue context from `resolve-issue-context`, and the TODOs / issue references from `search-codebase-todos`. Use these plus the prior-review verdicts from [§1.1](#11-pr-context) for the round handling below.
 
 **Read the pack, don't dump it.** The context source exists so you can pull _targeted_ context on demand — via its read contract: `graphify` queries on the graph tier, or `grep_repomix_output` (regex + `contextLines`) and `read_repomix_output` with a specific `startLine`/`endLine` slice on the repomix tier. NEVER `read_repomix_output` over the whole range (that loads the entire codebase into context). When the diff is self-contained and needs no cross-file lookup (the common case), don't read the pack at all — pull cross-file context only for checks that need it (e.g. architecture reuse, duplicated logic).
 
@@ -56872,7 +57675,7 @@ After all calls complete, store the selected context source (and its `outputId` 
 
 **Follow-up review (previous review by REVIEWER exists):**
 
-1. Read all previous review findings from the `reviews`/`latestReviews` bodies ([§1.1](#11-pr-context)) and the per-line inline threads from `fetch-pr-reviews` ([§1.2](#12-load-context-via-sub-agents))
+1. Read all previous review findings from the `reviews`/`latestReviews` bodies ([§1.1](#11-pr-context)) and the per-line inline threads from the review-thread helper ([§1.2](#12-load-context-via-sub-agents))
 2. Check if issues were addressed by re-examining the current diff for each finding named in those bodies
 3. Compare current findings against previous review
 4. **SKIP (no structured JSON)** if: all findings are identical to previous review, OR no new findings and no unresolved issues
@@ -56912,7 +57715,7 @@ Read the project's own conventions before judging the diff — you enforce them,
 - **PR diff** — changed files and the one-line role of each change ([§1.1](#11-pr-context)).
 - **Linked-issue requirements** — acceptance criteria from `resolve-issue-context` ([§1.2](#12-load-context-via-sub-agents)), or "no linked issue".
 - **Related work** — TODOs and `#<issue>` references in the codebase from `search-codebase-todos` ([§1.2](#12-load-context-via-sub-agents)): flag whether the diff resolves or conflicts with a related TODO, leaves a referenced issue half-addressed, or duplicates work tracked elsewhere; "none" when no issue is linked or none found.
-- **Prior-review findings** — unresolved findings from prior review bodies ([§1.1](#11-pr-context)) and inline threads from `fetch-pr-reviews` ([§1.2](#12-load-context-via-sub-agents)); empty on first review.
+- **Prior-review findings** — unresolved findings from prior review bodies ([§1.1](#11-pr-context)) and inline threads from the review-thread helper ([§1.2](#12-load-context-via-sub-agents)); empty on first review.
 - **Project conventions** — the CLAUDE.md / README / `docs/*` points that bear on the diff ([§1.4](#14-project-context-read-before-reviewing)).
 - **Applicable standards** — name the source first. When the [§1.4](#14-project-context-read-before-reviewing) check-first tier fired: `CODE_REVIEW.md`, plus the rule ids that bear on the diff. Otherwise the discovered inventory: the standards and any `principles/` values selected in [§1.4](#14-project-context-read-before-reviewing), each as id + status (marked "defaulted" when the status was inferred) with a one-line why, plus any dropped candidates; "none" when nothing matched or the sources are absent. This map is the audit log of what was loaded and why.
 - **Codebase pointers** — only the targeted pack-`grep` hits pulled for cross-file checks; "none" when the diff is self-contained.
@@ -58466,6 +59269,34 @@ The prohibitions above compress into one executable pattern, exercised by the `g
 <!-- git-history:end -->
 </file>
 
+<file path="claude-plugins/autopilot/skills/shared-rules/references/github-review-fetch.md">
+<!-- github-review-fetch:start -->
+
+### Fetch PR review threads (deterministic helper)
+
+Fetch review threads with the bundled zero-dependency helper — one bounded Bash call, no delegated agent:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.ts" <OWNER>/<REPO> <PR_NUMBER> <PR_AUTHOR>
+```
+
+`${CLAUDE_PLUGIN_ROOT}` is the plugin root Claude Code provides to plugin components; when it is unset, resolve the script from the invoking skill's base directory instead: `<skill base directory>/../../lib/github/fetch-pr-reviews.ts`.
+
+The helper performs four bounded, read-only GitHub reads (REST reviews, REST inline comments, PR metadata, and the GraphQL `reviewThreads` resolution query — all paginated), always exits 0, and prints a single JSON object:
+
+- `pr`, `title`, `author` — PR number, title, and author login.
+- `reviewState` — `APPROVED` | `CHANGES_REQUESTED` | `REVIEW_REQUIRED` | `PENDING`.
+- `reviewers` — `{ "login", "state" }` per reviewer, carrying each reviewer's latest review state.
+- `comments` — the unresolved review comments, grouped by `path` and sorted by `line` (`null` lines last; `line` is `null` when the diff line moved). Each is `{ "commentId", "path", "line", "reviewer", "severity", "body", "authorReplied", "lastAuthorReply" }`: `commentId` is the REST review-comment id used to reply to that thread; `severity` is `blocker` (a comment from a `CHANGES_REQUESTED` review, or blocker markers) | `suggestion` | `nitpick` | `question`; `body` is a 400-character excerpt. Resolved threads, CI-automation bots, and the PR author's own root comments are already filtered out.
+- `authorReplied` / `lastAuthorReply` — whether the PR author replied in the thread, and the latest such reply. Whether that reply actually addresses the comment is a judgment call: make it in-model before acting on the comment; the helper never makes it.
+- `note` — `null` when comments are present; `"no-comments"` when none were found; `"all-resolved"` when every review thread is resolved.
+- `truncated` — `true` when the 100-comment cap dropped comments (unresolved blockers are kept first).
+- `fetchError` — `null` on a clean fetch. When non-null, one or more GitHub reads failed (rate limiting is named explicitly) and `telemetry.degradedReads` lists them; the remaining reads still populate the payload. Surface the error and treat the fetch as incomplete — a degraded fetch is NEVER "no prior findings". When `degradedReads` includes `reviewThreads`, resolution state is unknown and comments are kept rather than silently dropped as resolved.
+- `telemetry` — diagnostic only (`durationMs`, `requestCount`, `payloadBytes`, `degradedReads`); report `fetchError`, never act on telemetry values.
+
+<!-- github-review-fetch:end -->
+</file>
+
 <file path="claude-plugins/autopilot/skills/shared-rules/references/issue-body-grammar.md">
 <!-- issue-body-grammar:start -->
 
@@ -59059,7 +59890,7 @@ RFC-0001 remains the binding standard for the reference-formatting block; `refer
 <file path="claude-plugins/autopilot/skills/shared-rules/SKILL.md">
 ---
 name: shared-rules
-description: Canonical home for instruction blocks shared by several autopilot skills and agents — reference formatting (RFC-0001), AskUserQuestion formatting and content-preview contract, codebase context acquisition (graphify → repomix → default tools), agent structured output, issue body grammar, Linear MCP access, peer CLI delegation, git history policy, and PR title/body grammar. Read the one block you need instead of carrying a copy.
+description: Canonical home for instruction blocks shared by several autopilot skills and agents — reference formatting (RFC-0001), AskUserQuestion formatting and content-preview contract, codebase context acquisition (graphify → repomix → default tools), agent structured output, issue body grammar, Linear MCP access, peer CLI delegation, git history policy, PR title/body grammar, and GitHub review-thread retrieval. Read the one block you need instead of carrying a copy.
 ---
 
 # Shared Rules
@@ -59093,6 +59924,7 @@ Apply the block's content **verbatim**. It is an instruction, not a summary to p
 | Git history policy               | [git-history-policy.md](./references/git-history-policy.md)             | before running any command that changes history or rewrites a remote branch         |
 | PR title and branch grammar      | [pr-title-grammar.md](./references/pr-title-grammar.md)                 | before generating or validating a PR title or branch name                           |
 | PR body grammar                  | [pr-body-grammar.md](./references/pr-body-grammar.md)                   | before generating or updating a PR description                                      |
+| GitHub review-thread retrieval   | [github-review-fetch.md](./references/github-review-fetch.md)           | before fetching a PR's review threads (invocation and output contract)              |
 
 Blocks are parameterised by the caller where noted (the repomix `includePatterns` value, the Linear tool-name list, the peer CLI specifics, the AskUserQuestion strings): each block file states what the caller supplies.
 </file>
@@ -61662,9 +62494,15 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
   "name": "autopilot",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "private": true,
+  "type": "module",
   "license": "MIT",
   "release": {
     "type": "claude-plugin"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test lib",
+    "clean": "rm -rf node_modules .turbo"
   },
   "version": "5.7.0"
 }
@@ -61740,7 +62578,6 @@ code-assistants/
         │   ├── digest-branch-diff.md
         │   ├── digest-repo-standards.md
         │   ├── expert-review.md
-        │   ├── fetch-pr-reviews.md
         │   ├── resolve-alert-context.md
         │   ├── resolve-assignees.md
         │   ├── digest-session-history.md
@@ -62043,24 +62880,23 @@ The canonical home for instruction blocks several skills need — reference form
 
 ## Agents
 
-### Helper sub-agents (12 agents)
+### Helper sub-agents (11 agents)
 
 Context-isolating workers invoked by other skills to keep the parent conversation small. Each returns a structured summary only.
 
-| Agent                    | Model   | Used by                                | Purpose                                                                                      |
-| ------------------------ | ------- | -------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `analyze-pr-commits`     | sonnet  | `pr-create`, `pr-update`               | Summarize branch commits, diff, and linked issue for PR context                              |
-| `digest-branch-diff`     | haiku   | `gather-context`                       | Summarize a branch's commits and diff against main; detect a stale-merged branch             |
-| `digest-repo-standards`  | sonnet  | `gather-context`                       | Digest the repo's README, docs/, rfc/, and principles/ into a bounded standards summary      |
-| `analyze-staged-changes` | haiku   | `commits-create`                       | Categorize staged files and recommend a commit strategy                                      |
-| `digest-session-history` | haiku   | `plan`, `run`, `explore`               | Map task files and commits to the Entire sessions and checkpoints that produced them         |
-| `expert-review`          | inherit | `plan`, `plan-*`                       | Score an implementation plan as a domain expert                                              |
-| `fetch-pr-reviews`       | sonnet  | `pr-answer`, `pr-resolve`, `pr-review` | Fetch, filter, and categorize PR review comments by severity                                 |
-| `resolve-alert-context`  | sonnet  | `plan`, `run`                          | Fetch GitHub code-scanning alert context via the code-scanning API                           |
-| `resolve-assignees`      | sonnet  | `linear-create`                        | Resolve candidate assignees from CODEOWNERS and Linear team members, current user first      |
-| `resolve-issue-context`  | sonnet  | `plan`, `run`, `pr-review`             | Fetch GitHub/Linear issue context; optionally auto-assign current user (idempotent) via `gh` |
-| `scan-and-analyze-todos` | sonnet  | `todo-cleanup`                         | Scan codebase for TODOs and check linked GitHub issue statuses                               |
-| `search-codebase-todos`  | haiku   | `plan`, `run`, `pr-review`             | Search the codebase for TODOs and references to a specific issue                             |
+| Agent                    | Model   | Used by                    | Purpose                                                                                      |
+| ------------------------ | ------- | -------------------------- | -------------------------------------------------------------------------------------------- |
+| `analyze-pr-commits`     | sonnet  | `pr-create`, `pr-update`   | Summarize branch commits, diff, and linked issue for PR context                              |
+| `digest-branch-diff`     | haiku   | `gather-context`           | Summarize a branch's commits and diff against main; detect a stale-merged branch             |
+| `digest-repo-standards`  | sonnet  | `gather-context`           | Digest the repo's README, docs/, rfc/, and principles/ into a bounded standards summary      |
+| `analyze-staged-changes` | haiku   | `commits-create`           | Categorize staged files and recommend a commit strategy                                      |
+| `digest-session-history` | haiku   | `plan`, `run`, `explore`   | Map task files and commits to the Entire sessions and checkpoints that produced them         |
+| `expert-review`          | inherit | `plan`, `plan-*`           | Score an implementation plan as a domain expert                                              |
+| `resolve-alert-context`  | sonnet  | `plan`, `run`              | Fetch GitHub code-scanning alert context via the code-scanning API                           |
+| `resolve-assignees`      | sonnet  | `linear-create`            | Resolve candidate assignees from CODEOWNERS and Linear team members, current user first      |
+| `resolve-issue-context`  | sonnet  | `plan`, `run`, `pr-review` | Fetch GitHub/Linear issue context; optionally auto-assign current user (idempotent) via `gh` |
+| `scan-and-analyze-todos` | sonnet  | `todo-cleanup`             | Scan codebase for TODOs and check linked GitHub issue statuses                               |
+| `search-codebase-todos`  | haiku   | `plan`, `run`, `pr-review` | Search the codebase for TODOs and references to a specific issue                             |
 
 ## Internal Skills (not in slash menu)
 
@@ -62125,6 +62961,8 @@ Configure in `.mcp.json` at plugin root:
 
 The plugin ships one server: `wiretext` (ASCII wireframes). Linear connectivity is consumer-level: interactive skills use a user- or project-configured Linear MCP server (`claude mcp add --transport http linear https://mcp.linear.app/mcp`), while agents and headless runs use a bundled zero-dependency GraphQL helper (`lib/linear/`) keyed by `LINEAR_API_KEY`. See [Linear tracker support](../../docs/11-linear-tracker.md).
 
+GitHub review-thread retrieval is also a bundled zero-dependency helper rather than an agent: [`lib/github/fetch-pr-reviews.ts`](./lib/github/fetch-pr-reviews.ts) performs the four bounded, read-only `gh` reads (REST reviews and comments, PR metadata, GraphQL `reviewThreads` resolution state) deterministically and prints one typed JSON payload with telemetry, replacing the delegated `fetch-pr-reviews` agent the `pr-answer`, `pr-resolve`, and `pr-review` skills previously spawned. The invocation and output contract live in the [github-review-fetch shared block](./skills/shared-rules/references/github-review-fetch.md).
+
 ### Versioning
 
 Update version in `.claude-plugin/plugin.json` following [semantic versioning](https://semver.org/):
@@ -62138,6 +62976,22 @@ Update version in `.claude-plugin/plugin.json` following [semantic versioning](h
 ### Testing Locally
 
 See [Local development](#local-development) in the Installation section.
+</file>
+
+<file path="claude-plugins/autopilot/tsconfig.json">
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["bun"]
+  },
+  "include": ["lib/**/*.ts"]
+}
 </file>
 
 <file path="claude-plugins/autopilot/version">
@@ -62340,11 +63194,11 @@ The globs are root-relative because Turbo resolves plain `inputs` against the pa
 
 `turbo.json` defines three tasks. Each task runs only in workspace members that declare the matching `package.json` script — there is no global config to update when you add a new member.
 
-| Task        | `inputs`                                                                                                                                                                             | Cached?             |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------- |
-| `typecheck` | `action.yml`, `*.ts`, `src/**/*.ts`, `tsconfig.json`, `package.json`                                                                                                                 | Yes                 |
-| `test`      | `*.ts`, `src/**/*.ts`, `tsconfig.json`, `package.json` (no `action.yml`), plus `$TURBO_ROOT$` globs for `claude-plugins/`, `docs/`, `rfc/`, `rules/`, `README.md`, `CONTRIBUTING.md` | Yes                 |
-| `clean`     | _none_                                                                                                                                                                               | No (`cache: false`) |
+| Task        | `inputs`                                                                                                                                                                                       | Cached?             |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| `typecheck` | `action.yml`, `*.ts`, `src/**/*.ts`, `tsconfig.json`, `package.json`                                                                                                                           | Yes                 |
+| `test`      | `*.ts`, `src/**/*.ts`, `lib/**`, `tsconfig.json`, `package.json` (no `action.yml`), plus `$TURBO_ROOT$` globs for `claude-plugins/`, `docs/`, `rfc/`, `rules/`, `README.md`, `CONTRIBUTING.md` | Yes                 |
+| `clean`     | _none_                                                                                                                                                                                         | No (`cache: false`) |
 
 `action.yml` is intentionally excluded from `test` inputs — changes to action metadata invalidate `typecheck` but not the test cache. If you add a task that needs cache-aware action-metadata sensitivity, include `action.yml` in its `inputs`.
 
@@ -64200,6 +65054,7 @@ Why `Read` and not the `Skill` tool: a skill loads its whole `SKILL.md`, so ther
 | Git history policy              | `git-history-policy.md`     | —                       |
 | PR title and branch grammar     | `pr-title-grammar.md`       | —                       |
 | PR body grammar                 | `pr-body-grammar.md`        | —                       |
+| GitHub review-thread retrieval  | `github-review-fetch.md`    | repo, PR number, author |
 
 ## Where a block is still inlined
 
@@ -69981,13 +70836,14 @@ In scope: the source code in this repository and the artifacts it publishes. Out
   "globalPassThroughEnv": ["CI", "GITHUB_*", "RUNNER_*", "TURBO_*", "PATH", "HOME", "TMPDIR"],
   "tasks": {
     "typecheck": {
-      "inputs": ["action.yml", "*.ts", "src/**/*.ts", "tsconfig.json", "package.json"],
+      "inputs": ["action.yml", "*.ts", "src/**/*.ts", "lib/**", "tsconfig.json", "package.json"],
       "outputs": []
     },
     "test": {
       "inputs": [
         "*.ts",
         "src/**/*.ts",
+        "lib/**",
         "tsconfig.json",
         "package.json",
         "$TURBO_ROOT$/claude-plugins/**/*.md",
