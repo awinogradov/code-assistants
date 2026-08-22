@@ -193,11 +193,11 @@ The globs are root-relative because Turbo resolves plain `inputs` against the pa
 
 `turbo.json` defines three tasks. Each task runs only in workspace members that declare the matching `package.json` script — there is no global config to update when you add a new member.
 
-| Task        | `inputs`                                                                                                                                                                             | Cached?             |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------- |
-| `typecheck` | `action.yml`, `*.ts`, `src/**/*.ts`, `tsconfig.json`, `package.json`                                                                                                                 | Yes                 |
-| `test`      | `*.ts`, `src/**/*.ts`, `tsconfig.json`, `package.json` (no `action.yml`), plus `$TURBO_ROOT$` globs for `claude-plugins/`, `docs/`, `rfc/`, `rules/`, `README.md`, `CONTRIBUTING.md` | Yes                 |
-| `clean`     | _none_                                                                                                                                                                               | No (`cache: false`) |
+| Task        | `inputs`                                                                                                                                                                                       | Cached?             |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| `typecheck` | `action.yml`, `*.ts`, `src/**/*.ts`, `tsconfig.json`, `package.json`                                                                                                                           | Yes                 |
+| `test`      | `*.ts`, `src/**/*.ts`, `lib/**`, `tsconfig.json`, `package.json` (no `action.yml`), plus `$TURBO_ROOT$` globs for `claude-plugins/`, `docs/`, `rfc/`, `rules/`, `README.md`, `CONTRIBUTING.md` | Yes                 |
+| `clean`     | _none_                                                                                                                                                                                         | No (`cache: false`) |
 
 `action.yml` is intentionally excluded from `test` inputs — changes to action metadata invalidate `typecheck` but not the test cache. If you add a task that needs cache-aware action-metadata sensitivity, include `action.yml` in its `inputs`.
 
