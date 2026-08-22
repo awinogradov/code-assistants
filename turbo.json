@@ -12,6 +12,7 @@
       "inputs": [
         "*.ts",
         "src/**/*.ts",
+        "lib/**",
         "tsconfig.json",
         "package.json",
         "$TURBO_ROOT$/claude-plugins/**/*.md",
