@@ -170,6 +170,8 @@ The content is organized as follows:
         actionsOutput.test.ts
         actionsOutput.ts
         branchGrammarSync.test.ts
+        buildReviewContext.test.ts
+        buildReviewContext.ts
         classifyReaction.test.ts
         classifyReaction.ts
         contextSourceContract.test.ts
@@ -199,6 +201,9 @@ The content is organized as follows:
         promptInputs.test.ts
         reactToComment.ts
         replyReferenceFormatting.test.ts
+        reviewContextBundle.test.ts
+        reviewContextBundle.ts
+        reviewContextBundleContract.test.ts
         reviewTip.test.ts
         reviewTip.ts
         reviewTipGeneration.test.ts
@@ -8993,6 +8998,863 @@ describe("branch grammar sync", () => {
 });
 </file>
 
+<file path=".github/actions/code-review-action/src/buildReviewContext.test.ts">
+/**
+ * Fixture-driven tests for buildReviewContext.ts: small and >100-file PRs,
+ * generated-file-heavy diffs, first-review vs re-review rounds, diverged and
+ * missing compare refs, partial API failures, rate-limit classification, the
+ * mid-build head-move retry, and the streamed diff byte cap. All GitHub access
+ * goes through an injected mock Octokit that records its arguments, so every
+ * test also proves the calls are fully qualified with owner/repo/PR.
+ */
+import type { CheckResult } from "@code-assistants/actions-core/checkStatus";
+import type { Octokit } from "@octokit/rest";
+
+import { describe, expect, test } from "bun:test";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import {
+  anyTruncation,
+  assembleBundle,
+  buildWithRetry,
+  countUnavailable,
+  sectionReason,
+  streamDiffToFile,
+  type BuilderDeps,
+} from "./buildReviewContext.ts";
+import type { ReviewThread } from "./github/githubReview.ts";
+import { bundleBounds } from "./reviewContextBundle.ts";
+
+/** Recorded parameters of every Octokit call, for the fully-qualified assertion. */
+type RecordedCall = { route: string; params: Record<string, unknown> };
+
+interface FixtureOptions {
+  changedFiles?: Array<{ filename: string; status: string; additions: number; deletions: number }>;
+  totalFiles?: number;
+  reviews?: Array<{
+    user: { login: string } | null;
+    state: string;
+    commit_id: string | null;
+    submitted_at: string | null;
+    body: string | null;
+  }>;
+  reviewsError?: Error;
+  compare?: { status: string; files: Array<{ filename: string }>; total_commits: number; commits: unknown[] };
+  compareError?: Error & { status?: number };
+  headShaSequence?: string[];
+}
+
+/** Build a mock Octokit + recorded-calls list for one scenario. */
+function makeOctokit(options: FixtureOptions): { octokit: Octokit; calls: RecordedCall[] } {
+  const calls: RecordedCall[] = [];
+  const heads = [...(options.headShaSequence ?? ["head-sha", "head-sha"])];
+  const files = options.changedFiles ?? [
+    { filename: "src/a.ts", status: "modified", additions: 3, deletions: 1 },
+  ];
+
+  const pullsGet = (params: Record<string, unknown>) => {
+    calls.push({ route: "pulls.get", params });
+    const sha = heads.length > 1 ? heads.shift() : heads[0];
+    return Promise.resolve({
+      data: {
+        html_url: "https://github.com/o/r/pull/5",
+        title: "Add feature",
+        user: { login: "octocat" },
+        changed_files: options.totalFiles ?? files.length,
+        base: { ref: "main", sha: "base-sha" },
+        head: { ref: "issue-5-feature", sha },
+      },
+    });
+  };
+
+  const listFiles = Object.assign(() => {}, { route: "pulls.listFiles" });
+  const listReviews = Object.assign(() => {}, { route: "pulls.listReviews" });
+
+  const paginate = (route: { route: string }, params: Record<string, unknown>, mapFn?: unknown) => {
+    calls.push({ route: route.route, params });
+    if (route.route === "pulls.listFiles") {
+      const done = { called: false };
+      for (let page = 0; page * 100 < files.length; page += 1) {
+        const slice = files.slice(page * 100, page * 100 + 100);
+        (mapFn as (r: { data: unknown[] }, d: () => void) => unknown[])(
+          { data: slice },
+          () => {
+            done.called = true;
+          },
+        );
+        if (done.called) break;
+      }
+      return Promise.resolve([]);
+    }
+    if (options.reviewsError) return Promise.reject(options.reviewsError);
+    return Promise.resolve(options.reviews ?? []);
+  };
+
+  const compare = (params: Record<string, unknown>) => {
+    calls.push({ route: "repos.compareCommitsWithBasehead", params });
+    if (options.compareError) return Promise.reject(options.compareError);
+    const data = options.compare ?? { status: "ahead", files: [], total_commits: 0, commits: [] };
+    return Promise.resolve({ data });
+  };
+
+  const octokit = {
+    rest: {
+      pulls: { get: pullsGet, listFiles, listReviews },
+      repos: { compareCommitsWithBasehead: compare },
+    },
+    paginate,
+  } as unknown as Octokit;
+
+  return { octokit, calls };
+}
+
+const passingChecks: CheckResult = {
+  allCompleted: true,
+  hasFailed: false,
+  failed: [],
+  pendingNames: [],
+};
+
+/** Assemble deps around a mock Octokit with quiet check/thread/diff fetchers. */
+async function makeDeps(
+  options: FixtureOptions,
+  overrides: Partial<BuilderDeps> = {},
+): Promise<{ deps: BuilderDeps; calls: RecordedCall[] }> {
+  const { octokit, calls } = makeOctokit(options);
+  const runnerTemp = await mkdtemp(join(tmpdir(), "bundle-test-"));
+  const deps: BuilderDeps = {
+    octokit,
+    owner: "o",
+    repoName: "r",
+    pullNumber: 5,
+    reviewer: "review-bot",
+    token: "tok",
+    runnerTemp,
+    jobName: "review",
+    fetchImpl: () => Promise.resolve(new Response("diff --git a b\n")),
+    fetchChecks: () => Promise.resolve(passingChecks),
+    fetchThreads: () => Promise.resolve([] as ReviewThread[]),
+    ...overrides,
+  };
+  return { deps, calls };
+}
+
+const noop = (): void => {};
+
+describe("assembleBundle", () => {
+  test("small first-review PR: valid bundle, no delta, null lastReviewedSha", async () => {
+    const { deps } = await makeDeps({});
+    const { bundle, headMoved } = await assembleBundle(deps, noop);
+
+    expect(headMoved).toBe(false);
+    expect(bundle.version).toBe(1);
+    expect(bundle.round).toEqual({ firstReview: true });
+    expect(bundle.refs.lastReviewedSha).toBeNull();
+    expect(bundle.changedFiles).toMatchObject({ available: true, totalFiles: 1, truncated: false });
+    expect(bundle.diff.available && bundle.diff.bytes).toBeGreaterThan(0);
+    expect(anyTruncation(bundle)).toBe(false);
+    expect(countUnavailable(bundle)).toBe(0);
+  });
+
+  test("every Octokit call is fully qualified with owner/repo/PR", async () => {
+    const { deps, calls } = await makeDeps({
+      reviews: [
+        {
+          user: { login: "review-bot" },
+          state: "CHANGES_REQUESTED",
+          commit_id: "old-sha",
+          submitted_at: "2026-08-01T00:00:00Z",
+          body: "blocker",
+        },
+      ],
+    });
+    await assembleBundle(deps, noop);
+
+    expect(calls.length).toBeGreaterThan(0);
+    for (const call of calls) {
+      expect(call.params.owner).toBe("o");
+      expect(call.params.repo).toBe("r");
+      const target = call.route.startsWith("pulls")
+        ? call.params.pull_number
+        : call.params.basehead;
+      expect(target).toBeDefined();
+    }
+  });
+
+  test("large PR beyond the file bound: pagination stops, generated paths cut first", async () => {
+    const generated = Array.from({ length: 60 }, (_, i) => ({
+      filename: `dist/out${i}.js`,
+      status: "modified",
+      additions: 1,
+      deletions: 0,
+    }));
+    const authored = Array.from({ length: 290 }, (_, i) => ({
+      filename: `src/f${i}.ts`,
+      status: "modified",
+      additions: 1,
+      deletions: 0,
+    }));
+    const { deps } = await makeDeps({
+      changedFiles: [...generated, ...authored],
+      totalFiles: 450,
+    });
+
+    const { bundle } = await assembleBundle(deps, noop);
+    if (!bundle.changedFiles.available) throw new Error("changedFiles degraded");
+
+    expect(bundle.changedFiles.truncated).toBe(true);
+    expect(bundle.changedFiles.totalFiles).toBe(450);
+    expect(bundle.changedFiles.files.length).toBe(bundleBounds.maxChangedFiles);
+    const kept = bundle.changedFiles.files.map((f) => f.path);
+    expect(kept.filter((p) => p.startsWith("src/")).length).toBe(290);
+    expect(kept.filter((p) => p.startsWith("dist/")).length).toBe(
+      bundleBounds.maxChangedFiles - 290,
+    );
+  });
+
+  test("re-review: delta computed from the reviewer's latest review commit", async () => {
+    const { deps, calls } = await makeDeps({
+      reviews: [
+        {
+          user: { login: "review-bot" },
+          state: "CHANGES_REQUESTED",
+          commit_id: "old-sha",
+          submitted_at: "2026-08-01T00:00:00Z",
+          body: "blocker found",
+        },
+        {
+          user: { login: "someone-else" },
+          state: "APPROVED",
+          commit_id: "newer-sha",
+          submitted_at: "2026-08-02T00:00:00Z",
+          body: "lgtm",
+        },
+      ],
+      compare: {
+        status: "ahead",
+        files: [{ filename: "src/a.ts" }],
+        total_commits: 2,
+        commits: [{}, {}],
+      },
+    });
+
+    const { bundle } = await assembleBundle(deps, noop);
+    expect(bundle.refs.lastReviewedSha).toBe("old-sha");
+    if (bundle.round.firstReview) throw new Error("expected re-review round");
+    expect(bundle.round.lastReviewedSha).toBe("old-sha");
+    expect(bundle.round.delta).toMatchObject({
+      available: true,
+      files: ["src/a.ts"],
+      commitCount: 2,
+    });
+
+    const compareCall = calls.find((c) => c.route === "repos.compareCommitsWithBasehead");
+    expect(compareCall?.params.basehead).toBe("old-sha...head-sha");
+  });
+
+  test("diverged compare status degrades the delta explicitly", async () => {
+    const { deps } = await makeDeps({
+      reviews: [
+        {
+          user: { login: "review-bot" },
+          state: "APPROVED",
+          commit_id: "old-sha",
+          submitted_at: null,
+          body: null,
+        },
+      ],
+      compare: { status: "diverged", files: [], total_commits: 0, commits: [] },
+    });
+
+    const { bundle } = await assembleBundle(deps, noop);
+    if (bundle.round.firstReview) throw new Error("expected re-review round");
+    expect(bundle.round.delta).toEqual({
+      available: false,
+      reason: "compare-status-diverged",
+    });
+  });
+
+  test("missing compare ref (404) degrades the delta as ref-missing", async () => {
+    const compareError = Object.assign(new Error("Not Found"), { status: 404 });
+    const { deps } = await makeDeps({
+      reviews: [
+        {
+          user: { login: "review-bot" },
+          state: "APPROVED",
+          commit_id: "gone-sha",
+          submitted_at: null,
+          body: null,
+        },
+      ],
+      compareError,
+    });
+
+    const { bundle } = await assembleBundle(deps, noop);
+    if (bundle.round.firstReview) throw new Error("expected re-review round");
+    expect(bundle.round.delta).toEqual({ available: false, reason: "ref-missing" });
+  });
+
+  test("reviews endpoint failure degrades only the review-state section", async () => {
+    const { deps } = await makeDeps({ reviewsError: new Error("boom\nstack") });
+    const { bundle } = await assembleBundle(deps, noop);
+
+    expect(bundle.reviewState).toEqual({ available: false, reason: "boom" });
+    expect(bundle.changedFiles.available).toBe(true);
+    expect(bundle.diff.available).toBe(true);
+    expect(countUnavailable(bundle)).toBe(1);
+    // With prior reviews unknowable, the round degrades to first-review; the
+    // unavailable review-state section is the consumer's signal to verify.
+    expect(bundle.round).toEqual({ firstReview: true });
+  });
+});
+
+describe("sectionReason", () => {
+  test("classifies 403/429 as rate-limited and keeps first error line otherwise", () => {
+    expect(sectionReason(Object.assign(new Error("nope"), { status: 403 }))).toBe("rate-limited");
+    expect(sectionReason(Object.assign(new Error("nope"), { status: 429 }))).toBe("rate-limited");
+    expect(sectionReason(new Error("first line\nsecond"))).toBe("first line");
+  });
+});
+
+describe("buildWithRetry", () => {
+  test("head moving once triggers a single rebuild with telemetry intact", async () => {
+    const { deps } = await makeDeps({
+      headShaSequence: ["head-1", "head-2", "head-2", "head-2"],
+    });
+    const built = await buildWithRetry(deps);
+
+    expect(built).not.toBeNull();
+    expect(built?.bundle.refs.headSha).toBe("head-2");
+    expect(built?.telemetry.request_count).toBeGreaterThan(6);
+    expect(built?.telemetry.cache_used).toBe(false);
+  });
+
+  test("head moving twice degrades to null (caller emits empty path)", async () => {
+    const { deps } = await makeDeps({
+      headShaSequence: ["head-1", "head-2", "head-3", "head-4"],
+    });
+    expect(await buildWithRetry(deps)).toBeNull();
+  });
+
+  test("telemetry counts requests and flags truncation", async () => {
+    const { deps } = await makeDeps({});
+    const built = await buildWithRetry(deps);
+
+    expect(built?.telemetry).toMatchObject({
+      request_count: 6,
+      truncated: false,
+      sections_unavailable: 0,
+      cache_used: false,
+    });
+    expect(built?.telemetry.bundle_bytes).toBeGreaterThan(0);
+  });
+});
+
+describe("streamDiffToFile", () => {
+  const target = { owner: "o", repoName: "r", pullNumber: 5, token: "tok" };
+
+  test("writes the full diff untruncated when under the cap", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "diff-test-"));
+    const dest = join(dir, "diff.patch");
+    const fetchImpl = (() => Promise.resolve(new Response("0123456789")));
+
+    const result = await streamDiffToFile(target, dest, 10, fetchImpl);
+    expect(result).toEqual({ path: dest, bytes: 10, truncated: false });
+    expect(await Bun.file(dest).text()).toBe("0123456789");
+  });
+
+  test("enforces the byte cap mid-stream and flags truncation", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "diff-test-"));
+    const dest = join(dir, "diff.patch");
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("aaaaa"));
+        controller.enqueue(new TextEncoder().encode("bbbbb"));
+        controller.enqueue(new TextEncoder().encode("ccccc"));
+        controller.close();
+      },
+    });
+    const fetchImpl = (() => Promise.resolve(new Response(body)));
+
+    const result = await streamDiffToFile(target, dest, 7, fetchImpl);
+    expect(result.bytes).toBe(7);
+    expect(result.truncated).toBe(true);
+    expect(await Bun.file(dest).text()).toBe("aaaaabb");
+  });
+
+  test("throws with the http status when the diff endpoint refuses (e.g. 406 too large)", async () => {
+    const fetchImpl = (() =>
+      Promise.resolve(new Response("too big", { status: 406 })));
+
+    expect(streamDiffToFile(target, "/tmp/unused.patch", 10, fetchImpl)).rejects.toThrow(
+      "http-406",
+    );
+  });
+});
+</file>
+
+<file path=".github/actions/code-review-action/src/buildReviewContext.ts">
+/**
+ * Deterministic review-context builder (issue #605).
+ *
+ * Runs as an action step before the Claude review session, fetches everything
+ * the pr-review skill's Phase 1 used to rediscover call-by-call, and writes a
+ * version-1 bundle (see `reviewContextBundle.ts`) plus a bounded diff file to
+ * `RUNNER_TEMP`. Always emits the `path` and `telemetry` step outputs — empty
+ * `path` on any fatal failure — so the prompt wiring never dangles and the
+ * skill degrades to its legacy discovery path.
+ *
+ * All GitHub calls go through Octokit, so every request is fully qualified
+ * with owner/repo/PR (this action has a recorded incident of silent repo
+ * inference failure with bare `gh` calls). Independent fetches run
+ * concurrently; a per-section failure degrades that section, never the build.
+ *
+ * @example
+ * GH_TOKEN=xxx REPO=owner/repo PR_NUMBER=123 REVIEWER=bot JOB_NAME=review bun run src/buildReviewContext.ts
+ */
+import { fetchCheckStatuses, type CheckResult } from "@code-assistants/actions-core/checkStatus";
+import type { Octokit } from "@octokit/rest";
+
+import { setOutput } from "./actionsOutput.ts";
+import { fetchReviewThreads, parseRepoEnv, type ReviewThread } from "./github/githubReview.ts";
+import {
+  boundBody,
+  bundleBounds,
+  bundleVersion,
+  contextBuilderTelemetrySchema,
+  orderForTruncation,
+  reviewContextBundleSchema,
+  type ContextBuilderTelemetry,
+  type ReviewContextBundle,
+} from "./reviewContextBundle.ts";
+
+/** Minimal fetch signature the diff streamer needs; injectable in tests. */
+export type DiffFetch = (url: string, init?: RequestInit) => Promise<Response>;
+
+/** Everything the builder needs; fetchers are injectable so tests never hit the network. */
+export interface BuilderDeps {
+  octokit: Octokit;
+  owner: string;
+  repoName: string;
+  pullNumber: number;
+  reviewer: string;
+  /** GitHub token used only for the streamed diff request. */
+  token: string;
+  runnerTemp: string;
+  /** Current job name, excluded from check aggregation (self-check). */
+  jobName: string;
+  fetchImpl?: DiffFetch;
+  fetchChecks?: typeof fetchCheckStatuses;
+  fetchThreads?: typeof fetchReviewThreads;
+}
+
+/** A fallible section outcome before schema assembly. */
+type Section<T> = ({ available: true } & T) | { available: false; reason: string };
+
+/** Map an error to the section-unavailable reason, classifying rate limits distinctly. */
+export function sectionReason(error: unknown): string {
+  const status = (error as { status?: number }).status;
+  if (status === 403 || status === 429) return "rate-limited";
+  const message = error instanceof Error ? error.message : String(error);
+  return message.split("\n")[0] ?? "unknown";
+}
+
+/** Run one fallible fetch, degrading to an explicit unavailable arm on error. */
+async function section<T>(fn: () => Promise<T>): Promise<Section<T>> {
+  try {
+    return { available: true, ...(await fn()) };
+  } catch (error) {
+    return { available: false, reason: sectionReason(error) };
+  }
+}
+
+/**
+ * Stream the PR's unified diff to `destPath`, enforcing the byte cap
+ * mid-stream — the diff is never buffered in memory (a generated-file-heavy
+ * PR can produce hundreds of MB). Records bytes written, not the unknown
+ * full size.
+ */
+export async function streamDiffToFile(
+  deps: Pick<BuilderDeps, "owner" | "repoName" | "pullNumber" | "token">,
+  destPath: string,
+  maxBytes: number,
+  fetchImpl: DiffFetch,
+): Promise<{ path: string; bytes: number; truncated: boolean }> {
+  const url = `https://api.github.com/repos/${deps.owner}/${deps.repoName}/pulls/${deps.pullNumber}`;
+  const response = await fetchImpl(url, {
+    headers: {
+      accept: "application/vnd.github.diff",
+      authorization: `Bearer ${deps.token}`,
+      "x-github-api-version": "2022-11-28",
+    },
+  });
+  if (!response.ok || !response.body) {
+    throw new Error(`diff fetch failed: http-${response.status}`);
+  }
+
+  const writer = Bun.file(destPath).writer();
+  const reader = response.body.getReader();
+  let bytes = 0;
+  let truncated = false;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const room = maxBytes - bytes;
+      // Strictly-over check: a diff of exactly maxBytes is complete, not cut.
+      if (value.length > room) {
+        writer.write(value.subarray(0, room));
+        bytes += room;
+        truncated = true;
+        await reader.cancel();
+        break;
+      }
+      writer.write(value);
+      bytes += value.length;
+    }
+  } finally {
+    await writer.end();
+  }
+  return { path: destPath, bytes, truncated };
+}
+
+/** Fetch changed files, paginating but stopping once the bundle bound is exceeded. */
+async function fetchChangedFiles(
+  deps: BuilderDeps,
+  totalFiles: number,
+): Promise<{
+  files: Array<{ path: string; status: string; additions: number; deletions: number }>;
+  totalFiles: number;
+  truncated: boolean;
+}> {
+  const collected: Array<{ path: string; status: string; additions: number; deletions: number }> =
+    [];
+  const raw = await deps.octokit.paginate(
+    deps.octokit.rest.pulls.listFiles,
+    { owner: deps.owner, repo: deps.repoName, pull_number: deps.pullNumber, per_page: 100 },
+    (response, done) => {
+      collected.push(
+        ...response.data.map((f) => ({
+          path: f.filename,
+          status: f.status,
+          additions: f.additions,
+          deletions: f.deletions,
+        })),
+      );
+      // One page past the bound is enough to order generated files to the tail
+      // before cutting; fetching the rest would burn requests on discarded rows.
+      if (collected.length > bundleBounds.maxChangedFiles) done();
+      return [];
+    },
+  );
+  void raw;
+
+  const truncated = totalFiles > collected.length || collected.length > bundleBounds.maxChangedFiles;
+  const files = orderForTruncation(collected).slice(0, bundleBounds.maxChangedFiles);
+  return { files, totalFiles, truncated };
+}
+
+/** Review-state fields plus the builder-internal `lastReviewedSha`. */
+interface ReviewStateData {
+  existingVerdict: string | null;
+  priorReviews: Array<{
+    state: string;
+    submittedAt: string | null;
+    commitId: string | null;
+    body: string;
+    bodyTruncated: boolean;
+  }>;
+  priorReviewsTruncated: boolean;
+  unresolvedThreads: Array<{
+    path: string;
+    line: number | null;
+    author: string | null;
+    body: string;
+    bodyTruncated: boolean;
+  }>;
+  threadsTruncated: boolean;
+  lastReviewedSha: string | null;
+}
+
+/** The reviewer's non-pending reviews plus unresolved threads, both paginated. */
+async function fetchReviewState(deps: BuilderDeps): Promise<ReviewStateData> {
+  const fetchThreads = deps.fetchThreads ?? fetchReviewThreads;
+  const [allReviews, allThreads] = await Promise.all([
+    deps.octokit.paginate(deps.octokit.rest.pulls.listReviews, {
+      owner: deps.owner,
+      repo: deps.repoName,
+      pull_number: deps.pullNumber,
+      per_page: 100,
+    }),
+    fetchThreads(deps.octokit, deps.owner, deps.repoName, deps.pullNumber),
+  ]);
+
+  const botReviews = allReviews.filter(
+    (r) => r.user?.login === deps.reviewer && r.state !== "PENDING",
+  );
+  const latest = botReviews.at(-1);
+  const recent = botReviews.slice(-bundleBounds.maxPriorReviews);
+  const unresolved = allThreads.filter((t: ReviewThread) => !t.isResolved);
+
+  return {
+    existingVerdict: latest?.state ?? null,
+    priorReviews: recent.map((r) => ({
+      state: r.state,
+      submittedAt: r.submitted_at ?? null,
+      commitId: r.commit_id ?? null,
+      ...boundBody(r.body ?? ""),
+    })),
+    priorReviewsTruncated: botReviews.length > recent.length,
+    unresolvedThreads: unresolved.slice(0, bundleBounds.maxThreads).map((t) => ({
+      path: t.path,
+      line: t.line,
+      author: t.firstCommentAuthor,
+      ...boundBody(t.firstCommentBody),
+    })),
+    threadsTruncated: unresolved.length > bundleBounds.maxThreads,
+    lastReviewedSha: latest?.commit_id ?? null,
+  };
+}
+
+/**
+ * Re-review delta from the last-reviewed SHA. Any compare status other than
+ * `ahead` (diverged, behind, identical) means the delta cannot be trusted as
+ * "what changed since the last review" — rebases move the goalposts — so it
+ * degrades explicitly and the reviewer works from the full diff.
+ */
+async function fetchDelta(
+  deps: BuilderDeps,
+  lastReviewedSha: string,
+  headSha: string,
+): Promise<Section<{ files: string[]; commitCount: number; truncated: boolean }>> {
+  try {
+    const { data } = await deps.octokit.rest.repos.compareCommitsWithBasehead({
+      owner: deps.owner,
+      repo: deps.repoName,
+      basehead: `${lastReviewedSha}...${headSha}`,
+    });
+    if (data.status !== "ahead") {
+      return { available: false, reason: `compare-status-${data.status}` };
+    }
+    const allFiles = (data.files ?? []).map((f) => f.filename);
+    return {
+      available: true,
+      files: allFiles.slice(0, bundleBounds.maxDeltaFiles),
+      commitCount: data.total_commits,
+      // The compare API silently caps its response at 250 commits / 300 files.
+      truncated:
+        allFiles.length > bundleBounds.maxDeltaFiles ||
+        data.total_commits > data.commits.length ||
+        allFiles.length >= 300,
+    };
+  } catch (error) {
+    const status = (error as { status?: number }).status;
+    if (status === 404) return { available: false, reason: "ref-missing" };
+    return { available: false, reason: sectionReason(error) };
+  }
+}
+
+/** Count truncation across sections for the telemetry `truncated` flag. */
+export function anyTruncation(bundle: ReviewContextBundle): boolean {
+  const flags = [
+    bundle.changedFiles.available && bundle.changedFiles.truncated,
+    bundle.diff.available && bundle.diff.truncated,
+    bundle.checks.available && bundle.checks.truncated,
+    bundle.reviewState.available &&
+      (bundle.reviewState.priorReviewsTruncated || bundle.reviewState.threadsTruncated),
+    !bundle.round.firstReview && bundle.round.delta.available && bundle.round.delta.truncated,
+  ];
+  return flags.some(Boolean);
+}
+
+/** Count sections that degraded to `available: false`. */
+export function countUnavailable(bundle: ReviewContextBundle): number {
+  const sections = [bundle.changedFiles, bundle.diff, bundle.checks, bundle.reviewState];
+  const delta = bundle.round.firstReview ? [] : [bundle.round.delta];
+  return [...sections, ...delta].filter((s) => !s.available).length;
+}
+
+/**
+ * One full assembly pass against the current head. Returns the validated
+ * bundle; throws only when PR identity itself cannot be fetched (the caller
+ * then falls back to an empty-path output).
+ */
+export async function assembleBundle(
+  deps: BuilderDeps,
+  countRequest: () => void,
+): Promise<{ bundle: ReviewContextBundle; headMoved: boolean }> {
+  const fetchImpl = deps.fetchImpl ?? fetch;
+  const fetchChecks = deps.fetchChecks ?? fetchCheckStatuses;
+
+  countRequest();
+  const { data: pr } = await deps.octokit.rest.pulls.get({
+    owner: deps.owner,
+    repo: deps.repoName,
+    pull_number: deps.pullNumber,
+  });
+
+  const diffPath = `${deps.runnerTemp}/review-context-diff.patch`;
+  const [changedFiles, diff, checks, reviewState] = await Promise.all([
+    section(() => {
+      countRequest();
+      return fetchChangedFiles(deps, pr.changed_files);
+    }),
+    section(() => {
+      countRequest();
+      return streamDiffToFile(deps, diffPath, bundleBounds.maxDiffBytes, fetchImpl);
+    }),
+    section(async () => {
+      countRequest();
+      const result: CheckResult = await fetchChecks(
+        deps.octokit,
+        deps.owner,
+        deps.repoName,
+        pr.head.sha,
+        deps.jobName,
+      );
+      return {
+        allCompleted: result.allCompleted,
+        failing: result.failed.map((f) => f.name).slice(0, bundleBounds.maxCheckNames),
+        pending: result.pendingNames.slice(0, bundleBounds.maxCheckNames),
+        truncated:
+          result.failed.length > bundleBounds.maxCheckNames ||
+          result.pendingNames.length > bundleBounds.maxCheckNames,
+      };
+    }),
+    section(() => {
+      countRequest();
+      return fetchReviewState(deps);
+    }),
+  ]);
+
+  const lastReviewedSha = reviewState.available ? reviewState.lastReviewedSha : null;
+  const round: ReviewContextBundle["round"] =
+    lastReviewedSha === null
+      ? { firstReview: true }
+      : {
+          firstReview: false,
+          lastReviewedSha,
+          delta: await (async () => {
+            countRequest();
+            return fetchDelta(deps, lastReviewedSha, pr.head.sha);
+          })(),
+        };
+
+  // Drop the builder-internal field before schema assembly.
+  const reviewStateSection = reviewState.available
+    ? (({ lastReviewedSha: _dropped, ...rest }) => rest)(reviewState)
+    : reviewState;
+
+  countRequest();
+  const { data: recheck } = await deps.octokit.rest.pulls.get({
+    owner: deps.owner,
+    repo: deps.repoName,
+    pull_number: deps.pullNumber,
+  });
+
+  const prBody = boundBody(pr.body ?? "");
+  const bundle = reviewContextBundleSchema.parse({
+    version: bundleVersion,
+    identity: {
+      repo: `${deps.owner}/${deps.repoName}`,
+      prNumber: deps.pullNumber,
+      url: pr.html_url,
+      title: pr.title,
+      body: prBody.body,
+      bodyTruncated: prBody.bodyTruncated,
+      author: pr.user?.login ?? "",
+      baseRefName: pr.base.ref,
+      headRefName: pr.head.ref,
+    },
+    refs: { baseSha: pr.base.sha, headSha: pr.head.sha, lastReviewedSha },
+    changedFiles,
+    diff,
+    checks,
+    reviewState: reviewStateSection,
+    round,
+  });
+
+  return { bundle, headMoved: recheck.head.sha !== pr.head.sha };
+}
+
+/**
+ * Build the bundle with one mid-build-push retry: a head that moved between
+ * the first and last fetch yields an internally inconsistent bundle, so the
+ * pass reruns once; a second move degrades to the fallback (empty path).
+ */
+export async function buildWithRetry(
+  deps: BuilderDeps,
+): Promise<{ bundle: ReviewContextBundle; telemetry: ContextBuilderTelemetry } | null> {
+  const started = performance.now();
+  let requestCount = 0;
+  const countRequest = (): void => {
+    requestCount += 1;
+  };
+
+  let result = await assembleBundle(deps, countRequest);
+  if (result.headMoved) {
+    console.log("::warning title=Review context builder::head moved mid-build, rebuilding once");
+    result = await assembleBundle(deps, countRequest);
+    if (result.headMoved) return null;
+  }
+
+  const { bundle } = result;
+  const bundleBytes = Buffer.byteLength(JSON.stringify(bundle));
+  const telemetry = contextBuilderTelemetrySchema.parse({
+    builder_ms: Math.round(performance.now() - started),
+    request_count: requestCount,
+    bundle_bytes: bundleBytes,
+    diff_bytes: bundle.diff.available ? bundle.diff.bytes : 0,
+    truncated: anyTruncation(bundle),
+    sections_unavailable: countUnavailable(bundle),
+    cache_used: false,
+  });
+  return { bundle, telemetry };
+}
+
+// Main execution — only when run as the step entry point, so tests can import
+// the helpers without triggering a build.
+if (import.meta.main) {
+  try {
+    const { octokit, owner, repoName, pullNumber, reviewer } = parseRepoEnv();
+    const deps: BuilderDeps = {
+      octokit,
+      owner,
+      repoName,
+      pullNumber,
+      reviewer,
+      token: process.env.GH_TOKEN ?? "",
+      runnerTemp: process.env.RUNNER_TEMP ?? "/tmp",
+      jobName: process.env.JOB_NAME ?? "",
+    };
+
+    const built = await buildWithRetry(deps);
+    if (!built) {
+      console.log(
+        "::warning title=Review context builder::head kept moving; falling back to in-session discovery",
+      );
+      await setOutput("path", "");
+      await setOutput("telemetry", "");
+    } else {
+      const bundlePath = `${deps.runnerTemp}/review-context-bundle.json`;
+      await Bun.write(bundlePath, JSON.stringify(built.bundle));
+      console.log(`Review context bundle: ${JSON.stringify(built.telemetry)}`);
+      await setOutput("path", bundlePath);
+      await setOutput("telemetry", JSON.stringify(built.telemetry));
+    }
+  } catch (error) {
+    // Fail open: the review must still run on the legacy discovery path, but
+    // the degradation is surfaced as a warning annotation, never silently.
+    const message = error instanceof Error ? error.message : String(error);
+    console.log(`::warning title=Review context builder failed::${message}`);
+    await setOutput("path", "");
+    await setOutput("telemetry", "");
+  }
+}
+</file>
+
 <file path=".github/actions/code-review-action/src/classifyReaction.test.ts">
 /**
  * Tests for classifyReaction.ts pure classification helpers.
@@ -14150,6 +15012,544 @@ describe("reply reference-formatting wiring", () => {
 });
 </file>
 
+<file path=".github/actions/code-review-action/src/reviewContextBundle.test.ts">
+/**
+ * Tests for reviewContextBundle.ts: version gating, strictness, discriminated
+ * union shapes, the bounds constants, the generated-path truncation ordering,
+ * and body bounding — the parts of the contract the pr-review skill and the
+ * builder both rely on staying exact.
+ */
+import { describe, expect, test } from "bun:test";
+
+import {
+  boundBody,
+  bundleBounds,
+  bundleVersion,
+  contextBuilderTelemetrySchema,
+  isGeneratedPath,
+  orderForTruncation,
+  reviewContextBundleSchema,
+} from "./reviewContextBundle.ts";
+
+/** Minimal valid version-1 bundle used as the mutation base for negative cases. */
+function validBundle(): Record<string, unknown> {
+  return {
+    version: bundleVersion,
+    identity: {
+      repo: "owner/repo",
+      prNumber: 5,
+      url: "https://github.com/owner/repo/pull/5",
+      title: "Add feature",
+      body: "**Issues:**\n\nCloses #5",
+      bodyTruncated: false,
+      author: "octocat",
+      baseRefName: "main",
+      headRefName: "issue-5-feature",
+    },
+    refs: { baseSha: "base-sha", headSha: "head-sha", lastReviewedSha: null },
+    changedFiles: {
+      available: true,
+      files: [{ path: "src/a.ts", status: "modified", additions: 3, deletions: 1 }],
+      totalFiles: 1,
+      truncated: false,
+    },
+    diff: { available: true, path: "/tmp/diff.patch", bytes: 120, truncated: false },
+    checks: { available: true, allCompleted: true, failing: [], pending: [], truncated: false },
+    reviewState: {
+      available: true,
+      existingVerdict: null,
+      priorReviews: [],
+      priorReviewsTruncated: false,
+      unresolvedThreads: [],
+      threadsTruncated: false,
+    },
+    round: { firstReview: true },
+  };
+}
+
+describe("reviewContextBundleSchema", () => {
+  test("accepts a minimal first-review bundle", () => {
+    expect(reviewContextBundleSchema.parse(validBundle()).version).toBe(1);
+  });
+
+  test("rejects a wrong version literal — the skill's consumption gate", () => {
+    expect(reviewContextBundleSchema.safeParse({ ...validBundle(), version: 2 }).success).toBe(
+      false,
+    );
+  });
+
+  test("rejects unknown top-level keys (strict contract)", () => {
+    expect(
+      reviewContextBundleSchema.safeParse({ ...validBundle(), extra: true }).success,
+    ).toBe(false);
+  });
+
+  test("accepts an unavailable section with a reason and rejects one without", () => {
+    const degraded = { ...validBundle(), checks: { available: false, reason: "rate-limited" } };
+    expect(reviewContextBundleSchema.parse(degraded).checks.available).toBe(false);
+
+    const bare = { ...validBundle(), checks: { available: false } };
+    expect(reviewContextBundleSchema.safeParse(bare).success).toBe(false);
+  });
+
+  test("accepts a re-review round with a delta and rejects one missing lastReviewedSha", () => {
+    const reReview = {
+      ...validBundle(),
+      round: {
+        firstReview: false,
+        lastReviewedSha: "old-sha",
+        delta: { available: true, files: ["src/a.ts"], commitCount: 2, truncated: false },
+      },
+    };
+    const parsed = reviewContextBundleSchema.parse(reReview);
+    expect(parsed.round.firstReview).toBe(false);
+
+    const missingSha = {
+      ...validBundle(),
+      round: { firstReview: false, delta: { available: false, reason: "ref-missing" } },
+    };
+    expect(reviewContextBundleSchema.safeParse(missingSha).success).toBe(false);
+  });
+
+  test("enforces the changed-files bound", () => {
+    const over = {
+      ...validBundle(),
+      changedFiles: {
+        available: true,
+        files: Array.from({ length: bundleBounds.maxChangedFiles + 1 }, (_, i) => ({
+          path: `src/f${i}.ts`,
+          status: "modified",
+          additions: 1,
+          deletions: 0,
+        })),
+        totalFiles: bundleBounds.maxChangedFiles + 1,
+        truncated: true,
+      },
+    };
+    expect(reviewContextBundleSchema.safeParse(over).success).toBe(false);
+  });
+});
+
+describe("contextBuilderTelemetrySchema", () => {
+  test("accepts the builder's telemetry shape and rejects unknown keys", () => {
+    const telemetry = {
+      builder_ms: 812,
+      request_count: 6,
+      bundle_bytes: 2048,
+      diff_bytes: 120,
+      truncated: false,
+      sections_unavailable: 0,
+      cache_used: false,
+    };
+    expect(contextBuilderTelemetrySchema.parse(telemetry).request_count).toBe(6);
+    expect(
+      contextBuilderTelemetrySchema.safeParse({ ...telemetry, surprise: 1 }).success,
+    ).toBe(false);
+  });
+});
+
+describe("isGeneratedPath", () => {
+  test.each([
+    ["bun.lock", true],
+    ["package-lock.json", true],
+    ["apps/web/yarn.lock", true],
+    ["dist/index.js", true],
+    ["packages/x/dist/out.js", true],
+    [".repomix/pack.xml", true],
+    ["assets/app.min.js", true],
+    ["src/__snapshots__/a.snap", true],
+    ["src/index.ts", false],
+    ["docs/lockfile-guide.md", false],
+    ["distribution.ts", false],
+  ])("%s → %p", (path, expected) => {
+    expect(isGeneratedPath(path)).toBe(expected);
+  });
+});
+
+describe("orderForTruncation", () => {
+  test("moves generated paths to the tail preserving API order within groups", () => {
+    const files = [
+      { path: "bun.lock" },
+      { path: "src/a.ts" },
+      { path: "dist/bundle.js" },
+      { path: "src/b.ts" },
+    ];
+    expect(orderForTruncation(files).map((f) => f.path)).toEqual([
+      "src/a.ts",
+      "src/b.ts",
+      "bun.lock",
+      "dist/bundle.js",
+    ]);
+  });
+});
+
+describe("boundBody", () => {
+  test("keeps short bodies intact and flags cut ones", () => {
+    expect(boundBody("short")).toEqual({ body: "short", bodyTruncated: false });
+
+    const long = "x".repeat(bundleBounds.maxBodyChars + 5);
+    const bounded = boundBody(long);
+    expect(bounded.body.length).toBe(bundleBounds.maxBodyChars);
+    expect(bounded.bodyTruncated).toBe(true);
+  });
+});
+</file>
+
+<file path=".github/actions/code-review-action/src/reviewContextBundle.ts">
+/**
+ * Version-1 review-context bundle contract (issue #605).
+ *
+ * One deterministic startup fetch replaces the review session's many small
+ * discovery calls: the builder (`buildReviewContext.ts`) assembles this bundle
+ * before the Claude session starts, and the pr-review skill consumes it in
+ * place of its Phase 1 rediscovery. The schema is `.strict()` and carries an
+ * in-payload `version` literal — the skill gates consumption on that field, so
+ * additive changes require a version bump by design.
+ *
+ * Every fallible section is a discriminated union on `available`, which makes
+ * a partially failed fetch unrepresentable-wrong: a section is either complete
+ * data with truncation metadata, or an explicit reason it is missing.
+ *
+ * @example
+ * const bundle = reviewContextBundleSchema.parse(JSON.parse(raw));
+ * if (bundle.changedFiles.available) console.log(bundle.changedFiles.totalFiles);
+ */
+import { z } from "zod";
+
+/** In-payload contract version; the pr-review skill consumes only this value. */
+export const bundleVersion = 1;
+
+/**
+ * Explicit bounds applied by the builder. Exported so tests and docs cite the
+ * same numbers the builder enforces — never restate these as literals elsewhere.
+ */
+export const bundleBounds = {
+  /** Changed-file entries kept in the bundle (`totalFiles` stays exact). */
+  maxChangedFiles: 300,
+  /** Bytes of unified diff streamed to the referenced file before cutting. */
+  maxDiffBytes: 1_000_000,
+  /** Unresolved review threads kept. */
+  maxThreads: 100,
+  /** Prior reviewer verdict bodies kept (most recent first). */
+  maxPriorReviews: 20,
+  /** Characters kept per prior-review or thread body. */
+  maxBodyChars: 4_000,
+  /** Failing / pending check names kept. */
+  maxCheckNames: 50,
+  /** Changed-since-last-review file paths kept in the re-review delta. */
+  maxDeltaFiles: 300,
+} as const;
+
+/**
+ * Paths deprioritized by the truncation policy: lockfiles, build output, and
+ * vendored or generated trees. When the changed-file list exceeds its bound,
+ * these sort to the tail so human-authored files survive the cut.
+ */
+export function isGeneratedPath(path: string): boolean {
+  if (/(^|\/)(dist|build|vendor|node_modules|\.repomix)\//.test(path)) return true;
+  if (/(^|\/)(bun\.lock|bun\.lockb|package-lock\.json|yarn\.lock|pnpm-lock\.yaml)$/.test(path)) {
+    return true;
+  }
+  return path.endsWith(".min.js") || path.endsWith(".min.css") || path.endsWith(".snap");
+}
+
+/**
+ * Deterministic truncation order: non-generated entries first, generated last,
+ * original (API) order preserved within each group — so the truncated subset
+ * is reproducible and generated churn never crowds out reviewable files.
+ */
+export function orderForTruncation<T extends { path: string }>(files: T[]): T[] {
+  return [...files.filter((f) => !isGeneratedPath(f.path)), ...files.filter((f) => isGeneratedPath(f.path))];
+}
+
+/** Shared unavailable arm: the section could not be fetched, with the reason. */
+const unavailableSchema = z
+  .object({
+    available: z.literal(false),
+    /** `rate-limited` for 403/429; otherwise the first line of the error. */
+    reason: z.string(),
+  })
+  .strict();
+
+/** One changed file as reported by the pulls files endpoint. */
+const changedFileSchema = z
+  .object({
+    path: z.string(),
+    status: z.string(),
+    additions: z.number().int().nonnegative(),
+    deletions: z.number().int().nonnegative(),
+  })
+  .strict();
+
+const changedFilesSchema = z.discriminatedUnion("available", [
+  z
+    .object({
+      available: z.literal(true),
+      files: z.array(changedFileSchema).max(bundleBounds.maxChangedFiles),
+      /** Exact count from PR metadata, valid even when `files` is truncated. */
+      totalFiles: z.number().int().nonnegative(),
+      truncated: z.boolean(),
+    })
+    .strict(),
+  unavailableSchema,
+]);
+
+const diffSchema = z.discriminatedUnion("available", [
+  z
+    .object({
+      available: z.literal(true),
+      /** Absolute path of the streamed unified diff — content stays out of the bundle. */
+      path: z.string(),
+      /** Bytes actually written (the full size is unknown when truncated). */
+      bytes: z.number().int().nonnegative(),
+      truncated: z.boolean(),
+    })
+    .strict(),
+  unavailableSchema,
+]);
+
+const checksSchema = z.discriminatedUnion("available", [
+  z
+    .object({
+      available: z.literal(true),
+      allCompleted: z.boolean(),
+      failing: z.array(z.string()).max(bundleBounds.maxCheckNames),
+      pending: z.array(z.string()).max(bundleBounds.maxCheckNames),
+      truncated: z.boolean(),
+    })
+    .strict(),
+  unavailableSchema,
+]);
+
+/** A prior non-pending review by the bot reviewer (the record of past findings). */
+const priorReviewSchema = z
+  .object({
+    state: z.string(),
+    submittedAt: z.string().nullable(),
+    commitId: z.string().nullable(),
+    body: z.string().max(bundleBounds.maxBodyChars),
+    bodyTruncated: z.boolean(),
+  })
+  .strict();
+
+/** An unresolved inline review thread carried into the bundle. */
+const unresolvedThreadSchema = z
+  .object({
+    path: z.string(),
+    line: z.number().int().nullable(),
+    author: z.string().nullable(),
+    body: z.string().max(bundleBounds.maxBodyChars),
+    bodyTruncated: z.boolean(),
+  })
+  .strict();
+
+const reviewStateSchema = z.discriminatedUnion("available", [
+  z
+    .object({
+      available: z.literal(true),
+      /** State of the reviewer's latest non-pending review, or null before any. */
+      existingVerdict: z.string().nullable(),
+      priorReviews: z.array(priorReviewSchema).max(bundleBounds.maxPriorReviews),
+      priorReviewsTruncated: z.boolean(),
+      unresolvedThreads: z.array(unresolvedThreadSchema).max(bundleBounds.maxThreads),
+      threadsTruncated: z.boolean(),
+    })
+    .strict(),
+  unavailableSchema,
+]);
+
+const deltaSchema = z.discriminatedUnion("available", [
+  z
+    .object({
+      available: z.literal(true),
+      files: z.array(z.string()).max(bundleBounds.maxDeltaFiles),
+      commitCount: z.number().int().nonnegative(),
+      /** The compare endpoint silently caps at 250 commits / 300 files. */
+      truncated: z.boolean(),
+    })
+    .strict(),
+  /** Unavailable reasons include `ref-missing` (404) and `compare-status-<status>`. */
+  unavailableSchema,
+]);
+
+/**
+ * Round metadata: a first review carries no delta; a re-review names the SHA
+ * the delta is computed from, or an explicit reason the delta is unavailable
+ * (force-pushed ref, diverged history) — in which case the reviewer must treat
+ * the full diff as the review surface.
+ */
+const roundSchema = z.discriminatedUnion("firstReview", [
+  z.object({ firstReview: z.literal(true) }).strict(),
+  z
+    .object({
+      firstReview: z.literal(false),
+      lastReviewedSha: z.string(),
+      delta: deltaSchema,
+    })
+    .strict(),
+]);
+
+/**
+ * The complete version-1 review-context bundle written by the builder and
+ * consumed by the pr-review skill's §1.0.
+ */
+export const reviewContextBundleSchema = z
+  .object({
+    version: z.literal(bundleVersion),
+    identity: z
+      .object({
+        repo: z.string(),
+        prNumber: z.number().int().positive(),
+        url: z.string(),
+        title: z.string(),
+        /** PR body (bounded) — carries the `Issues:` section for linked-issue extraction. */
+        body: z.string().max(bundleBounds.maxBodyChars),
+        bodyTruncated: z.boolean(),
+        author: z.string(),
+        baseRefName: z.string(),
+        headRefName: z.string(),
+      })
+      .strict(),
+    refs: z
+      .object({
+        baseSha: z.string(),
+        headSha: z.string(),
+        lastReviewedSha: z.string().nullable(),
+      })
+      .strict(),
+    changedFiles: changedFilesSchema,
+    diff: diffSchema,
+    checks: checksSchema,
+    reviewState: reviewStateSchema,
+    round: roundSchema,
+  })
+  .strict();
+
+/** Validated version-1 bundle. */
+export type ReviewContextBundle = z.infer<typeof reviewContextBundleSchema>;
+
+/**
+ * Builder telemetry emitted as the `telemetry` step output and merged into the
+ * run summary by `runClaude.ts` (issue #605 acceptance: duration, request
+ * counts, payload size, truncation, cache use). Snake_case to slot directly
+ * into the run-summary object beside its existing keys.
+ */
+export const contextBuilderTelemetrySchema = z
+  .object({
+    builder_ms: z.number().int().nonnegative(),
+    request_count: z.number().int().nonnegative(),
+    bundle_bytes: z.number().int().nonnegative(),
+    diff_bytes: z.number().int().nonnegative(),
+    truncated: z.boolean(),
+    sections_unavailable: z.number().int().nonnegative(),
+    /** Always false today; the field exists so cache adoption is measurable. */
+    cache_used: z.boolean(),
+  })
+  .strict();
+
+/** Validated builder telemetry. */
+export type ContextBuilderTelemetry = z.infer<typeof contextBuilderTelemetrySchema>;
+
+/**
+ * Truncate a body to the shared per-body bound, flagging the cut so consumers
+ * can request the full text as a targeted follow-up instead of guessing.
+ */
+export function boundBody(body: string): { body: string; bodyTruncated: boolean } {
+  if (body.length <= bundleBounds.maxBodyChars) return { body, bodyTruncated: false };
+  return { body: body.slice(0, bundleBounds.maxBodyChars), bodyTruncated: true };
+}
+</file>
+
+<file path=".github/actions/code-review-action/src/reviewContextBundleContract.test.ts">
+/**
+ * Guards the review-context-bundle contract (issue #605) across its three
+ * holders: the schema (`reviewContextBundle.ts`), the action wiring
+ * (`action.yml`), and the pr-review skill prose (SKILL.md §1.0). Each lives in
+ * a different file, and any one drifting silently defeats the bundle — a skill
+ * that rediscovers anyway, a prompt that never passes the path, or a version
+ * gate checking a number the schema no longer exports.
+ *
+ * Mirrors contextSourceContract.test.ts: the guarded documents are asserted
+ * non-empty first (vacuous-pass defence — a moved file would otherwise pass
+ * every substring check on ""), and the fallback-reason taxonomy is explicit
+ * test data, one assertion per token, so dropping a reason fails loudly.
+ *
+ * Like that file, this proves text, not runtime behavior: runtime evidence is
+ * the `context_builder` block in the run-summary footer (fallback rate and
+ * follow-up counts per run) compared against issue #605's production baseline.
+ */
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
+import { describe, expect, test } from "bun:test";
+
+import { bundleVersion } from "./reviewContextBundle.ts";
+
+// Depth mirrors sharedBlockSync.test.ts in this directory — a move of the
+// action updates both in lockstep.
+const actionDir = join(import.meta.dirname, "..");
+const repoRoot = join(actionDir, "..", "..", "..");
+const skillPath = join(repoRoot, "claude-plugins/autopilot/skills/pr-review/SKILL.md");
+const actionYmlPath = join(actionDir, "action.yml");
+
+/** Shortest either guarded document can plausibly be. */
+const minDocLength = 1000;
+
+/** The machine-readable fallback reasons §1.0 names; runClaude counts the marker. */
+const fallbackReasons = ["absent", "unreadable", "invalid-json", "invalid-version"];
+
+const skill = await readFile(skillPath, "utf8");
+const actionYml = await readFile(actionYmlPath, "utf8");
+
+describe("review-context-bundle contract", () => {
+  test("both guarded documents exist and are substantial", () => {
+    expect(skill.length).toBeGreaterThan(minDocLength);
+    expect(actionYml.length).toBeGreaterThan(minDocLength);
+  });
+
+  test("the skill gates consumption on the version the schema exports", () => {
+    expect(skill).toContain("### 1.0 Consume the Context Bundle");
+    expect(skill).toContain(`\`version\` field equals \`${bundleVersion}\``);
+  });
+
+  test("the bundle substitutes data acquisition only, with both paths sharing §1.3", () => {
+    expect(skill).toContain("substitutes for data acquisition only");
+    expect(skill).toContain("This decision procedure is the same on both data paths");
+  });
+
+  test("follow-ups are budgeted and trace-recorded", () => {
+    expect(skill).toContain("bundle-followup:");
+    expect(skill).toContain("3 per session");
+  });
+
+  test("the fallback is trace-recorded with the full reason taxonomy", () => {
+    expect(skill).toContain("bundle-fallback:");
+  });
+
+  test.each(fallbackReasons)("the fallback taxonomy names %s", (reason) => {
+    expect(skill).toContain(reason);
+  });
+
+  test("the legacy discovery sections survive as the fallback path", () => {
+    expect(skill).toContain("### 1.1 PR Context");
+    expect(skill).toContain("### 1.2 Load Context via Sub-Agents");
+    expect(skill).toContain(
+      "run [§1.1](#11-pr-context)–[§1.2](#12-load-context-via-sub-agents) unchanged",
+    );
+  });
+
+  test("action.yml passes the bundle path in the review prompt", () => {
+    expect(actionYml).toContain("CONTEXT_BUNDLE: ${{ steps.bundle.outputs.path }}");
+  });
+
+  test("action.yml runs the builder step and threads its telemetry into the session", () => {
+    expect(actionYml).toContain("id: bundle");
+    expect(actionYml).toContain("src/buildReviewContext.ts");
+    expect(actionYml).toContain("BUNDLE_TELEMETRY: ${{ steps.bundle.outputs.telemetry }}");
+  });
+});
+</file>
+
 <file path=".github/actions/code-review-action/src/reviewTip.test.ts">
 /**
  * Tests for reviewTip.ts.
@@ -14866,9 +16266,11 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import {
+  buildContextBuilderSummary,
   buildRunSummary,
   buildSdkEnv,
   countToolRoundTrips,
+  countTraceMarker,
   deriveMode,
   detectLinuxLibc,
   extractUsage,
@@ -15366,6 +16768,71 @@ describe("buildSdkEnv", () => {
     expect("ANTHROPIC_AUTH_TOKEN" in env).toBe(false);
   });
 });
+
+describe("countTraceMarker", () => {
+  const assistantText = (text: string) => ({
+    type: "assistant",
+    message: { content: [{ type: "text", text }] },
+  });
+
+  test("counts marker lines across assistant text blocks", () => {
+    const messages = [
+      assistantText("bundle-followup: diff gh pr diff 5\nprose"),
+      assistantText("more prose\nbundle-followup: threads gh api ..."),
+      { type: "user" },
+      assistantText("no markers here"),
+    ];
+    expect(countTraceMarker(messages, "bundle-followup:")).toBe(2);
+    expect(countTraceMarker(messages, "bundle-fallback:")).toBe(0);
+  });
+
+  test("ignores non-text blocks and malformed messages", () => {
+    expect(
+      countTraceMarker([null, 42, { type: "assistant" }, { type: "assistant", message: {} }], "x"),
+    ).toBe(0);
+  });
+});
+
+describe("buildContextBuilderSummary", () => {
+  const telemetry = {
+    builder_ms: 812,
+    request_count: 6,
+    bundle_bytes: 2048,
+    diff_bytes: 120,
+    truncated: false,
+    sections_unavailable: 0,
+    cache_used: false,
+  };
+  const fallbackMessage = {
+    type: "assistant",
+    message: { content: [{ type: "text", text: "bundle-fallback: invalid-version" }] },
+  };
+
+  test("merges builder telemetry with session follow-up and fallback counts", () => {
+    expect(buildContextBuilderSummary(JSON.stringify(telemetry), [fallbackMessage])).toEqual({
+      ...telemetry,
+      followup_count: 0,
+      fallback: true,
+    });
+  });
+
+  test("fails open on absent, malformed, or schema-invalid telemetry", () => {
+    expect(buildContextBuilderSummary(undefined, [])).toBeUndefined();
+    expect(buildContextBuilderSummary("", [])).toBeUndefined();
+    expect(buildContextBuilderSummary("{not json", [])).toBeUndefined();
+    expect(
+      buildContextBuilderSummary(JSON.stringify({ ...telemetry, builder_ms: "1s" }), []),
+    ).toBeUndefined();
+  });
+
+  test("buildRunSummary carries the block only when telemetry is present", () => {
+    const withBlock = buildRunSummary("review", [], { modelMs: 5 }, "m", JSON.stringify(telemetry));
+    expect(withBlock.context_builder).toEqual({ ...telemetry, followup_count: 0, fallback: false });
+
+    const without = buildRunSummary("review", [], { modelMs: 5 }, "m");
+    expect(without.context_builder).toBeUndefined();
+  });
+});
 </file>
 
 <file path=".github/actions/code-review-action/src/runClaude.ts">
@@ -15394,6 +16861,7 @@ import { assertExclusiveAnthropicAuth } from "@code-assistants/actions-core/anth
 
 import { setOutput } from "./actionsOutput.ts";
 import { logMessage } from "./logClaudeMessage.ts";
+import { contextBuilderTelemetrySchema } from "./reviewContextBundle.ts";
 
 /** Duration above which a Claude session is considered long-running (triggers artifact upload). */
 const longRunMs = 5 * 60 * 1000;
@@ -15851,7 +17319,13 @@ async function run(): Promise<void> {
   // Emit the run summary (log + step output) BEFORE emitOutputs, which may
   // process.exit(1) on a non-success result — keeping the footer data available
   // to the separate submitReview step even on a failed run.
-  const summary = buildRunSummary(resolveRunMode(config.prompt), messages, { modelMs }, config.model);
+  const summary = buildRunSummary(
+    resolveRunMode(config.prompt),
+    messages,
+    { modelMs },
+    config.model,
+    process.env.BUNDLE_TELEMETRY
+  );
   log.info(summary, "Run summary.");
   await setOutput("run_summary", JSON.stringify(summary));
 
@@ -15940,6 +17414,60 @@ export function countToolRoundTrips(messages: unknown[]): number {
   return count;
 }
 
+/**
+ * Count assistant text lines carrying a trace marker (e.g. `bundle-followup:`),
+ * the pr-review skill's machine-readable record of bundle follow-ups and
+ * fallbacks. Counted here so the run summary can report them per run — the
+ * issue #605 telemetry criterion the builder alone cannot satisfy, since
+ * follow-ups happen inside the session.
+ */
+export function countTraceMarker(messages: unknown[], marker: string): number {
+  let count = 0;
+  for (const message of messages) {
+    if (typeof message !== "object" || message === null) continue;
+    const record = message as Record<string, unknown>;
+    if (record.type !== "assistant") continue;
+    const content = (record.message as { content?: unknown } | undefined)?.content;
+    if (!Array.isArray(content)) continue;
+    for (const block of content) {
+      const text = (block as { type?: string; text?: string }).type === "text"
+        ? ((block as { text?: string }).text ?? "")
+        : "";
+      count += text.split("\n").filter((line) => line.includes(marker)).length;
+    }
+  }
+  return count;
+}
+
+/**
+ * Merge the builder's telemetry (the `BUNDLE_TELEMETRY` env, set from the
+ * bundle step's output) with the session-side follow-up/fallback counts.
+ * Fails open: absent or schema-invalid telemetry yields `undefined` and the
+ * run summary simply carries no `context_builder` block (react/preflight
+ * runs, or a builder that crashed before emitting telemetry).
+ */
+export function buildContextBuilderSummary(
+  raw: string | undefined,
+  messages: unknown[]
+): Record<string, number | boolean> | undefined {
+  if (!raw) return undefined;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+  const result = contextBuilderTelemetrySchema.safeParse(parsed);
+  if (!result.success) return undefined;
+
+  return {
+    ...result.data,
+    followup_count: countTraceMarker(messages, "bundle-followup:"),
+    fallback: countTraceMarker(messages, "bundle-fallback:") > 0,
+  };
+}
+
 /** Token and cost usage extracted from the SDK `result` message. */
 export interface UsageSummary {
   tokensIn: number;
@@ -15988,11 +17516,12 @@ export function buildRunSummary(
   mode: string,
   messages: unknown[],
   timings: PhaseTimings,
-  fallbackModel: string
-): Record<string, number | string> {
+  fallbackModel: string,
+  bundleTelemetryRaw?: string
+): Record<string, unknown> {
   const usage = extractUsage(findResultMessage(messages));
 
-  return {
+  const summary: Record<string, unknown> = {
     mode,
     model: findInitModel(messages) ?? fallbackModel,
     model_ms: timings.modelMs,
@@ -16004,6 +17533,10 @@ export function buildRunSummary(
     num_turns: usage.numTurns,
     tool_round_trips: countToolRoundTrips(messages),
   };
+
+  const contextBuilder = buildContextBuilderSummary(bundleTelemetryRaw, messages);
+  if (contextBuilder) summary.context_builder = contextBuilder;
+  return summary;
 }
 
 /**
@@ -16280,6 +17813,48 @@ describe("buildReviewBody", () => {
     expect(buildReviewBody("", "", false)).toBe(cleanApprovalBody);
   });
 });
+
+describe("context_builder block (issue #605)", () => {
+  const builderSummary: RunSummary = {
+    ...coreSummary,
+    context_builder: {
+      builder_ms: 812,
+      request_count: 6,
+      bundle_bytes: 34917,
+      diff_bytes: 1200,
+      truncated: false,
+      sections_unavailable: 0,
+      cache_used: false,
+      followup_count: 1,
+      fallback: false,
+    },
+  };
+
+  test("parseRunSummary accepts a summary carrying the optional block", () => {
+    expect(parseRunSummary(JSON.stringify(builderSummary))).toEqual(builderSummary);
+  });
+
+  test("parseRunSummary still accepts an old summary without the block", () => {
+    expect(parseRunSummary(JSON.stringify(coreSummary))).toEqual(coreSummary);
+  });
+
+  test("footer renders a Context bundle row and camelCase data-comment fields", () => {
+    const footer = renderRunSummaryFooter(builderSummary);
+    expect(footer).toContain("| Context bundle | consumed · 6 req · 34.1 kB · 1 follow-up(s) |");
+    expect(footer).toContain('"contextBuilder":{"builderMs":812,"requestCount":6');
+    expect(footer).toContain('"followupCount":1,"fallback":false}');
+  });
+
+  test("a fallback run renders as fallback and old summaries add no row", () => {
+    const fallbackSummary: RunSummary = {
+      ...builderSummary,
+      context_builder: { ...builderSummary.context_builder!, fallback: true },
+    };
+    expect(renderRunSummaryFooter(fallbackSummary)).toContain("| Context bundle | fallback |");
+    expect(renderRunSummaryFooter(coreSummary)).not.toContain("Context bundle");
+    expect(renderRunSummaryFooter(coreSummary)).not.toContain("contextBuilder");
+  });
+});
 </file>
 
 <file path=".github/actions/code-review-action/src/runSummaryFooter.ts">
@@ -16307,6 +17882,7 @@ describe("buildReviewBody", () => {
 import { z } from "zod";
 
 import { buildMarkedDetailsBlock } from "./markedDetailsBlock.ts";
+import { contextBuilderTelemetrySchema } from "./reviewContextBundle.ts";
 
 /** Opening marker bounding the run-summary footer, used for dedup stripping. */
 const footerStartMarker = "<!-- run-summary-start -->";
@@ -16320,6 +17896,18 @@ const footerEndMarker = "<!-- run-summary-end -->";
  * string, and `mode` a known literal, so a malformed value can never reach
  * the rendered markdown.
  */
+/**
+ * Builder telemetry merged with the session-side follow-up/fallback counts by
+ * `runClaude.ts` (issue #605). Optional in the run summary: react/preflight
+ * runs and pre-bundle action versions carry no `context_builder` block.
+ */
+export const contextBuilderSummarySchema = contextBuilderTelemetrySchema
+  .extend({
+    followup_count: z.number().int().nonnegative(),
+    fallback: z.boolean(),
+  })
+  .strict();
+
 export const runSummarySchema = z.object({
   mode: z.enum(["review", "react", "unknown", "preflight"]),
   model: z.string(),
@@ -16331,6 +17919,7 @@ export const runSummarySchema = z.object({
   cost_usd: z.number(),
   num_turns: z.number(),
   tool_round_trips: z.number(),
+  context_builder: contextBuilderSummarySchema.optional(),
 });
 
 /** Validated per-run summary rendered into the review footer. */
@@ -16373,6 +17962,16 @@ function buildRows(summary: RunSummary): string[] {
     ["Cost (USD)", `$${summary.cost_usd.toFixed(2)}`],
   ];
 
+  const builder = summary.context_builder;
+  if (builder) {
+    rows.push([
+      "Context bundle",
+      builder.fallback
+        ? "fallback"
+        : `consumed · ${builder.request_count} req · ${(builder.bundle_bytes / 1024).toFixed(1)} kB · ${builder.followup_count} follow-up(s)`,
+    ]);
+  }
+
   return rows.map(([label, value]) => `| ${label} | ${value} |`);
 }
 
@@ -16387,6 +17986,7 @@ const footerDataPrefix = "<!-- run-summary-data:";
  * `model_ms` is rounded to whole milliseconds to satisfy the integer contract.
  */
 function renderDataComment(summary: RunSummary): string {
+  const builder = summary.context_builder;
   const data = {
     mode: summary.mode,
     modelMs: Math.round(summary.model_ms),
@@ -16397,6 +17997,23 @@ function renderDataComment(summary: RunSummary): string {
     cacheReadTokens: summary.cache_read_tokens,
     cacheCreationTokens: summary.cache_creation_tokens,
     costUsd: summary.cost_usd,
+    // camelCase like the other keys; absent on runs without a bundle builder
+    // (react/preflight, builder crash) so old footers stay byte-identical.
+    ...(builder
+      ? {
+          contextBuilder: {
+            builderMs: builder.builder_ms,
+            requestCount: builder.request_count,
+            bundleBytes: builder.bundle_bytes,
+            diffBytes: builder.diff_bytes,
+            truncated: builder.truncated,
+            sectionsUnavailable: builder.sections_unavailable,
+            cacheUsed: builder.cache_used,
+            followupCount: builder.followup_count,
+            fallback: builder.fallback,
+          },
+        }
+      : {}),
   };
   return `${footerDataPrefix} ${JSON.stringify(data)} -->`;
 }
@@ -17673,7 +19290,7 @@ inputs:
     required: false
     default: "https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/pr-review/SKILL.md"
   review_prompt:
-    description: "Leading slash command / prompt for review mode. The action appends the runtime arguments block (REPO, PR_NUMBER, REVIEWER, PR_AUTHOR, RULES_DOC_URL) after this value, so a custom prompt still receives them. Override to run a different review skill without forking the action."
+    description: "Leading slash command / prompt for review mode. The action appends the runtime arguments block (REPO, PR_NUMBER, REVIEWER, PR_AUTHOR, RULES_DOC_URL, CONTEXT_BUNDLE) after this value, so a custom prompt still receives them. Override to run a different review skill without forking the action."
     required: false
     default: "/autopilot:pr-review"
   react_prompt:
@@ -18145,6 +19762,24 @@ runs:
         RUN_SUMMARY: ${{ steps.explain.outputs.run_summary }}
       run: bun run "${{ github.action_path }}/src/preflightSkipComment.ts"
 
+    # Deterministic startup context bundle (issue #605): one fetch pass replaces the
+    # review session's many small discovery calls. Runs after preflight so check
+    # state is settled. Fail-open — the builder always writes its `path` output
+    # (empty on any failure), and an empty/invalid CONTEXT_BUNDLE value makes the
+    # pr-review skill fall back to its legacy in-session discovery.
+    - name: Build review context
+      id: bundle
+      if: steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.mode == 'review' && steps.preflight.outputs.skip_review != 'true'
+      continue-on-error: true
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.bot_token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ steps.ctx.outputs.pr_number }}
+        REVIEWER: ${{ inputs.reviewer }}
+        JOB_NAME: ${{ github.job }}
+      run: bun run "${{ github.action_path }}/src/buildReviewContext.ts"
+
     - name: Code Review
       id: review
       if: steps.ctx.outputs.skip != 'true' && steps.ctx.outputs.mode == 'review' && steps.preflight.outputs.skip_review != 'true'
@@ -18157,7 +19792,7 @@ runs:
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude_oauth_token }}
         GH_TOKEN: ${{ inputs.bot_token }}
         CLAUDE_PROMPT: |
-          ${{ inputs.review_prompt }} REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} PR_AUTHOR: ${{ steps.pr.outputs.author }} RULES_DOC_URL: ${{ inputs.rules_doc_url }}
+          ${{ inputs.review_prompt }} REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} PR_AUTHOR: ${{ steps.pr.outputs.author }} RULES_DOC_URL: ${{ inputs.rules_doc_url }} CONTEXT_BUNDLE: ${{ steps.bundle.outputs.path }}
         CLAUDE_RUN_MODE: review
         CLAUDE_MODEL: ${{ inputs.model }}
         # The single Bash(node …) rule permits ONLY the bundled read-only review-thread helper at the
@@ -18178,6 +19813,9 @@ runs:
         CLAUDE_INSTALL_PLUGINS: ${{ inputs.plugins }}
         CLAUDE_MCP_CONFIG: ${{ steps.mcp.outputs.path }}
         CLAUDE_SETTINGS: ${{ inputs.settings }}
+        # Builder telemetry merged into the run summary (and its footer) so the
+        # cost monitor sees bundle duration/size/truncation per run (issue #605).
+        BUNDLE_TELEMETRY: ${{ steps.bundle.outputs.telemetry }}
         EXECUTION_OUTPUT_FILE: ${{ runner.temp }}/claude-execution-output.json
         LOG_LEVEL: ${{ inputs.debug_logs == 'true' && 'debug' || 'info' }}
       run: bun run "${{ github.action_path }}/src/runClaude.ts"
@@ -20360,6 +21998,14 @@ The `pr-review` skill carries the full review rubric (all `CHECK-*` rules) inlin
 
 To run a different repo's skills instead — e.g. a consumer's own `pr-review` — point `review_prompt` / `react_prompt` at them and install the plugin that provides them (see below).
 
+## Startup context bundle
+
+Review mode runs one deterministic **Build review context** step ([`buildReviewContext.ts`](src/buildReviewContext.ts)) before the Claude session. It fetches the PR metadata, refs, changed files, bounded diff, check state, prior reviews, and unresolved threads in a single concurrent pass — paginated past every GitHub page cap — and writes a versioned, Zod-typed bundle to the runner temp dir. The review prompt receives its path as `CONTEXT_BUNDLE:` and the `pr-review` skill consumes it instead of rediscovering the same data through many small `gh` calls, which is what dominated review wall-clock (issue [#605](https://github.com/awinogradov/code-assistants/issues/605)).
+
+The version-1 contract lives in [`reviewContextBundle.ts`](src/reviewContextBundle.ts): every bound (file entries, diff bytes, threads, review bodies) is an exported constant, every truncation is flagged in the payload, and each fallible section is either complete data or an explicit `{ available: false, reason }` — rate limits (`rate-limited`) are distinguished from endpoint failures. Re-reviews carry an explicit delta from the last-reviewed SHA (the reviewer's latest review commit); a force-pushed or diverged ref degrades the delta explicitly rather than pretending nothing changed. The diff is streamed to a separate file with the byte cap enforced mid-stream, never buffered.
+
+The step is fail-open: it always writes its `path` output (empty on any failure, with a warning annotation), and the skill treats an empty or invalid bundle as `bundle-fallback:` — running its legacy in-session discovery unchanged, so manual local runs and builder outages degrade instead of breaking. In-session follow-ups for missing or truncated fields are budgeted (3 per session) and trace-recorded as `bundle-followup:` lines. Builder telemetry (duration, request count, payload bytes, truncation, cache use) flows through the `BUNDLE_TELEMETRY` env into the run summary, where the session's follow-up count and fallback status join it — see the run-summary footer below and the post-merge verification tracked on issue [#605](https://github.com/awinogradov/code-assistants/issues/605).
+
 ## Repository standards (rfc/, docs/, and principles/)
 
 When the reviewed repository carries an `rfc/` folder (versioned standards with `status` frontmatter), a `docs/` folder, or a root-level `principles/` folder (long-lived values), the review enforces those standards on the diff — no input or config needed; the folders are the opt-in. Severity follows source stability: an Accepted RFC violation blocks (`CHECK-RFC-001`), while a Draft RFC conflict, a `docs/` convention contradiction, and a conflict with a stated principle are non-blocking suggestions (`CHECK-RFC-002`, `CHECK-DOC-005`, `CHECK-PRINCIPLE-001`), and two hygiene checks protect the `rfc/` contract itself (`CHECK-RFC-003/004`).
@@ -20384,7 +22030,7 @@ with:
 
 ## Review run-summary footer
 
-Every review comment carries a collapsed **"Review run summary 🤖"** footer ("under the cut") with the run's latency, token usage, cache hits, cost, and tool round-trips. The metrics are computed in `runClaude.ts`, passed to `submitReview.ts` via the `run_summary` step output, and appended to the **main review comment only** (never inline, never on `react`-mode replies). The footer is wrapped in HTML-comment markers so it is stripped before duplicate-review detection, keeping run-varying numbers from defeating dedup.
+Every review comment carries a collapsed **"Review run summary 🤖"** footer ("under the cut") with the run's latency, token usage, cache hits, cost, and tool round-trips. The metrics are computed in `runClaude.ts`, passed to `submitReview.ts` via the `run_summary` step output, and appended to the **main review comment only** (never inline, never on `react`-mode replies). The footer is wrapped in HTML-comment markers so it is stripped before duplicate-review detection, keeping run-varying numbers from defeating dedup. Review runs that built a context bundle add a **Context bundle** row (consumed vs fallback, request count, payload size, follow-ups) and an optional `contextBuilder` block in the machine-readable data comment, which the cost monitor parses.
 
 See [Review run-summary footer](../../../docs/03-code-review-run-summary.md) for the full data flow and diagram.
 
@@ -21952,6 +23598,34 @@ describe("hasRunSummaryData()", () => {
     expect(hasRunSummaryData("<!-- run-summary-start -->\n| Mode | review |")).toBe(false);
   });
 });
+
+describe("contextBuilder metrics (issue #605)", () => {
+  const contextBuilder = {
+    builderMs: 812,
+    requestCount: 6,
+    bundleBytes: 34917,
+    diffBytes: 1200,
+    truncated: false,
+    sectionsUnavailable: 0,
+    cacheUsed: false,
+    followupCount: 1,
+    fallback: false,
+  };
+
+  test("parses a payload carrying the optional contextBuilder block", () => {
+    const parsed = parseFooterMetrics(bodyWithData({ ...metrics, contextBuilder }));
+    expect(parsed?.contextBuilder).toEqual(contextBuilder);
+  });
+
+  test("still parses an old payload without the block (backward compat)", () => {
+    expect(parseFooterMetrics(bodyWithData(metrics))?.contextBuilder).toBeUndefined();
+  });
+
+  test("rejects the whole payload when the block is present but malformed", () => {
+    const bad = { ...metrics, contextBuilder: { ...contextBuilder, requestCount: "six" } };
+    expect(parseFooterMetrics(bodyWithData(bad))).toBeUndefined();
+  });
+});
 </file>
 
 <file path=".github/actions/code-review-cost-monitor/src/footerMetrics.ts">
@@ -21986,6 +23660,23 @@ const footerDataSuffix = "-->";
  * comment. Strict numerics: a field that is not a finite non-negative number
  * rejects the whole payload rather than feeding NaN into a baseline.
  */
+/**
+ * Startup context-builder metrics (issue #605), present only on review runs
+ * from action versions that ship the bundle builder. Optional so footers from
+ * older action versions keep parsing unchanged.
+ */
+export const contextBuilderMetricsSchema = z.object({
+  builderMs: z.number().int().nonnegative(),
+  requestCount: z.number().int().nonnegative(),
+  bundleBytes: z.number().int().nonnegative(),
+  diffBytes: z.number().int().nonnegative(),
+  truncated: z.boolean(),
+  sectionsUnavailable: z.number().int().nonnegative(),
+  cacheUsed: z.boolean(),
+  followupCount: z.number().int().nonnegative(),
+  fallback: z.boolean(),
+});
+
 export const runMetricsSchema = z.object({
   mode: z.string().min(1),
   modelMs: z.number().int().nonnegative(),
@@ -21996,6 +23687,7 @@ export const runMetricsSchema = z.object({
   cacheReadTokens: z.number().int().nonnegative(),
   cacheCreationTokens: z.number().int().nonnegative(),
   costUsd: z.number().nonnegative(),
+  contextBuilder: contextBuilderMetricsSchema.optional(),
 });
 
 /** Metrics of one review run, as serialized in the footer data comment. */
@@ -57566,7 +59258,7 @@ Tests using `setTimeout`, fixed delays, or retry loops to wait for conditions �
 ---
 name: pr-review
 description: Review a pull request and provide constructive feedback with structured verdict. Used by awinogradov/code-review-action
-argument-hint: "REPO: <owner/repo> PR_NUMBER: <number> REVIEWER: <bot-login> PR_AUTHOR: <author-login> RULES_DOC_URL: <url> (all but RULES_DOC_URL fall back to gh when omitted)"
+argument-hint: "REPO: <owner/repo> PR_NUMBER: <number> REVIEWER: <bot-login> PR_AUTHOR: <author-login> RULES_DOC_URL: <url> CONTEXT_BUNDLE: <path> (all but RULES_DOC_URL and CONTEXT_BUNDLE fall back to gh when omitted)"
 allowed-tools:
   - Read
   - Glob
@@ -57590,7 +59282,7 @@ Arguments: `$ARGUMENTS`
 
 Expected form (typically supplied by `awinogradov/code-review-action`):
 
-- `REPO: <owner/repo> PR_NUMBER: <number> REVIEWER: <bot-login> PR_AUTHOR: <author-login> RULES_DOC_URL: <url>`
+- `REPO: <owner/repo> PR_NUMBER: <number> REVIEWER: <bot-login> PR_AUTHOR: <author-login> RULES_DOC_URL: <url> CONTEXT_BUNDLE: <path>`
 
 ## Input resolution
 
@@ -57599,6 +59291,7 @@ Expected form (typically supplied by `awinogradov/code-review-action`):
 - **`REVIEWER`** — `$ARGUMENTS` → `gh api user --jq .login` (authenticated user).
 - **`PR_AUTHOR`** — `$ARGUMENTS` → `gh pr view --json author --jq .author.login`.
 - **`RULES_DOC_URL`** — `$ARGUMENTS` only. The action always supplies it (its `rules_doc_url` input default is the one canonical copy). When absent (e.g. a manual local run), do NOT fabricate a URL — render every `CHECK-` rule code as plain text (the bare code, no link) per [§2.5](#25-rule-codes).
+- **`CONTEXT_BUNDLE`** — `$ARGUMENTS` only; optional, supplied by the action's deterministic context-builder step. An empty value counts as absent. Never inferred or searched for — [§1.0](#10-consume-the-context-bundle-action-supplied) defines consumption and fallback.
 
 Do NOT prompt the user. Return structured output with an explicit error if inputs cannot be resolved.
 
@@ -57612,7 +59305,22 @@ You review the whole PR yourself in a single pass: load context, evaluate the di
 
 ## Phase 1: Context Loading
 
+### 1.0 Consume the Context Bundle (action-supplied)
+
+When `CONTEXT_BUNDLE` carries a non-empty path, Read that file once. It is valid when it parses as JSON and its `version` field equals `1` — the versioned contract lives in [`reviewContextBundle.ts`](https://github.com/awinogradov/code-assistants/blob/main/.github/actions/code-review-action/src/reviewContextBundle.ts). A valid bundle **substitutes for data acquisition only** — every decision procedure below runs unchanged over bundle-sourced data:
+
+- It replaces the [§1.1](#11-pr-context) `gh pr view` / `gh pr diff` calls and the [§1.2](#12-load-context-via-sub-agents) review-thread helper: `identity`/`refs` carry the PR metadata and SHAs, `changedFiles` the bounded file list (`totalFiles` stays exact when truncated), `checks` the check state, and `reviewState` the prior verdicts, review bodies, and unresolved inline threads.
+- Read the diff exactly once from the file `diff.path` references — the same never-embed-twice rule as [§1.1](#11-pr-context).
+- [§1.3](#13-review-round-handling) takes its round from `round`: `firstReview: true` is the first-review branch; otherwise `round.lastReviewedSha` and `round.delta` name what changed since the last review. A delta marked `available: false` (force-pushed ref, diverged history) means the full diff is the review surface — never assume "nothing changed".
+- The [§1.2](#12-load-context-via-sub-agents) codebase snapshot and the issue-linked agents still run — the bundle does not cover them; extract the linked issue from `identity.body`.
+
+**Targeted follow-ups are budgeted.** A concrete missing field, a section with `truncated: true`, or a section with `available: false` permits a targeted fetch — at most **3 per session**. Record each, before running it, as a machine-readable trace line: `bundle-followup: <field> <command>`. Past the budget, proceed on the bounded data and say so in the [§1.5](#15-context-map) Context Map. Never re-fetch data the bundle already carries — rediscovery is exactly the cost the bundle exists to remove.
+
+**Fallback.** When `CONTEXT_BUNDLE` is absent or empty, the file is unreadable, the JSON does not parse, or `version` is not `1`, record one machine-readable trace line — `bundle-fallback: <absent|unreadable|invalid-json|invalid-version>` — and run [§1.1](#11-pr-context)–[§1.2](#12-load-context-via-sub-agents) unchanged. Manual local runs take this path by design.
+
 ### 1.1 PR Context
+
+Skip this section's fetches when [§1.0](#10-consume-the-context-bundle-action-supplied) consumed a valid bundle — it already carries all of this data; the prose below still defines what the data means.
 
 Fetch PR metadata and the diff:
 
@@ -57634,7 +59342,7 @@ Extract the linked issue ID from PR metadata. Check in order, stop at first matc
 1. **PR body `Issues:` section** — lines starting with `Closes` or `Related to` followed by a ticket ID; the id may be bare (`#12`, `ENG-123`) or inside a tracker issue URL (`https://linear.app/<workspace>/issue/ENG-123/<slug>`) — extract the `#N` / `KEY-N` token either way
 2. **Branch name** — leading `[a-z]+-[0-9]+` segment, convert to UPPERCASE
 
-Load the remaining context in parallel — the codebase snapshot, the prior inline review threads, and (when an issue is linked) the linked-issue context plus the related TODOs / issue references in the codebase. Prior-review verdicts and summary bodies already come from the [§1.1](#11-pr-context) `gh pr view` output; the deterministic review-thread helper adds the per-line inline annotations in one bounded Bash call, returning a categorized payload (raw API output stays out of this context).
+Load the remaining context in parallel — the codebase snapshot, the prior inline review threads, and (when an issue is linked) the linked-issue context plus the related TODOs / issue references in the codebase. Prior-review verdicts and summary bodies already come from the [§1.1](#11-pr-context) `gh pr view` output; the deterministic review-thread helper adds the per-line inline annotations in one bounded Bash call, returning a categorized payload (raw API output stays out of this context). When [§1.0](#10-consume-the-context-bundle-action-supplied) consumed a valid bundle, skip the review-thread helper — `reviewState.unresolvedThreads` already carries the inline threads — and run only the snapshot and the issue-linked agents below.
 
 Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the ordered context-acquisition chain; this skill passes the review-scoped `includePatterns` (repomix tier only) shown below. Read [`github-review-fetch.md`](../shared-rules/references/github-review-fetch.md) for the review-thread helper invocation and its output contract.
 
@@ -57667,6 +59375,8 @@ After all calls complete, store the selected context source (and its `outputId` 
 **Read the pack, don't dump it.** The context source exists so you can pull _targeted_ context on demand — via its read contract: `graphify` queries on the graph tier, or `grep_repomix_output` (regex + `contextLines`) and `read_repomix_output` with a specific `startLine`/`endLine` slice on the repomix tier. NEVER `read_repomix_output` over the whole range (that loads the entire codebase into context). When the diff is self-contained and needs no cross-file lookup (the common case), don't read the pack at all — pull cross-file context only for checks that need it (e.g. architecture reuse, duplicated logic).
 
 ### 1.3 Review Round Handling
+
+This decision procedure is the same on both data paths: the bundle path sources "previous reviews by REVIEWER" from `round` and `reviewState` ([§1.0](#10-consume-the-context-bundle-action-supplied)), the legacy path from [§1.1](#11-pr-context)–[§1.2](#12-load-context-via-sub-agents). A bundle whose `reviewState` is `available: false` never means "no prior reviews" — that is a degraded fetch; verify with a budgeted follow-up before treating the round as a first review.
 
 **First review (no previous reviews by REVIEWER):**
 
@@ -63536,6 +65246,8 @@ Reviews posted before the footer went TIP-free carry a now-retired always-on usa
 ```
 
 **Model** is the model that actually served the run — read from the SDK's `system`/`init` message, falling back to the action's `model` input when the stream ends before init. **Tokens in** is the total input the model consumed — fresh input plus cache reads plus cache creation — so it stays plausible under heavy prompt caching (reading only the uncached `input_tokens` reports a misleading near-zero residual). **Cache read / write** is the breakdown of that total.
+
+**Review runs carry an optional `contextBuilder` block.** When the review ran with a startup context bundle (issue #605), the summary gains a `context_builder` object — builder duration, source request count, bundle and diff bytes, truncation, cache use, plus the session-side `bundle-followup:` count and `bundle-fallback:` status counted by `runClaude.ts` from the transcript — rendered as an extra **Context bundle** table row and a camelCase `contextBuilder` key in the data comment. The field is optional end to end: react/preflight runs, pre-bundle action versions, and a crashed builder simply omit it, and the monitor's schema treats it as optional, so old footers keep parsing.
 
 **The footer is machine-consumed.** After the visible table — still inside the strip markers — the footer embeds the same metrics as a machine-readable JSON comment (`<!-- run-summary-data: … -->`), keyed to mirror the monitor's `runMetricsSchema`. The scheduled [`code-review-cost-monitor`](../.github/actions/code-review-cost-monitor/README.md) action reads **that comment**, not the table, back out of recent PR reviews to detect cost regressions, so the data-comment payload is the compatibility contract; the table is purely presentational and can be relabeled, reordered, or restyled (e.g. `<sub>`-wrapped) without touching the monitor. Dropping or renaming a payload key breaks the parser, which fails loudly only when at least `min_runs` reviews carry the comment yet none parse — a sparse or newly-adopting window degrades to "insufficient data" instead, never a red scheduled run. The monitor's optional attribution step also reuses `runClaude.ts` as its model engine.
 
