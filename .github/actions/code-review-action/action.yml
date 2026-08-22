@@ -571,14 +571,18 @@ runs:
           ${{ inputs.review_prompt }} REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} PR_AUTHOR: ${{ steps.pr.outputs.author }} RULES_DOC_URL: ${{ inputs.rules_doc_url }}
         CLAUDE_RUN_MODE: review
         CLAUDE_MODEL: ${{ inputs.model }}
-        # The three Bash(node …fetch-pr-reviews.mjs) rules permit ONLY the bundled read-only
-        # review-thread helper (each anchors the script path directly after `node`, so no -e/--require
-        # flag injection). The helper intentionally performs the read-only reviewThreads GraphQL query
-        # that the direct Bash(gh api graphql:*) disallow blocks — a reviewed exception, not an accident.
-        CLAUDE_ALLOWED_TOOLS: 'Bash(gh:*),Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.mjs":*),Bash(node /*lib/github/fetch-pr-reviews.mjs:*),Bash(node "/*lib/github/fetch-pr-reviews.mjs":*),mcp__repomix__*,mcp__context7__*,mcp__Ref__*,mcp__exa__*,mcp__perplexity__*,Read,Glob,Grep'
+        # The single Bash(node …) rule permits ONLY the bundled read-only review-thread helper at the
+        # literal ${CLAUDE_PLUGIN_ROOT} path (set below from the trusted plugin-install output), so it can
+        # never match the reviewed PR's own checkout of that file — no absolute-path wildcard, no -e/--require
+        # flag injection. The helper intentionally performs the read-only reviewThreads GraphQL query that the
+        # direct Bash(gh api graphql:*) disallow blocks — a reviewed exception, not an accident.
+        CLAUDE_ALLOWED_TOOLS: 'Bash(gh:*),Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.mjs":*),mcp__repomix__*,mcp__context7__*,mcp__Ref__*,mcp__exa__*,mcp__perplexity__*,Read,Glob,Grep'
         CLAUDE_DISALLOWED_TOOLS: "Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh issue comment:*),Bash(gh api * -X *:*),Bash(gh api * --method *:*),Bash(gh api * -f *:*),Bash(gh api * -F *:*),Bash(gh api * --field *:*),Bash(gh api * --raw-field *:*),Bash(gh api * --input *:*),Bash(gh api graphql:*)"
         CLAUDE_JSON_SCHEMA: '{"type":"object","properties":{"verdict":{"type":"string","enum":["approve","requestChanges","comment"]},"reviewComment":{"type":"string"},"inlineComments":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"},"body":{"type":"string"},"startLine":{"type":"integer"},"suggestion":{"type":"string"}},"required":["path","line","body"]}}},"required":["verdict","reviewComment"]}'
         CLAUDE_PLUGIN_DIR: ${{ steps.plugin.outputs.dir }}
+        # Resolve ${CLAUDE_PLUGIN_ROOT} in the helper invocation to the trusted installed plugin dir so the
+        # anchored allowlist rule matches and the path never falls back to an untrusted checkout.
+        CLAUDE_PLUGIN_ROOT: ${{ steps.plugin.outputs.dir }}
         # Register/install the marketplaces + plugins requested via inputs; the SDK is cache-only without this.
         CLAUDE_CODE_SYNC_PLUGIN_INSTALL: "1"
         CLAUDE_INSTALL_MARKETPLACES: ${{ inputs.marketplaces }}
@@ -686,14 +690,18 @@ runs:
           ${{ inputs.react_prompt }} REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} PR_AUTHOR: ${{ github.event.pull_request.user.login || github.event.issue.user.login }} COMMENT_BODY: ${{ steps.ctx.outputs.comment_body }} COMMENT_PATH: ${{ steps.ctx.outputs.comment_path }} COMMENT_LINE: ${{ steps.ctx.outputs.comment_line }} NEEDS_REVERDICT: ${{ steps.classify.outputs.needs_reverdict }} RULES_DOC_URL: ${{ inputs.rules_doc_url }}
         CLAUDE_RUN_MODE: react
         CLAUDE_MODEL: ${{ inputs.model }}
-        # The three Bash(node …fetch-pr-reviews.mjs) rules permit ONLY the bundled read-only
-        # review-thread helper (each anchors the script path directly after `node`, so no -e/--require
-        # flag injection). The helper intentionally performs the read-only reviewThreads GraphQL query
-        # that the direct Bash(gh api graphql:*) disallow blocks — a reviewed exception, not an accident.
-        CLAUDE_ALLOWED_TOOLS: 'Bash(gh:*),Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.mjs":*),Bash(node /*lib/github/fetch-pr-reviews.mjs:*),Bash(node "/*lib/github/fetch-pr-reviews.mjs":*),mcp__repomix__*,mcp__context7__*,mcp__Ref__*,mcp__exa__*,mcp__perplexity__*,Read,Glob,Grep'
+        # The single Bash(node …) rule permits ONLY the bundled read-only review-thread helper at the
+        # literal ${CLAUDE_PLUGIN_ROOT} path (set below from the trusted plugin-install output), so it can
+        # never match the reviewed PR's own checkout of that file — no absolute-path wildcard, no -e/--require
+        # flag injection. The helper intentionally performs the read-only reviewThreads GraphQL query that the
+        # direct Bash(gh api graphql:*) disallow blocks — a reviewed exception, not an accident.
+        CLAUDE_ALLOWED_TOOLS: 'Bash(gh:*),Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.mjs":*),mcp__repomix__*,mcp__context7__*,mcp__Ref__*,mcp__exa__*,mcp__perplexity__*,Read,Glob,Grep'
         CLAUDE_DISALLOWED_TOOLS: "Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh issue comment:*),Bash(gh api * -X *:*),Bash(gh api * --method *:*),Bash(gh api * -f *:*),Bash(gh api * -F *:*),Bash(gh api * --field *:*),Bash(gh api * --raw-field *:*),Bash(gh api * --input *:*),Bash(gh api graphql:*)"
         CLAUDE_JSON_SCHEMA: '{"type":"object","properties":{"reply":{"type":"string"},"resolveComments":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"}},"required":["path","line"]}},"updatedVerdict":{"type":["string","null"],"enum":["approve","requestChanges","comment",null]},"updatedReviewComment":{"type":["string","null"]}},"required":["reply"]}'
         CLAUDE_PLUGIN_DIR: ${{ steps.plugin.outputs.dir }}
+        # Resolve ${CLAUDE_PLUGIN_ROOT} in the helper invocation to the trusted installed plugin dir so the
+        # anchored allowlist rule matches and the path never falls back to an untrusted checkout.
+        CLAUDE_PLUGIN_ROOT: ${{ steps.plugin.outputs.dir }}
         # Register/install the marketplaces + plugins requested via inputs; the SDK is cache-only without this.
         CLAUDE_CODE_SYNC_PLUGIN_INSTALL: "1"
         CLAUDE_INSTALL_MARKETPLACES: ${{ inputs.marketplaces }}

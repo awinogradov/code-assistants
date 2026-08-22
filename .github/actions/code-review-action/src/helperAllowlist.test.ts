@@ -1,10 +1,13 @@
 /**
- * Pins the review-thread helper's Bash allow rules in action.yml. The helper
+ * Pins the review-thread helper's Bash allow rule in action.yml. The helper
  * (claude-plugins/autopilot/lib/github/fetch-pr-reviews.mjs) tunnels a read-only
  * `gh api graphql` reviewThreads query past the Bash-layer graphql disallow — a
- * deliberate exception that stays safe only while the allow rules keep the script
- * path anchored directly after `node`, so `node -e`/`--require` flag injection
- * cannot ride the wildcard. A future "loosen the glob" edit fails here first.
+ * deliberate exception that stays safe only while the single allow rule pins the
+ * script to the literal `${CLAUDE_PLUGIN_ROOT}` path (the trusted installed
+ * plugin, set from steps.plugin.outputs.dir). An absolute-path wildcard such as
+ * `node /*…/fetch-pr-reviews.mjs` would also match the reviewed PR's own untrusted
+ * checkout of that file, granting arbitrary Node execution with secrets in scope
+ * (CHECK-SEC-003); this test fails the moment such a rule reappears.
  */
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -18,12 +21,9 @@ const allowedToolsLines = actionYml
   .split("\n")
   .filter((line) => line.includes("CLAUDE_ALLOWED_TOOLS:"));
 
-/** The exact anchored rules — the script path follows `node` with no wildcard between. */
-const pinnedHelperRules = [
-  'Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.mjs":*)',
-  "Bash(node /*lib/github/fetch-pr-reviews.mjs:*)",
-  'Bash(node "/*lib/github/fetch-pr-reviews.mjs":*)',
-];
+/** The one safe rule — the script is pinned to the literal ${CLAUDE_PLUGIN_ROOT} path. */
+const pinnedHelperRule =
+  'Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.mjs":*)';
 
 describe("review-thread helper allowlist", () => {
   test("both Claude steps declare an allowlist", () => {
@@ -31,26 +31,35 @@ describe("review-thread helper allowlist", () => {
   });
 
   test.each(allowedToolsLines.map((line, index) => [index, line] as const))(
-    "allowlist %d carries exactly the pinned helper rules",
+    "allowlist %d carries the pinned helper rule",
     (_index, line) => {
-      for (const rule of pinnedHelperRules) {
-        expect(line).toContain(rule);
-      }
+      expect(line).toContain(pinnedHelperRule);
     },
   );
 
-  test("no broader node rule exists in any tools declaration", () => {
+  test("every step that allows the helper also exports CLAUDE_PLUGIN_ROOT", () => {
+    // The literal ${CLAUDE_PLUGIN_ROOT} in the rule only resolves to the trusted
+    // installed plugin when the env var is set; without it the helper path would
+    // fall back to an untrusted location.
+    const rootExports = actionYml
+      .split("\n")
+      .filter((line) => line.includes("CLAUDE_PLUGIN_ROOT:")).length;
+    expect(rootExports).toBe(allowedToolsLines.length);
+  });
+
+  test("no absolute-path or wildcard node rule exists in any tools declaration", () => {
     const toolsLines = actionYml
       .split("\n")
-      .filter((line) => line.includes("CLAUDE_ALLOWED_TOOLS:") || line.includes("CLAUDE_DISALLOWED_TOOLS:"));
+      .filter(
+        (line) =>
+          line.includes("CLAUDE_ALLOWED_TOOLS:") || line.includes("CLAUDE_DISALLOWED_TOOLS:"),
+      );
     const nodeRules = toolsLines.flatMap((line) => line.match(/Bash\(node[^)]*\)/g) ?? []);
+    // The ONLY permitted node rule is the ${CLAUDE_PLUGIN_ROOT}-anchored one. An
+    // absolute-path (`node /…`) or wildcard (`node /*…`) rule would also match the
+    // reviewed PR's own checkout of the helper file — CHECK-SEC-003.
     for (const rule of nodeRules) {
-      expect(pinnedHelperRules).toContain(rule);
-    }
-    // Every node rule anchors the helper path right after `node ` — a wildcard
-    // there would re-open arbitrary `node -e` execution.
-    for (const rule of nodeRules) {
-      expect(rule).toMatch(/^Bash\(node ["/$]/);
+      expect(rule).toBe(pinnedHelperRule);
     }
   });
 });
