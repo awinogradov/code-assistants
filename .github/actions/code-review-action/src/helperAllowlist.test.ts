@@ -1,11 +1,11 @@
 /**
  * Pins the review-thread helper's Bash allow rule in action.yml. The helper
- * (claude-plugins/autopilot/lib/github/fetch-pr-reviews.mjs) tunnels a read-only
+ * (claude-plugins/autopilot/lib/github/fetch-pr-reviews.ts) tunnels a read-only
  * `gh api graphql` reviewThreads query past the Bash-layer graphql disallow — a
  * deliberate exception that stays safe only while the single allow rule pins the
  * script to the literal `${CLAUDE_PLUGIN_ROOT}` path (the trusted installed
  * plugin, set from steps.plugin.outputs.dir). An absolute-path wildcard such as
- * `node /*…/fetch-pr-reviews.mjs` would also match the reviewed PR's own untrusted
+ * `node /*…/fetch-pr-reviews.ts` would also match the reviewed PR's own untrusted
  * checkout of that file, granting arbitrary Node execution with secrets in scope
  * (CHECK-SEC-003); this test fails the moment such a rule reappears.
  */
@@ -23,7 +23,7 @@ const allowedToolsLines = actionYml
 
 /** The one safe rule — the script is pinned to the literal ${CLAUDE_PLUGIN_ROOT} path. */
 const pinnedHelperRule =
-  'Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.mjs":*)';
+  'Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.ts":*)';
 
 describe("review-thread helper allowlist", () => {
   test("both Claude steps declare an allowlist", () => {

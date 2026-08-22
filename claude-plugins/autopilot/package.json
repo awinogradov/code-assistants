@@ -2,12 +2,15 @@
   "name": "autopilot",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "private": true,
+  "type": "module",
   "license": "MIT",
   "release": {
     "type": "claude-plugin"
   },
   "scripts": {
-    "test": "bun test lib"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test lib",
+    "clean": "rm -rf node_modules .turbo"
   },
   "version": "5.7.0"
 }

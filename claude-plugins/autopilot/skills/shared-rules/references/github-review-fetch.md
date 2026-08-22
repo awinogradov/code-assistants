@@ -5,10 +5,10 @@
 Fetch review threads with the bundled zero-dependency helper — one bounded Bash call, no delegated agent:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.mjs" <OWNER>/<REPO> <PR_NUMBER> <PR_AUTHOR>
+node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.ts" <OWNER>/<REPO> <PR_NUMBER> <PR_AUTHOR>
 ```
 
-`${CLAUDE_PLUGIN_ROOT}` is the plugin root Claude Code provides to plugin components; when it is unset, resolve the script from the invoking skill's base directory instead: `<skill base directory>/../../lib/github/fetch-pr-reviews.mjs`.
+`${CLAUDE_PLUGIN_ROOT}` is the plugin root Claude Code provides to plugin components; when it is unset, resolve the script from the invoking skill's base directory instead: `<skill base directory>/../../lib/github/fetch-pr-reviews.ts`.
 
 The helper performs four bounded, read-only GitHub reads (REST reviews, REST inline comments, PR metadata, and the GraphQL `reviewThreads` resolution query — all paginated), always exits 0, and prints a single JSON object:
 
