@@ -2,6 +2,71 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [6.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v5.7.0...autopilot@v6.0.0) (2026-08-22)
+
+## Release Notes
+
+The most impactful change in this release is the replacement of the `autopilot:fetch-pr-reviews` sub-agent with a bundled TypeScript helper, making PR review-thread retrieval deterministic, typed, and telemetry-aware.
+
+## ✨ What's New
+
+### Deterministic Startup Context Bundle for Code Review
+
+Code review sessions now pre-fetch all PR context in a single builder step before the session starts, rather than discovering it on-the-fly during each run. This eliminates per-run discovery churn and makes review startup faster and more consistent. The review run-summary footer now reports the builder's duration, request count, payload size, truncation status, follow-up count, and fallback status — giving you clear visibility into what the agent fetched and how.
+
+<details><summary>Related issues</summary>
+
+- [#605: Build a deterministic startup context bundle for code review](https://github.com/awinogradov/code-assistants/issues/605)
+- [#608: Speed up code review startup with a deterministic context bundle](https://github.com/awinogradov/code-assistants/pull/608)
+</details>
+
+### Typed, Bounded Review-Thread Retrieval with Telemetry
+
+Review skills now fetch PR review threads via a bundled [`lib/github/fetch-pr-reviews.ts`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/lib/github/fetch-pr-reviews.ts) helper rather than delegating to a sub-agent. The helper runs as a single Bash call using a read-only GraphQL query, returns a typed and bounded payload, and emits telemetry so you can observe retrieval behavior. CI code reviews also regain review-thread resolution state through this same helper.
+
+<details><summary>Related issues</summary>
+
+- [#604: Replace fetch-pr-reviews subagent with deterministic GitHub retrieval](https://github.com/awinogradov/code-assistants/issues/604)
+- [#606: Fetch PR review threads deterministically without a delegated agent](https://github.com/awinogradov/code-assistants/pull/606)
+</details>
+
+## ⚠️ Breaking Changes
+
+### `autopilot:fetch-pr-reviews` Agent Removed
+
+The `autopilot:fetch-pr-reviews` sub-agent no longer exists. Any workflow, skill, or automation that invokes `/autopilot:fetch-pr-reviews` directly will fail silently or error after this upgrade.
+
+**Migration steps:**
+
+1. Identify any skills, agents, or scripts in your environment that call `autopilot:fetch-pr-reviews`.
+2. Replace those calls with a direct invocation of the bundled [`lib/github/fetch-pr-reviews.ts`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/lib/github/fetch-pr-reviews.ts) helper via a single Bash call.
+3. Review the helper's typed output shape — the payload is now bounded and includes telemetry fields, so any downstream parsing of the old agent's freeform output will need to be updated to match the structured response.
+4. Upgrade the plugin to v6.0.0 and verify that your review skills resolve review threads correctly before promoting to shared/project scope.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #605 | [#608](https://github.com/awinogradov/code-assistants/pull/608) | @awinogradov |
+| #604 | [#606](https://github.com/awinogradov/code-assistants/pull/606) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **autopilot:** the autopilot:fetch-pr-reviews agent is removed; review-thread
+retrieval now runs the bundled lib/github/fetch-pr-reviews.mjs helper.
+
+Entire-Checkpoint: 56c2bd6eacca
+
+### Features
+
+* **autopilot:** add github review-thread fetch helper ([39b5be7](https://github.com/awinogradov/code-assistants/commit/39b5be774be5682276f4b5acbc7eeff9bf01abc8))
+* **autopilot:** replace fetch-pr-reviews agent with bundled helper ([ca0450b](https://github.com/awinogradov/code-assistants/commit/ca0450baa5dc36692f8e6f1755fcb19c1ab891ae))
+* **code-review:** add deterministic startup context bundle ([bb0cd79](https://github.com/awinogradov/code-assistants/commit/bb0cd790b336e8dfa13dc378c23de16e265ce097))
+
+### Refactoring
+
+* **autopilot:** convert review-thread helper to typescript ([fa26c1f](https://github.com/awinogradov/code-assistants/commit/fa26c1ffdb1dbb03d878c0211080a1cfda3a6804))
 ## [5.7.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v5.6.0...autopilot@v5.7.0) (2026-08-17)
 
 ## Release Notes

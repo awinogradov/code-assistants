@@ -53,3 +53,9 @@
 ### Breaking changes
 
 - _Document migration steps here._
+
+## From 5.7.0 to 6.0.0
+
+### Breaking changes
+
+- the autopilot:fetch-pr-reviews agent is removed; review-thread
