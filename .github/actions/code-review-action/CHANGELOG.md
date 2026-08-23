@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [8.1.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v8.0.0...code-review-action@v8.1.0) (2026-08-23)
+
+## Release Notes
+
+The autopilot workflow now records its finalized plan directly on the source Linear issue before implementation begins, giving your team a persistent, readable record of what the agent intends to do — in the same format produced by the `/autopilot:linear-plan` skill.
+
+## ✨ What's New
+
+### Autopilot Run Plan Written to Linear Before Implementation
+
+When `/autopilot:run` is triggered with a Linear issue as its input, it now saves the finalized plan back to that Linear ticket before it starts making any changes. The plan is stored in the same structured format that `/autopilot:linear-plan` produces, so the ticket becomes a single source of truth — you can inspect exactly what the agent decided to do, and the record is there whether or not the run succeeds.
+
+This closes the gap where a run would proceed silently and the Linear issue would only reflect the outcome (via a PR link or status update), with no visibility into the plan the agent was executing. Teams tracking work in Linear can now review, audit, or hand off mid-run context directly from the ticket.
+
+<details><summary>Related issues</summary>
+
+- [#618: Update the source Linear issue and continue the same autopilot run](https://github.com/awinogradov/code-assistants/issues/618)
+- [#619: Store the autopilot run plan on its source Linear ticket before implementation](https://github.com/awinogradov/code-assistants/pull/619)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #618 | [#619](https://github.com/awinogradov/code-assistants/pull/619) | @awinogradov |
+
+### Features
+
+* **autopilot:** store run plan on source linear issue ([9d8c515](https://github.com/awinogradov/code-assistants/commit/9d8c515f7d95a24d84f922c795ef9b0800495568))
 ## [8.0.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v7.0.0...code-review-action@v8.0.0) (2026-08-23)
 
 ## Release Notes
