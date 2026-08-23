@@ -3,7 +3,7 @@
  * Linear issue's description, and `linear-run`, which executes a valid stored plan
  * verbatim or falls back to a run-local fresh plan when the artifact is unusable.
  *
- * Five properties are load-bearing, and each fails silently without a guard:
+ * Seven properties are load-bearing, and each fails silently without a guard:
  *
  * 1. The stored-plan section names `linear-run` reads match the ones `linear-plan` writes.
  *    This is the real rot: the two files have no import between them, so renaming a
@@ -23,6 +23,13 @@
  *    line; the `--experts-review` flag lives in those two skills and nowhere else, so
  *    the `run` family cannot quietly grow the skip — and a skipped store must stay
  *    visible, so `linear-plan` pins the `Score: skipped` stored-header variant.
+ * 7. `run` stores its finalized plan on the source Linear issue — for `linear-issue`
+ *    inputs only — by reference to `linear-plan`'s store, inside Phase 4 and before
+ *    implementation, and a failed write never blocks delivery. The reference link is
+ *    the sole guard for preserving the prior ticket description: `run` carries no
+ *    second emission template, so the write contract stays single-source in the
+ *    producer, and the reader keeps ignoring the `Stored by` attribution — the one
+ *    field the two producers differ on.
  *
  * The section names are extracted from the producer's own text rather than hardcoded,
  * so the guard tracks the source instead of a copy of it.
@@ -300,13 +307,72 @@ describe("linear plan contract", () => {
     }
   });
 
-  test("ordinary plan and run know nothing of the stored plan", () => {
+  test("ordinary plan and run-primed know nothing of the stored plan", () => {
     for (const [name, source] of [
       ["plan", plan],
-      ["run", run],
       ["run-primed", runPrimed],
     ] as const) {
       expect(`${name}: ${source.includes("## Implementation plan")}`).toBe(`${name}: false`);
     }
+  });
+
+  /**
+   * Issue #618: a `linear-issue` input to `run` persists the finalized plan onto the
+   * source ticket before implementation. The subsection below is extracted from `run`'s
+   * own text; an empty extraction fails the presence assertions rather than passing
+   * vacuously. Preservation of the prior ticket description is guarded solely by the
+   * reference link into `linear-plan`'s write contract — asserting it again against
+   * `run` would recreate the duplicated template these tests exist to prevent.
+   */
+  const runStore = run.split("### Persist the plan to Linear")[1]?.split("\n## ")[0] ?? "";
+
+  test("run gates the Linear store to linear-issue inputs", () => {
+    expect(runStore).toContain("`linear-issue`");
+  });
+
+  test("run stores inside Phase 4, after the blocks and before implementation", () => {
+    const storeIndex = run.indexOf("### Persist the plan to Linear");
+    const phase4Index = run.indexOf("## Phase 4");
+    const phase5Index = run.indexOf("## Phase 5");
+    expect(storeIndex).toBeGreaterThan(-1);
+    expect(phase4Index).toBeGreaterThan(-1);
+    expect(phase5Index).toBeGreaterThan(-1);
+    expect(storeIndex).toBeGreaterThan(phase4Index);
+    expect(storeIndex).toBeLessThan(phase5Index);
+  });
+
+  test("the store never gates delivery", () => {
+    expect(runStore).toContain("never gates delivery");
+    expect(runStore).toContain("the run continues");
+    // Phase 5's precondition must accept a loudly reported failure, not require the store.
+    expect(run).toContain("or its failure loudly reported");
+  });
+
+  test("run reuses linear-plan's store by reference, with no second template", () => {
+    expect(runStore).toContain("../linear-plan/SKILL.md#the-write");
+    expect(runStore).toContain("../linear-plan/SKILL.md#the-emission-template");
+    // run's delta prose names only the `Stored by` and `Score:` fields, so the
+    // template's other header tokens appearing anywhere in run means a copied template.
+    expect(run).not.toContain("Format: v1");
+    expect(run).not.toContain("· Base:");
+  });
+
+  test("run attributes its store and never claims the producer's identity", () => {
+    expect(runStore).toContain("`Stored by`");
+    expect(runStore).toContain("`/autopilot:run`");
+    expect(runStore).not.toContain("Stored by /autopilot:linear-plan");
+  });
+
+  test("run's store never records a skipped review", () => {
+    expect(runStore).toContain("never the literal `skipped`");
+  });
+
+  test("the reader ignores the attribution the two producers differ on", () => {
+    expect(linearRun).not.toContain("Stored by");
+  });
+
+  test("run never dispatches the producer or the reader", () => {
+    expect(run).not.toContain("Skill(autopilot:linear-plan)");
+    expect(run).not.toContain("Skill(autopilot:linear-run)");
   });
 });

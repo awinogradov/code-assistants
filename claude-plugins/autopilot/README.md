@@ -198,12 +198,13 @@ Perform deep analysis and create a validated implementation plan. Detects tech s
 
 ### `/autopilot:run`
 
-Plan and implement without a plan-approval pause, then select one of two terminal paths. A task whose verified plan explicitly requires no repository edits reports `Outcome: no_repository_change`; a repository change is committed, opened as a PR, and monitored for review approval. Uses the [codebase context snapshot](#codebase-context-snapshot). See [how the plan and run skills work](../../docs/05-plan-run-skills.md#how-run-differs-automated-post-implementation) for the terminal-path contract.
+Plan and implement without a plan-approval pause, then select one of two terminal paths. A task whose verified plan explicitly requires no repository edits reports `Outcome: no_repository_change`; a repository change is committed, opened as a PR, and monitored for review approval. A Linear-issue input additionally gets the finalized plan stored on its ticket before implementation — the same stored format `/autopilot:linear-plan` writes; see [the linear-plan skill](../../docs/16-linear-plan-skill.md). Uses the [codebase context snapshot](#codebase-context-snapshot). See [how the plan and run skills work](../../docs/05-plan-run-skills.md#how-run-differs-automated-post-implementation) for the terminal-path contract.
 
 ```bash
 /autopilot:run #42                                                      # From GitHub issue
 /autopilot:run 123                                                      # From GitHub issue number
 /autopilot:run https://github.com/org/repo/issues/789                   # From GitHub URL
+/autopilot:run ENG-123                                                  # From Linear issue (plan stored on the ticket)
 /autopilot:run "add user authentication"                                # From description
 /autopilot:run #42 I think we should start with the auth module         # Issue + additional context
 ```

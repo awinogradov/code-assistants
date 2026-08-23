@@ -65,11 +65,12 @@ Section names are the plan file's own, demoted from `##` to `###`, so mapping a 
 
 All five are written, because a human reading the ticket should see the whole plan. The two marked caller-owned are written but not for the reader to consume: a branch step and a post-implementation chain have to be produced in the checkout doing the work, not replayed from a description. Marking them is what lets the guard prove the reader ignores them.
 
-The three metadata fields each earn their place:
+The four metadata fields each earn their place:
 
 - **`Format: v1`** is what keeps "stored under an older template" separable from "corrupt". Without it, the first template revision would make every previously stored plan indistinguishable from a mangled description, and the reader would tell users to discard valid stored work.
 - **`Score:`** records what the plan actually achieved, so a later reader can weigh it.
 - **`Base:`** records the tree the plan was drafted against. It is information, not a gate — see [why drift does not block](./17-linear-run-skill.md#drift-is-reported-not-enforced).
+- **`Stored by`** names the producer. This chapter's deliberate path writes `/autopilot:linear-plan`; [`/autopilot:run` on a Linear-issue input](./05-plan-run-skills.md#how-run-differs-automated-post-implementation) writes the same format with `/autopilot:run` — same anchored write and preservation, but its `Score:` is never `skipped` (the run family's review is always-on), and it performs no title refresh and no "AI Ready" transition, because the same session immediately executes the ticket. The reader validates none of this field, so both producers' plans are equally executable.
 
 The annotated list above is the contract; what the store actually writes is a literal **emission template** the skill carries beside it — the exact stored block with `<angle-bracket>` placeholders for the score (or the literal `skipped`), the base SHA, and each section body. Only placeholders are filled; every other byte — anchor, header line, headings, order, blank-line layout — is emitted verbatim, and the `<- required` / `<- caller-owned` annotations never reach a ticket. That removes the failure mode where each store re-derives the markdown from prose and submits a structurally different description that the reader then rejects as unusable. The first-store `+++ Original task +++` cut is a literal emission form too — the same collapsible shape as `linear-create`'s original-prompt preamble, with the prior description inserted byte-identical and treated as opaque rather than rewritten into the canonical forms below.
 
