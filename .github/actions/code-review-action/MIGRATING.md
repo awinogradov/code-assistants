@@ -41,3 +41,9 @@
 ### Breaking changes
 
 - the autopilot:fetch-pr-reviews agent is removed; review-thread
+
+## From 7.0.0 to 8.0.0
+
+### Breaking changes
+
+- _Document migration steps here._
