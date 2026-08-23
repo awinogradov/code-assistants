@@ -90,7 +90,7 @@ Detection is free — it inspects the argument string and touches nothing. Resol
 **Flow Legend:**
 
 - Every call in the box is issued in a **single message** so they run concurrently.
-- The digest agents return bounded JSON. The full text of a README, the selected RFCs, and an unbounded `git diff` never reaches the caller's context — that isolation is the point of using agents rather than reading inline.
+- Every acquisition returns bounded JSON, but only genuinely semantic work is delegated to agents (the standards digest, the Entire-gated session history, alert resolution). The deterministic reads — the branch digest, the issue context, the TODO search — are one bundled-helper Bash call each (or one parent Grep), per the pattern [#606](https://github.com/awinogradov/code-assistants/pull/606) proved on the review path. The full text of a README, the selected RFCs, and an unbounded `git diff` still never reaches the caller's context — the bounding moved into typed helpers without the delegated-agent loop.
 - The task-scoped pass runs after the fan-out, because only then is the task's subject matter known. It searches the snapshot; live tools are reserved for working-tree code the snapshot cannot show.
 - The session-history digest joins the fan-out only when the repository has [Entire](https://docs.entire.io/overview) enabled; it maps the task's files and commits to the agent sessions and checkpoints that produced them, and degrades to `none` everywhere else.
 - The Context Map is the caller's entire view of the repository. Later phases reason over it instead of re-reading the tree.
@@ -137,7 +137,7 @@ This gate used to fire in Phase 0, before any code had been read. Asking at that
 
 The Context Map already carries branch, worktree, `isStaleMerged`, and `baseAhead`. The skill compares the issue id against the branch name for a mismatch and acts on the map; `Skill(autopilot:preflight-check)` is invoked for anything ambiguous or uncovered, and owns the interactive prompts. If it cancels, planning stops immediately.
 
-`isStaleMerged` matters because a branch whose commits already landed upstream under rebase-rewritten SHAs still shows a non-empty `git log origin/main..HEAD`. A check testing only for emptiness reads a finished branch as active work and skips creating a fresh one. The [`digest-branch-diff`](../claude-plugins/autopilot/agents/digest-branch-diff.md) agent resolves it with `git cherry`, which compares patch equivalence rather than SHA identity.
+`isStaleMerged` matters because a branch whose commits already landed upstream under rebase-rewritten SHAs still shows a non-empty `git log origin/main..HEAD`. A check testing only for emptiness reads a finished branch as active work and skips creating a fresh one. The [`digest-branch.ts`](../claude-plugins/autopilot/lib/git/digest-branch.ts) helper resolves it with `git cherry`, which compares patch equivalence rather than SHA identity — and reports it as `null`, not `false`, when that read failed.
 
 ## Plan mode
 
@@ -240,9 +240,9 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
   context ┌───┴───┬────────┬────────┐      ┌───┼────────┐
           ▼       ▼        ▼        ▼      ▼   ▼        ▼
      ┌────────┐┌───────┐┌───────┐┌──────┐┌──────┐┌──────┐
-     │digest- ││digest-││resolve││search││expert││expert│
-     │repo-   ││branch-││-issue-││-code-││-rev  ││-rev  │
-     │standard││diff   ││context││ todos││  #1  ││  #2  │
+     │digest- ││branch ││issue  ││ todo ││expert││expert│
+     │repo-   ││digest ││context││ grep ││-rev  ││-rev  │
+     │standard││helper ││helper ││direct││  #1  ││  #2  │
      └───┬────┘└───┬───┘└───┬───┘└───┬──┘└───┬──┘└───┬──┘
          │ JSON    │ JSON   │ JSON   │ JSON  │ JSON  │ JSON
          └─────────┴────┬───┴────────┘       └───┬───┘
@@ -255,10 +255,10 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
 **Flow Legend:**
 
 - `digest-repo-standards` → `{ conventions[], standards[{id,title,status,path,defaulted,why}], dropped[], principles[], digestError|null }`
-- `digest-branch-diff` → `{ branch, commits[{sha,subject,upstream}], files[{path,change}], summary, isStaleMerged, baseAhead, digestError|null }`
-- `resolve-issue-context` → `{ source, issueId, title, status, labels[], assignee|null, url|null, description, comments[], resolveError|null }`
+- [`lib/git/digest-branch.ts`](../claude-plugins/autopilot/lib/git/digest-branch.ts) helper (one Bash call, not a sub-agent) → `{ branch, isWorktree, commits[{sha,subject,upstream}], files[{path,additions,deletions}], isStaleMerged|null, baseAhead|null, truncated, digestError|null, telemetry }`
+- [`lib/github/fetch-issue.ts`](../claude-plugins/autopilot/lib/github/fetch-issue.ts) helper for GitHub, [`lib/linear/fetch-issue.mjs`](../claude-plugins/autopilot/lib/linear/fetch-issue.mjs) for Linear (one Bash call, not a sub-agent) → `{ source, issueId, title, status, labels[], assignee|null, url|null, description, comments[], truncated, resolveError|null }`
 - `resolve-alert-context` → `{ source, alertNumber, ruleId, severity, state, file, line, message, htmlUrl, resolveError|null }` (alert input only)
-- `search-codebase-todos` → `{ todos[{location, text}], total }`
+- TODO search → one parent-side Grep bounded at 20 matches, kept as `path:line — text` lines (no sub-agent). The [`resolve-issue-context`](../claude-plugins/autopilot/agents/resolve-issue-context.md) and [`search-codebase-todos`](../claude-plugins/autopilot/agents/search-codebase-todos.md) agents still exist for the `pr-review` CI path, which runs under the code-review action's Bash allowlist.
 - `expert-review` → `{ expertRole, score, dimensions{alignment,completeness,typeSafety,testability,simplicity}, verdict, findings[3–5], grounding[], revision|null }`
 
 `grounding` names what a reviewer actually consulted, and the pipeline screens on it: a panel member with empty grounding, an unparseable report, or file claims it had no tools to make is **discarded rather than averaged**, every discard is named, and a panel that loses everyone reports the plan as unreviewed instead of emitting a score.
@@ -312,8 +312,11 @@ There are two variants of this flow, each replacing a different half of it. [`/a
 | `claude-plugins/autopilot/skills/run/SKILL.md`                       | `plan` plus the automated post-implementation chain          |
 | `claude-plugins/autopilot/skills/run-primed/SKILL.md`                | `run` with the fan-out replaced by a validated context brief |
 | `claude-plugins/autopilot/agents/digest-repo-standards.md`           | README / `docs/` / `rfc/` / `principles/` digest (JSON)      |
-| `claude-plugins/autopilot/agents/digest-branch-diff.md`              | Branch commits, diff, and stale-merge detection (JSON)       |
+| `claude-plugins/autopilot/lib/git/digest-branch.ts`                  | Branch digest helper CLI: commits, diff, stale-merge, state  |
+| `claude-plugins/autopilot/lib/git/branchDigest.ts`                   | Its pure transforms and bounds, fixture-tested               |
+| `claude-plugins/autopilot/lib/github/fetch-issue.ts`                 | GitHub issue helper CLI with opt-in `--assign`               |
+| `claude-plugins/autopilot/lib/github/issueContext.ts`                | Its pure transforms, shape guards, assignee statuses         |
 | `claude-plugins/autopilot/agents/expert-review.md`                   | Domain-expert plan reviewer with per-dimension scores (JSON) |
-| `claude-plugins/autopilot/agents/resolve-issue-context.md`           | GitHub / Linear issue context resolver (JSON)                |
+| `claude-plugins/autopilot/agents/resolve-issue-context.md`           | GitHub / Linear issue context resolver (JSON; pr-review)     |
 | `claude-plugins/autopilot/agents/resolve-alert-context.md`           | Code-scanning alert context resolver (JSON)                  |
-| `claude-plugins/autopilot/agents/search-codebase-todos.md`           | TODO/issue-reference search (JSON)                           |
+| `claude-plugins/autopilot/agents/search-codebase-todos.md`           | TODO/issue-reference search (JSON; pr-review)                |
