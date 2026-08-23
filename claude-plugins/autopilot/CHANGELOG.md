@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [7.1.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.0.0...autopilot@v7.1.0) (2026-08-23)
+
+## Release Notes
+
+The autopilot `run` command now writes the finalized implementation plan back to the originating Linear issue before starting any code changes, giving your team full visibility into what's being built and why — directly on the ticket.
+
+## ✨ What's New
+
+### Run Plan Written to Linear Issue Before Implementation
+
+When you kick off `/autopilot:run` with a Linear issue as input, the plugin now stores the finalized plan on that ticket before any implementation work begins. The plan is written in the same structured format that `/autopilot:linear-plan` produces, so anyone watching the ticket can see exactly what the agent intends to do — without having to dig through session logs or ask the developer.
+
+This is particularly useful for teams that use Linear as their source of truth: the ticket itself now carries a record of the plan, making it easier to review, audit, or hand off mid-flight runs.
+
+<details><summary>Related issues</summary>
+
+- [#618: Update the source Linear issue and continue the same autopilot run](https://github.com/awinogradov/code-assistants/issues/618)
+- [#619: Store the autopilot run plan on its source Linear ticket before implementation](https://github.com/awinogradov/code-assistants/pull/619)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #618 | [#619](https://github.com/awinogradov/code-assistants/pull/619) | @awinogradov |
+
+### Features
+
+* **autopilot:** store run plan on source linear issue ([9d8c515](https://github.com/awinogradov/code-assistants/commit/9d8c515f7d95a24d84f922c795ef9b0800495568))
 ## [7.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v6.0.0...autopilot@v7.0.0) (2026-08-23)
 
 ## Release Notes
