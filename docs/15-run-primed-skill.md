@@ -135,7 +135,7 @@ The brief's three volatile sections are ignored because they describe the explor
 | `broad`          | principal modules and boundaries, entry points, the conventions in force | runs             |
 | `primed`         | only the task-specific gaps the brief does not cover                     | skipped          |
 
-`primed` is the first scope that gates a Phase 1 agent, so the input is now a fan-out selector and not only a read strategy. `digest-repo-standards` is the one agent it skips, because a validated brief already carries that digest's output from the same revision. [`digest-branch-diff`](../claude-plugins/autopilot/agents/digest-branch-diff.md) still runs at every scope — `isStaleMerged` and `baseAhead` describe the checkout in front of you, which a brief written elsewhere cannot know.
+`primed` is the first scope that gates a Phase 1 agent, so the input is now a fan-out selector and not only a read strategy. `digest-repo-standards` is the one agent it skips, because a validated brief already carries that digest's output from the same revision. The [`digest-branch.ts`](../claude-plugins/autopilot/lib/git/digest-branch.ts) helper still runs at every scope — `isStaleMerged` and `baseAhead` describe the checkout in front of you, which a brief written elsewhere cannot know.
 
 The emitted Context Map has the same sections at all three scopes, so `plan` and `run`, which omit `Scope`, are unaffected.
 

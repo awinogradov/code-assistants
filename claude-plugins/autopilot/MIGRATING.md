@@ -59,3 +59,10 @@
 ### Breaking changes
 
 - the autopilot:fetch-pr-reviews agent is removed; review-thread
+
+## From 6.0.0 to 7.0.0
+
+### Breaking changes
+
+- The `autopilot:digest-branch-diff` agent is removed. The `gather-context` fan-out now runs the bundled helper [`lib/git/digest-branch.ts`](./lib/git/digest-branch.ts) as one Bash call — `node "${CLAUDE_PLUGIN_ROOT}/lib/git/digest-branch.ts" [base-ref]` — which also reports git state (`branch`, `isWorktree`) and tri-state degraded fields (`isStaleMerged`/`baseAhead` become `null` on a failed read). Anything that invoked the agent directly must call the helper instead; environments that restrict Bash need a `Bash(node *)` allowlist entry and a Node ≥ 24 (or Bun) runtime for the plan/run path.
+- `gather-context` no longer spawns the `resolve-issue-context` or `search-codebase-todos` agents. GitHub issue context comes from the bundled [`lib/github/fetch-issue.ts`](./lib/github/fetch-issue.ts) helper (`--assign` replaces `Auto-assign current user: true`), Linear issue context from the existing [`lib/linear/fetch-issue.mjs`](./lib/linear/fetch-issue.mjs) directly, and the TODO search from one bounded parent-side Grep. Both agents still ship for the `pr-review` CI path, so consumers of that skill are unaffected.
