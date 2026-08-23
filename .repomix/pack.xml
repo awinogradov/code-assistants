@@ -506,6 +506,7 @@ claude-plugins/
       5.7.0.md
       6.0.0.md
       7.0.0.md
+      7.1.0.md
     agents/
       analyze-pr-commits.md
       analyze-staged-changes.md
@@ -46439,7 +46440,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "7.0.0",
+  "version": "7.1.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -48977,6 +48978,39 @@ This is **required** for the `plan` and `run-primed` skills to function. Environ
 ### Documentation
 
 * **autopilot:** document bundled planning helpers ([184bd80](https://github.com/awinogradov/code-assistants/commit/184bd80c2c33696101b79ac6c071d022c3b41895))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/7.1.0.md">
+## [7.1.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.0.0...autopilot@v7.1.0) (2026-08-23)
+
+## Release Notes
+
+The autopilot `run` command now writes the finalized implementation plan back to the originating Linear issue before starting any code changes, giving your team full visibility into what's being built and why — directly on the ticket.
+
+## ✨ What's New
+
+### Run Plan Written to Linear Issue Before Implementation
+
+When you kick off `/autopilot:run` with a Linear issue as input, the plugin now stores the finalized plan on that ticket before any implementation work begins. The plan is written in the same structured format that `/autopilot:linear-plan` produces, so anyone watching the ticket can see exactly what the agent intends to do — without having to dig through session logs or ask the developer.
+
+This is particularly useful for teams that use Linear as their source of truth: the ticket itself now carries a record of the plan, making it easier to review, audit, or hand off mid-flight runs.
+
+<details><summary>Related issues</summary>
+
+- [#618: Update the source Linear issue and continue the same autopilot run](https://github.com/awinogradov/code-assistants/issues/618)
+- [#619: Store the autopilot run plan on its source Linear ticket before implementation](https://github.com/awinogradov/code-assistants/pull/619)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #618 | [#619](https://github.com/awinogradov/code-assistants/pull/619) | @awinogradov |
+
+### Features
+
+* **autopilot:** store run plan on source linear issue ([9d8c515](https://github.com/awinogradov/code-assistants/commit/9d8c515f7d95a24d84f922c795ef9b0800495568))
 </file>
 
 <file path="claude-plugins/autopilot/agents/analyze-pr-commits.md">
@@ -63317,6 +63351,36 @@ Before writing any output that mentions a file, standard, section, commit, or is
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [7.1.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.0.0...autopilot@v7.1.0) (2026-08-23)
+
+## Release Notes
+
+The autopilot `run` command now writes the finalized implementation plan back to the originating Linear issue before starting any code changes, giving your team full visibility into what's being built and why — directly on the ticket.
+
+## ✨ What's New
+
+### Run Plan Written to Linear Issue Before Implementation
+
+When you kick off `/autopilot:run` with a Linear issue as input, the plugin now stores the finalized plan on that ticket before any implementation work begins. The plan is written in the same structured format that `/autopilot:linear-plan` produces, so anyone watching the ticket can see exactly what the agent intends to do — without having to dig through session logs or ask the developer.
+
+This is particularly useful for teams that use Linear as their source of truth: the ticket itself now carries a record of the plan, making it easier to review, audit, or hand off mid-flight runs.
+
+<details><summary>Related issues</summary>
+
+- [#618: Update the source Linear issue and continue the same autopilot run](https://github.com/awinogradov/code-assistants/issues/618)
+- [#619: Store the autopilot run plan on its source Linear ticket before implementation](https://github.com/awinogradov/code-assistants/pull/619)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #618 | [#619](https://github.com/awinogradov/code-assistants/pull/619) | @awinogradov |
+
+### Features
+
+* **autopilot:** store run plan on source linear issue ([9d8c515](https://github.com/awinogradov/code-assistants/commit/9d8c515f7d95a24d84f922c795ef9b0800495568))
 ## [7.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v6.0.0...autopilot@v7.0.0) (2026-08-23)
 
 ## Release Notes
@@ -65812,14 +65876,14 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
     "test": "bun test lib",
     "clean": "rm -rf node_modules .turbo"
   },
-  "version": "7.0.0"
+  "version": "7.1.0"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v7.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v7.1.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -66308,7 +66372,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-7.0.0
+7.1.0
 </file>
 
 <file path="docs/01-workspace-structure.md">
