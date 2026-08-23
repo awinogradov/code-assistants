@@ -506,7 +506,6 @@ claude-plugins/
     agents/
       analyze-pr-commits.md
       analyze-staged-changes.md
-      digest-branch-diff.md
       digest-repo-standards.md
       digest-session-history.md
       expert-review.md
@@ -516,8 +515,15 @@ claude-plugins/
       scan-and-analyze-todos.md
       search-codebase-todos.md
     lib/
+      git/
+        branchDigest.test.ts
+        branchDigest.ts
+        digest-branch.ts
       github/
+        fetch-issue.ts
         fetch-pr-reviews.ts
+        issueContext.test.ts
+        issueContext.ts
         reviewThreads.test.ts
         reviewThreads.ts
       linear/
@@ -18271,7 +18277,6 @@ const retainedCopies: { block: string; file: string; unescapeBackticks?: boolean
   ...[
     "analyze-pr-commits.md",
     "analyze-staged-changes.md",
-    "digest-branch-diff.md",
     "digest-repo-standards.md",
     "digest-session-history.md",
     "expert-review.md",
@@ -48873,107 +48878,6 @@ Example:
 Emit the raw object, not the fenced form.
 </file>
 
-<file path="claude-plugins/autopilot/agents/digest-branch-diff.md">
----
-name: digest-branch-diff
-description: Summarize a branch's commits and diff against main, and detect a stale-merged branch whose work already landed upstream. Use when planning skills need the in-flight change set without an unbounded diff in parent context.
-tools: Bash
-model: haiku
----
-
-You are a branch diff digester. Summarize what a branch changes relative to `origin/main` and report whether the branch is stale. Do not output intermediate steps — only the final structured block.
-
-The point of this agent is bounding: `git diff origin/main...HEAD` on a wide branch is larger than everything else a planning skill reads combined. Characterize the change set here so the parent never holds the raw diff.
-
-**Constraints:**
-
-- Read-only git commands only. Never `checkout`, `commit`, `reset`, `push`, or `fetch --prune`.
-- Start from `--stat`. Read full hunks only for the few files whose role cannot be inferred from the path and the stat line.
-- All variable interpolations into shell commands MUST be double-quoted.
-
-## Input
-
-The invoking skill provides in the prompt:
-
-- **Repository root** (e.g., `/path/to/repo`) — absolute path.
-- **Base ref** (optional, default `origin/main`) — the ref the branch is compared against.
-
-## Phase 1: Collect
-
-```bash
-git log "$BASE".."HEAD" --oneline
-git diff "$BASE"...HEAD --stat
-git branch --show-current
-```
-
-## Phase 2: Detect a stale-merged branch
-
-A branch whose commits already landed upstream under different SHAs — the normal result of a rebase or squash merge — still shows a non-empty `git log origin/main..HEAD`. Callers that test only for emptiness therefore read a finished branch as active work and skip creating a fresh one.
-
-Resolve it with patch equivalence, not SHA identity:
-
-```bash
-git cherry "$BASE" HEAD
-```
-
-Each output line is `+ <sha>` (no equivalent patch upstream) or `- <sha>` (an equivalent patch is already upstream).
-
-- At least one line, and every line starts with `-` → `isStaleMerged: true`. The branch's work is already on the base; a caller should re-sync and branch fresh.
-- Any line starts with `+` → `isStaleMerged: false`. There is genuine unmerged work.
-- No output → `isStaleMerged: false` with an empty `commits` array. The branch is level with the base.
-
-Also report how far the base has moved ahead, which a caller needs to decide whether to re-sync:
-
-```bash
-git rev-list --count "HEAD".."$BASE"
-```
-
-## Phase 3: Output
-
-<!-- agent-json:start -->
-
-Output ONLY a single JSON object matching the schema below — no preamble, no surrounding code fence, no commentary. The parent parses it directly, so any extra text breaks consumption.
-
-<!-- agent-json:end -->
-
-| Field           | Type     | Constraint                                                                                                       |
-| --------------- | -------- | ---------------------------------------------------------------------------------------------------------------- |
-| `branch`        | string   | Current branch name; empty string in detached HEAD                                                               |
-| `commits`       | object[] | `{ "sha": string, "subject": string, "upstream": boolean }` per commit ahead of the base; `upstream` from cherry |
-| `files`         | object[] | `{ "path": string, "change": string }` per changed file; `change` is a one-line role summary, not a diff         |
-| `summary`       | string   | One or two sentences: what this branch does as a whole                                                           |
-| `isStaleMerged` | boolean  | Per [Phase 2](#phase-2-detect-a-stale-merged-branch); `true` means every commit already exists upstream          |
-| `baseAhead`     | integer  | Commits the base has that HEAD does not; `0` when HEAD is current                                                |
-| `digestError`   | string   | `null` (or omitted) on success; a short reason when git could not be read                                        |
-
-Example:
-
-```json
-{
-  "branch": "issue-475-plan-pipeline-restructure",
-  "commits": [
-    {
-      "sha": "b8bb4b2",
-      "subject": "revert(code-review): restore pull_request trigger",
-      "upstream": true
-    }
-  ],
-  "files": [
-    {
-      "path": ".github/workflows/code-review.yml",
-      "change": "Restores the pull_request trigger for ai-review"
-    }
-  ],
-  "summary": "Reverts the workflow_run trigger back to pull_request for the AI review workflow.",
-  "isStaleMerged": true,
-  "baseAhead": 3,
-  "digestError": null
-}
-```
-
-Emit the raw object, not the fenced form.
-</file>
-
 <file path="claude-plugins/autopilot/agents/digest-repo-standards.md">
 ---
 name: digest-repo-standards
@@ -49747,6 +49651,616 @@ Example:
 When no matches are found, emit `{ "todos": [], "total": 0 }`. Emit the raw object, not the fenced form.
 </file>
 
+<file path="claude-plugins/autopilot/lib/git/branchDigest.test.ts">
+import { describe, expect, test } from "bun:test";
+
+import {
+  buildBranchDigest,
+  deriveIsStaleMerged,
+  maxCommits,
+  maxFiles,
+  parseCherryUpstream,
+  parseNumstat,
+  parseOnelineLog,
+} from "./branchDigest.ts";
+import type { GitReadResults } from "./branchDigest.ts";
+
+const healthyReads: GitReadResults = {
+  branch: "issue-42-jwt-refresh\n",
+  gitDir: "/repo/.git\n",
+  gitCommonDir: "/repo/.git\n",
+  log: "",
+  numstat: "",
+  cherry: "",
+  baseAhead: "0\n",
+};
+
+describe("parseOnelineLog", () => {
+  test("splits sha and subject on the first space", () => {
+    const parsed = parseOnelineLog("b8bb4b2 revert(code-review): restore pull_request trigger\n");
+    expect(parsed).toEqual([
+      { sha: "b8bb4b2", subject: "revert(code-review): restore pull_request trigger" },
+    ]);
+  });
+
+  test("returns no commits for empty output", () => {
+    expect(parseOnelineLog("")).toEqual([]);
+  });
+});
+
+describe("parseCherryUpstream / deriveIsStaleMerged", () => {
+  test("collects only minus-marked SHAs", () => {
+    const cherry = "- aaaa111122223333\n+ bbbb444455556666\n";
+    expect(parseCherryUpstream(cherry)).toEqual(["aaaa111122223333"]);
+  });
+
+  test("all minus lines mean stale-merged", () => {
+    expect(deriveIsStaleMerged("- aaaa\n- bbbb\n")).toBe(true);
+  });
+
+  test("any plus line means genuine unmerged work", () => {
+    expect(deriveIsStaleMerged("- aaaa\n+ bbbb\n")).toBe(false);
+  });
+
+  test("empty output means level with base, not stale", () => {
+    expect(deriveIsStaleMerged("")).toBe(false);
+  });
+});
+
+describe("parseNumstat", () => {
+  test("parses counts and keeps binary files with null counts", () => {
+    const parsed = parseNumstat("12\t3\tsrc/a.ts\n-\t-\tassets/logo.png\n");
+    expect(parsed).toEqual([
+      { path: "src/a.ts", additions: 12, deletions: 3 },
+      { path: "assets/logo.png", additions: null, deletions: null },
+    ]);
+  });
+});
+
+describe("buildBranchDigest", () => {
+  test("level branch: no commits, not stale, base current", () => {
+    const digest = buildBranchDigest(healthyReads);
+    expect(digest.branch).toBe("issue-42-jwt-refresh");
+    expect(digest.commits).toEqual([]);
+    expect(digest.isStaleMerged).toBe(false);
+    expect(digest.baseAhead).toBe(0);
+    expect(digest.isWorktree).toBe(false);
+    expect(digest.truncated).toBe(false);
+  });
+
+  test("unmerged work: upstream flags come from cherry prefix matches", () => {
+    const digest = buildBranchDigest({
+      ...healthyReads,
+      log: "aaaa111 landed upstream\nbbbb222 still local\n",
+      cherry: "- aaaa111122223333\n+ bbbb222233334444\n",
+    });
+    expect(digest.commits).toEqual([
+      { sha: "aaaa111", subject: "landed upstream", upstream: true },
+      { sha: "bbbb222", subject: "still local", upstream: false },
+    ]);
+    expect(digest.isStaleMerged).toBe(false);
+  });
+
+  test("stale-merged branch: all cherry lines are minus", () => {
+    const digest = buildBranchDigest({
+      ...healthyReads,
+      log: "aaaa111 landed upstream\n",
+      cherry: "- aaaa111122223333\n",
+      baseAhead: "3\n",
+    });
+    expect(digest.isStaleMerged).toBe(true);
+    expect(digest.baseAhead).toBe(3);
+  });
+
+  test("detached HEAD: empty branch name survives", () => {
+    const digest = buildBranchDigest({ ...healthyReads, branch: "\n" });
+    expect(digest.branch).toBe("");
+  });
+
+  test("worktree: differing git dirs set isWorktree", () => {
+    const digest = buildBranchDigest({
+      ...healthyReads,
+      gitDir: "/repo/.git/worktrees/wt\n",
+      gitCommonDir: "/repo/.git\n",
+    });
+    expect(digest.isWorktree).toBe(true);
+  });
+
+  test("caps commit and file lists and flags truncation", () => {
+    const log = Array.from({ length: maxCommits + 1 }, (_, i) => `sha${i} subject ${i}`).join("\n");
+    const numstat = Array.from({ length: maxFiles + 1 }, (_, i) => `1\t1\tsrc/f${i}.ts`).join("\n");
+    const digest = buildBranchDigest({ ...healthyReads, log, numstat });
+    expect(digest.commits).toHaveLength(maxCommits);
+    expect(digest.files).toHaveLength(maxFiles);
+    expect(digest.truncated).toBe(true);
+  });
+
+  test("degraded cherry and rev-list reads yield null tri-states, never confident negatives", () => {
+    const digest = buildBranchDigest({
+      ...healthyReads,
+      log: "aaaa111 local work\n",
+      cherry: null,
+      baseAhead: null,
+    });
+    expect(digest.isStaleMerged).toBeNull();
+    expect(digest.baseAhead).toBeNull();
+    expect(digest.commits).toEqual([{ sha: "aaaa111", subject: "local work", upstream: false }]);
+  });
+});
+</file>
+
+<file path="claude-plugins/autopilot/lib/git/branchDigest.ts">
+// Pure transforms for the branch digest: parse read-only `git` output into the
+// bounded contract the gather-context skill consumes in place of the retired
+// digest-branch-diff delegated agent. No I/O lives here — the CLI in
+// digest-branch.ts is a thin shell around these functions, so the fixture tests
+// in branchDigest.test.ts exercise the exact production paths.
+//
+// Runs under Node's native type stripping (Node >=24) and Bun without a build
+// step, so it ships as source at ${CLAUDE_PLUGIN_ROOT}/lib/git/.
+//
+// Usage:
+//   import { buildBranchDigest } from "./branchDigest.ts";
+//   const digest = buildBranchDigest(reads);
+
+/** One commit ahead of the base; `upstream` means `git cherry` found an equivalent patch on the base. */
+export interface BranchCommit {
+  sha: string;
+  subject: string;
+  upstream: boolean;
+}
+
+/** One changed file from `git diff --numstat`; counts are null for binary files. */
+export interface BranchFile {
+  path: string;
+  additions: number | null;
+  deletions: number | null;
+}
+
+/**
+ * The bounded digest contract. Degraded reads yield tri-state fields:
+ * `isStaleMerged`/`baseAhead` are null — never a confident false/0 — when the
+ * `cherry`/`rev-list` read they derive from failed.
+ */
+export interface BranchDigest {
+  branch: string;
+  isWorktree: boolean;
+  commits: BranchCommit[];
+  files: BranchFile[];
+  isStaleMerged: boolean | null;
+  baseAhead: number | null;
+  truncated: boolean;
+  digestError: string | null;
+}
+
+/**
+ * Raw stdout per read, or null when that read failed. The CLI collects the
+ * per-read failure reasons separately and joins them into `digestError`.
+ */
+export interface GitReadResults {
+  branch: string | null;
+  gitDir: string | null;
+  gitCommonDir: string | null;
+  log: string | null;
+  numstat: string | null;
+  cherry: string | null;
+  baseAhead: string | null;
+}
+
+/** Commit-list bound; `git log` is capped at the source with `-n maxCommits + 1`. */
+export const maxCommits = 100;
+
+/** File-list bound applied to the parsed numstat entries. */
+export const maxFiles = 200;
+
+/** Parse `git log --oneline --no-decorate` output into sha/subject pairs. */
+export function parseOnelineLog(log: string): { sha: string; subject: string }[] {
+  return log
+    .split("\n")
+    .filter((line) => line.trim() !== "")
+    .map((line) => {
+      const spaceAt = line.indexOf(" ");
+      if (spaceAt === -1) return { sha: line, subject: "" };
+      return { sha: line.slice(0, spaceAt), subject: line.slice(spaceAt + 1) };
+    });
+}
+
+/** Full SHAs `git cherry` marked `-` (an equivalent patch already exists upstream). */
+export function parseCherryUpstream(cherry: string): string[] {
+  return cherry
+    .split("\n")
+    .filter((line) => line.startsWith("- "))
+    .map((line) => line.slice(2).trim());
+}
+
+/**
+ * Stale-merged per the digest-branch-diff rules: at least one cherry line and
+ * every line `-` means all work already landed upstream (rebase/squash merge);
+ * empty output means the branch is level; any `+` line is genuine unmerged work.
+ */
+export function deriveIsStaleMerged(cherry: string): boolean {
+  const lines = cherry.split("\n").filter((line) => line.trim() !== "");
+  return lines.length > 0 && lines.every((line) => line.startsWith("-"));
+}
+
+/** Parse `git diff --numstat` lines (`added<TAB>deleted<TAB>path`); `-` counts mean binary. */
+export function parseNumstat(numstat: string): BranchFile[] {
+  return numstat
+    .split("\n")
+    .filter((line) => line.trim() !== "")
+    .map((line) => {
+      const [added, deleted, ...pathParts] = line.split("\t");
+      return {
+        path: pathParts.join("\t"),
+        additions: added === "-" ? null : Number.parseInt(added, 10),
+        deletions: deleted === "-" ? null : Number.parseInt(deleted, 10),
+      };
+    });
+}
+
+/**
+ * Assemble the digest from raw read results. Independent reads degrade
+ * independently: a failed `cherry` read nulls only `isStaleMerged`, a failed
+ * `rev-list` read nulls only `baseAhead`, and the commit/file lists keep
+ * whatever loaded.
+ */
+export function buildBranchDigest(reads: GitReadResults): BranchDigest {
+  const upstreamShas = reads.cherry === null ? [] : parseCherryUpstream(reads.cherry);
+  const allCommits = reads.log === null ? [] : parseOnelineLog(reads.log);
+  const commits = allCommits.slice(0, maxCommits).map(({ sha, subject }) => ({
+    sha,
+    subject,
+    upstream: upstreamShas.some((full) => full.startsWith(sha)),
+  }));
+
+  const allFiles = reads.numstat === null ? [] : parseNumstat(reads.numstat);
+  const files = allFiles.slice(0, maxFiles);
+
+  const parsedBaseAhead =
+    reads.baseAhead === null ? Number.NaN : Number.parseInt(reads.baseAhead.trim(), 10);
+
+  return {
+    branch: reads.branch?.trim() ?? "",
+    isWorktree:
+      reads.gitDir !== null &&
+      reads.gitCommonDir !== null &&
+      reads.gitDir.trim() !== reads.gitCommonDir.trim(),
+    commits,
+    files,
+    isStaleMerged: reads.cherry === null ? null : deriveIsStaleMerged(reads.cherry),
+    baseAhead: Number.isNaN(parsedBaseAhead) ? null : parsedBaseAhead,
+    truncated: allCommits.length > maxCommits || allFiles.length > maxFiles,
+    digestError: null,
+  };
+}
+</file>
+
+<file path="claude-plugins/autopilot/lib/git/digest-branch.ts">
+#!/usr/bin/env node
+// Digests the current branch against its base deterministically and prints the
+// typed contract to stdout. Invoked by the gather-context skill in place of the
+// retired digest-branch-diff delegated agent — one bounded Bash call instead of
+// a model-driven loop. Also reports git state (branch, isWorktree), absorbing
+// the fan-out's separate git-state commands.
+//
+// Runs under Node's native type stripping (Node >=24) and Bun — no build step;
+// the file ships as source at ${CLAUDE_PLUGIN_ROOT}/lib/git/.
+//
+// Usage:  node "${CLAUDE_PLUGIN_ROOT}/lib/git/digest-branch.ts" [base-ref]
+//
+// The base ref defaults to the remote HEAD (refs/remotes/origin/HEAD), falling
+// back to origin/main. Always exits 0 and always prints a single JSON object.
+// Reads degrade independently: a failed `cherry` read nulls only
+// `isStaleMerged`, `digestError` names what failed, and
+// `telemetry.degradedReads` lists the failed reads — so consumers never mistake
+// a degraded digest for a level branch.
+
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+import { buildBranchDigest, maxCommits } from "./branchDigest.ts";
+import type { BranchDigest } from "./branchDigest.ts";
+
+interface Telemetry {
+  durationMs: number;
+  commandCount: number;
+  payloadBytes: number;
+  degradedReads: string[];
+}
+
+type HelperOutput = BranchDigest & { telemetry: Telemetry };
+
+interface ReadResult {
+  stdout: string | null;
+  error: string | null;
+}
+
+const execFileAsync = promisify(execFile);
+const gitOptions = { maxBuffer: 32 * 1024 * 1024, timeout: 120_000 };
+
+let commandCount = 0;
+
+async function gitRead(args: string[]): Promise<ReadResult> {
+  commandCount += 1;
+  try {
+    const { stdout } = await execFileAsync("git", args, gitOptions);
+    return { stdout: stdout.toString(), error: null };
+  } catch (error) {
+    const e = error as { stderr?: string; message?: string };
+    const reason = (e.stderr ?? e.message ?? "").split("\n")[0].slice(0, 200);
+    return { stdout: null, error: reason || "git invocation failed" };
+  }
+}
+
+async function resolveBaseRef(argRef: string | undefined): Promise<string> {
+  if (argRef) return argRef;
+  const remoteHead = await gitRead(["rev-parse", "--abbrev-ref", "refs/remotes/origin/HEAD"]);
+  const resolved = remoteHead.stdout?.trim();
+  return resolved ? resolved : "origin/main";
+}
+
+async function main(): Promise<HelperOutput> {
+  const startedAt = Date.now();
+  const base = await resolveBaseRef(process.argv[2]);
+
+  const [branch, gitDir, gitCommonDir, baseVerify] = await Promise.all([
+    gitRead(["branch", "--show-current"]),
+    gitRead(["rev-parse", "--git-dir"]),
+    gitRead(["rev-parse", "--git-common-dir"]),
+    gitRead(["rev-parse", "--verify", "--quiet", `${base}^{commit}`]),
+  ]);
+
+  // An absent base ref (unfetched remote, non-main default with no origin/HEAD)
+  // would fail every diff read identically; degrade once, explicitly, instead.
+  const diffReads =
+    baseVerify.error === null
+      ? await Promise.all([
+          gitRead(["log", `${base}..HEAD`, "--oneline", "--no-decorate", "-n", String(maxCommits + 1)]),
+          gitRead(["diff", `${base}...HEAD`, "--numstat"]),
+          gitRead(["cherry", base, "HEAD"]),
+          gitRead(["rev-list", "--count", `HEAD..${base}`]),
+        ])
+      : null;
+  const [log, numstat, cherry, baseAhead] = diffReads ?? [
+    { stdout: null, error: `base ref ${base} not found` },
+    { stdout: null, error: `base ref ${base} not found` },
+    { stdout: null, error: `base ref ${base} not found` },
+    { stdout: null, error: `base ref ${base} not found` },
+  ];
+
+  const digest = buildBranchDigest({
+    branch: branch.stdout,
+    gitDir: gitDir.stdout,
+    gitCommonDir: gitCommonDir.stdout,
+    log: log.stdout,
+    numstat: numstat.stdout,
+    cherry: cherry.stdout,
+    baseAhead: baseAhead.stdout,
+  });
+
+  const named: { name: string; read: ReadResult }[] = [
+    { name: "branch", read: branch },
+    { name: "gitDir", read: gitDir },
+    { name: "gitCommonDir", read: gitCommonDir },
+    { name: "log", read: log },
+    { name: "numstat", read: numstat },
+    { name: "cherry", read: cherry },
+    { name: "baseAhead", read: baseAhead },
+  ];
+  const failures = named.filter(({ read }) => read.error !== null);
+
+  const withError: BranchDigest = {
+    ...digest,
+    digestError: failures.length
+      ? failures.map(({ name, read }) => `${name}: ${read.error}`).join("; ")
+      : null,
+  };
+
+  return {
+    ...withError,
+    telemetry: {
+      durationMs: Date.now() - startedAt,
+      commandCount,
+      payloadBytes: Buffer.byteLength(JSON.stringify(withError)),
+      degradedReads: failures.map(({ name }) => name),
+    },
+  };
+}
+
+const output = await main();
+process.stderr.write(`digest-branch telemetry: ${JSON.stringify(output.telemetry)}\n`);
+process.stdout.write(JSON.stringify(output));
+</file>
+
+<file path="claude-plugins/autopilot/lib/github/fetch-issue.ts">
+#!/usr/bin/env node
+// Fetches a GitHub issue deterministically and prints the provider-agnostic
+// issue contract to stdout. Invoked by the gather-context skill in place of the
+// resolve-issue-context delegated agent's GitHub path (the agent itself remains
+// for the pr-review CI path); Linear inputs use lib/linear/fetch-issue.mjs.
+//
+// Runs under Node's native type stripping (Node >=24) and Bun — no build step;
+// the file ships as source at ${CLAUDE_PLUGIN_ROOT}/lib/github/.
+//
+// Usage:  node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-issue.ts" <owner/repo> <issue-number> [--assign]
+//
+// Always exits 0 and always prints a single JSON object: on any failure it
+// prints the degraded shape with a non-null `resolveError`, so the caller can
+// surface the error and STOP rather than proceed against missing data. With
+// --assign it also self-assigns the authenticated user (idempotent,
+// best-effort — an assignment failure never degrades the fetch) and fills
+// `assignee` with one of the six canonical status strings. The one-line
+// telemetry summary is mirrored to stderr for CI logs.
+
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+import {
+  buildIssueContext,
+  degradedIssueContext,
+  deriveAssigneeStatus,
+  parseIssueJson,
+} from "./issueContext.ts";
+import type { IssueContext } from "./issueContext.ts";
+
+interface Telemetry {
+  durationMs: number;
+  requestCount: number;
+  payloadBytes: number;
+  degradedReads: string[];
+}
+
+type HelperOutput = IssueContext & { telemetry: Telemetry };
+
+const execFileAsync = promisify(execFile);
+const ghOptions = { maxBuffer: 32 * 1024 * 1024, timeout: 120_000 };
+
+let requestCount = 0;
+
+async function ghRead(args: string[]): Promise<{ stdout: string | null; error: string | null }> {
+  requestCount += 1;
+  try {
+    const { stdout } = await execFileAsync("gh", args, ghOptions);
+    return { stdout: stdout.toString(), error: null };
+  } catch (error) {
+    const e = error as { stderr?: string; message?: string };
+    const reason = (e.stderr ?? e.message ?? "").split("\n")[0].slice(0, 200);
+    return { stdout: null, error: reason || "gh invocation failed" };
+  }
+}
+
+const assigneesOf = (stdout: string | null): string[] | null => {
+  if (stdout === null) return null;
+  try {
+    const parsed = JSON.parse(stdout) as { assignees?: { login?: string }[] };
+    return (parsed.assignees ?? []).flatMap((entry) => (entry.login ? [entry.login] : []));
+  } catch {
+    return null;
+  }
+};
+
+async function selfAssign(repo: string, issueNumber: number, context: IssueContext): Promise<string> {
+  const login = (await ghRead(["api", "user", "--jq", ".login"])).stdout?.trim() ?? null;
+  const preconditions = {
+    login,
+    state: context.status,
+    assignees: [] as string[],
+    editExitCode: null as number | null,
+    editStderr: "",
+    verifiedAssignees: null as string[] | null,
+  };
+  if (!login || context.status === "CLOSED") return deriveAssigneeStatus(preconditions);
+
+  const current = await ghRead([
+    "issue",
+    "view",
+    String(issueNumber),
+    "-R",
+    repo,
+    "--json",
+    "assignees",
+  ]);
+  const assignees = assigneesOf(current.stdout) ?? [];
+  if (assignees.includes(login)) return deriveAssigneeStatus({ ...preconditions, assignees });
+
+  requestCount += 1;
+  let editExitCode = 0;
+  let editStderr = "";
+  try {
+    await execFileAsync(
+      "gh",
+      ["issue", "edit", String(issueNumber), "-R", repo, "--add-assignee", login],
+      ghOptions,
+    );
+  } catch (error) {
+    const e = error as { code?: number; stderr?: string; message?: string };
+    editExitCode = typeof e.code === "number" ? e.code : 1;
+    editStderr = e.stderr ?? e.message ?? "";
+  }
+  if (editExitCode !== 0) {
+    return deriveAssigneeStatus({ ...preconditions, assignees, editExitCode, editStderr });
+  }
+
+  // gh returns exit 0 even when GitHub silently drops the addition, so trust
+  // only a verifying re-read.
+  const verified = await ghRead([
+    "issue",
+    "view",
+    String(issueNumber),
+    "-R",
+    repo,
+    "--json",
+    "assignees",
+  ]);
+  return deriveAssigneeStatus({
+    ...preconditions,
+    assignees,
+    editExitCode,
+    editStderr,
+    verifiedAssignees: assigneesOf(verified.stdout) ?? [],
+  });
+}
+
+async function main(): Promise<HelperOutput> {
+  const startedAt = Date.now();
+  const args = process.argv.slice(2).filter((arg) => arg !== "--assign");
+  const assign = process.argv.includes("--assign");
+  const [repo, numberArg] = args;
+  const issueNumber = Number.parseInt(numberArg ?? "", 10);
+
+  const finish = (context: IssueContext, degradedReads: string[]): HelperOutput => ({
+    ...context,
+    telemetry: {
+      durationMs: Date.now() - startedAt,
+      requestCount,
+      payloadBytes: Buffer.byteLength(JSON.stringify(context)),
+      degradedReads,
+    },
+  });
+
+  if (!repo || !repo.includes("/") || Number.isNaN(issueNumber)) {
+    return finish(
+      degradedIssueContext(
+        Number.isNaN(issueNumber) ? null : issueNumber,
+        "usage: fetch-issue.ts <owner/repo> <issue-number> [--assign] — arguments missing or invalid",
+      ),
+      [],
+    );
+  }
+
+  const fetched = await ghRead([
+    "issue",
+    "view",
+    String(issueNumber),
+    "-R",
+    repo,
+    "--json",
+    "title,body,comments,labels,state,url",
+  ]);
+  if (fetched.stdout === null) {
+    return finish(degradedIssueContext(issueNumber, fetched.error ?? "gh invocation failed"), [
+      "issue",
+    ]);
+  }
+
+  const raw = parseIssueJson(fetched.stdout);
+  if (raw === null) {
+    return finish(
+      degradedIssueContext(issueNumber, "gh issue view returned an unrecognized payload shape"),
+      ["issue"],
+    );
+  }
+
+  const context = buildIssueContext(issueNumber, raw);
+  if (!assign) return finish(context, []);
+  return finish({ ...context, assignee: await selfAssign(repo, issueNumber, context) }, []);
+}
+
+const output = await main();
+process.stderr.write(`fetch-issue telemetry: ${JSON.stringify(output.telemetry)}\n`);
+process.stdout.write(JSON.stringify(output));
+</file>
+
 <file path="claude-plugins/autopilot/lib/github/fetch-pr-reviews.ts">
 #!/usr/bin/env node
 // Fetches a PR's review threads deterministically and prints the typed review
@@ -49887,6 +50401,321 @@ async function main(): Promise<HelperOutput> {
 const output = await main();
 process.stderr.write(`fetch-pr-reviews telemetry: ${JSON.stringify(output.telemetry)}\n`);
 process.stdout.write(JSON.stringify(output));
+</file>
+
+<file path="claude-plugins/autopilot/lib/github/issueContext.test.ts">
+import { describe, expect, test } from "bun:test";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
+import {
+  assigneeStatusMarkers,
+  buildIssueContext,
+  degradedIssueContext,
+  deriveAssigneeStatus,
+  maxCommentLength,
+  maxComments,
+  maxDescriptionLength,
+  parseIssueJson,
+} from "./issueContext.ts";
+import type { AssignReads } from "./issueContext.ts";
+
+const healthyReads: AssignReads = {
+  login: "octocat",
+  state: "OPEN",
+  assignees: [],
+  editExitCode: 0,
+  editStderr: "",
+  verifiedAssignees: ["octocat"],
+};
+
+describe("deriveAssigneeStatus", () => {
+  test("just assigned: edit succeeded and the verifying re-read shows the login", () => {
+    expect(deriveAssigneeStatus(healthyReads)).toBe("@octocat (just assigned)");
+  });
+
+  test("already assigned short-circuits before any edit", () => {
+    expect(deriveAssigneeStatus({ ...healthyReads, assignees: ["octocat"] })).toBe(
+      "@octocat (already assigned)",
+    );
+  });
+
+  test("no authenticated login", () => {
+    expect(deriveAssigneeStatus({ ...healthyReads, login: null })).toBe(
+      "unassigned — gh not authenticated",
+    );
+  });
+
+  test("closed issue", () => {
+    expect(deriveAssigneeStatus({ ...healthyReads, state: "CLOSED" })).toBe(
+      "unassigned — issue closed",
+    );
+  });
+
+  test("silent drop: exit-0 edit not confirmed by the re-read", () => {
+    expect(deriveAssigneeStatus({ ...healthyReads, verifiedAssignees: [] })).toBe(
+      "unassigned — permission denied or assignee limit reached",
+    );
+  });
+
+  test("failed edit reports the first stderr line", () => {
+    expect(
+      deriveAssigneeStatus({
+        ...healthyReads,
+        editExitCode: 1,
+        editStderr: "GraphQL: boom\nsecond line",
+      }),
+    ).toBe("unassigned — gh edit error: GraphQL: boom");
+  });
+});
+
+describe("assignee-status vocabulary sync", () => {
+  const vocabularyHomes = [
+    join(import.meta.dirname, "../../agents/resolve-issue-context.md"),
+    join(import.meta.dirname, "../../skills/branch-create/references/self-assign.md"),
+  ];
+
+  test.each(vocabularyHomes)("all six status markers appear verbatim in %s", async (home) => {
+    const content = await readFile(home, "utf8");
+    for (const marker of assigneeStatusMarkers) {
+      expect(content).toContain(marker);
+    }
+  });
+});
+
+describe("parseIssueJson", () => {
+  test("accepts a payload with the load-bearing fields", () => {
+    expect(parseIssueJson('{"title":"T","state":"OPEN"}')).toEqual({ title: "T", state: "OPEN" });
+  });
+
+  test.each(["not json", "[1,2]", "null", '{"title":42,"state":"OPEN"}', '{"title":"T"}'])(
+    "rejects malformed payload %s",
+    (stdout) => {
+      expect(parseIssueJson(stdout)).toBeNull();
+    },
+  );
+});
+
+describe("buildIssueContext", () => {
+  test("maps the gh payload to the issue contract", () => {
+    const context = buildIssueContext(42, {
+      title: "Add JWT refresh endpoint",
+      body: "We need a refresh endpoint...",
+      state: "OPEN",
+      url: "https://github.com/octocat/hello-world/issues/42",
+      labels: [{ name: "enhancement" }, {}],
+      comments: [{ author: { login: "octocat" }, createdAt: "2026-05-30T10:00:00Z", body: "Agreed." }],
+    });
+    expect(context).toEqual({
+      source: "GitHub Issue #42",
+      issueId: 42,
+      title: "Add JWT refresh endpoint",
+      status: "OPEN",
+      labels: ["enhancement"],
+      assignee: null,
+      url: "https://github.com/octocat/hello-world/issues/42",
+      description: "We need a refresh endpoint...",
+      comments: [{ author: "octocat", date: "2026-05-30", body: "Agreed." }],
+      truncated: false,
+      resolveError: null,
+    });
+  });
+
+  test("caps description and comments and flags truncation", () => {
+    const context = buildIssueContext(7, {
+      title: "T",
+      state: "OPEN",
+      body: "x".repeat(maxDescriptionLength + 1),
+      comments: Array.from({ length: maxComments + 1 }, () => ({
+        body: "y".repeat(maxCommentLength + 1),
+      })),
+    });
+    expect(context.description).toHaveLength(maxDescriptionLength);
+    expect(context.comments).toHaveLength(maxComments);
+    expect(context.comments[0].body).toHaveLength(maxCommentLength);
+    expect(context.truncated).toBe(true);
+  });
+
+  test("degraded fetch carries the reason and the unresolved status", () => {
+    const context = degradedIssueContext(9, "gh invocation failed");
+    expect(context.status).toBe("unresolved");
+    expect(context.resolveError).toBe("gh invocation failed");
+    expect(context.issueId).toBe(9);
+  });
+});
+</file>
+
+<file path="claude-plugins/autopilot/lib/github/issueContext.ts">
+// Pure transforms for GitHub issue retrieval: guard the parsed `gh issue view`
+// payload and reduce it to the provider-agnostic issue contract the
+// gather-context skill consumes in place of the resolve-issue-context delegated
+// agent (the agent itself remains for the pr-review CI path). No I/O lives here —
+// the CLI in fetch-issue.ts is a thin shell around these functions, so the
+// fixture tests in issueContext.test.ts exercise the exact production paths.
+//
+// Runs under Node's native type stripping (Node >=24) and Bun without a build
+// step, so it ships as source at ${CLAUDE_PLUGIN_ROOT}/lib/github/.
+//
+// The assignee-status vocabulary below stays in sync with
+// agents/resolve-issue-context.md Phase 2 and
+// skills/branch-create/references/self-assign.md — issueContext.test.ts pins
+// the six markers against both files.
+//
+// Usage:
+//   import { buildIssueContext, deriveAssigneeStatus } from "./issueContext.ts";
+
+/** One issue comment in the output contract. */
+export interface IssueComment {
+  author: string;
+  date: string;
+  body: string;
+}
+
+/**
+ * The provider-agnostic issue contract, matching the resolve-issue-context
+ * agent's output and lib/linear/fetch-issue.mjs. `truncated` flags that the
+ * description or comment list hit an exported bound.
+ */
+export interface IssueContext {
+  source: string;
+  issueId: number | null;
+  title: string | null;
+  status: string;
+  labels: string[];
+  assignee: string | null;
+  url: string | null;
+  description: string;
+  comments: IssueComment[];
+  truncated: boolean;
+  resolveError: string | null;
+}
+
+/** The `gh issue view --json` fields the transforms consume. */
+export interface RawIssue {
+  title: string;
+  body?: string | null;
+  state: string;
+  url?: string | null;
+  labels?: { name?: string }[];
+  assignees?: { login?: string }[];
+  comments?: { author?: { login?: string }; createdAt?: string; body?: string }[];
+}
+
+/** Description bound in characters. */
+export const maxDescriptionLength = 16_000;
+
+/** Comment-list bound. */
+export const maxComments = 30;
+
+/** Per-comment body bound in characters. */
+export const maxCommentLength = 2_000;
+
+/**
+ * The six assignee outcomes' distinguishing markers, one per status string.
+ * Pinned by issueContext.test.ts against the two markdown homes of the
+ * vocabulary so the three copies cannot drift silently.
+ */
+export const assigneeStatusMarkers = [
+  "(just assigned)",
+  "(already assigned)",
+  "unassigned — gh not authenticated",
+  "unassigned — issue closed",
+  "unassigned — permission denied or assignee limit reached",
+  "unassigned — gh edit error:",
+] as const;
+
+/**
+ * Guard the parsed `gh issue view --json` payload: external input, so the
+ * load-bearing fields are checked at runtime instead of trusted through a cast.
+ * Returns null when the shape does not hold; the CLI degrades that into
+ * `resolveError`.
+ */
+export function parseIssueJson(stdout: string): RawIssue | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+  const candidate = parsed as Record<string, unknown>;
+  if (typeof candidate.title !== "string" || typeof candidate.state !== "string") return null;
+  return candidate as unknown as RawIssue;
+}
+
+/** The degraded contract shape for a failed fetch; `resolveError` carries the reason. */
+export function degradedIssueContext(issueNumber: number | null, error: string): IssueContext {
+  return {
+    source: issueNumber === null ? "GitHub Issue" : `GitHub Issue #${issueNumber}`,
+    issueId: issueNumber,
+    title: null,
+    status: "unresolved",
+    labels: [],
+    assignee: null,
+    url: null,
+    description: "",
+    comments: [],
+    truncated: false,
+    resolveError: error,
+  };
+}
+
+/** Reduce a guarded issue payload to the bounded contract. */
+export function buildIssueContext(issueNumber: number, raw: RawIssue): IssueContext {
+  const body = raw.body ?? "";
+  const allComments = raw.comments ?? [];
+  const comments = allComments.slice(0, maxComments).map((comment) => ({
+    author: comment.author?.login ?? "unknown",
+    date: (comment.createdAt ?? "").slice(0, 10),
+    body: (comment.body ?? "").slice(0, maxCommentLength),
+  }));
+
+  return {
+    source: `GitHub Issue #${issueNumber}`,
+    issueId: issueNumber,
+    title: raw.title,
+    status: raw.state,
+    labels: (raw.labels ?? []).flatMap((label) => (label.name ? [label.name] : [])),
+    assignee: null,
+    url: raw.url ?? null,
+    description: body.slice(0, maxDescriptionLength),
+    comments,
+    truncated:
+      body.length > maxDescriptionLength ||
+      allComments.length > maxComments ||
+      allComments.some((comment) => (comment.body ?? "").length > maxCommentLength),
+    resolveError: null,
+  };
+}
+
+/** The reads the assign flow produced, injected so the derivation stays pure. */
+export interface AssignReads {
+  login: string | null;
+  state: string;
+  assignees: string[];
+  editExitCode: number | null;
+  editStderr: string;
+  verifiedAssignees: string[] | null;
+}
+
+/**
+ * Derive the assignee status string per the canonical six-outcome flow: no
+ * login, closed issue, and already-assigned short-circuit before any edit; a
+ * non-zero edit reports its stderr; an exit-0 edit is trusted only after the
+ * verifying re-read shows the login, because GitHub drops additions silently on
+ * missing permission or the 10-assignee limit.
+ */
+export function deriveAssigneeStatus(reads: AssignReads): string {
+  if (reads.login === null || reads.login === "") return "unassigned — gh not authenticated";
+  if (reads.state === "CLOSED") return "unassigned — issue closed";
+  if (reads.assignees.includes(reads.login)) return `@${reads.login} (already assigned)`;
+  if (reads.editExitCode !== 0) {
+    const firstLine = reads.editStderr.split("\n")[0];
+    return `unassigned — gh edit error: ${firstLine}`;
+  }
+  if (reads.verifiedAssignees?.includes(reads.login)) return `@${reads.login} (just assigned)`;
+  return "unassigned — permission denied or assignee limit reached";
+}
 </file>
 
 <file path="claude-plugins/autopilot/lib/github/reviewThreads.test.ts">
@@ -52737,6 +53566,7 @@ allowed-tools:
   - Grep
   - Agent
   - Bash(git *)
+  - Bash(node *)
   - Bash(command -v graphify)
   - Bash(graphify *)
   - Bash(command -v entire)
@@ -52749,7 +53579,7 @@ Acquire every piece of context a planning pass needs, in one parallel fan-out, a
 Two properties make this skill worth its own seam:
 
 - **One fan-out.** Input _detection_ is pure string matching and performs no I/O, so the issue id is known before anything is fetched. Input _resolution_ is what costs time, and it parallelizes with standards, branch, and snapshot acquisition. There is no reason to stage these.
-- **Digests, not documents.** Each sub-agent returns a bounded JSON object. The full text of a README, three RFCs, and an unbounded branch diff never reaches the caller's context.
+- **Digests, not documents.** Every sub-agent and bundled helper returns a bounded JSON object. The full text of a README, three RFCs, and an unbounded branch diff never reaches the caller's context. Deterministic acquisition — the branch digest, the issue fetch, the TODO search — runs as direct bounded calls rather than delegated agents, per the pattern [#606](https://github.com/awinogradov/code-assistants/pull/606) proved on the review path.
 
 ## Input
 
@@ -52771,29 +53601,28 @@ Issue **every** call below in a **single message** so they run concurrently. Do 
 | Agent                                                                                                                                          | When                       | Prompt                                                                                                     |
 | ---------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | [`digest-repo-standards`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/digest-repo-standards.md)   | Except `Scope: primed`     | `Repository root: [path]. Task summary: [summary].`                                                        |
-| [`digest-branch-diff`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/digest-branch-diff.md)         | Always                     | `Repository root: [path]. Base ref: origin/main.`                                                          |
-| [`resolve-issue-context`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/resolve-issue-context.md)   | Issue inputs               | Per that agent's Input section; pass `Auto-assign current user: true` for GitHub only                      |
 | [`resolve-alert-context`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/resolve-alert-context.md)   | `code-scanning-alert` only | `Fetch alert context. Alert number: [n]. Repository: [owner/repo].`                                        |
-| [`search-codebase-todos`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/search-codebase-todos.md)   | Issue inputs               | `Search for TODOs. Input type: [type]. Issue ID: [id].`                                                    |
 | [`digest-session-history`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/digest-session-history.md) | Entire enabled (see below) | `Repository root: [path]. Task summary: [summary]. Relevant files: [paths the task text names, when any].` |
 
 **Direct calls** in the same message:
 
 - **Snapshot** — follow the ordered source chain in [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md); this skill passes no `includePatterns`. Emit the block's `context-source:` trace line for the tier you selected, including the `outputId` when it was the repomix tier. On the graph tier the line waits for a query that **exited zero** and emit the whole evidence record, trace and shortlist together — a label written before the first query records an intention, not a selection. A graph pass that cannot produce a valid record leaves through the block's `superseding graphify (<reason>)` transition and the successor tier selects normally; a partial record is never the cheaper option. The fan-out is not complete until that line exists: it is what [Phase 3](#phase-3-emit-the-context-map) hands to the caller, and a caller cannot enforce a selection it was never told about.
 - **Stack** — Read `package.json` and extract `agents.rules`.
-- **Git state** — `git branch --show-current`, `git rev-parse --git-dir`, and `git rev-parse --git-common-dir` (the last two differ inside a worktree).
+- **Branch digest** — always: one Bash call to the bundled helper, `node "${CLAUDE_PLUGIN_ROOT}/lib/git/digest-branch.ts"` (Node ≥ 24 or Bun; when `CLAUDE_PLUGIN_ROOT` is unset, build the absolute path from this skill's own base directory). It prints one bounded JSON object — `branch`, `isWorktree`, `commits[]`, `files[]`, `isStaleMerged`, `baseAhead`, `truncated`, `digestError`, `telemetry` — covering git state too, so no separate `git branch`/`git rev-parse` calls run. The full invocation and output contract live in [the helper's header](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/lib/git/digest-branch.ts). A failed `cherry`/`rev-list` read yields `isStaleMerged`/`baseAhead` as `null` — treat null as unknown, never as false/0.
+- **Issue context** — issue inputs only: one Bash call to the provider's bundled helper, in place of a delegated agent. GitHub: `node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-issue.ts" <owner/repo> <issue-number>`, appending `--assign` exactly when the caller passes `Auto-assign current user: true` (contract in [the helper's header](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/lib/github/fetch-issue.ts)). Linear: `LINEAR_API_KEY="$LINEAR_API_KEY" node "${CLAUDE_PLUGIN_ROOT}/lib/linear/fetch-issue.mjs" <LINEAR-ID>`. Both print the provider-agnostic issue contract with `resolveError` naming any failure.
+- **Related TODOs** — issue inputs only: one bounded Grep call by this skill (no sub-agent). Search the issue reference forms — for GitHub number `N` both `issues/N` and `#N`, for Linear id `ID` both `issue/ID` and the bare `ID` token — in content mode with `head_limit` ≤ 20, keeping each match as `path:line — text`.
 
 **Entire enabled** means `.entire/settings.json` at the repository root exists and carries `"enabled": true` — check it with the Read tool before the fan-out, so repositories without [Entire](https://docs.entire.io/overview) never pay the agent spawn. The agent re-verifies the CLI itself and degrades to a `digestError` result on missing binary or auth; like every digest, that failure is recorded, never fatal.
 
-`digest-repo-standards` is the one agent `Scope: primed` skips: that caller holds a validated brief whose conventions came from this same digest on this same revision, so re-running it is duplicate cost rather than fresh information. `digest-branch-diff` still runs at every scope — `isStaleMerged` and `baseAhead` describe the checkout in front of you, which a brief written elsewhere cannot know.
+`digest-repo-standards` is the one agent `Scope: primed` skips: that caller holds a validated brief whose conventions came from this same digest on this same revision, so re-running it is duplicate cost rather than fresh information. The branch-digest helper still runs at every scope — `isStaleMerged` and `baseAhead` describe the checkout in front of you, which a brief written elsewhere cannot know.
 
-**Failure handling.** A resolver that returns `unresolved` with a non-null `resolveError` is fatal — surface the error and stop, so nothing proceeds against a misfetched target. A _digest_ failure is not fatal: record `digestError` in the map and continue, because a plan without a standards digest is degraded, not wrong.
+**Failure handling.** A resolver that returns `unresolved` with a non-null `resolveError` is fatal — surface the error and stop, so nothing proceeds against a misfetched target. A _digest_ failure is not fatal: record `digestError` in the map and continue, because a plan without a standards digest is degraded, not wrong. A helper **process** failure — non-zero exit despite the exit-0 design, stdout that is not one JSON object, a missing Node runtime — maps to the same class as the field that helper feeds: fatal for the issue helper, degraded for the branch digest. Surface it either way; never silently re-run the work through a delegated agent.
 
 ## Phase 2: Scope the codebase pass
 
 Only now is the task's subject matter known, so this pass runs after the fan-out returns.
 
-Search the snapshot for the implementations, patterns, and tests the change touches, using the read contract of the selected source — `graphify` queries when the graph tier was selected, `mcp__repomix__grep_repomix_output` with ranged `mcp__repomix__read_repomix_output` when the repomix tier was, or `Grep`/`Glob`/`Read` directly when only default tools remain. On the graph tier that read contract is the block's [query discipline](../shared-rules/references/repomix-snapshot.md): a truncated or empty first answer is refined with a narrower graph operation before any file read, and the pass ends at the shortlist and the `graphify-trace:` line [Phase 3](#phase-3-emit-the-context-map) carries. A graph or pack reflects the base at its last refresh, so reach for live Grep/Glob/Read **only** for working-tree code it cannot show — `digest-branch-diff` already reports what is in flight — and record each such read with the one-line `context-fallback: <reason> <path>` note from the [shared block's taxonomy](../shared-rules/references/repomix-snapshot.md) (here usually `post-snapshot-mutation`). Do not crawl the tree for anything the selected source answers.
+Search the snapshot for the implementations, patterns, and tests the change touches, using the read contract of the selected source — `graphify` queries when the graph tier was selected, `mcp__repomix__grep_repomix_output` with ranged `mcp__repomix__read_repomix_output` when the repomix tier was, or `Grep`/`Glob`/`Read` directly when only default tools remain. On the graph tier that read contract is the block's [query discipline](../shared-rules/references/repomix-snapshot.md): a truncated or empty first answer is refined with a narrower graph operation before any file read, and the pass ends at the shortlist and the `graphify-trace:` line [Phase 3](#phase-3-emit-the-context-map) carries. A graph or pack reflects the base at its last refresh, so reach for live Grep/Glob/Read **only** for working-tree code it cannot show — the branch digest already reports what is in flight — and record each such read with the one-line `context-fallback: <reason> <path>` note from the [shared block's taxonomy](../shared-rules/references/repomix-snapshot.md) (here usually `post-snapshot-mutation`). Do not crawl the tree for anything the selected source answers.
 
 **At `broad` scope there is no change to narrow to**, so read the snapshot breadth-first instead: the principal modules and their boundaries, the entry points, and the conventions that govern them. Fill `Relevant files` and `Patterns to mirror` at that altitude — the modules a newcomer must know and the conventions they must copy, rather than the handful a specific edit would touch.
 
@@ -52814,11 +53643,11 @@ Emit these sections in this order. This is the caller's entire view of the repos
 **Patterns to mirror** — [existing implementation — what to copy from it]
 **Key types** — [interfaces, types, Zod schemas in play]
 **Test conventions** — [how this area is tested; fixtures that apply]
-**In-flight changes** — [from digest-branch-diff: summary, and isStaleMerged / baseAhead when relevant]
+**In-flight changes** — [one-line summary this skill composes from the branch digest's commit subjects and file stats, and isStaleMerged / baseAhead when relevant]
 **Session history** — [from digest-session-history: commit/file → session/checkpoint links; "none" when Entire is unavailable or nothing matched]
 **Applicable standards** — [id + status (mark "defaulted" when inferred) + one line on why the plan must honor it; then dropped candidates; "none" when nothing matched]
 **Stack** — [agents.rules value, and the deltas it resolves to]
-**Git state** — [branch, isWorktree, isStaleMerged, baseAhead]
+**Git state** — [from the branch digest: branch, isWorktree, isStaleMerged, baseAhead — null tri-states reported as unknown]
 **Snapshot** — [the evidence record emitted in Phase 1, verbatim — the `context-source:` line for later phases to reuse, and on the graph tier the `graphify-trace:` line and the `graphify-shortlist:` bullets with the relationship justifying each]
 ```
 
@@ -64579,6 +65408,13 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
 ### Breaking changes
 
 - the autopilot:fetch-pr-reviews agent is removed; review-thread
+
+## From 6.0.0 to 7.0.0
+
+### Breaking changes
+
+- The `autopilot:digest-branch-diff` agent is removed. The `gather-context` fan-out now runs the bundled helper [`lib/git/digest-branch.ts`](./lib/git/digest-branch.ts) as one Bash call — `node "${CLAUDE_PLUGIN_ROOT}/lib/git/digest-branch.ts" [base-ref]` — which also reports git state (`branch`, `isWorktree`) and tri-state degraded fields (`isStaleMerged`/`baseAhead` become `null` on a failed read). Anything that invoked the agent directly must call the helper instead; environments that restrict Bash need a `Bash(node *)` allowlist entry and a Node ≥ 24 (or Bun) runtime for the plan/run path.
+- `gather-context` no longer spawns the `resolve-issue-context` or `search-codebase-todos` agents. GitHub issue context comes from the bundled [`lib/github/fetch-issue.ts`](./lib/github/fetch-issue.ts) helper (`--assign` replaces `Auto-assign current user: true`), Linear issue context from the existing [`lib/linear/fetch-issue.mjs`](./lib/linear/fetch-issue.mjs) directly, and the TODO search from one bounded parent-side Grep. Both agents still ship for the `pr-review` CI path, so consumers of that skill are unaffected.
 </file>
 
 <file path="claude-plugins/autopilot/package.json">
@@ -64667,7 +65503,6 @@ code-assistants/
         ├── agents/                 # Sub-agents
         │   ├── analyze-pr-commits.md
         │   ├── analyze-staged-changes.md
-        │   ├── digest-branch-diff.md
         │   ├── digest-repo-standards.md
         │   ├── expert-review.md
         │   ├── resolve-alert-context.md
@@ -64972,23 +65807,22 @@ The canonical home for instruction blocks several skills need — reference form
 
 ## Agents
 
-### Helper sub-agents (11 agents)
+### Helper sub-agents (10 agents)
 
-Context-isolating workers invoked by other skills to keep the parent conversation small. Each returns a structured summary only.
+Context-isolating workers invoked by other skills to keep the parent conversation small. Each returns a structured summary only. Deterministic work is not delegated: the plan/run branch digest and GitHub issue fetch run as bundled helper CLIs under [`lib/`](./lib) (see [Bundled helpers](#bundled-helpers) below), so `gather-context` spawns an agent only for semantic digests.
 
-| Agent                    | Model   | Used by                    | Purpose                                                                                      |
-| ------------------------ | ------- | -------------------------- | -------------------------------------------------------------------------------------------- |
-| `analyze-pr-commits`     | sonnet  | `pr-create`, `pr-update`   | Summarize branch commits, diff, and linked issue for PR context                              |
-| `digest-branch-diff`     | haiku   | `gather-context`           | Summarize a branch's commits and diff against main; detect a stale-merged branch             |
-| `digest-repo-standards`  | sonnet  | `gather-context`           | Digest the repo's README, docs/, rfc/, and principles/ into a bounded standards summary      |
-| `analyze-staged-changes` | haiku   | `commits-create`           | Categorize staged files and recommend a commit strategy                                      |
-| `digest-session-history` | haiku   | `plan`, `run`, `explore`   | Map task files and commits to the Entire sessions and checkpoints that produced them         |
-| `expert-review`          | inherit | `plan`, `plan-*`           | Score an implementation plan as a domain expert                                              |
-| `resolve-alert-context`  | sonnet  | `plan`, `run`              | Fetch GitHub code-scanning alert context via the code-scanning API                           |
-| `resolve-assignees`      | sonnet  | `linear-create`            | Resolve candidate assignees from CODEOWNERS and Linear team members, current user first      |
-| `resolve-issue-context`  | sonnet  | `plan`, `run`, `pr-review` | Fetch GitHub/Linear issue context; optionally auto-assign current user (idempotent) via `gh` |
-| `scan-and-analyze-todos` | sonnet  | `todo-cleanup`             | Scan codebase for TODOs and check linked GitHub issue statuses                               |
-| `search-codebase-todos`  | haiku   | `plan`, `run`, `pr-review` | Search the codebase for TODOs and references to a specific issue                             |
+| Agent                    | Model   | Used by                  | Purpose                                                                                      |
+| ------------------------ | ------- | ------------------------ | -------------------------------------------------------------------------------------------- |
+| `analyze-pr-commits`     | sonnet  | `pr-create`, `pr-update` | Summarize branch commits, diff, and linked issue for PR context                              |
+| `digest-repo-standards`  | sonnet  | `gather-context`         | Digest the repo's README, docs/, rfc/, and principles/ into a bounded standards summary      |
+| `analyze-staged-changes` | haiku   | `commits-create`         | Categorize staged files and recommend a commit strategy                                      |
+| `digest-session-history` | haiku   | `plan`, `run`, `explore` | Map task files and commits to the Entire sessions and checkpoints that produced them         |
+| `expert-review`          | inherit | `plan`, `plan-*`         | Score an implementation plan as a domain expert                                              |
+| `resolve-alert-context`  | sonnet  | `plan`, `run`            | Fetch GitHub code-scanning alert context via the code-scanning API                           |
+| `resolve-assignees`      | sonnet  | `linear-create`          | Resolve candidate assignees from CODEOWNERS and Linear team members, current user first      |
+| `resolve-issue-context`  | sonnet  | `pr-review`              | Fetch GitHub/Linear issue context; optionally auto-assign current user (idempotent) via `gh` |
+| `scan-and-analyze-todos` | sonnet  | `todo-cleanup`           | Scan codebase for TODOs and check linked GitHub issue statuses                               |
+| `search-codebase-todos`  | haiku   | `pr-review`              | Search the codebase for TODOs and references to a specific issue                             |
 
 ## Internal Skills (not in slash menu)
 
@@ -65053,7 +65887,13 @@ Configure in `.mcp.json` at plugin root:
 
 The plugin ships one server: `wiretext` (ASCII wireframes). Linear connectivity is consumer-level: interactive skills use a user- or project-configured Linear MCP server (`claude mcp add --transport http linear https://mcp.linear.app/mcp`), while agents and headless runs use a bundled zero-dependency GraphQL helper (`lib/linear/`) keyed by `LINEAR_API_KEY`. See [Linear tracker support](../../docs/11-linear-tracker.md).
 
-GitHub review-thread retrieval is also a bundled zero-dependency helper rather than an agent: [`lib/github/fetch-pr-reviews.ts`](./lib/github/fetch-pr-reviews.ts) performs the four bounded, read-only `gh` reads (REST reviews and comments, PR metadata, GraphQL `reviewThreads` resolution state) deterministically and prints one typed JSON payload with telemetry, replacing the delegated `fetch-pr-reviews` agent the `pr-answer`, `pr-resolve`, and `pr-review` skills previously spawned. The invocation and output contract live in the [github-review-fetch shared block](./skills/shared-rules/references/github-review-fetch.md).
+### Bundled helpers
+
+Deterministic retrieval ships as zero-dependency CLIs under [`lib/`](./lib) — run by Node ≥ 24 native type stripping or Bun, always exiting 0 with one typed JSON payload plus telemetry — rather than as delegated agents:
+
+- [`lib/github/fetch-pr-reviews.ts`](./lib/github/fetch-pr-reviews.ts) performs the four bounded, read-only `gh` reads (REST reviews and comments, PR metadata, GraphQL `reviewThreads` resolution state), replacing the delegated `fetch-pr-reviews` agent the `pr-answer`, `pr-resolve`, and `pr-review` skills previously spawned. The invocation and output contract live in the [github-review-fetch shared block](./skills/shared-rules/references/github-review-fetch.md).
+- [`lib/git/digest-branch.ts`](./lib/git/digest-branch.ts) digests the current branch against its base — commits, numstat, `git cherry` stale-merge detection, worktree state — replacing the delegated `digest-branch-diff` agent in the `gather-context` fan-out. Degraded `cherry`/`rev-list` reads report `isStaleMerged`/`baseAhead` as `null`, never as a confident negative.
+- [`lib/github/fetch-issue.ts`](./lib/github/fetch-issue.ts) fetches a GitHub issue and, with `--assign`, self-assigns the authenticated user with a verifying re-read, replacing the `resolve-issue-context` agent's GitHub path in the same fan-out. Each helper's invocation and output contract lives in its header comment.
 
 ### Versioning
 
@@ -65954,7 +66794,7 @@ Detection is free — it inspects the argument string and touches nothing. Resol
 **Flow Legend:**
 
 - Every call in the box is issued in a **single message** so they run concurrently.
-- The digest agents return bounded JSON. The full text of a README, the selected RFCs, and an unbounded `git diff` never reaches the caller's context — that isolation is the point of using agents rather than reading inline.
+- Every acquisition returns bounded JSON, but only genuinely semantic work is delegated to agents (the standards digest, the Entire-gated session history, alert resolution). The deterministic reads — the branch digest, the issue context, the TODO search — are one bundled-helper Bash call each (or one parent Grep), per the pattern [#606](https://github.com/awinogradov/code-assistants/pull/606) proved on the review path. The full text of a README, the selected RFCs, and an unbounded `git diff` still never reaches the caller's context — the bounding moved into typed helpers without the delegated-agent loop.
 - The task-scoped pass runs after the fan-out, because only then is the task's subject matter known. It searches the snapshot; live tools are reserved for working-tree code the snapshot cannot show.
 - The session-history digest joins the fan-out only when the repository has [Entire](https://docs.entire.io/overview) enabled; it maps the task's files and commits to the agent sessions and checkpoints that produced them, and degrades to `none` everywhere else.
 - The Context Map is the caller's entire view of the repository. Later phases reason over it instead of re-reading the tree.
@@ -66001,7 +66841,7 @@ This gate used to fire in Phase 0, before any code had been read. Asking at that
 
 The Context Map already carries branch, worktree, `isStaleMerged`, and `baseAhead`. The skill compares the issue id against the branch name for a mismatch and acts on the map; `Skill(autopilot:preflight-check)` is invoked for anything ambiguous or uncovered, and owns the interactive prompts. If it cancels, planning stops immediately.
 
-`isStaleMerged` matters because a branch whose commits already landed upstream under rebase-rewritten SHAs still shows a non-empty `git log origin/main..HEAD`. A check testing only for emptiness reads a finished branch as active work and skips creating a fresh one. The [`digest-branch-diff`](../claude-plugins/autopilot/agents/digest-branch-diff.md) agent resolves it with `git cherry`, which compares patch equivalence rather than SHA identity.
+`isStaleMerged` matters because a branch whose commits already landed upstream under rebase-rewritten SHAs still shows a non-empty `git log origin/main..HEAD`. A check testing only for emptiness reads a finished branch as active work and skips creating a fresh one. The [`digest-branch.ts`](../claude-plugins/autopilot/lib/git/digest-branch.ts) helper resolves it with `git cherry`, which compares patch equivalence rather than SHA identity — and reports it as `null`, not `false`, when that read failed.
 
 ## Plan mode
 
@@ -66104,9 +66944,9 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
   context ┌───┴───┬────────┬────────┐      ┌───┼────────┐
           ▼       ▼        ▼        ▼      ▼   ▼        ▼
      ┌────────┐┌───────┐┌───────┐┌──────┐┌──────┐┌──────┐
-     │digest- ││digest-││resolve││search││expert││expert│
-     │repo-   ││branch-││-issue-││-code-││-rev  ││-rev  │
-     │standard││diff   ││context││ todos││  #1  ││  #2  │
+     │digest- ││branch ││issue  ││ todo ││expert││expert│
+     │repo-   ││digest ││context││ grep ││-rev  ││-rev  │
+     │standard││helper ││helper ││direct││  #1  ││  #2  │
      └───┬────┘└───┬───┘└───┬───┘└───┬──┘└───┬──┘└───┬──┘
          │ JSON    │ JSON   │ JSON   │ JSON  │ JSON  │ JSON
          └─────────┴────┬───┴────────┘       └───┬───┘
@@ -66119,10 +66959,10 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
 **Flow Legend:**
 
 - `digest-repo-standards` → `{ conventions[], standards[{id,title,status,path,defaulted,why}], dropped[], principles[], digestError|null }`
-- `digest-branch-diff` → `{ branch, commits[{sha,subject,upstream}], files[{path,change}], summary, isStaleMerged, baseAhead, digestError|null }`
-- `resolve-issue-context` → `{ source, issueId, title, status, labels[], assignee|null, url|null, description, comments[], resolveError|null }`
+- [`lib/git/digest-branch.ts`](../claude-plugins/autopilot/lib/git/digest-branch.ts) helper (one Bash call, not a sub-agent) → `{ branch, isWorktree, commits[{sha,subject,upstream}], files[{path,additions,deletions}], isStaleMerged|null, baseAhead|null, truncated, digestError|null, telemetry }`
+- [`lib/github/fetch-issue.ts`](../claude-plugins/autopilot/lib/github/fetch-issue.ts) helper for GitHub, [`lib/linear/fetch-issue.mjs`](../claude-plugins/autopilot/lib/linear/fetch-issue.mjs) for Linear (one Bash call, not a sub-agent) → `{ source, issueId, title, status, labels[], assignee|null, url|null, description, comments[], truncated, resolveError|null }`
 - `resolve-alert-context` → `{ source, alertNumber, ruleId, severity, state, file, line, message, htmlUrl, resolveError|null }` (alert input only)
-- `search-codebase-todos` → `{ todos[{location, text}], total }`
+- TODO search → one parent-side Grep bounded at 20 matches, kept as `path:line — text` lines (no sub-agent). The [`resolve-issue-context`](../claude-plugins/autopilot/agents/resolve-issue-context.md) and [`search-codebase-todos`](../claude-plugins/autopilot/agents/search-codebase-todos.md) agents still exist for the `pr-review` CI path, which runs under the code-review action's Bash allowlist.
 - `expert-review` → `{ expertRole, score, dimensions{alignment,completeness,typeSafety,testability,simplicity}, verdict, findings[3–5], grounding[], revision|null }`
 
 `grounding` names what a reviewer actually consulted, and the pipeline screens on it: a panel member with empty grounding, an unparseable report, or file claims it had no tools to make is **discarded rather than averaged**, every discard is named, and a panel that loses everyone reports the plan as unreviewed instead of emitting a score.
@@ -66176,11 +67016,14 @@ There are two variants of this flow, each replacing a different half of it. [`/a
 | `claude-plugins/autopilot/skills/run/SKILL.md`                       | `plan` plus the automated post-implementation chain          |
 | `claude-plugins/autopilot/skills/run-primed/SKILL.md`                | `run` with the fan-out replaced by a validated context brief |
 | `claude-plugins/autopilot/agents/digest-repo-standards.md`           | README / `docs/` / `rfc/` / `principles/` digest (JSON)      |
-| `claude-plugins/autopilot/agents/digest-branch-diff.md`              | Branch commits, diff, and stale-merge detection (JSON)       |
+| `claude-plugins/autopilot/lib/git/digest-branch.ts`                  | Branch digest helper CLI: commits, diff, stale-merge, state  |
+| `claude-plugins/autopilot/lib/git/branchDigest.ts`                   | Its pure transforms and bounds, fixture-tested               |
+| `claude-plugins/autopilot/lib/github/fetch-issue.ts`                 | GitHub issue helper CLI with opt-in `--assign`               |
+| `claude-plugins/autopilot/lib/github/issueContext.ts`                | Its pure transforms, shape guards, assignee statuses         |
 | `claude-plugins/autopilot/agents/expert-review.md`                   | Domain-expert plan reviewer with per-dimension scores (JSON) |
-| `claude-plugins/autopilot/agents/resolve-issue-context.md`           | GitHub / Linear issue context resolver (JSON)                |
+| `claude-plugins/autopilot/agents/resolve-issue-context.md`           | GitHub / Linear issue context resolver (JSON; pr-review)     |
 | `claude-plugins/autopilot/agents/resolve-alert-context.md`           | Code-scanning alert context resolver (JSON)                  |
-| `claude-plugins/autopilot/agents/search-codebase-todos.md`           | TODO/issue-reference search (JSON)                           |
+| `claude-plugins/autopilot/agents/search-codebase-todos.md`           | TODO/issue-reference search (JSON; pr-review)                |
 </file>
 
 <file path="docs/06-release-field.md">
@@ -67497,7 +68340,7 @@ The brief's three volatile sections are ignored because they describe the explor
 | `broad`          | principal modules and boundaries, entry points, the conventions in force | runs             |
 | `primed`         | only the task-specific gaps the brief does not cover                     | skipped          |
 
-`primed` is the first scope that gates a Phase 1 agent, so the input is now a fan-out selector and not only a read strategy. `digest-repo-standards` is the one agent it skips, because a validated brief already carries that digest's output from the same revision. [`digest-branch-diff`](../claude-plugins/autopilot/agents/digest-branch-diff.md) still runs at every scope — `isStaleMerged` and `baseAhead` describe the checkout in front of you, which a brief written elsewhere cannot know.
+`primed` is the first scope that gates a Phase 1 agent, so the input is now a fan-out selector and not only a read strategy. `digest-repo-standards` is the one agent it skips, because a validated brief already carries that digest's output from the same revision. The [`digest-branch.ts`](../claude-plugins/autopilot/lib/git/digest-branch.ts) helper still runs at every scope — `isStaleMerged` and `baseAhead` describe the checkout in front of you, which a brief written elsewhere cannot know.
 
 The emitted Context Map has the same sections at all three scopes, so `plan` and `run`, which omit `Scope`, are unaffected.
 
