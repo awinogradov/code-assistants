@@ -267,6 +267,8 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
 
 `run` shares Phases 0–3 and the pipeline with `plan`, but never stops for plan approval — invoking `/autopilot:run` is itself the authorization, so there is **no plan-approval gate**; run implements the moment the plan file is written. It then **replaces** the plan's `## Post-Implementation` section with a body for the selected terminal path and drives the decision from its own Phase 4 — the checks, steps, flags, and recovery rules stay in the skill, not in the plan file.
 
+**A Linear-issue input adds one pre-implementation step.** Once both blocks are embedded and before implementation starts, run stores the finalized plan on the source ticket, executing [`linear-plan`'s store contract](./16-linear-plan-skill.md#the-stored-plan-format) by reference — same format, same anchored idempotent write, prior description preserved — with the `Stored by` field naming `/autopilot:run`, no title refresh, and no "AI Ready" transition, since this same session immediately executes the ticket. The store is an audit write, never a gate: a failed write is loudly reported with the plan recoverable from the transcript, and the run continues. Every other input type skips the step.
+
 ```text
                     ┌───────────────────────────┐
                     │ Plan implemented and     │
@@ -297,7 +299,7 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
 - **Monitor** — `Skill(autopilot:pr-monitor)` polls CI and review status; on changes-requested it runs `pr-resolve` (auto "Address all") and loops until approval.
 - Direct `gh pr create` / `git commit` are forbidden in autopilot mode — everything routes through the sub-skills so format stays correct.
 
-There are two variants of this flow, each replacing a different half of it. [`/autopilot:run-primed`](./15-run-primed-skill.md) keeps every phase above and replaces only the context gather, reading a SHA-validated [explore brief](./14-explore-skill.md) instead of re-mapping the repository. [`/autopilot:linear-run`](./17-linear-run-skill.md) keeps terminal selection and replaces the draft-and-review half, executing a plan that [`/autopilot:linear-plan`](./16-linear-plan-skill.md) stored on a Linear issue earlier — possibly in another session, for another person to read first. Both variants inherit the same no-change checks and repository-delivery chain instead of copying them.
+There are two variants of this flow, each replacing a different half of it. [`/autopilot:run-primed`](./15-run-primed-skill.md) keeps every phase above and replaces only the context gather, reading a SHA-validated [explore brief](./14-explore-skill.md) instead of re-mapping the repository. [`/autopilot:linear-run`](./17-linear-run-skill.md) keeps terminal selection and replaces the draft-and-review half, executing a plan that [`/autopilot:linear-plan`](./16-linear-plan-skill.md) stored on a Linear issue earlier — possibly in another session, for another person to read first. Both variants inherit the same no-change checks and repository-delivery chain instead of copying them. The paths differ in who reads the plan before it runs: `run` on a Linear input stores the plan and executes it in the same breath, while `linear-plan` → `linear-run` puts a teammate between store and execution — pick the pair when the plan should be read on the ticket first.
 
 ## Where to look in the code
 

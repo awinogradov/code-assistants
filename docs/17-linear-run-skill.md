@@ -81,6 +81,8 @@ The same five verdicts remain, but they select a mode rather than deciding admis
 
 Every fresh-plan verdict is reported before the run continues. **The skill never invokes `linear-plan` and never overwrites the issue description.** The new plan is a run-local harness artifact, so an unusable stored plan stays visible while no longer blocking implementation.
 
+Validation reads no producer attribution: the header field naming which skill stored the plan is ignored, so a plan [`/autopilot:run` stored on its own Linear input](./05-plan-run-skills.md#how-run-differs-automated-post-implementation) validates as `stored plan` exactly like one from `linear-plan` — including on a ticket whose work has since been delivered. The `Base:` drift report below is what surfaces that plan's age; nothing marks it executed.
+
 ## Drift is reported, not enforced
 
 In stored-plan mode, the artifact records the tree it was drafted against in `Base:`. This skill compares that against the checkout's `origin/main`, reports any difference, and **proceeds**. Fresh-plan mode drafts against current context and needs no stored-artifact drift report.

@@ -1,6 +1,6 @@
 ---
 name: run
-description: Plan and implement, then either report verified no repository change or deliver a PR
+description: Plan and implement, then either report verified no repository change or deliver a PR; a Linear-issue input also gets the finalized plan stored on its ticket before implementation
 argument-hint: "<task, GitHub/Linear issue (123, #123, ENG-123, or URL), or code-scanning alert (alert#N or URL)>"
 allowed-tools:
   - TaskCreate
@@ -23,6 +23,8 @@ allowed-tools:
   - Bash(command -v entire)
   - Bash(entire *)
   - MCP(repomix:*)
+  - MCP(linear:*)
+  - ToolSearch
   - AskUserQuestion
   - Skill(autopilot:gather-context)
   - Skill(autopilot:preflight-check)
@@ -209,9 +211,23 @@ PR: <pr-url>
 Status: <approved/merged>
 ```
 
+### Persist the plan to Linear
+
+Runs only when the detected input type is `linear-issue` (the type named by [input-detection.md](../plan/references/input-detection.md)'s detection table); every other input type skips this subsection and keeps its current behavior. It executes once both blocks above are embedded and before any step of [Phase 5](#phase-5-implement-and-proceed) runs, so the source ticket carries the finalized plan before implementation starts. This is chain work between tasks 5 and 6 — the task table stays as it is.
+
+The store is [`linear-plan`](../linear-plan/SKILL.md)'s, executed by reference rather than restated: fill [the emission template](../linear-plan/SKILL.md#the-emission-template) from the finalized plan file under [the stored plan format](../linear-plan/SKILL.md#the-stored-plan-format) and [Linear-safe markdown](../linear-plan/SKILL.md#linear-safe-markdown) rules, then perform [the write](../linear-plan/SKILL.md#the-write)'s read, anchor, preserved-prefix, write, and recovery steps. Resolve `get_issue` and `save_issue` per [`linear-mcp-access.md`](../shared-rules/references/linear-mcp-access.md). Three deltas, and only these:
+
+- The header's `Stored by` field reads `/autopilot:run`, so the ticket records which skill wrote the plan.
+- The header's `Score:` field carries this run's panel verdicts — the review is always-on for the `run` family, so it is never the literal `skipped`.
+- The write's title-refresh and board-transition steps do not run: this same session immediately executes the ticket, so the planned-and-ready hand-off signal belongs to the deliberate `linear-plan` path, and [`branch-create`](../branch-create/SKILL.md) moves the ticket to "In Progress" moments later via `--start`.
+
+When the plan is a no-repository-change candidate with no `## Pre-Implementation` section, the stored `### Pre-Implementation` states in one line that no branch is created because the plan requires no repository change.
+
+Re-running against the same ticket replaces the stored plan and never stacks a second wrapper — that idempotence is the write's anchor rule, inherited by reference. A failed, refused, or unavailable write — the preserved-prefix abort and an unresolvable Linear MCP included — is reported loudly with the full plan text emitted into the transcript, so the store is recoverable by hand; then the run continues. The store is an audit write and never gates delivery. No `Skill(...)` dispatch is involved: the update happens in place, in this session.
+
 ## Phase 5: Implement and proceed
 
-Once the plan file carries the applicable blocks, proceed straight through with no approval gate:
+Once the plan file carries the applicable blocks — and, for a `linear-issue` input, the plan is stored on the ticket or its failure loudly reported — proceed straight through with no approval gate:
 
 1. For a repository-delivery plan, create the branch per the **Mechanics** paragraph beside the matching block in [branch-blocks.md](../plan/references/branch-blocks.md), using the run variant where one is noted. The plan file's `## Pre-Implementation` states the outcome; that paragraph carries the invocation. For a no-repository-change candidate, defer this step.
 2. Implement every step in the plan, verifying each as you go.
