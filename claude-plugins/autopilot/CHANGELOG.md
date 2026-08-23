@@ -2,6 +2,64 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [7.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v6.0.0...autopilot@v7.0.0) (2026-08-23)
+
+## Release Notes
+
+The `plan` and `run-primed` skills now gather planning context through a single bundled helper call instead of spawning dedicated subagents, cutting roughly 30–50k tokens and 30–60 seconds off every planning run — but the `autopilot:digest-branch-diff` agent has been removed entirely.
+
+## ⚠️ Breaking Changes
+
+### `autopilot:digest-branch-diff` Agent Removed
+
+The `autopilot:digest-branch-diff` agent no longer exists. Any workflow, script, or manual invocation that calls this agent directly will fail.
+
+The capability it provided — gathering a digest of branch changes for planning context — is now handled internally by the bundled `lib/git/digest-branch.ts` helper, invoked as a single Bash call within `plan` and `run-primed`. There is no standalone replacement slash command; this logic runs automatically as part of the planning gather-context phase.
+
+If you have custom agents, wrapper scripts, or documented runbooks that reference `autopilot:digest-branch-diff`, remove those references. Planning runs that previously required you to invoke this agent as a step no longer need it — the context is gathered automatically.
+
+<details><summary>Related issues</summary>
+
+- [#612: Replace deterministic planning subagents with bundled helpers](https://github.com/awinogradov/code-assistants/issues/612)
+</details>
+
+## ✨ What's New
+
+### Faster, Cheaper Planning Runs
+
+The gather-context phase of the `plan` and `run-primed` skills now runs as a single deterministic Bash call using the bundled `lib/git/digest-branch.ts` helper, rather than delegating out to multiple subagents in sequence. In practice this removes approximately three delegated-agent loops per planning run, saving roughly 30–50k subagent tokens and 30–60 seconds of wall-clock time on every issue-input plan invocation. Context payloads (GitHub issues, branch digests, TODO references) are now typed and bounded, which also improves reliability — runaway context expansion that could previously bloat a planning session is now constrained by design.
+
+<details><summary>Related issues</summary>
+
+- [#612: Replace deterministic planning subagents with bundled helpers](https://github.com/awinogradov/code-assistants/issues/612)
+</details>
+
+## ⚙️ Configuration Required
+
+### Node ≥ 24 (or Bun) Runtime for `plan` and `run-primed`
+
+The bundled helper that now drives planning context gathering requires a Node.js runtime at version 24 or later (or Bun as an alternative). If your environment restricts what Bash is permitted to execute, you must add a `Bash(node *)` entry to your allowlist so that Claude Code can invoke the helper.
+
+This is **required** for the `plan` and `run-primed` skills to function. Environments without Node ≥ 24 or Bun, or those with a restrictive Bash allowlist and no `Bash(node *)` exception, will see gather-context fail silently or error out at the start of a planning run.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #612 | [#613](https://github.com/awinogradov/code-assistants/pull/613) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **autopilot:** replace planning subagents with bundled helpers
+
+### Features
+
+* **autopilot:** replace planning subagents with bundled helpers ([f34e59a](https://github.com/awinogradov/code-assistants/commit/f34e59a89b000fd442e0a5858e7cdc6c79a84810))
+
+### Documentation
+
+* **autopilot:** document bundled planning helpers ([184bd80](https://github.com/awinogradov/code-assistants/commit/184bd80c2c33696101b79ac6c071d022c3b41895))
 ## [6.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v5.7.0...autopilot@v6.0.0) (2026-08-22)
 
 ## Release Notes
