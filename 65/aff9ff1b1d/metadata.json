@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "65aff9ff1b1d",
+  "strategy": "manual-commit",
+  "branch": "issue-622-review-round-ownership",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "claude-plugins/autopilot/skills/pr-review/SKILL.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/65/aff9ff1b1d/0/metadata.json",
+      "transcript": "/65/aff9ff1b1d/0/full.jsonl",
+      "compact_transcript": "/65/aff9ff1b1d/0/transcript.jsonl",
+      "content_hash": "/65/aff9ff1b1d/0/content_hash.txt",
+      "prompt": "/65/aff9ff1b1d/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 18,
+    "cache_creation_tokens": 7136,
+    "cache_read_tokens": 2764569,
+    "output_tokens": 3731,
+    "api_call_count": 9
+  }
+}

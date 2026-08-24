@@ -1,0 +1,10 @@
+<task-notification>
+<task-id>bta0l75lm</task-id>
+<summary>Monitor event: "PR #623 review/CI status changes"</summary>
+<event>state=OPEN decision=REVIEW_REQUIRED failing=ai-review,Analyze (actions),Analyze (javascript-typescript) pending=0</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+https://github.com/awinogradov/code-assistants/pull/623#pullrequestreview-5011878167
