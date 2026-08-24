@@ -252,7 +252,18 @@ if (guardReview && reviewDedupKey(guardReview.body ?? "") === reviewDedupKey(fin
   process.exit(0);
 }
 
-// Submit the review
+// Submit the review, bound to the head this run reviewed (issue #622):
+// commit_id attaches the review to that exact commit instead of GitHub's
+// default (the PR's latest commit), so a head that moved after review cannot
+// claim the verdict. PR_HEAD_SHA can be absent outside pull_request events —
+// warn loudly rather than submit silently unbound. A 422 from a stale SHA
+// throws and fails the step; never retry without commit_id.
+const expectedHeadSha = process.env.PR_HEAD_SHA ?? "";
+if (!expectedHeadSha) {
+  console.log(
+    "::warning title=Review submission::PR_HEAD_SHA is empty; submitting review without commit_id binding"
+  );
+}
 const { data: submittedReview } = await octokit.rest.pulls.createReview({
   owner,
   repo: repoName,
@@ -260,6 +271,7 @@ const { data: submittedReview } = await octokit.rest.pulls.createReview({
   event,
   body: finalBody,
   comments: buildReviewComments(validComments, prFiles),
+  ...(expectedHeadSha ? { commit_id: expectedHeadSha } : {}),
 });
 
 console.log("✓ Review submitted successfully");

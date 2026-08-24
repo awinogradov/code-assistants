@@ -180,7 +180,28 @@ interface ReviewStateData {
   lastReviewedSha: string | null;
 }
 
-/** The reviewer's non-pending reviews plus unresolved threads, both paginated. */
+/**
+ * Whether a review can anchor a follow-up round (issue #622). `APPROVED` and
+ * `CHANGES_REQUESTED` are substantive verdicts even with an empty body; a
+ * `COMMENTED` review counts only when it carries a non-empty top-level body
+ * (pr-review always writes one for a full review), because GitHub represents
+ * a reply inside an inline thread as an empty `COMMENTED` review at the
+ * current head — letting it advance the anchor poisons round classification.
+ * Every other state, including `DISMISSED` (a verdict explicitly revoked),
+ * never anchors. The pr-review skill's §1.3 prose defines this predicate;
+ * this helper implements it for the bundle path.
+ */
+export function isSubstantiveReview(review: { state: string; body?: string | null }): boolean {
+  if (review.state === "APPROVED" || review.state === "CHANGES_REQUESTED") return true;
+  return review.state === "COMMENTED" && (review.body ?? "").trim().length > 0;
+}
+
+/**
+ * The reviewer's non-pending reviews plus unresolved threads, both paginated.
+ * The anchor (`lastReviewedSha`/`existingVerdict`) comes from the latest
+ * substantive review, not the latest non-pending one — see
+ * {@link isSubstantiveReview}.
+ */
 async function fetchReviewState(deps: BuilderDeps): Promise<ReviewStateData> {
   const fetchThreads = deps.fetchThreads ?? fetchReviewThreads;
   const [allReviews, allThreads] = await Promise.all([
@@ -196,12 +217,12 @@ async function fetchReviewState(deps: BuilderDeps): Promise<ReviewStateData> {
   const botReviews = allReviews.filter(
     (r) => r.user?.login === deps.reviewer && r.state !== "PENDING",
   );
-  const latest = botReviews.at(-1);
+  const anchor = botReviews.findLast((r) => isSubstantiveReview(r));
   const recent = botReviews.slice(-bundleBounds.maxPriorReviews);
   const unresolved = allThreads.filter((t: ReviewThread) => !t.isResolved);
 
   return {
-    existingVerdict: latest?.state ?? null,
+    existingVerdict: anchor?.state ?? null,
     priorReviews: recent.map((r) => ({
       state: r.state,
       submittedAt: r.submitted_at ?? null,
@@ -216,7 +237,7 @@ async function fetchReviewState(deps: BuilderDeps): Promise<ReviewStateData> {
       ...boundBody(t.firstCommentBody),
     })),
     threadsTruncated: unresolved.length > bundleBounds.maxThreads,
-    lastReviewedSha: latest?.commit_id ?? null,
+    lastReviewedSha: anchor?.commit_id ?? null,
   };
 }
 
