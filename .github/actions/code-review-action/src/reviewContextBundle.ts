@@ -149,7 +149,7 @@ const reviewStateSchema = z.discriminatedUnion("available", [
   z
     .object({
       available: z.literal(true),
-      /** State of the reviewer's latest non-pending review, or null before any. */
+      /** State of the reviewer's latest substantive review (the round anchor — see the builder's `isSubstantiveReview`), or null before any. */
       existingVerdict: z.string().nullable(),
       priorReviews: z.array(priorReviewSchema).max(bundleBounds.maxPriorReviews),
       priorReviewsTruncated: z.boolean(),
@@ -175,10 +175,12 @@ const deltaSchema = z.discriminatedUnion("available", [
 ]);
 
 /**
- * Round metadata: a first review carries no delta; a re-review names the SHA
- * the delta is computed from, or an explicit reason the delta is unavailable
- * (force-pushed ref, diverged history) — in which case the reviewer must treat
- * the full diff as the review surface.
+ * Round metadata: a first review carries no delta; a re-review names the
+ * substantive-anchor SHA the delta is computed from, or an explicit reason the
+ * delta is unavailable. The pr-review skill's §1.3 routes that reason:
+ * `compare-status-identical` means the head is already reviewed (skip), while
+ * `compare-status-diverged`/`compare-status-behind`/`ref-missing` mean
+ * rewritten or unavailable history (full review).
  */
 const roundSchema = z.discriminatedUnion("firstReview", [
   z.object({ firstReview: z.literal(true) }).strict(),
