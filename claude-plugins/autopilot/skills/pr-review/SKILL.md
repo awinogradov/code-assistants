@@ -54,7 +54,7 @@ When `CONTEXT_BUNDLE` carries a non-empty path, Read that file once. It is valid
 
 - It replaces the [§1.1](#11-pr-context) `gh pr view` / `gh pr diff` calls and the [§1.2](#12-load-context-via-sub-agents) review-thread helper: `identity`/`refs` carry the PR metadata and SHAs, `changedFiles` the bounded file list (`totalFiles` stays exact when truncated), `checks` the check state, and `reviewState` the prior verdicts, review bodies, and unresolved inline threads.
 - Read the diff exactly once from the file `diff.path` references — the same never-embed-twice rule as [§1.1](#11-pr-context).
-- [§1.3](#13-review-round-handling) takes its round from `round`: `firstReview: true` is the first-review branch; otherwise `round.lastReviewedSha` and `round.delta` name what changed since the last review. A delta marked `available: false` (force-pushed ref, diverged history) means the full diff is the review surface — never assume "nothing changed".
+- [§1.3](#13-review-round-handling) takes its round from `round`: `firstReview: true` is the first-review branch; otherwise `round.lastReviewedSha` names the substantive anchor and `round.delta` what changed since it. Route an unavailable delta by its `reason` — `compare-status-identical` means the head is already reviewed (the [§1.3](#13-review-round-handling) skip arm); `compare-status-diverged`, `compare-status-behind`, and `ref-missing` mean rewritten or unavailable history, so the full diff is the review surface. `delta.files` is informational only; the review surface is materialized per [§1.3](#13-review-round-handling) — never assume "nothing changed".
 - The [§1.2](#12-load-context-via-sub-agents) codebase snapshot and the issue-linked agents still run — the bundle does not cover them; extract the linked issue from `identity.body`.
 
 **Targeted follow-ups are budgeted.** A concrete missing field, a section with `truncated: true`, or a section with `available: false` permits a targeted fetch — at most **3 per session**. Record each, before running it, as a machine-readable trace line: `bundle-followup: <field> <command>`. Past the budget, proceed on the bounded data and say so in the [§1.5](#15-context-map) Context Map. Never re-fetch data the bundle already carries — rediscovery is exactly the cost the bundle exists to remove.
@@ -117,19 +117,34 @@ After all calls complete, store the selected context source (and its `outputId` 
 
 **Read the pack, don't dump it.** The context source exists so you can pull _targeted_ context on demand — via its read contract: `graphify` queries on the graph tier, or `grep_repomix_output` (regex + `contextLines`) and `read_repomix_output` with a specific `startLine`/`endLine` slice on the repomix tier. NEVER `read_repomix_output` over the whole range (that loads the entire codebase into context). When the diff is self-contained and needs no cross-file lookup (the common case), don't read the pack at all — pull cross-file context only for checks that need it (e.g. architecture reuse, duplicated logic).
 
+**Graphify is context, never surface.** The changed-file list and the review surface come from Git/GitHub ([§1.0](#10-consume-the-context-bundle-action-supplied)/[§1.1](#11-pr-context) and the [§1.3](#13-review-round-handling) round contract) — never from Graphify. On the graph tier, Graphify answers questions that originate from the active review surface: callers of a changed symbol, a contract or invariant outside the diff, an existing shared helper, duplicated logic elsewhere. Its results may explain a finding on that surface, but must never expand an incremental round into a review of unrelated code.
+
 ### 1.3 Review Round Handling
 
-This decision procedure is the same on both data paths: the bundle path sources "previous reviews by REVIEWER" from `round` and `reviewState` ([§1.0](#10-consume-the-context-bundle-action-supplied)), the legacy path from [§1.1](#11-pr-context)–[§1.2](#12-load-context-via-sub-agents). A bundle whose `reviewState` is `available: false` never means "no prior reviews" — that is a degraded fetch; verify with a budgeted follow-up before treating the round as a first review.
+This decision procedure is the same on both data paths: the bundle path sources "previous reviews by REVIEWER" from `round` and `reviewState` ([§1.0](#10-consume-the-context-bundle-action-supplied)), the legacy path from [§1.1](#11-pr-context)–[§1.2](#12-load-context-via-sub-agents). A bundle whose `reviewState` is `available: false` never means "no prior reviews" — that is a degraded fetch; verify with a budgeted follow-up before treating the round as a first review. This section owns the round contract end to end: anchor selection, round classification, the review surface, and reconciliation — a consumer host supplies raw GitHub facts and publication, never its own round policy.
 
-**First review (no previous reviews by REVIEWER):**
+**The substantive anchor.** The durable review anchor is the latest **substantive** review authored by REVIEWER, keyed by the review's structured `commit_id` — never a SHA parsed from review prose. A review is substantive when its state is `APPROVED` or `CHANGES_REQUESTED` (even with an empty body), or `COMMENTED` with a non-empty top-level body (a full review emitted by this skill always writes one). An empty `COMMENTED` review — GitHub's side effect of a reviewer replying inside an inline thread — and a `DISMISSED` review (a verdict explicitly revoked) never advance the anchor. A valid bundle's `round` already encodes this selection ([`buildReviewContext.ts`](https://github.com/awinogradov/code-assistants/blob/main/.github/actions/code-review-action/src/buildReviewContext.ts) implements the same predicate as `isSubstantiveReview`, and [`reviewRoundContract.test.ts`](https://github.com/awinogradov/code-assistants/blob/main/.github/actions/code-review-action/src/reviewRoundContract.test.ts) pins the two to each other); on the legacy path, apply the predicate yourself over the [§1.1](#11-pr-context) `reviews` list.
+
+**Round state machine.** Classify before reviewing. Never infer a force-push from whether the old anchor object still exists — GitHub retains orphaned commits; ancestry/compare status is the contract:
+
+| State                                                                            | Review behavior                                                                                 |
+| -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| No substantive prior review                                                      | Full PR review (first review — a history of only non-substantive reviews lands here)            |
+| Anchor `commit_id` equals the head SHA (delta reason `compare-status-identical`) | **SKIP** — output only `Review skipped: no commits since the reviewed head`, no structured JSON |
+| Anchor is an ancestor of head (delta available, compare status `ahead`)          | Incremental: review the exact anchor-to-head patch, plus revalidate prior unresolved findings   |
+| `compare-status-diverged`, `compare-status-behind`, or `ref-missing`             | Full PR review — rewritten history is untrusted; conflict resolution may have changed any patch |
+
+**Incremental surface.** Materialize the patch once via the GitHub compare API with the diff media type — `gh api repos/<REPO>/compare/<anchor>...<headSha> -H "Accept: application/vnd.github.diff"` — because a shallow checkout cannot assume the anchor object exists locally. Record it, before running it, as a machine-readable trace line: `round-surface: <anchor>...<headSha>`. This is the round's defined surface acquisition, not counted against the [§1.0](#10-consume-the-context-bundle-action-supplied) follow-up budget. When the fetch fails (404 — the refs moved since the bundle was built; 406 — diff too large), the range hits the compare caps (250 commits / 300 files), or the fetched patch covers fewer files than the delta reports, degrade to a full PR review and record `round-surface-fallback: <reason>` — never review a silently truncated patch, and never run an incremental round on an empty surface.
+
+**First review (no substantive prior review by REVIEWER):**
 
 - Start with a greeting: ONE short sentence that @-mentions PR_AUTHOR — the @-mention is what triggers their notification. Vary the wording each time in your own voice; no praise, no round-labeling, no elaboration after it.
 - **Precedence:** Greeting applies only when the review has findings (blockers, suggestions, or nitpicks). For first-time approvals with no issues, use the minimal approval format — empty `reviewComment`, no body text at all.
 
-**Follow-up review (previous review by REVIEWER exists):**
+**Follow-up review (substantive prior review by REVIEWER exists):**
 
-1. Read all previous review findings from the `reviews`/`latestReviews` bodies ([§1.1](#11-pr-context)) and the per-line inline threads from the review-thread helper ([§1.2](#12-load-context-via-sub-agents))
-2. Check if issues were addressed by re-examining the current diff for each finding named in those bodies
+1. Read all previous review findings from the `reviews`/`latestReviews` bodies ([§1.1](#11-pr-context)) and the per-line inline threads from the review-thread helper ([§1.2](#12-load-context-via-sub-agents)) — the reconciliation record needs no model-session memory. Both sources are bounded on the bundle path (20 prior reviews, 100 threads); a `truncated: true` flag there permits a budgeted follow-up, never a silent drop of prior findings.
+2. Check if issues were addressed by re-examining the round's review surface for each finding named in those bodies
 3. Compare current findings against previous review
 4. **SKIP (no structured JSON)** if: all findings are identical to previous review, OR no new findings and no unresolved issues
 5. If previous review was CHANGES_REQUESTED and all blockers are now fixed with no new findings → approve with empty `reviewComment` (no body text)
@@ -140,9 +155,9 @@ This decision procedure is the same on both data paths: the bundle path sources 
 When skipping, output only: `Review skipped: no new findings since last review`
 Do NOT produce the structured JSON output.
 
-**Consecutive approval (previous review by REVIEWER was APPROVED):**
+**Consecutive approval (the substantive anchor is an APPROVED review):**
 
-- If no new commits since last approval → **SKIP (no structured JSON)**. Output only: `Review skipped: already approved, no new commits`
+- If the anchor `commit_id` is the head SHA → **SKIP (no structured JSON)**. Output only: `Review skipped: already approved, no new commits`
 - If new commits exist but no new issues → approve with empty `reviewComment` (no body text)
 - Only submit a full review body if new commits introduce genuinely NEW findings
 
