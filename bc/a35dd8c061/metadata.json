@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "bca35dd8c061",
+  "strategy": "manual-commit",
+  "branch": "issue-622-review-round-ownership",
+  "checkpoints_count": 7,
+  "files_touched": [
+    ".github/actions/code-review-action/src/buildReviewContext.ts",
+    ".github/actions/code-review-action/src/reviewContextBundle.ts",
+    ".github/actions/code-review-action/src/submitReview.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/bc/a35dd8c061/0/metadata.json",
+      "transcript": "/bc/a35dd8c061/0/full.jsonl",
+      "compact_transcript": "/bc/a35dd8c061/0/transcript.jsonl",
+      "content_hash": "/bc/a35dd8c061/0/content_hash.txt",
+      "prompt": "/bc/a35dd8c061/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 2119,
+    "cache_creation_tokens": 255346,
+    "cache_read_tokens": 14516486,
+    "output_tokens": 71118,
+    "api_call_count": 78,
+    "subagent_tokens": {
+      "input_tokens": 82,
+      "cache_creation_tokens": 107168,
+      "cache_read_tokens": 152401,
+      "output_tokens": 6012,
+      "api_call_count": 18
+    }
+  }
+}

@@ -1,0 +1,180 @@
+/autopilot:run #622
+
+---
+
+<task-notification>
+<task-id>ac6e8550b2fadf9b7</task-id>
+<tool-use-id>toolu_014qMAhuVTPq6k5PXPffR2Jc</tool-use-id>
+<output-file>/tmp/claude-0/REDACTED/8d12b4c4-8256-432b-97b2-c0a71266cf63/tasks/ac6e8550b2fadf9b7.output</output-file>
+<status>completed</status>
+<summary>Agent "Search codebase TODOs" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>```json
+{
+  "todos": [],
+  "total": 0
+}
+```</result>
+<usage><subagent_tokens>10991</subagent_tokens><tool_uses>4</tool_uses><duration_ms>12846</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>ae3bbc847b2321e58</task-id>
+<tool-use-id>toolu_01A5vatdvFvRZMFMf7zJHBwt</tool-use-id>
+<output-file>/tmp/claude-0/REDACTED/8d12b4c4-8256-432b-97b2-c0a71266cf63/tasks/ae3bbc847b2321e58.output</output-file>
+<status>completed</status>
+<summary>Agent "Digest branch diff" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>```json
+{
+  "branch": "REDACTED",
+  "commits": [],
+  "files": [],
+  "summary": "This branch is fully synchronized with origin/main and contains no uncommitted work.",
+  "isStaleMerged": false,
+  "baseAhead": 0,
+  "digestError": null
+}
+```</result>
+<usage><subagent_tokens>12781</subagent_tokens><tool_uses>5</tool_uses><duration_ms>15488</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a0cbfc2cb43c84f3e</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-0/REDACTED/8d12b4c4-8256-432b-97b2-c0a71266cf63/tasks/a0cbfc2cb43c84f3e.output</output-file>
+<status>completed</status>
+<summary>Agent "Resolve issue context" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>```json
+{
+  "source": "GitHub Issue #622",
+  "issueId": 622,
+  "title": "Make pr-review own follow-up scope across rewritten history",
+  "status": "OPEN",
+  "labels": [],
+  "assignee": "@awinogradov (just assigned)",
+  "url": "https://github.com/awinogradov/code-assistants/issues/622",
+  "description": "## Problem\n\nFollow-up review policy is currently split between the context builder, the `pr-review` skill, and downstream consumers:\n\n- the context bundle chooses `lastReviewedSha` from the latest non-pending bot review;\n- bundle v1 exposes only delta file names, while the skill can still read the full PR diff;\n- the skill says an unavailable delta makes the full PR diff the review surface;\n- consumers are therefore tempted to reimplement anchor selection, ancestry handling, and late-finding guards outside `pr-review`.\n\nThat makes behavior inconsistent and allows a normal follow-up to reopen untouched code.\n\nA production example occurred on `wefortis/fortune-os#916`:\n\n1. A reply by the reviewer inside an inline thread was represented by GitHub as an empty `COMMENTED` review at the current head SHA.\n2. Treating the latest non-pending review as the review anchor produced `lastReviewedSha === headSha` (`compare-status-identical`), even though the latest full review was on an earlier commit.\n3. A later rebase produced `compare-status-diverged` and correctly required a full re-review.\n\nThe first transition is an anchor-classification bug. The second is a valid full-review case: after rewritten history, conflict resolution may have changed any part of the patch series.\n\n## Desired ownership\n\n`claude-plugins/autopilot/skills/pr-review/SKILL.md` should be the single owner of:\n\n- which prior bot review is the durable review anchor;\n- whether a round is full, incremental, or unchanged;\n- the review surface for that round;\n- reconciliation of prior findings;\n- when Graphify may be used during review.\n\nThe GitHub Action or any external reviewer host should only provide raw GitHub facts, a fenced checkout, read helpers, and publication/reaction orchestration. A consumer should not need its own review-round policy.\n\n## Proposed round contract\n\nUse GitHub's structured `review.commit_id`; do not encode or parse a SHA from review prose.\n\nSelect the latest **substantive review authored by the configured reviewer**:\n\n- `APPROVED` and `CHANGES_REQUESTED` are substantive even with an empty body;\n- a `COMMENTED` review is substantive only when it is a full review emitted by `pr-review` (for the current output contract, a non-empty top-level review body is sufficient);\n- an empty `COMMENTED` object created as a side effect of replying inside an inline thread must not advance the anchor.\n\nThen apply this state machine:\n\n| State | Review behavior |\n| --- | --- |\n| No substantive prior review | Full PR review |\n| `anchor.commit_id === headSha` | Skip: no commits since the reviewed head |\n| Anchor is an ancestor of head (`compare.status === ahead`) | Incremental review of the exact `anchor...head` patch, plus revalidation of prior unresolved findings |\n| `diverged`, `behind`, or anchor ref unavailable | Full PR review; rewritten history is intentionally treated as untrusted |\n\nDo not infer force-push from whether the old object still exists: GitHub may retain orphaned commits. Ancestry/compare status is the contract.\n\nFor the incremental branch, the skill must consume the actual compare patch/hunks, not only `files[]`. With the action's shallow checkout (`fetch-depth: 20`), it may use the GitHub compare API with the diff media type rather than assuming the anchor object exists locally.\n\n## Graphify boundary\n\nThe changed-file list and review surface come from Git/GitHub, never Graphify.\n\nGraphify remains useful only as optional cross-file context originating from a question on the active review surface, for example:\n\n- callers of a changed symbol;\n- a contract or invariant outside the diff;\n- an existing shared helper;\n- duplicated logic elsewhere.\n\nGraphify results may explain a finding on the active surface, but must not expand an incremental round into a new review of unrelated code.\n\n## Context-bundle/action changes\n\nThe action-side contract should expose raw facts rather than decide review policy:\n\n- current base/head identity;\n- prior bot reviews with `state`, `body`, `commit_id`, and submission time;\n- unresolved review threads;\n- full PR diff path;\n- enough compare/read capability for `pr-review` to materialize the incremental patch it selects.\n\nIf bundle v2 is needed, keep round classification in the skill and treat the bundle as deterministic data acquisition only.\n\nWhen publishing, pass the expected reviewed SHA explicitly as `commit_id` to `pulls.createReview` in addition to the existing head fence. This is provenance/transport safety, not review policy.\n\n## Consumer impact\n\nDownstream reviewer implementations such as Fortune Reviewer should require only mechanical changes:\n\n1. pass raw review metadata and the context-bundle path to `pr-review`;\n2. make the selected compare patch readable when requested;\n3. publish the skill's structured result and handle comments/reactions/checks;\n4. pin the released `code-assistants` revision.\n\nThey should remove duplicated anchor selection, rebase policy, semantic-delta heuristics, and late-finding policy. Those would create a second source of truth.\n\n## Acceptance criteria\n\n- [ ] `pr-review` contains the complete round state machine above.\n- [ ] An empty inline-reply `COMMENTED` review does not advance the anchor.\n- [ ] Same reviewed SHA skips without performing a new full review.\n- [ ] A fast-forward push reviews the exact compare patch since the substantive review's `commit_id`.\n- [ ] A rebase/force-push that breaks ancestry triggers a full review.\n- [ ] A missing anchor ref triggers a full review rather than pretending there were no changes.\n- [ ] Prior review bodies and unresolved threads remain available for follow-up reconciliation without model-session memory.\n- [ ] Graphify is documented and tested as context-only, never review-surface discovery.\n- [ ] Review publication explicitly binds the GitHub review to the expected `commit_id`.\n- [ ] Contract fixtures cover the `fortune-os#916` reply-poisoning sequence, normal push, unchanged head, diverged history, and missing ref.\n\n## Likely files\n\n- `claude-plugins/autopilot/skills/pr-review/SKILL.md`\n- `.github/actions/code-review-action/src/reviewContextBundle.ts`\n- `.github/actions/code-review-action/src/buildReviewContext.ts`\n- `.github/actions/code-review-action/src/submitReview.ts`\n- `.github/actions/code-review-action/src/buildReviewContext.test.ts`\n- `.github/actions/code-review-action/src/reviewContextBundleContract.test.ts`\n- `.github/actions/code-review-action/src/contextSourceContract.test.ts`\n- relevant `pr-review`/review-output contract tests\n",
+  "comments": []
+}
+```</result>
+<usage><subagent_tokens>20453</subagent_tokens><tool_uses>4</tool_uses><duration_ms>36907</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a3868d9e442f84d2c</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-0/REDACTED/8d12b4c4-8256-432b-97b2-c0a71266cf63/tasks/a3868d9e442f84d2c.output</output-file>
+<status>completed</status>
+<summary>Agent "Expert review: Pre-mortem" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>{
+  "expertRole": "Pre-mortem Analyst",
+  "score": 84,
+  "dimensions": {
+    "alignment": 18,
+    "completeness": 15,
+    "typeSafety": 17,
+    "testability": 17,
+    "simplicity": 17
+  },
+  "verdict": "needs-revision",
+  "findings": [
+    "Failure narrative #1 — silent under-review via truncated incremental surface (6 months out, highest damage): step 3 makes the skill fetch the anchor...head patch via `gh api .../compare` with the diff media type, but the GitHub compare API truncates large ranges (~300 files; huge rebases still classify as 'ahead'). The plan has no truncation/size guard, so a big incremental round silently reviews a partial patch — strictly worse than today's file-name delta, which at least enumerates every changed file the model could cross-check. Early warning sign: incremental follow-up reviews that never comment on files late in the alphabetical/compare order, or `round-surface:` trace lines whose patch file count is below the bundle's informational delta.files count. Mitigation: compare the fetched patch's file set against delta files[] (or the compare JSON's file count) and fall back to a full review on mismatch/truncation.",
+    "Failure narrative #2 — commit_id binding decays into the old behavior or hard-fails: step 6 passes `commit_id: process.env.PR_HEAD_SHA` only 'when the env var is non-empty', so any trigger context that stops populating PR_HEAD_SHA silently reverts to unbound reviews with no warning — and the reviewRoundContract.test.ts assertion is only a source grep for the token `commit_id`, which keeps passing. Conversely, a force-push landing between env capture and publication yields a commit_id no longer in the PR, producing 422s from pulls.createReview (a new failure mode the plan does not handle, only 'in addition to the existing head fence' is stated). Early warning signs: action logs showing empty PR_HEAD_SHA, or 422 'commit_id is not part of the pull request'. Mitigation: fail loudly (or log a taxonomy line) when PR_HEAD_SHA is empty, and define the behavior when createReview rejects the stale commit_id (re-fence, don't retry unbound).",
+    "Failure narrative #3 — the policy split the issue set out to kill survives as builder/skill drift: after this plan, substantive-anchor selection exists twice — `isSubstantiveReview` in buildReviewContext.ts feeding bundle round/lastReviewedSha/existingVerdict, and the prose rule in SKILL.md §1.3 that also governs the non-bundle fallback path (§1.0 `bundle-fallback:` taxonomy in the Context Map confirms both paths exist). Six months later one side changes (e.g., DISMISSED handling) and the bundle's round classification disagrees with the skill's own anchor computation; the text-contract test asserts phrases, not semantic equivalence with the TS helper. Early warning sign: a session where bundle round says follow-up but the skill's §1.3 walk over priorReviews[] picks a different anchor. Mitigation: state in SKILL.md that the bundle's anchor is authoritative when present and the prose rule applies only on fallback, and add a fixture pinning existingVerdict/lastReviewedSha to the same review the prose rule would select.",
+    "Failure narrative #4 — DISMISSED policy is chosen silently and is unverifiable against the spec: the Context Map's issue statement defines substantiveness only for APPROVED/CHANGES_REQUESTED/COMMENTED; step 1 unilaterally rules DISMISSED non-substantive. A maintainer dismissing a stale CHANGES_REQUESTED then rolls the anchor back to an older review (over-review, cost) or to none (full review on a PR that was thoroughly reviewed). Whether that matches issue #622's intent cannot be verified from the material provided. Per project rules ('surface assumptions... don't pick silently'), the plan should name this as a decision and encode it in a dedicated fixture; currently none of the five step-2 fixtures covers DISMISSED, so the behavior is untested and free to drift.",
+    "Minor, stacked: (a) prior-finding reconciliation leans on priorReviews (cap 20) and unresolvedThreads (cap 100) — long-lived PRs exceed caps and revalidation silently drops findings, worth one sentence in §1.3; (b) the skip-path output string and reason-aware routing phrases in steps 3–4 will be phrase-pinned by reviewRoundContract.test.ts, so any future SKILL.md copy-edit breaks an action-workspace test the editor may not run locally — consistent with existing contract-test convention, but the README (step 8) should point SKILL.md editors at that test."
+  ],
+  "grounding": [
+    "plan text",
+    "Context Map excerpt: task/issue #622 statement, buildReviewContext.ts and submitReview.ts behavior summaries, reviewContextBundle.ts caps, SKILL.md §1.0/§1.3 current wording, test conventions"
+  ],
+  "revision": {
+    "changed": "Add a truncation guard to step 3: after fetching the compare patch, verify its file set covers the bundle delta files[] (or the compare JSON file count) and fall back to a full review when the compare API truncated the range. In step 6, define behavior for empty PR_HEAD_SHA (emit a warning/taxonomy line rather than silently omitting commit_id) and for a 422 stale-commit_id rejection. In steps 1–2, explicitly document the DISMISSED-is-non-substantive decision as a policy choice traced to the issue and add a sixth fixture covering a dismissed CHANGES_REQUESTED anchor. In step 3, state that the bundle's precomputed anchor is authoritative when the bundle validates, with the prose rule governing only the fallback path."
+  }
+}</result>
+<usage><subagent_tokens>11564</subagent_tokens><tool_uses>0</tool_uses><duration_ms>60112</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>aa118d790c23a0864</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/tmp/claude-0/REDACTED/8d12b4c4-8256-432b-97b2-c0a71266cf63/tasks/aa118d790c23a0864.output</output-file>
+<status>completed</status>
+<summary>Agent "Expert review: Bun engineer" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>{
+  "expertRole": "Principal Bun/NodeJS Engineer",
+  "score": 85,
+  "dimensions": {
+    "alignment": 18,
+    "completeness": 16,
+    "typeSafety": 17,
+    "testability": 16,
+    "simplicity": 18
+  },
+  "verdict": "needs-revision",
+  "findings": [
+    "commit_id binding source is wrong under the builder's own retry semantics: the Context Map states the builder has a mid-build-push retry (headMoved), so the head the bundle was actually built against can differ from the PR_HEAD_SHA env captured earlier. Step 6 binds pulls.createReview to raw process.env.PR_HEAD_SHA, which can attach the review to a commit that was never reviewed — the exact class of mis-anchoring #622 exists to fix. Bind to the headSha the assembled bundle records, and specify behavior when createReview rejects (e.g., 422 because the bound commit vanished after a force push): fail loudly, never retry without commit_id.",
+    "The skill-side incremental surface fetch (step 3: `gh api .../compare/&lt;anchor&gt;...&lt;head&gt;` with diff media type) has no size or truncation handling. The builder deliberately bounds delta files at 300 names (deltaSchema) and bodies at 4000 chars, but the raw compare diff is unbounded and GitHub's compare endpoint itself truncates large comparisons. A big incremental push would flood the skill's context or silently operate on a truncated patch. The plan must define a bound and a fallback arm (degrade to full review, or per-file patch fetches) when the diff is oversized or the compare response signals truncation — this is a memory/context-budget risk, not a nicety.",
+    "Fixture coverage in step 2 misses two state-machine arms and the positive substantive case: (i) a bot history containing ONLY non-substantive reviews (empty COMMENTED replies) must yield the no-substantive-prior → firstReview/full arm — this is a distinct regression risk from the #916 case because botReviews is non-empty but the anchor is null; (ii) COMMENTED with a non-empty (and separately, whitespace-only) top-level body proving the substantive side of the taxonomy. Also, isSubstantiveReview's parameter should type body as string | null | undefined to match octokit's review payload — trimming an assumed string will fail strict null checks or hide a runtime TypeError.",
+    "Minor issues, stacked: (a) skip-path waste — when anchor.commit_id === headSha the builder still spends a compareCommitsWithBasehead call just to produce compare-status-identical; a builder short-circuit (or skill-side SHA equality check, which step 3's state machine already implies) removes an API round-trip per already-reviewed head; (b) existingVerdict's semantics change from 'latest non-pending' to 'latest substantive' with no bundleVersion signal — the JSDoc update is right, but the plan should explicitly confirm no consumer branches on the old semantics; (c) the contract-test assertion 'submitReview.ts contains commit_id' is brittle and can pass on a comment — assert the exact guarded call-site phrase (e.g., `commit_id:` within the createReview argument object) per the existing guarded-phrase convention in reviewContextBundleContract.test.ts."
+  ],
+  "grounding": [
+    "plan text",
+    "Context Map excerpt: task/root-cause description, relevant-file summaries (buildReviewContext.ts, reviewContextBundle.ts, submitReview.ts), test conventions"
+  ],
+  "revision": {
+    "changed": "Step 6: bind commit_id to the headSha recorded in the assembled bundle (post headMoved retry), not raw PR_HEAD_SHA env, and document fail-loud behavior on createReview 422 for a vanished commit. Step 3: add a diff-size/truncation guard for the skill's compare fetch with an explicit fallback to full review. Step 2: add fixtures for only-non-substantive-history → firstReview/full, COMMENTED-with-body → substantive, and whitespace-only body; type isSubstantiveReview body as string | null | undefined. Step 7: replace the bare 'contains commit_id' assertion with the exact createReview call-site phrase. Optionally short-circuit the builder's compare call when anchor.commit_id === headSha."
+  }
+}</result>
+<usage><subagent_tokens>10876</subagent_tokens><tool_uses>0</tool_uses><duration_ms>57712</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>aff173677e9a966d0</task-id>
+<tool-use-id>toolu_011gimjJ5EXxL93gccgyxET1</tool-use-id>
+<output-file>/tmp/claude-0/REDACTED/8d12b4c4-8256-432b-97b2-c0a71266cf63/tasks/aff173677e9a966d0.output</output-file>
+<status>completed</status>
+<summary>Agent "Expert review: DevOps" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>{
+  "expertRole": "Principal DevOps Engineer",
+  "score": 82,
+  "dimensions": {
+    "alignment": 16,
+    "completeness": 15,
+    "typeSafety": 17,
+    "testability": 16,
+    "simplicity": 18
+  },
+  "verdict": "needs-revision",
+  "findings": [
+    "Substantive-anchor policy is implemented twice with no consistency guard. The issue makes pr-review 'the single owner of review-round policy: durable anchor selection', yet step 1 implements isSubstantiveReview in buildReviewContext.ts while step 3 restates the same predicate as SKILL.md prose. Calling the builder's filter 'raw-fact acquisition, no policy' is a stretch — COMMENTED-with-non-empty-trimmed-body is exactly the policy the incident (#916) turns on. Two independent encodings (TS + prose) will drift; the plan's tests (step 2 builder fixtures, step 7 SKILL.md phrase guard) each check one side but never that they agree. Either move selection fully to the skill (builder emits all reviews as facts — priorReviews already carries state/commitId/body) or add a contract test that pins the SKILL.md substantive definition to the builder helper's behavior.",
+    "The skill's compare-diff fetch has unspecified failure modes. Step 3's single `gh api repos/&lt;REPO&gt;/compare/&lt;anchor&gt;...&lt;head&gt;` with diff media type can: (a) 404 if the head or anchor moved between builder run and skill run (TOCTOU — builder said 'ahead', skill fetches later against a rebased branch); (b) 406 when GitHub refuses to render a too-large diff in the diff media type; (c) silently truncate at the documented 250-commit/300-file caps the Context Map already flags for the builder path. The plan defines no behavior for any of these — the correct degrade is 'fall back to full review with a trace line', mirroring the builder's fail-open posture, and it must be stated and contract-tested, otherwise a failed fetch yields an incremental round with an empty surface.",
+    "commit_id binding in submitReview.ts is underspecified at its edges. 'when non-empty' means an empty/missing PR_HEAD_SHA silently omits commit_id, and pulls.createReview then defaults to the latest commit on the PR — reintroducing exactly the head-drift the binding exists to prevent; that case should hard-fail, not degrade. The plan also doesn't state expected behavior when createReview 422s because the bound SHA is no longer the head (race after the last-write dedup guard re-read), nor how the new binding interacts with the existing head fence — is the fence now redundant, or the first line of defense? One sentence each resolves this.",
+    "Step 6's verification is text-contract only ('action typecheck + contract test'). A phrase guard on submitReview.ts proves the string `commit_id` appears, not that PR_HEAD_SHA is actually threaded into the createReview payload. The repo's stated convention of bun:test with fake octokit deps fits here: a unit test asserting the fake received `commit_id === PR_HEAD_SHA` (and that empty env behaves as specified) is cheap and closes the gap.",
+    "Minor, stacked: changing lastReviewedSha semantics (substantive anchor) without a bundle version bump is defensible since the field shape is unchanged, but telemetry consumers will see the compare-status reason distribution shift (fewer `identical`, more `ahead`) — worth a note in the README step; and the plan should confirm the skill's `gh api` call is covered by the existing `Bash(gh *)` allowed-tools entry rather than assuming it (Context Map says it is, so this is documentation, not wiring)."
+  ],
+  "grounding": [
+    "plan text",
+    "Context Map excerpt: task/issue #622 statement, buildReviewContext.ts and submitReview.ts behavior summaries, reviewContextBundle.ts schema summary, SKILL.md §1.0/§1.3 summary, test conventions"
+  ],
+  "revision": {
+    "changed": "Step 3: specify degrade-to-full on compare-fetch failure (404 TOCTOU, 406 diff-too-large, 250-commit/300-file truncation) with a dedicated trace line, and guard it in reviewRoundContract.test.ts. Step 6: hard-fail on empty PR_HEAD_SHA instead of silently omitting commit_id, state the 422/head-fence interaction, and add a fake-octokit unit test asserting the commit_id payload. Steps 1+3: either move substantive selection entirely into the skill (builder ships raw review facts) or add a cross-consistency contract test pinning the SKILL.md substantive definition to isSubstantiveReview."
+  }
+}</result>
+<usage><subagent_tokens>10173</subagent_tokens><tool_uses>0</tool_uses><duration_ms>62147</duration_ms></usage>
+</task-notification>
