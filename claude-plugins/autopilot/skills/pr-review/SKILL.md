@@ -157,7 +157,7 @@ Do NOT produce the structured JSON output.
 
 **Consecutive approval (the substantive anchor is an APPROVED review):**
 
-- If the anchor `commit_id` is the head SHA → **SKIP (no structured JSON)**. Output only: `Review skipped: already approved, no new commits`
+- An anchor `commit_id` at the head SHA never reaches this branch — the state machine above already skipped it with `Review skipped: no commits since the reviewed head`
 - If new commits exist but no new issues → approve with empty `reviewComment` (no body text)
 - Only submit a full review body if new commits introduce genuinely NEW findings
 
