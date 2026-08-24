@@ -161,6 +161,7 @@ The content is organized as follows:
         7.0.0.md
         8.0.0.md
         8.1.0.md
+        8.1.1.md
       src/
         github/
           githubReview.test.ts
@@ -7379,6 +7380,53 @@ This closes the gap where a run would proceed silently and the Linear issue woul
 ### Features
 
 * **autopilot:** store run plan on source linear issue ([9d8c515](https://github.com/awinogradov/code-assistants/commit/9d8c515f7d95a24d84f922c795ef9b0800495568))
+</file>
+
+<file path=".github/actions/code-review-action/.release_notes/8.1.1.md">
+## [8.1.1](https://github.com/awinogradov/code-assistants/compare/code-review-action@v8.1.0...code-review-action@v8.1.1) (2026-08-24)
+
+## Release Notes
+
+The AI reviewer now correctly tracks which commits it has already reviewed — even when history is rewritten — so follow-up passes cover exactly the right scope and never drift due to stray reply threads.
+
+## 🐛 Bug Fixes
+
+### Accurate Review Scope Across Force-Pushes and Thread Replies
+
+Previously, the action anchored its "last reviewed" position on any review activity — including inline thread replies posted by the bot in response to comments. This caused follow-up reviews to silently skip commits that hadn't actually been reviewed, or to re-review too little after a force-push or history rewrite. Now, only *substantive* reviews (those that actually analysed the diff and submitted a verdict) are used as the anchor point. Inline reply activity no longer resets the scope.
+
+The behaviour by scenario:
+
+- **Unchanged head** — if the PR's head commit hasn't changed since the last substantive review, the review run is skipped entirely.
+- **Fast-forward push** — the action reviews exactly the commits added since the last substantive review, nothing more.
+- **Rewritten history / force-push** — because the old commits no longer exist in the branch, a full re-review is triggered automatically.
+
+Each published review is now bound to the specific commit it analysed via `commit_id`, which is what makes the anchor reliable across rewrites.
+
+<details><summary>Related issues</summary>
+
+- [#622: Make pr-review own follow-up scope across rewritten history](https://github.com/awinogradov/code-assistants/issues/622)
+- [#623: Anchor follow-up reviews on substantive reviews across rewritten history](https://github.com/awinogradov/code-assistants/pull/623)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #622 | [#623](https://github.com/awinogradov/code-assistants/pull/623) | @awinogradov |
+
+### Bug Fixes
+
+* **code-review-action:** anchor review rounds on substantive reviews ([b952c4a](https://github.com/awinogradov/code-assistants/commit/b952c4ae3aff2f4c2ac6eaaf49b2bd9a74638d1e))
+
+### Documentation
+
+* **code-review-action:** document substantive anchor round contract ([2f420de](https://github.com/awinogradov/code-assistants/commit/2f420de0bd1806f33a86eea50c40c698d7b20757))
+
+### Tests
+
+* **code-review-action:** add review round scenario and contract tests ([f309415](https://github.com/awinogradov/code-assistants/commit/f30941525230f66333c1a1b4b4a9292078e4863c))
 </file>
 
 <file path=".github/actions/code-review-action/src/github/githubReview.test.ts">
@@ -20467,6 +20515,50 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [8.1.1](https://github.com/awinogradov/code-assistants/compare/code-review-action@v8.1.0...code-review-action@v8.1.1) (2026-08-24)
+
+## Release Notes
+
+The AI reviewer now correctly tracks which commits it has already reviewed — even when history is rewritten — so follow-up passes cover exactly the right scope and never drift due to stray reply threads.
+
+## 🐛 Bug Fixes
+
+### Accurate Review Scope Across Force-Pushes and Thread Replies
+
+Previously, the action anchored its "last reviewed" position on any review activity — including inline thread replies posted by the bot in response to comments. This caused follow-up reviews to silently skip commits that hadn't actually been reviewed, or to re-review too little after a force-push or history rewrite. Now, only *substantive* reviews (those that actually analysed the diff and submitted a verdict) are used as the anchor point. Inline reply activity no longer resets the scope.
+
+The behaviour by scenario:
+
+- **Unchanged head** — if the PR's head commit hasn't changed since the last substantive review, the review run is skipped entirely.
+- **Fast-forward push** — the action reviews exactly the commits added since the last substantive review, nothing more.
+- **Rewritten history / force-push** — because the old commits no longer exist in the branch, a full re-review is triggered automatically.
+
+Each published review is now bound to the specific commit it analysed via `commit_id`, which is what makes the anchor reliable across rewrites.
+
+<details><summary>Related issues</summary>
+
+- [#622: Make pr-review own follow-up scope across rewritten history](https://github.com/awinogradov/code-assistants/issues/622)
+- [#623: Anchor follow-up reviews on substantive reviews across rewritten history](https://github.com/awinogradov/code-assistants/pull/623)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #622 | [#623](https://github.com/awinogradov/code-assistants/pull/623) | @awinogradov |
+
+### Bug Fixes
+
+* **code-review-action:** anchor review rounds on substantive reviews ([b952c4a](https://github.com/awinogradov/code-assistants/commit/b952c4ae3aff2f4c2ac6eaaf49b2bd9a74638d1e))
+
+### Documentation
+
+* **code-review-action:** document substantive anchor round contract ([2f420de](https://github.com/awinogradov/code-assistants/commit/2f420de0bd1806f33a86eea50c40c698d7b20757))
+
+### Tests
+
+* **code-review-action:** add review round scenario and contract tests ([f309415](https://github.com/awinogradov/code-assistants/commit/f30941525230f66333c1a1b4b4a9292078e4863c))
 ## [8.1.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v8.0.0...code-review-action@v8.1.0) (2026-08-23)
 
 ## Release Notes
@@ -22521,7 +22613,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/package.json">
 {
   "name": "@code-assistants/code-review-action",
-  "version": "8.1.0",
+  "version": "8.1.1",
   "description": "Composite GitHub Action that runs AI code review on pull requests via Claude Code.",
   "private": true,
   "type": "module",
@@ -22557,7 +22649,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/README.md">
 # Code review action
 
-[![GitHub Release](https://img.shields.io/badge/release-v8.1.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v8.1.1-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that runs AI code review on pull requests using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Has two modes:
@@ -22751,7 +22843,7 @@ uses: awinogradov/code-assistants/.github/actions/code-review-action@v1
 </file>
 
 <file path=".github/actions/code-review-action/version">
-8.1.0
+8.1.1
 </file>
 
 <file path=".github/actions/code-review-cost-monitor/.release_notes/0.1.0.md">
