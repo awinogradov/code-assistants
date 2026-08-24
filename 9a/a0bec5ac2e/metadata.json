@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "9aa0bec5ac2e",
+  "strategy": "manual-commit",
+  "branch": "issue-622-review-round-ownership",
+  "checkpoints_count": 7,
+  "files_touched": [
+    ".github/actions/code-review-action/src/buildReviewContext.test.ts",
+    ".github/actions/code-review-action/src/reviewRoundContract.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/9a/a0bec5ac2e/0/metadata.json",
+      "transcript": "/9a/a0bec5ac2e/0/full.jsonl",
+      "compact_transcript": "/9a/a0bec5ac2e/0/transcript.jsonl",
+      "content_hash": "/9a/a0bec5ac2e/0/content_hash.txt",
+      "prompt": "/9a/a0bec5ac2e/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 2121,
+    "cache_creation_tokens": 256145,
+    "cache_read_tokens": 14789111,
+    "output_tokens": 71545,
+    "api_call_count": 79
+  }
+}
