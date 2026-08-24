@@ -509,6 +509,7 @@ claude-plugins/
       6.0.0.md
       7.0.0.md
       7.1.0.md
+      7.1.1.md
     agents/
       analyze-pr-commits.md
       analyze-staged-changes.md
@@ -46782,7 +46783,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "7.1.0",
+  "version": "7.1.1",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -49353,6 +49354,56 @@ This is particularly useful for teams that use Linear as their source of truth: 
 ### Features
 
 * **autopilot:** store run plan on source linear issue ([9d8c515](https://github.com/awinogradov/code-assistants/commit/9d8c515f7d95a24d84f922c795ef9b0800495568))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/7.1.1.md">
+## [7.1.1](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.1.0...autopilot@v7.1.1) (2026-08-24)
+
+## Release Notes
+
+The `pr-review` skill now owns its follow-up scoping logic directly, so review rounds stay correctly anchored even when history is rewritten or inline threads generate extra activity.
+
+## 🐛 Bug Fixes
+
+### Smarter Follow-Up Review Scoping
+
+Previously, the logic that decided *how much* of a PR to re-review on a follow-up pass lived outside the `pr-review` skill itself, which made it easy for that policy to get applied inconsistently. That logic now lives inside the skill where it belongs.
+
+In practice, this means the skill correctly handles three situations that previously could go wrong:
+
+- **Inline thread replies** no longer reset the review scope — only a new substantive review (one that actually looks at code) counts as the anchor point for what to re-review next time.
+- **Fast-forward pushes** are reviewed efficiently: only the commits added since the last real review are examined, not the whole PR again.
+- **Rewritten history** (e.g. a force-push after a rebase) triggers a full re-review, since the commit chain has changed in a way that makes incremental comparison unreliable.
+
+Published reviews are now bound to the specific commit they reviewed via `commit_id`, which is what makes the above anchoring reliable across history changes.
+
+<details><summary>Related issues</summary>
+
+- [#622: Make pr-review own follow-up scope across rewritten history](https://github.com/awinogradov/code-assistants/issues/622)
+
+</details>
+
+### No More Duplicate "Approval Skipped" Messages
+
+When the skill determined that a PR didn't need a new review pass, it was emitting the approval-skip message twice. That duplicate output is now gone — the skip is reported exactly once.
+
+<details><summary>Related issues</summary>
+
+- [#622: Make pr-review own follow-up scope across rewritten history](https://github.com/awinogradov/code-assistants/issues/622)
+
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #622 | [#623](https://github.com/awinogradov/code-assistants/pull/623) | @awinogradov |
+
+### Bug Fixes
+
+* **autopilot:** drop duplicate approval skip message ([7346341](https://github.com/awinogradov/code-assistants/commit/7346341f5863bbde3da15d532634d04b9f41dec1))
+* **autopilot:** move review round policy into pr-review skill ([9b6fa02](https://github.com/awinogradov/code-assistants/commit/9b6fa024fc333b8a074601c8823dee939372c34d))
 </file>
 
 <file path="claude-plugins/autopilot/agents/analyze-pr-commits.md">
@@ -63708,6 +63759,53 @@ Before writing any output that mentions a file, standard, section, commit, or is
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [7.1.1](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.1.0...autopilot@v7.1.1) (2026-08-24)
+
+## Release Notes
+
+The `pr-review` skill now owns its follow-up scoping logic directly, so review rounds stay correctly anchored even when history is rewritten or inline threads generate extra activity.
+
+## 🐛 Bug Fixes
+
+### Smarter Follow-Up Review Scoping
+
+Previously, the logic that decided *how much* of a PR to re-review on a follow-up pass lived outside the `pr-review` skill itself, which made it easy for that policy to get applied inconsistently. That logic now lives inside the skill where it belongs.
+
+In practice, this means the skill correctly handles three situations that previously could go wrong:
+
+- **Inline thread replies** no longer reset the review scope — only a new substantive review (one that actually looks at code) counts as the anchor point for what to re-review next time.
+- **Fast-forward pushes** are reviewed efficiently: only the commits added since the last real review are examined, not the whole PR again.
+- **Rewritten history** (e.g. a force-push after a rebase) triggers a full re-review, since the commit chain has changed in a way that makes incremental comparison unreliable.
+
+Published reviews are now bound to the specific commit they reviewed via `commit_id`, which is what makes the above anchoring reliable across history changes.
+
+<details><summary>Related issues</summary>
+
+- [#622: Make pr-review own follow-up scope across rewritten history](https://github.com/awinogradov/code-assistants/issues/622)
+
+</details>
+
+### No More Duplicate "Approval Skipped" Messages
+
+When the skill determined that a PR didn't need a new review pass, it was emitting the approval-skip message twice. That duplicate output is now gone — the skip is reported exactly once.
+
+<details><summary>Related issues</summary>
+
+- [#622: Make pr-review own follow-up scope across rewritten history](https://github.com/awinogradov/code-assistants/issues/622)
+
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #622 | [#623](https://github.com/awinogradov/code-assistants/pull/623) | @awinogradov |
+
+### Bug Fixes
+
+* **autopilot:** drop duplicate approval skip message ([7346341](https://github.com/awinogradov/code-assistants/commit/7346341f5863bbde3da15d532634d04b9f41dec1))
+* **autopilot:** move review round policy into pr-review skill ([9b6fa02](https://github.com/awinogradov/code-assistants/commit/9b6fa024fc333b8a074601c8823dee939372c34d))
 ## [7.1.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.0.0...autopilot@v7.1.0) (2026-08-23)
 
 ## Release Notes
@@ -66233,14 +66331,14 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
     "test": "bun test lib",
     "clean": "rm -rf node_modules .turbo"
   },
-  "version": "7.1.0"
+  "version": "7.1.1"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v7.1.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v7.1.1-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -66729,7 +66827,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-7.1.0
+7.1.1
 </file>
 
 <file path="docs/01-workspace-structure.md">
