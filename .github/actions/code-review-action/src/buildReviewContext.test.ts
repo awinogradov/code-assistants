@@ -1,6 +1,7 @@
 /**
  * Fixture-driven tests for buildReviewContext.ts: small and >100-file PRs,
- * generated-file-heavy diffs, first-review vs re-review rounds, diverged and
+ * generated-file-heavy diffs, first-review vs re-review rounds,
+ * substantive-anchor selection (issue #622), diverged and
  * missing compare refs, partial API failures, rate-limit classification, the
  * mid-build head-move retry, and the streamed diff byte cap. All GitHub access
  * goes through an injected mock Octokit that records its arguments, so every
@@ -306,6 +307,86 @@ describe("assembleBundle", () => {
     // With prior reviews unknowable, the round degrades to first-review; the
     // unavailable review-state section is the consumer's signal to verify.
     expect(bundle.round).toEqual({ firstReview: true });
+  });
+});
+
+describe("substantive-anchor rounds", () => {
+  const botReview = (state: string, sha: string, body: string | null) => ({
+    user: { login: "review-bot" },
+    state,
+    commit_id: sha,
+    submitted_at: "2026-08-01T00:00:00Z",
+    body,
+  });
+
+  test("an empty COMMENTED reply at head does not advance the anchor (reply-poisoning)", async () => {
+    const { deps, calls } = await makeDeps({
+      reviews: [
+        botReview("CHANGES_REQUESTED", "old-sha", "blocker found"),
+        botReview("COMMENTED", "head-sha", ""),
+      ],
+      compare: { status: "ahead", files: [{ filename: "src/a.ts" }], total_commits: 1, commits: [{}] },
+    });
+
+    const { bundle } = await assembleBundle(deps, noop);
+    expect(bundle.refs.lastReviewedSha).toBe("old-sha");
+    if (bundle.round.firstReview) throw new Error("expected re-review round");
+    expect(bundle.round.lastReviewedSha).toBe("old-sha");
+    expect(bundle.reviewState.available && bundle.reviewState.existingVerdict).toBe(
+      "CHANGES_REQUESTED",
+    );
+    const compareCall = calls.find((c) => c.route === "repos.compareCommitsWithBasehead");
+    expect(compareCall?.params.basehead).toBe("old-sha...head-sha");
+  });
+
+  test("anchor at the current head yields compare-status-identical (skip signal)", async () => {
+    const { deps } = await makeDeps({
+      reviews: [botReview("APPROVED", "head-sha", "")],
+      compare: { status: "identical", files: [], total_commits: 0, commits: [] },
+    });
+
+    const { bundle } = await assembleBundle(deps, noop);
+    expect(bundle.refs.lastReviewedSha).toBe("head-sha");
+    if (bundle.round.firstReview) throw new Error("expected re-review round");
+    expect(bundle.round.delta).toEqual({
+      available: false,
+      reason: "compare-status-identical",
+    });
+  });
+
+  test("a history of only non-substantive reviews is a first review", async () => {
+    const { deps } = await makeDeps({
+      reviews: [botReview("COMMENTED", "reply-sha-1", ""), botReview("COMMENTED", "reply-sha-2", null)],
+    });
+
+    const { bundle } = await assembleBundle(deps, noop);
+    expect(bundle.round).toEqual({ firstReview: true });
+    expect(bundle.refs.lastReviewedSha).toBeNull();
+    expect(bundle.reviewState.available && bundle.reviewState.existingVerdict).toBeNull();
+  });
+
+  test("a COMMENTED full review with a body anchors; a whitespace-only body does not", async () => {
+    const { deps } = await makeDeps({
+      reviews: [
+        botReview("COMMENTED", "full-sha", "### Review\nfindings here"),
+        botReview("COMMENTED", "head-sha", "  \n  "),
+      ],
+      compare: { status: "ahead", files: [], total_commits: 1, commits: [{}] },
+    });
+
+    const { bundle } = await assembleBundle(deps, noop);
+    expect(bundle.refs.lastReviewedSha).toBe("full-sha");
+  });
+
+  test("a DISMISSED verdict never anchors; the prior substantive review does", async () => {
+    const { deps } = await makeDeps({
+      reviews: [botReview("APPROVED", "ok-sha", ""), botReview("DISMISSED", "newer-sha", "old blocker")],
+      compare: { status: "ahead", files: [], total_commits: 1, commits: [{}] },
+    });
+
+    const { bundle } = await assembleBundle(deps, noop);
+    expect(bundle.refs.lastReviewedSha).toBe("ok-sha");
+    expect(bundle.reviewState.available && bundle.reviewState.existingVerdict).toBe("APPROVED");
   });
 });
 
