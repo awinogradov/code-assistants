@@ -207,6 +207,7 @@ The content is organized as follows:
         reviewContextBundle.test.ts
         reviewContextBundle.ts
         reviewContextBundleContract.test.ts
+        reviewRoundContract.test.ts
         reviewTip.test.ts
         reviewTip.ts
         reviewTipGeneration.test.ts
@@ -9180,7 +9181,8 @@ describe("branch grammar sync", () => {
 <file path=".github/actions/code-review-action/src/buildReviewContext.test.ts">
 /**
  * Fixture-driven tests for buildReviewContext.ts: small and >100-file PRs,
- * generated-file-heavy diffs, first-review vs re-review rounds, diverged and
+ * generated-file-heavy diffs, first-review vs re-review rounds,
+ * substantive-anchor selection (issue #622), diverged and
  * missing compare refs, partial API failures, rate-limit classification, the
  * mid-build head-move retry, and the streamed diff byte cap. All GitHub access
  * goes through an injected mock Octokit that records its arguments, so every
@@ -9489,6 +9491,86 @@ describe("assembleBundle", () => {
   });
 });
 
+describe("substantive-anchor rounds", () => {
+  const botReview = (state: string, sha: string, body: string | null) => ({
+    user: { login: "review-bot" },
+    state,
+    commit_id: sha,
+    submitted_at: "2026-08-01T00:00:00Z",
+    body,
+  });
+
+  test("an empty COMMENTED reply at head does not advance the anchor (reply-poisoning)", async () => {
+    const { deps, calls } = await makeDeps({
+      reviews: [
+        botReview("CHANGES_REQUESTED", "old-sha", "blocker found"),
+        botReview("COMMENTED", "head-sha", ""),
+      ],
+      compare: { status: "ahead", files: [{ filename: "src/a.ts" }], total_commits: 1, commits: [{}] },
+    });
+
+    const { bundle } = await assembleBundle(deps, noop);
+    expect(bundle.refs.lastReviewedSha).toBe("old-sha");
+    if (bundle.round.firstReview) throw new Error("expected re-review round");
+    expect(bundle.round.lastReviewedSha).toBe("old-sha");
+    expect(bundle.reviewState.available && bundle.reviewState.existingVerdict).toBe(
+      "CHANGES_REQUESTED",
+    );
+    const compareCall = calls.find((c) => c.route === "repos.compareCommitsWithBasehead");
+    expect(compareCall?.params.basehead).toBe("old-sha...head-sha");
+  });
+
+  test("anchor at the current head yields compare-status-identical (skip signal)", async () => {
+    const { deps } = await makeDeps({
+      reviews: [botReview("APPROVED", "head-sha", "")],
+      compare: { status: "identical", files: [], total_commits: 0, commits: [] },
+    });
+
+    const { bundle } = await assembleBundle(deps, noop);
+    expect(bundle.refs.lastReviewedSha).toBe("head-sha");
+    if (bundle.round.firstReview) throw new Error("expected re-review round");
+    expect(bundle.round.delta).toEqual({
+      available: false,
+      reason: "compare-status-identical",
+    });
+  });
+
+  test("a history of only non-substantive reviews is a first review", async () => {
+    const { deps } = await makeDeps({
+      reviews: [botReview("COMMENTED", "reply-sha-1", ""), botReview("COMMENTED", "reply-sha-2", null)],
+    });
+
+    const { bundle } = await assembleBundle(deps, noop);
+    expect(bundle.round).toEqual({ firstReview: true });
+    expect(bundle.refs.lastReviewedSha).toBeNull();
+    expect(bundle.reviewState.available && bundle.reviewState.existingVerdict).toBeNull();
+  });
+
+  test("a COMMENTED full review with a body anchors; a whitespace-only body does not", async () => {
+    const { deps } = await makeDeps({
+      reviews: [
+        botReview("COMMENTED", "full-sha", "### Review\nfindings here"),
+        botReview("COMMENTED", "head-sha", "  \n  "),
+      ],
+      compare: { status: "ahead", files: [], total_commits: 1, commits: [{}] },
+    });
+
+    const { bundle } = await assembleBundle(deps, noop);
+    expect(bundle.refs.lastReviewedSha).toBe("full-sha");
+  });
+
+  test("a DISMISSED verdict never anchors; the prior substantive review does", async () => {
+    const { deps } = await makeDeps({
+      reviews: [botReview("APPROVED", "ok-sha", ""), botReview("DISMISSED", "newer-sha", "old blocker")],
+      compare: { status: "ahead", files: [], total_commits: 1, commits: [{}] },
+    });
+
+    const { bundle } = await assembleBundle(deps, noop);
+    expect(bundle.refs.lastReviewedSha).toBe("ok-sha");
+    expect(bundle.reviewState.available && bundle.reviewState.existingVerdict).toBe("APPROVED");
+  });
+});
+
 describe("sectionReason", () => {
   test("classifies 403/429 as rate-limited and keeps first error line otherwise", () => {
     expect(sectionReason(Object.assign(new Error("nope"), { status: 403 }))).toBe("rate-limited");
@@ -9757,7 +9839,28 @@ interface ReviewStateData {
   lastReviewedSha: string | null;
 }
 
-/** The reviewer's non-pending reviews plus unresolved threads, both paginated. */
+/**
+ * Whether a review can anchor a follow-up round (issue #622). `APPROVED` and
+ * `CHANGES_REQUESTED` are substantive verdicts even with an empty body; a
+ * `COMMENTED` review counts only when it carries a non-empty top-level body
+ * (pr-review always writes one for a full review), because GitHub represents
+ * a reply inside an inline thread as an empty `COMMENTED` review at the
+ * current head — letting it advance the anchor poisons round classification.
+ * Every other state, including `DISMISSED` (a verdict explicitly revoked),
+ * never anchors. The pr-review skill's §1.3 prose defines this predicate;
+ * this helper implements it for the bundle path.
+ */
+export function isSubstantiveReview(review: { state: string; body?: string | null }): boolean {
+  if (review.state === "APPROVED" || review.state === "CHANGES_REQUESTED") return true;
+  return review.state === "COMMENTED" && (review.body ?? "").trim().length > 0;
+}
+
+/**
+ * The reviewer's non-pending reviews plus unresolved threads, both paginated.
+ * The anchor (`lastReviewedSha`/`existingVerdict`) comes from the latest
+ * substantive review, not the latest non-pending one — see
+ * {@link isSubstantiveReview}.
+ */
 async function fetchReviewState(deps: BuilderDeps): Promise<ReviewStateData> {
   const fetchThreads = deps.fetchThreads ?? fetchReviewThreads;
   const [allReviews, allThreads] = await Promise.all([
@@ -9773,12 +9876,12 @@ async function fetchReviewState(deps: BuilderDeps): Promise<ReviewStateData> {
   const botReviews = allReviews.filter(
     (r) => r.user?.login === deps.reviewer && r.state !== "PENDING",
   );
-  const latest = botReviews.at(-1);
+  const anchor = botReviews.findLast((r) => isSubstantiveReview(r));
   const recent = botReviews.slice(-bundleBounds.maxPriorReviews);
   const unresolved = allThreads.filter((t: ReviewThread) => !t.isResolved);
 
   return {
-    existingVerdict: latest?.state ?? null,
+    existingVerdict: anchor?.state ?? null,
     priorReviews: recent.map((r) => ({
       state: r.state,
       submittedAt: r.submitted_at ?? null,
@@ -9793,7 +9896,7 @@ async function fetchReviewState(deps: BuilderDeps): Promise<ReviewStateData> {
       ...boundBody(t.firstCommentBody),
     })),
     threadsTruncated: unresolved.length > bundleBounds.maxThreads,
-    lastReviewedSha: latest?.commit_id ?? null,
+    lastReviewedSha: anchor?.commit_id ?? null,
   };
 }
 
@@ -15592,7 +15695,7 @@ const reviewStateSchema = z.discriminatedUnion("available", [
   z
     .object({
       available: z.literal(true),
-      /** State of the reviewer's latest non-pending review, or null before any. */
+      /** State of the reviewer's latest substantive review (the round anchor — see the builder's `isSubstantiveReview`), or null before any. */
       existingVerdict: z.string().nullable(),
       priorReviews: z.array(priorReviewSchema).max(bundleBounds.maxPriorReviews),
       priorReviewsTruncated: z.boolean(),
@@ -15618,10 +15721,12 @@ const deltaSchema = z.discriminatedUnion("available", [
 ]);
 
 /**
- * Round metadata: a first review carries no delta; a re-review names the SHA
- * the delta is computed from, or an explicit reason the delta is unavailable
- * (force-pushed ref, diverged history) — in which case the reviewer must treat
- * the full diff as the review surface.
+ * Round metadata: a first review carries no delta; a re-review names the
+ * substantive-anchor SHA the delta is computed from, or an explicit reason the
+ * delta is unavailable. The pr-review skill's §1.3 routes that reason:
+ * `compare-status-identical` means the head is already reviewed (skip), while
+ * `compare-status-diverged`/`compare-status-behind`/`ref-missing` mean
+ * rewritten or unavailable history (full review).
  */
 const roundSchema = z.discriminatedUnion("firstReview", [
   z.object({ firstReview: z.literal(true) }).strict(),
@@ -15791,6 +15896,137 @@ describe("review-context-bundle contract", () => {
     expect(actionYml).toContain("id: bundle");
     expect(actionYml).toContain("src/buildReviewContext.ts");
     expect(actionYml).toContain("BUNDLE_TELEMETRY: ${{ steps.bundle.outputs.telemetry }}");
+  });
+});
+</file>
+
+<file path=".github/actions/code-review-action/src/reviewRoundContract.test.ts">
+/**
+ * Guards the review-round contract (issue #622) across its three holders: the
+ * substantive-anchor predicate (`buildReviewContext.ts`), the pr-review skill
+ * prose that owns round policy (SKILL.md §1.3 plus the §1.0 routing bullet and
+ * the Graphify boundary), and the publication binding (`submitReview.ts`
+ * `commit_id`). The predicate is pinned twice on purpose — behaviorally via
+ * `isSubstantiveReview` and textually via the §1.3 prose — because the two
+ * encodings live in different files and either drifting alone silently splits
+ * anchor selection between the builder and the skill, which is the exact
+ * failure the issue exists to remove.
+ *
+ * Mirrors reviewContextBundleContract.test.ts: guarded documents are asserted
+ * non-empty first (vacuous-pass defence), and each taxonomy entry is explicit
+ * test data so dropping one fails loudly. Like that file, the text assertions
+ * prove prose, not runtime behavior; the behavioral half runs the real
+ * predicate.
+ */
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
+import { describe, expect, test } from "bun:test";
+
+import { isSubstantiveReview } from "./buildReviewContext.ts";
+
+// Depth mirrors sharedBlockSync.test.ts in this directory — a move of the
+// action updates both in lockstep.
+const actionDir = join(import.meta.dirname, "..");
+const repoRoot = join(actionDir, "..", "..", "..");
+const skillPath = join(repoRoot, "claude-plugins/autopilot/skills/pr-review/SKILL.md");
+const submitPath = join(actionDir, "src", "submitReview.ts");
+
+/** Shortest either guarded document can plausibly be. */
+const minDocLength = 1000;
+
+/**
+ * The substantive-anchor taxonomy: [state, body, substantive]. §1.3 prose and
+ * the builder predicate must agree on every row.
+ */
+const anchorTaxonomy: Array<[string, string | null, boolean]> = [
+  ["APPROVED", "", true],
+  ["APPROVED", null, true],
+  ["CHANGES_REQUESTED", "", true],
+  ["COMMENTED", "Found a real issue in src/a.ts", true],
+  ["COMMENTED", "", false],
+  ["COMMENTED", "  \n  ", false],
+  ["COMMENTED", null, false],
+  ["DISMISSED", "old blocker text", false],
+];
+
+/** The four state-machine arms §1.3 must name, one guarded phrase each. */
+const stateMachineArms = [
+  "No substantive prior review",
+  "Review skipped: no commits since the reviewed head",
+  "compare status `ahead`",
+  "rewritten history is untrusted",
+];
+
+/** Delta reasons the §1.0 routing bullet must route explicitly. */
+const deltaReasons = [
+  "compare-status-identical",
+  "compare-status-diverged",
+  "compare-status-behind",
+  "ref-missing",
+];
+
+const skill = await readFile(skillPath, "utf8");
+const submitSource = await readFile(submitPath, "utf8");
+
+describe("substantive-anchor predicate", () => {
+  test("both guarded documents exist and are substantial", () => {
+    expect(skill.length).toBeGreaterThan(minDocLength);
+    expect(submitSource.length).toBeGreaterThan(minDocLength);
+  });
+
+  test.each(anchorTaxonomy)(
+    "state %s with body %p is substantive: %p",
+    (state, body, substantive) => {
+      expect(isSubstantiveReview({ state, body })).toBe(substantive);
+    },
+  );
+
+  test("the skill prose defines the same predicate it delegates to the builder", () => {
+    expect(skill).toContain("**The substantive anchor.**");
+    expect(skill).toContain("never a SHA parsed from review prose");
+    expect(skill).toContain("never advance the anchor");
+    expect(skill).toContain("`DISMISSED`");
+    expect(skill).toContain("isSubstantiveReview");
+  });
+});
+
+describe("round state machine", () => {
+  test.each(stateMachineArms)("§1.3 names the arm: %s", (arm) => {
+    expect(skill).toContain(arm);
+  });
+
+  test.each(deltaReasons)("the §1.0 routing bullet routes %s", (reason) => {
+    expect(skill).toContain(reason);
+  });
+
+  test("force-push is never inferred from object existence", () => {
+    expect(skill).toContain("Never infer a force-push");
+  });
+
+  test("the incremental surface is trace-recorded with a degrade arm", () => {
+    expect(skill).toContain("round-surface:");
+    expect(skill).toContain("round-surface-fallback:");
+    expect(skill).toContain("never review a silently truncated patch");
+  });
+});
+
+describe("graphify boundary", () => {
+  test("Graphify is context-only, never review-surface discovery", () => {
+    expect(skill).toContain("**Graphify is context, never surface.**");
+    expect(skill).toContain("never expand an incremental round");
+  });
+});
+
+describe("publication binding", () => {
+  test("submitReview binds the review to the expected head SHA", () => {
+    expect(submitSource).toContain("commit_id: expectedHeadSha");
+  });
+
+  test("an empty PR_HEAD_SHA warns instead of silently submitting unbound", () => {
+    expect(submitSource).toContain(
+      "PR_HEAD_SHA is empty; submitting review without commit_id binding",
+    );
   });
 });
 </file>
@@ -19332,7 +19568,18 @@ if (guardReview && reviewDedupKey(guardReview.body ?? "") === reviewDedupKey(fin
   process.exit(0);
 }
 
-// Submit the review
+// Submit the review, bound to the head this run reviewed (issue #622):
+// commit_id attaches the review to that exact commit instead of GitHub's
+// default (the PR's latest commit), so a head that moved after review cannot
+// claim the verdict. PR_HEAD_SHA can be absent outside pull_request events —
+// warn loudly rather than submit silently unbound. A 422 from a stale SHA
+// throws and fails the step; never retry without commit_id.
+const expectedHeadSha = process.env.PR_HEAD_SHA ?? "";
+if (!expectedHeadSha) {
+  console.log(
+    "::warning title=Review submission::PR_HEAD_SHA is empty; submitting review without commit_id binding"
+  );
+}
 const { data: submittedReview } = await octokit.rest.pulls.createReview({
   owner,
   repo: repoName,
@@ -19340,6 +19587,7 @@ const { data: submittedReview } = await octokit.rest.pulls.createReview({
   event,
   body: finalBody,
   comments: buildReviewComments(validComments, prFiles),
+  ...(expectedHeadSha ? { commit_id: expectedHeadSha } : {}),
 });
 
 console.log("✓ Review submitted successfully");
@@ -22415,7 +22663,9 @@ To run a different repo's skills instead — e.g. a consumer's own `pr-review` �
 
 Review mode runs one deterministic **Build review context** step ([`buildReviewContext.ts`](src/buildReviewContext.ts)) before the Claude session. It fetches the PR metadata, refs, changed files, bounded diff, check state, prior reviews, and unresolved threads in a single concurrent pass — paginated past every GitHub page cap — and writes a versioned, Zod-typed bundle to the runner temp dir. The review prompt receives its path as `CONTEXT_BUNDLE:` and the `pr-review` skill consumes it instead of rediscovering the same data through many small `gh` calls, which is what dominated review wall-clock (issue [#605](https://github.com/awinogradov/code-assistants/issues/605)).
 
-The version-1 contract lives in [`reviewContextBundle.ts`](src/reviewContextBundle.ts): every bound (file entries, diff bytes, threads, review bodies) is an exported constant, every truncation is flagged in the payload, and each fallible section is either complete data or an explicit `{ available: false, reason }` — rate limits (`rate-limited`) are distinguished from endpoint failures. Re-reviews carry an explicit delta from the last-reviewed SHA (the reviewer's latest review commit); a force-pushed or diverged ref degrades the delta explicitly rather than pretending nothing changed. The diff is streamed to a separate file with the byte cap enforced mid-stream, never buffered.
+The version-1 contract lives in [`reviewContextBundle.ts`](src/reviewContextBundle.ts): every bound (file entries, diff bytes, threads, review bodies) is an exported constant, every truncation is flagged in the payload, and each fallible section is either complete data or an explicit `{ available: false, reason }` — rate limits (`rate-limited`) are distinguished from endpoint failures. Re-reviews carry an explicit delta from the **substantive anchor** — the reviewer's latest `APPROVED`/`CHANGES_REQUESTED` review, or a `COMMENTED` one with a non-empty top-level body; an empty `COMMENTED` review created by replying inside an inline thread never advances the anchor (issue [#622](https://github.com/awinogradov/code-assistants/issues/622)). A force-pushed or diverged ref degrades the delta explicitly rather than pretending nothing changed. The diff is streamed to a separate file with the byte cap enforced mid-stream, never buffered.
+
+The builder acquires raw facts only — round **policy** (full vs incremental vs skip, and the review surface for each) is owned by the `pr-review` skill's §1.3 state machine, which routes the delta's reason strings: `compare-status-identical` skips, `compare-status-diverged`/`compare-status-behind`/`ref-missing` force a full review. [`reviewRoundContract.test.ts`](src/reviewRoundContract.test.ts) pins the skill prose and the builder's `isSubstantiveReview` predicate to each other — editors of the skill's §1.3 wording should expect that test to fail until both sides agree. De-poisoning the anchor shifts telemetry: expect fewer `compare-status-identical` deltas and more `ahead` ones after upgrading. On publication, [`submitReview.ts`](src/submitReview.ts) binds the created review to the expected head SHA via `commit_id`, so a head that moves after review cannot claim the verdict.
 
 The step is fail-open: it always writes its `path` output (empty on any failure, with a warning annotation), and the skill treats an empty or invalid bundle as `bundle-fallback:` — running its legacy in-session discovery unchanged, so manual local runs and builder outages degrade instead of breaking. In-session follow-ups for missing or truncated fields are budgeted (3 per session) and trace-recorded as `bundle-followup:` lines. Builder telemetry (duration, request count, payload bytes, truncation, cache use) flows through the `BUNDLE_TELEMETRY` env into the run summary, where the session's follow-up count and fallback status join it — see the run-summary footer below and the post-merge verification tracked on issue [#605](https://github.com/awinogradov/code-assistants/issues/605).
 
@@ -60785,7 +61035,7 @@ When `CONTEXT_BUNDLE` carries a non-empty path, Read that file once. It is valid
 
 - It replaces the [§1.1](#11-pr-context) `gh pr view` / `gh pr diff` calls and the [§1.2](#12-load-context-via-sub-agents) review-thread helper: `identity`/`refs` carry the PR metadata and SHAs, `changedFiles` the bounded file list (`totalFiles` stays exact when truncated), `checks` the check state, and `reviewState` the prior verdicts, review bodies, and unresolved inline threads.
 - Read the diff exactly once from the file `diff.path` references — the same never-embed-twice rule as [§1.1](#11-pr-context).
-- [§1.3](#13-review-round-handling) takes its round from `round`: `firstReview: true` is the first-review branch; otherwise `round.lastReviewedSha` and `round.delta` name what changed since the last review. A delta marked `available: false` (force-pushed ref, diverged history) means the full diff is the review surface — never assume "nothing changed".
+- [§1.3](#13-review-round-handling) takes its round from `round`: `firstReview: true` is the first-review branch; otherwise `round.lastReviewedSha` names the substantive anchor and `round.delta` what changed since it. Route an unavailable delta by its `reason` — `compare-status-identical` means the head is already reviewed (the [§1.3](#13-review-round-handling) skip arm); `compare-status-diverged`, `compare-status-behind`, and `ref-missing` mean rewritten or unavailable history, so the full diff is the review surface. `delta.files` is informational only; the review surface is materialized per [§1.3](#13-review-round-handling) — never assume "nothing changed".
 - The [§1.2](#12-load-context-via-sub-agents) codebase snapshot and the issue-linked agents still run — the bundle does not cover them; extract the linked issue from `identity.body`.
 
 **Targeted follow-ups are budgeted.** A concrete missing field, a section with `truncated: true`, or a section with `available: false` permits a targeted fetch — at most **3 per session**. Record each, before running it, as a machine-readable trace line: `bundle-followup: <field> <command>`. Past the budget, proceed on the bounded data and say so in the [§1.5](#15-context-map) Context Map. Never re-fetch data the bundle already carries — rediscovery is exactly the cost the bundle exists to remove.
@@ -60848,19 +61098,34 @@ After all calls complete, store the selected context source (and its `outputId` 
 
 **Read the pack, don't dump it.** The context source exists so you can pull _targeted_ context on demand — via its read contract: `graphify` queries on the graph tier, or `grep_repomix_output` (regex + `contextLines`) and `read_repomix_output` with a specific `startLine`/`endLine` slice on the repomix tier. NEVER `read_repomix_output` over the whole range (that loads the entire codebase into context). When the diff is self-contained and needs no cross-file lookup (the common case), don't read the pack at all — pull cross-file context only for checks that need it (e.g. architecture reuse, duplicated logic).
 
+**Graphify is context, never surface.** The changed-file list and the review surface come from Git/GitHub ([§1.0](#10-consume-the-context-bundle-action-supplied)/[§1.1](#11-pr-context) and the [§1.3](#13-review-round-handling) round contract) — never from Graphify. On the graph tier, Graphify answers questions that originate from the active review surface: callers of a changed symbol, a contract or invariant outside the diff, an existing shared helper, duplicated logic elsewhere. Its results may explain a finding on that surface, but must never expand an incremental round into a review of unrelated code.
+
 ### 1.3 Review Round Handling
 
-This decision procedure is the same on both data paths: the bundle path sources "previous reviews by REVIEWER" from `round` and `reviewState` ([§1.0](#10-consume-the-context-bundle-action-supplied)), the legacy path from [§1.1](#11-pr-context)–[§1.2](#12-load-context-via-sub-agents). A bundle whose `reviewState` is `available: false` never means "no prior reviews" — that is a degraded fetch; verify with a budgeted follow-up before treating the round as a first review.
+This decision procedure is the same on both data paths: the bundle path sources "previous reviews by REVIEWER" from `round` and `reviewState` ([§1.0](#10-consume-the-context-bundle-action-supplied)), the legacy path from [§1.1](#11-pr-context)–[§1.2](#12-load-context-via-sub-agents). A bundle whose `reviewState` is `available: false` never means "no prior reviews" — that is a degraded fetch; verify with a budgeted follow-up before treating the round as a first review. This section owns the round contract end to end: anchor selection, round classification, the review surface, and reconciliation — a consumer host supplies raw GitHub facts and publication, never its own round policy.
 
-**First review (no previous reviews by REVIEWER):**
+**The substantive anchor.** The durable review anchor is the latest **substantive** review authored by REVIEWER, keyed by the review's structured `commit_id` — never a SHA parsed from review prose. A review is substantive when its state is `APPROVED` or `CHANGES_REQUESTED` (even with an empty body), or `COMMENTED` with a non-empty top-level body (a full review emitted by this skill always writes one). An empty `COMMENTED` review — GitHub's side effect of a reviewer replying inside an inline thread — and a `DISMISSED` review (a verdict explicitly revoked) never advance the anchor. A valid bundle's `round` already encodes this selection ([`buildReviewContext.ts`](https://github.com/awinogradov/code-assistants/blob/main/.github/actions/code-review-action/src/buildReviewContext.ts) implements the same predicate as `isSubstantiveReview`, and [`reviewRoundContract.test.ts`](https://github.com/awinogradov/code-assistants/blob/main/.github/actions/code-review-action/src/reviewRoundContract.test.ts) pins the two to each other); on the legacy path, apply the predicate yourself over the [§1.1](#11-pr-context) `reviews` list.
+
+**Round state machine.** Classify before reviewing. Never infer a force-push from whether the old anchor object still exists — GitHub retains orphaned commits; ancestry/compare status is the contract:
+
+| State                                                                            | Review behavior                                                                                 |
+| -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| No substantive prior review                                                      | Full PR review (first review — a history of only non-substantive reviews lands here)            |
+| Anchor `commit_id` equals the head SHA (delta reason `compare-status-identical`) | **SKIP** — output only `Review skipped: no commits since the reviewed head`, no structured JSON |
+| Anchor is an ancestor of head (delta available, compare status `ahead`)          | Incremental: review the exact anchor-to-head patch, plus revalidate prior unresolved findings   |
+| `compare-status-diverged`, `compare-status-behind`, or `ref-missing`             | Full PR review — rewritten history is untrusted; conflict resolution may have changed any patch |
+
+**Incremental surface.** Materialize the patch once via the GitHub compare API with the diff media type — `gh api repos/<REPO>/compare/<anchor>...<headSha> -H "Accept: application/vnd.github.diff"` — because a shallow checkout cannot assume the anchor object exists locally. Record it, before running it, as a machine-readable trace line: `round-surface: <anchor>...<headSha>`. This is the round's defined surface acquisition, not counted against the [§1.0](#10-consume-the-context-bundle-action-supplied) follow-up budget. When the fetch fails (404 — the refs moved since the bundle was built; 406 — diff too large), the range hits the compare caps (250 commits / 300 files), or the fetched patch covers fewer files than the delta reports, degrade to a full PR review and record `round-surface-fallback: <reason>` — never review a silently truncated patch, and never run an incremental round on an empty surface.
+
+**First review (no substantive prior review by REVIEWER):**
 
 - Start with a greeting: ONE short sentence that @-mentions PR_AUTHOR — the @-mention is what triggers their notification. Vary the wording each time in your own voice; no praise, no round-labeling, no elaboration after it.
 - **Precedence:** Greeting applies only when the review has findings (blockers, suggestions, or nitpicks). For first-time approvals with no issues, use the minimal approval format — empty `reviewComment`, no body text at all.
 
-**Follow-up review (previous review by REVIEWER exists):**
+**Follow-up review (substantive prior review by REVIEWER exists):**
 
-1. Read all previous review findings from the `reviews`/`latestReviews` bodies ([§1.1](#11-pr-context)) and the per-line inline threads from the review-thread helper ([§1.2](#12-load-context-via-sub-agents))
-2. Check if issues were addressed by re-examining the current diff for each finding named in those bodies
+1. Read all previous review findings from the `reviews`/`latestReviews` bodies ([§1.1](#11-pr-context)) and the per-line inline threads from the review-thread helper ([§1.2](#12-load-context-via-sub-agents)) — the reconciliation record needs no model-session memory. Both sources are bounded on the bundle path (20 prior reviews, 100 threads); a `truncated: true` flag there permits a budgeted follow-up, never a silent drop of prior findings.
+2. Check if issues were addressed by re-examining the round's review surface for each finding named in those bodies
 3. Compare current findings against previous review
 4. **SKIP (no structured JSON)** if: all findings are identical to previous review, OR no new findings and no unresolved issues
 5. If previous review was CHANGES_REQUESTED and all blockers are now fixed with no new findings → approve with empty `reviewComment` (no body text)
@@ -60871,9 +61136,9 @@ This decision procedure is the same on both data paths: the bundle path sources 
 When skipping, output only: `Review skipped: no new findings since last review`
 Do NOT produce the structured JSON output.
 
-**Consecutive approval (previous review by REVIEWER was APPROVED):**
+**Consecutive approval (the substantive anchor is an APPROVED review):**
 
-- If no new commits since last approval → **SKIP (no structured JSON)**. Output only: `Review skipped: already approved, no new commits`
+- An anchor `commit_id` at the head SHA never reaches this branch — the state machine above already skipped it with `Review skipped: no commits since the reviewed head`
 - If new commits exist but no new issues → approve with empty `reviewComment` (no body text)
 - Only submit a full review body if new commits introduce genuinely NEW findings
 
