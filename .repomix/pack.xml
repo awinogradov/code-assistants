@@ -50047,9 +50047,9 @@ The existing GitHub-direct and `/plugin marketplace add` installation paths rema
 
 ## ⚙️ Configuration Required
 
-### OIDC Trusted Publishing (recommended) or npm Token
+### npm Token Required for Publishing
 
-The release pipeline publishes to npm using OIDC trusted publishing where available, falling back to a long-lived npm token. If your environment or fork needs to publish releases, configure OIDC trust between your CI provider and npm, or set an `NPM_TOKEN` secret. No change is needed for teams that only consume the package.
+The stock release-publish workflow authenticates to npm with an `NPM_TOKEN` repository secret — its `pull_request_target` trigger cannot obtain GitHub OIDC tokens, so trusted publishing does not engage there. If your environment or fork publishes releases, set `NPM_TOKEN`; the underlying release-action still supports OIDC trusted publishing when invoked from a workflow trigger that can mint OIDC tokens. No change is needed for teams that only consume the package.
 
 ## ⚠️ Breaking Changes
 
