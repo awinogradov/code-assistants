@@ -515,6 +515,7 @@ claude-plugins/
       7.1.0.md
       7.1.1.md
       7.1.2.md
+      7.2.0.md
     agents/
       analyze-pr-commits.md
       analyze-staged-changes.md
@@ -47359,7 +47360,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "7.1.2",
+  "version": "7.2.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -50010,6 +50011,67 @@ Autopilot skills previously gave coding agents unrestricted access to all Graphi
 ### Bug Fixes
 
 * **autopilot:** make graphify read-only for agents ([78d100d](https://github.com/awinogradov/code-assistants/commit/78d100d1a4b5f23fefaba6aa79d6d11231773db7))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/7.2.0.md">
+## [7.2.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.1.2...autopilot@v7.2.0) (2026-08-27)
+
+## Release Notes
+
+Autopilot can now be installed as a version-pinned npm package, giving teams a dependency-managed distribution path with full lockfile integrity.
+
+## ✨ What's New
+
+### npm Package Distribution for Autopilot
+
+Autopilot is now published to npm as `@code-assistants/autopilot`, making it a first-class dependency you can pin and manage alongside the rest of your project's packages. Instead of tracking a plugin version and a source commit SHA separately, you pin one exact version in `package.json` and your lockfile records the resolved artifact with registry integrity. Dependabot and Renovate can then propose upgrades through their normal dependency workflows.
+
+The npm package is itself a valid local Claude Code marketplace — it ships its own `marketplace.json` — so once installed into `node_modules`, you register and install it locally without any writes to Claude's internal plugin cache:
+
+```bash
+npm install --save-exact @code-assistants/autopilot
+
+/plugin marketplace add ./node_modules/@code-assistants/autopilot
+/plugin install autopilot@code-assistants-autopilot
+```
+
+The existing GitHub-direct and `/plugin marketplace add` installation paths remain fully supported and unchanged.
+
+<details><summary>Related issues</summary>
+
+- [#630: Publish Autopilot as a versioned npm package](https://github.com/awinogradov/code-assistants/issues/630)
+</details>
+
+## ⚙️ Configuration Required
+
+### OIDC Trusted Publishing (recommended) or npm Token
+
+The release pipeline publishes to npm using OIDC trusted publishing where available, falling back to a long-lived npm token. If your environment or fork needs to publish releases, configure OIDC trust between your CI provider and npm, or set an `NPM_TOKEN` secret. No change is needed for teams that only consume the package.
+
+## ⚠️ Breaking Changes
+
+### Version Consistency Now Enforced Across All Manifests
+
+Repository validation now fails if the version number drifts between the npm `package.json`, the Claude plugin manifest (`.claude-plugin/plugin.json`), and the release manifest. If you maintain a fork or a custom packaging setup that sets these versions independently, they must be kept in sync or the build will reject the release. Align all three manifest versions before cutting a release.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #630 | [#632](https://github.com/awinogradov/code-assistants/pull/632) | @awinogradov |
+
+### Features
+
+* **autopilot:** package the plugin for npm publishing ([9f93d19](https://github.com/awinogradov/code-assistants/commit/9f93d19f9f9a11f0d55b31bb0178e410c6ca73a8))
+
+### Documentation
+
+* describe claude plugin npm publishing and install ([c32bb88](https://github.com/awinogradov/code-assistants/commit/c32bb88e61860d746b7b26984fc33f5f17f2184b))
+
+### Tests
+
+* cover npm publish gate and pack contract ([9de789a](https://github.com/awinogradov/code-assistants/commit/9de789a3dbd052ac50f27b18f13771b229f65170))
 </file>
 
 <file path="claude-plugins/autopilot/agents/analyze-pr-commits.md">
@@ -64540,6 +64602,64 @@ Before writing any output that mentions a file, standard, section, commit, or is
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [7.2.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.1.2...autopilot@v7.2.0) (2026-08-27)
+
+## Release Notes
+
+Autopilot can now be installed as a version-pinned npm package, giving teams a dependency-managed distribution path with full lockfile integrity.
+
+## ✨ What's New
+
+### npm Package Distribution for Autopilot
+
+Autopilot is now published to npm as `@code-assistants/autopilot`, making it a first-class dependency you can pin and manage alongside the rest of your project's packages. Instead of tracking a plugin version and a source commit SHA separately, you pin one exact version in `package.json` and your lockfile records the resolved artifact with registry integrity. Dependabot and Renovate can then propose upgrades through their normal dependency workflows.
+
+The npm package is itself a valid local Claude Code marketplace — it ships its own `marketplace.json` — so once installed into `node_modules`, you register and install it locally without any writes to Claude's internal plugin cache:
+
+```bash
+npm install --save-exact @code-assistants/autopilot
+
+/plugin marketplace add ./node_modules/@code-assistants/autopilot
+/plugin install autopilot@code-assistants-autopilot
+```
+
+The existing GitHub-direct and `/plugin marketplace add` installation paths remain fully supported and unchanged.
+
+<details><summary>Related issues</summary>
+
+- [#630: Publish Autopilot as a versioned npm package](https://github.com/awinogradov/code-assistants/issues/630)
+</details>
+
+## ⚙️ Configuration Required
+
+### OIDC Trusted Publishing (recommended) or npm Token
+
+The release pipeline publishes to npm using OIDC trusted publishing where available, falling back to a long-lived npm token. If your environment or fork needs to publish releases, configure OIDC trust between your CI provider and npm, or set an `NPM_TOKEN` secret. No change is needed for teams that only consume the package.
+
+## ⚠️ Breaking Changes
+
+### Version Consistency Now Enforced Across All Manifests
+
+Repository validation now fails if the version number drifts between the npm `package.json`, the Claude plugin manifest (`.claude-plugin/plugin.json`), and the release manifest. If you maintain a fork or a custom packaging setup that sets these versions independently, they must be kept in sync or the build will reject the release. Align all three manifest versions before cutting a release.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #630 | [#632](https://github.com/awinogradov/code-assistants/pull/632) | @awinogradov |
+
+### Features
+
+* **autopilot:** package the plugin for npm publishing ([9f93d19](https://github.com/awinogradov/code-assistants/commit/9f93d19f9f9a11f0d55b31bb0178e410c6ca73a8))
+
+### Documentation
+
+* describe claude plugin npm publishing and install ([c32bb88](https://github.com/awinogradov/code-assistants/commit/c32bb88e61860d746b7b26984fc33f5f17f2184b))
+
+### Tests
+
+* cover npm publish gate and pack contract ([9de789a](https://github.com/awinogradov/code-assistants/commit/9de789a3dbd052ac50f27b18f13771b229f65170))
 ## [7.1.2](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.1.1...autopilot@v7.1.2) (2026-08-27)
 
 ## Release Notes
@@ -67177,14 +67297,14 @@ SOFTWARE.
     "test": "bun test lib",
     "clean": "rm -rf node_modules .turbo"
   },
-  "version": "7.1.2"
+  "version": "7.2.0"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v7.1.2-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v7.2.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -67696,7 +67816,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-7.1.2
+7.2.0
 </file>
 
 <file path="docs/01-workspace-structure.md">
