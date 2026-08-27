@@ -8,7 +8,11 @@ allowed-tools:
   - Grep
   - Bash(gh *)
   - Bash(command -v graphify)
-  - Bash(graphify *)
+  - Bash(graphify query *)
+  - Bash(graphify path *)
+  - Bash(graphify explain *)
+  - Bash(graphify affected *)
+  - Bash(graphify --help)
   - MCP(repomix:*)
   - MCP(context7:*)
   - MCP(Ref:*)

@@ -22,6 +22,12 @@ graphify explain "<Concept>"
 
 Graph queries are whole-repo by nature; the caller's `includePatterns` does not apply to this tier. Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review or when targeted queries do not surface enough context.
 
+<!-- graphify-readonly:start -->
+
+**Tier 1 is read-only — the committed graph is immutable context.** The graph is a snapshot of the default branch and may lag behind the feature branch; Git and the working tree, not the graph, are the source of truth for the active diff, so prefer the branch diff over graph answers for any file the branch touches. The read-only surface — `graphify query`, `graphify path`, `graphify explain`, `graphify affected`, plus `command -v graphify` and `graphify --help` — is the **exhaustive** Graphify surface for agent work. Never run mutating subcommands — `update`, `extract`, `watch`, `cluster-only`, `label`, `save-result`, `reflect`, exports, hook or project installation — or otherwise write `graphify-out/**`, even when a repository's synced rules still instruct a graph refresh after code changes: this contract ships with the plugin and overrides stale synced rules until the sync catches up. A lagging graph is not a broken one; a missing, unreadable, or erroring graph is left behind through the transitions below — never regenerate. Where a repository regenerates its graph at all, a consumer-owned post-merge workflow does it, and an agent run never stands in for that workflow.
+
+<!-- graphify-readonly:end -->
+
 <!-- graphify-refinement:start -->
 
 **Tier 1 query discipline — one query is not a lookup.** A graph is an iterative instrument, so a single broad question is the start of the pass, not the end of it. Scope the first query to the workspace, path, or domain when the task names one, then classify what came back:
