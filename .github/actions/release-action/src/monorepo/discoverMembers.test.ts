@@ -80,6 +80,30 @@ describe("discoverMembers", () => {
     });
   });
 
+  test("reads isPrivate from the member manifest", async () => {
+    await withTempDir(async (dir) => {
+      await writePkg(dir, {
+        name: "monorepo",
+        release: { members: ["packages/open", "packages/closed"] },
+      });
+      await mkdir(join(dir, "packages", "open"), { recursive: true });
+      await mkdir(join(dir, "packages", "closed"), { recursive: true });
+      await writePkg(join(dir, "packages", "open"), {
+        name: "@scope/open",
+        release: { type: "claude-plugin" },
+      });
+      await writePkg(join(dir, "packages", "closed"), {
+        name: "@scope/closed",
+        private: true,
+        release: { type: "claude-plugin" },
+      });
+
+      const result = await discoverMembers(dir);
+      expect(result.members.find((m) => m.name === "open")?.isPrivate).toBe(false);
+      expect(result.members.find((m) => m.name === "closed")?.isPrivate).toBe(true);
+    });
+  });
+
   test("expands workspaces globs and skips members without a release field", async () => {
     await withTempDir(async (dir) => {
       await writePkg(dir, {

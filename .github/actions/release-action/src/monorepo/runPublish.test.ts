@@ -28,6 +28,17 @@ async function setupMonorepo(dir: string): Promise<void> {
     name: "@scope/act",
     release: { type: "github-action" },
   });
+  await mkdir(join(dir, "packages", "plugin"), { recursive: true });
+  await mkdir(join(dir, "packages", "vendored"), { recursive: true });
+  await writeJson(join(dir, "packages", "plugin", "package.json"), {
+    name: "@scope/plugin",
+    release: { type: "claude-plugin" },
+  });
+  await writeJson(join(dir, "packages", "vendored", "package.json"), {
+    name: "@scope/vendored",
+    private: true,
+    release: { type: "claude-plugin" },
+  });
 }
 
 describe("resolvePublishPlan", () => {
@@ -56,6 +67,29 @@ describe("resolvePublishPlan", () => {
       expect(plan.member.name).toBe("act");
       expect(plan.versionTag).toBe("act@v2.5.1");
       expect(plan.majorTag).toBe("act@v2");
+      expect(plan.publishToNpm).toBe(false);
+    }));
+
+  test("publishes a non-private claude-plugin member to npm", () =>
+    withTempDir(async (dir) => {
+      await setupMonorepo(dir);
+      const plan = await resolvePublishPlan({
+        cwd: dir,
+        changedFiles: ["packages/plugin/.release_notes/3.0.0.md"],
+      });
+      expect(plan.member.name).toBe("plugin");
+      expect(plan.publishToNpm).toBe(true);
+      expect(plan.majorTag).toBeUndefined();
+    }));
+
+  test("keeps a private claude-plugin member off npm", () =>
+    withTempDir(async (dir) => {
+      await setupMonorepo(dir);
+      const plan = await resolvePublishPlan({
+        cwd: dir,
+        changedFiles: ["packages/vendored/.release_notes/3.0.0.md"],
+      });
+      expect(plan.member.name).toBe("vendored");
       expect(plan.publishToNpm).toBe(false);
     }));
 
