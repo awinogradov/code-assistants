@@ -20,7 +20,7 @@
     },
     ".github/actions/agents-rules-sync": {
       "name": "@code-assistants/agents-rules-sync-action",
-      "version": "2.1.1",
+      "version": "3.0.0",
       "dependencies": {
         "@actions/core": "3.0.1",
         "@code-assistants/actions-core": "workspace:*",
@@ -36,7 +36,7 @@
     },
     ".github/actions/agents-skills-sync": {
       "name": "@code-assistants/agents-skills-sync-action",
-      "version": "0.1.0",
+      "version": "1.0.0",
       "dependencies": {
         "@actions/core": "3.0.1",
         "@code-assistants/actions-core": "workspace:*",
@@ -65,7 +65,7 @@
     },
     ".github/actions/code-review-action": {
       "name": "@code-assistants/code-review-action",
-      "version": "5.1.0",
+      "version": "8.1.2",
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "0.3.202",
         "@anthropic-ai/sdk": "0.110.0",
@@ -82,7 +82,7 @@
     },
     ".github/actions/code-review-cost-monitor": {
       "name": "@code-assistants/code-review-cost-monitor-action",
-      "version": "0.2.2",
+      "version": "1.1.0",
       "dependencies": {
         "@actions/core": "3.0.1",
         "@code-assistants/actions-core": "workspace:*",
@@ -96,7 +96,7 @@
     },
     ".github/actions/files-sync": {
       "name": "@code-assistants/files-sync-action",
-      "version": "2.1.0",
+      "version": "2.1.1",
       "dependencies": {
         "@actions/core": "3.0.1",
         "@code-assistants/actions-core": "workspace:*",
@@ -174,8 +174,8 @@
       },
     },
     "claude-plugins/autopilot": {
-      "name": "autopilot",
-      "version": "4.2.2",
+      "name": "@code-assistants/autopilot",
+      "version": "7.1.2",
     },
     "packages/actions-core": {
       "name": "@code-assistants/actions-core",
@@ -233,6 +233,8 @@
     "@code-assistants/agents-skills-sync-action": ["@code-assistants/agents-skills-sync-action@workspace:.github/actions/agents-skills-sync"],
 
     "@code-assistants/auto-label-action": ["@code-assistants/auto-label-action@workspace:.github/actions/auto-label"],
+
+    "@code-assistants/autopilot": ["@code-assistants/autopilot@workspace:claude-plugins/autopilot"],
 
     "@code-assistants/code-review-action": ["@code-assistants/code-review-action@workspace:.github/actions/code-review-action"],
 
@@ -387,8 +389,6 @@
     "asynckit": ["asynckit@0.4.0", "", {}, "sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q=="],
 
     "atomic-sleep": ["atomic-sleep@1.0.0", "", {}, "sha512-kNOjDqAh7px0XWNI+4QbzoiR/nTkHAWNud2uvnJquD1/x5a7EQZMJT0AczqK0Qn67oY/TTQ1LbUKajZpp3I9tQ=="],
-
-    "autopilot": ["autopilot@workspace:claude-plugins/autopilot"],
 
     "axios": ["axios@1.16.1", "", { "dependencies": { "follow-redirects": "^1.16.0", "form-data": "^4.0.5", "https-proxy-agent": "^5.0.1", "proxy-from-env": "^2.1.0" } }, "sha512-caYkukvroVPO8KrzuJEb50Hm07KwfBZPEC3VeFHTsqWHvKTsy54hjJz9BS/cdaypROE2rH6xvm9mHX4fgWkr3A=="],
 

@@ -1,0 +1,14 @@
+{
+  "name": "code-assistants-autopilot",
+  "description": "Single-plugin marketplace shipped inside the @code-assistants/autopilot npm package, so the installed package directory can be added to Claude Code from its local path",
+  "owner": {
+    "name": "Tony Vi"
+  },
+  "plugins": [
+    {
+      "name": "autopilot",
+      "source": "./",
+      "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows"
+    }
+  ]
+}

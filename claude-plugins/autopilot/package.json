@@ -1,9 +1,23 @@
 {
-  "name": "autopilot",
+  "name": "@code-assistants/autopilot",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
-  "private": true,
   "type": "module",
   "license": "MIT",
+  "repository": "https://github.com/awinogradov/code-assistants",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "skills",
+    "agents",
+    "lib",
+    "!lib/**/*.test.ts",
+    ".claude-plugin",
+    ".mcp.json",
+    "MIGRATING.md",
+    "CHANGELOG.md",
+    "LICENSE.md"
+  ],
   "release": {
     "type": "claude-plugin"
   },
