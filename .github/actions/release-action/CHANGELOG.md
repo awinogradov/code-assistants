@@ -2,6 +2,52 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.4.0](https://github.com/awinogradov/code-assistants/compare/release-action@v1.3.1...release-action@v1.4.0) (2026-08-27)
+
+## Release Notes
+
+The release pipeline now automatically publishes public Claude plugins to npm as versioned packages, starting with Autopilot shipping as `@code-assistants/autopilot`.
+
+## ✨ What's New
+
+### Claude Plugin npm Publishing
+
+Public Claude plugins in the monorepo are now published to npm as part of the standard release flow. When a plugin's `package.json` marks it as non-private with a `claude-plugin` release type, the publish phase will push it to the npm registry — preferring OIDC trusted publishing over long-lived token secrets where the registry supports it.
+
+This means Autopilot is now available as `@code-assistants/autopilot` on npm. Consumers can pin an exact version in their `package.json` and let lockfiles track registry integrity, rather than relying on Claude's plugin cache. The npm package also doubles as a local Claude Code marketplace entry point, so the plugin installs directly from `node_modules`.
+
+As part of this change, the release pipeline now validates that version numbers are consistent across a plugin's npm manifest, Claude plugin manifest, and release manifest — a mismatch will fail the release before anything is published.
+
+<details><summary>Related issues</summary>
+
+- [#630: Publish Autopilot as a versioned npm package](https://github.com/awinogradov/code-assistants/issues/630)
+- [#632: Publish Autopilot as a versioned npm package](https://github.com/awinogradov/code-assistants/pull/632)
+</details>
+
+## 📚 Documentation & Settings Updates
+
+### Claude Plugin npm Publishing & Install Guide
+
+Documentation has been added covering how Claude plugin npm publishing works, how to configure a plugin for public release, and how to install a published plugin from `node_modules`. See the updated docs for the full setup walkthrough.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #630 | [#632](https://github.com/awinogradov/code-assistants/pull/632) | @awinogradov |
+
+### Features
+
+* **release-action:** publish public claude plugins to npm ([3cf5b63](https://github.com/awinogradov/code-assistants/commit/3cf5b63aea00530b5211a72a196003de99af7cd1))
+
+### Documentation
+
+* describe claude plugin npm publishing and install ([c32bb88](https://github.com/awinogradov/code-assistants/commit/c32bb88e61860d746b7b26984fc33f5f17f2184b))
+
+### Tests
+
+* cover npm publish gate and pack contract ([9de789a](https://github.com/awinogradov/code-assistants/commit/9de789a3dbd052ac50f27b18f13771b229f65170))
 ## [1.3.1](https://github.com/awinogradov/code-assistants/compare/release-action@v1.3.0...release-action@v1.3.1) (2026-08-01)
 
 ## Release Notes
