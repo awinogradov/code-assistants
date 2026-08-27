@@ -34,6 +34,7 @@ function classify(path: string): Target | null {
 async function discoverAll(): Promise<Target[]> {
   const patterns = [
     ".claude-plugin/marketplace.json",
+    "claude-plugins/*/.claude-plugin/marketplace.json",
     "claude-plugins/*/.claude-plugin/plugin.json",
     "claude-plugins/*/skills/*/SKILL.md",
     "claude-plugins/*/agents/*.md",
@@ -41,7 +42,9 @@ async function discoverAll(): Promise<Target[]> {
   const out: Target[] = [];
   for (const pattern of patterns) {
     const glob = new Glob(pattern);
-    for await (const path of glob.scan(".")) {
+    // dot: true — without it the scan silently skips the `.claude-plugin/`
+    // manifests, leaving them validated only in `--files` (lint-staged) mode.
+    for await (const path of glob.scan({ cwd: ".", dot: true })) {
       const t = classify(path);
       if (t) out.push(t);
     }
@@ -137,10 +140,42 @@ async function validateRulesSectionSync(): Promise<string | null> {
   return null;
 }
 
+/**
+ * Verify each claude-plugins/* member keeps its npm, Claude-plugin, and release
+ * version manifests in agreement (`package.json`, `.claude-plugin/plugin.json`,
+ * and the `version` file), and still declares `release.type` so the release
+ * pipeline keeps discovering it.
+ */
+async function validatePluginVersionSync(): Promise<string | null> {
+  for await (const pluginPath of new Glob("claude-plugins/*/.claude-plugin/plugin.json").scan({
+    cwd: ".",
+    dot: true,
+  })) {
+    const memberDir = pluginPath.slice(0, -"/.claude-plugin/plugin.json".length);
+    const pkgFile = Bun.file(`${memberDir}/package.json`);
+    if (!(await pkgFile.exists())) {
+      return `${memberDir}: missing package.json (required for the npm/release version invariant)`;
+    }
+    const pkg = (await pkgFile.json()) as { version?: string; release?: { type?: string } };
+    const plugin = (await Bun.file(pluginPath).json()) as { version?: string };
+    const versionFile = Bun.file(`${memberDir}/version`);
+    const fileVersion = (await versionFile.exists()) ? (await versionFile.text()).trim() : null;
+
+    if (typeof pkg.release?.type !== "string") {
+      return `${memberDir}/package.json: missing release.type — the member would silently drop out of the release pipeline`;
+    }
+    if (pkg.version !== plugin.version || plugin.version !== fileVersion) {
+      return `${memberDir}: version drift — package.json ${pkg.version ?? "missing"}, plugin.json ${plugin.version ?? "missing"}, version file ${fileVersion ?? "missing"}`;
+    }
+  }
+  return null;
+}
+
 async function main() {
   const args = process.argv.slice(2);
   let targets: Target[] = [];
   let checkRules = true;
+  let checkVersions = true;
 
   const filesIdx = args.indexOf("--files");
   if (filesIdx !== -1) {
@@ -150,11 +185,12 @@ async function main() {
       if (t) targets.push(t);
     }
     checkRules = paths.some((p) => /^rules\/[^/]+\.md$/.test(p));
+    checkVersions = paths.some((p) => p.startsWith("claude-plugins/"));
   } else {
     targets = await discoverAll();
   }
 
-  if (targets.length === 0 && !checkRules) {
+  if (targets.length === 0 && !checkRules && !checkVersions) {
     console.log("validate-plugins: no plugin files to check");
     return;
   }
@@ -180,11 +216,23 @@ async function main() {
     }
   }
 
+  if (checkVersions) {
+    const err = await validatePluginVersionSync();
+    if (err) {
+      failed += 1;
+      console.error(`✖ claude-plugins/* versions\n    ${err}`);
+    } else {
+      console.log("✔ claude-plugins/* version manifests in agreement");
+    }
+  }
+
   if (failed > 0) {
     console.error(`\nvalidate-plugins: ${failed} file(s) failed validation`);
     process.exit(1);
   }
-  console.log(`\nvalidate-plugins: ${targets.length + (checkRules ? 1 : 0)} check(s) OK`);
+  console.log(
+    `\nvalidate-plugins: ${targets.length + (checkRules ? 1 : 0) + (checkVersions ? 1 : 0)} check(s) OK`,
+  );
 }
 
 main().catch((e) => {
