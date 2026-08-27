@@ -29,6 +29,11 @@ export interface Member {
   relPath: string;
   /** Release type declared on the member's `package.json`. */
   releaseType: ReleaseType;
+  /**
+   * Whether the member's `package.json` declares `"private": true`. A private
+   * `claude-plugin` member keeps the historical no-npm-publish behavior.
+   */
+  isPrivate: boolean;
   /** Optional Slack channel declared on the member's `package.json`. */
   slack?: string;
 }
@@ -127,6 +132,7 @@ async function buildMember(memberPath: string, cwd: string): Promise<Member | un
     path: absPath,
     relPath: relative(cwd, absPath),
     releaseType: config.type,
+    isPrivate: pkgRecord.private === true,
   };
   if (config.slack !== undefined) {
     member.slack = config.slack;

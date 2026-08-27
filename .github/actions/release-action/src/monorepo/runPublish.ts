@@ -35,7 +35,10 @@ export interface PublishPlan {
   versionTag: string;
   /** `<name>@v<MAJOR>` floating tag, only set for `github-action` members. */
   majorTag?: string;
-  /** Whether the member opts into NPM publish (`lib-nodejs` / `lib-bun`). */
+  /**
+   * Whether the member opts into NPM publish: `lib-nodejs` / `lib-bun` always,
+   * and `claude-plugin` when its `package.json` is not `private`.
+   */
   publishToNpm: boolean;
   /** Slack channel from the member's `release.slack`, if any. */
   slackChannel?: string;
@@ -157,7 +160,10 @@ export async function resolvePublishPlan(options: ResolveMemberOptions): Promise
   }
 
   const { member, version } = resolved;
-  const publishToNpm = member.releaseType === "lib-nodejs" || member.releaseType === "lib-bun";
+  const publishToNpm =
+    member.releaseType === "lib-nodejs" ||
+    member.releaseType === "lib-bun" ||
+    (member.releaseType === "claude-plugin" && !member.isPrivate);
   const plan: PublishPlan = {
     member,
     version,

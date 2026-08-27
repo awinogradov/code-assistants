@@ -16,6 +16,7 @@
 import { appendFile } from "node:fs/promises";
 
 import { $ } from "bun";
+import semver from "semver";
 
 import { discoverMembers } from "./monorepo/discoverMembers.ts";
 import { memberMajorTag, memberVersionTag } from "./monorepo/memberTags.ts";
@@ -173,6 +174,36 @@ async function runMonorepoCreate(cwd: string): Promise<void> {
   await writeGithubOutput(`released=${releasedNames.join(",")}`);
 }
 
+/** How the npm publish step authenticates against the registry. */
+export type NpmAuthMode = "token" | "oidc";
+
+/**
+ * Decide how `npm publish` authenticates, failing fast before any release side
+ * effect. A configured `NPM_TOKEN` wins. Without it the runner must support
+ * npm trusted publishing: the workflow granted `id-token: write` (visible as
+ * `ACTIONS_ID_TOKEN_REQUEST_URL`) and the npm CLI is >= 11.5.1 — otherwise an
+ * old npm would surface a confusing `ENEEDAUTH` mid-release instead of this
+ * error naming both auth paths.
+ */
+export function resolveNpmAuthMode(options: {
+  npmToken: string;
+  idTokenRequestUrl: string | undefined;
+  npmVersion: string;
+}): NpmAuthMode {
+  if (options.npmToken) return "token";
+  if (!options.idTokenRequestUrl) {
+    throw new Error(
+      "npm publish needs auth: set the npm_token input, or configure npm trusted publishing for the package and grant `id-token: write` to the publish workflow.",
+    );
+  }
+  if (!semver.gte(options.npmVersion, "11.5.1")) {
+    throw new Error(
+      `npm ${options.npmVersion} cannot use trusted publishing (requires >= 11.5.1): set the npm_token input or update the npm CLI on the runner.`,
+    );
+  }
+  return "oidc";
+}
+
 async function runMonorepoPublish(cwd: string): Promise<void> {
   const discovery = await discoverMembers(cwd);
   if (discovery.mode !== "monorepo") {
@@ -185,11 +216,23 @@ async function runMonorepoPublish(cwd: string): Promise<void> {
 
   if (plan.publishToNpm) {
     const npmToken = process.env.NPM_TOKEN ?? "";
+    let authMode: NpmAuthMode = "token";
     if (!npmToken) {
-      throw new Error("NPM_TOKEN required to publish lib-nodejs/lib-bun member");
+      const npmVersion = (await $`npm --version`.quiet()).stdout.toString().trim();
+      authMode = resolveNpmAuthMode({
+        npmToken,
+        idTokenRequestUrl: process.env.ACTIONS_ID_TOKEN_REQUEST_URL,
+        npmVersion,
+      });
     }
     await $`bun install`.cwd(plan.member.path).quiet();
-    await $`npm config set //registry.npmjs.org/:_authToken ${npmToken}`.quiet();
+    if (authMode === "token") {
+      await $`npm config set //registry.npmjs.org/:_authToken ${npmToken}`.quiet();
+    } else {
+      console.log(
+        "NPM_TOKEN unset — publishing via npm trusted publishing (OIDC); the registry generates provenance.",
+      );
+    }
     await $`npm publish`.cwd(plan.member.path);
   }
 
