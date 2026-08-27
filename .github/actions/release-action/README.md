@@ -78,25 +78,25 @@ jobs:
 
 ## Inputs
 
-| Input                  | Required | Default               | Description                                                                                                                               |
-| ---------------------- | -------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `mode`                 | yes      | —                     | `create` or `publish`.                                                                                                                    |
-| `bot_token`            | yes      | —                     | PAT or App installation token with `contents: write` + `pull-requests: write`. See [Permissions](#permissions).                           |
-| `bot_username`         | no       | `github-actions[bot]` | Git author/committer login for release commits, tags, and PRs. Pass `${{ vars.BOT_USERNAME }}`.                                           |
-| `npm_token`            | no       | —                     | NPM token. Required for `publish` with `lib-nodejs` or `lib-bun` release types.                                                           |
-| `anthropic_api_key`    | no       | —                     | Anthropic API key. When set, generates human-readable release-note summaries.                                                             |
-| `anthropic_base_url`   | no       | —                     | Custom Anthropic API base URL for a gateway/proxy/compatible endpoint (full URL with scheme). Unset uses the default `api.anthropic.com`. |
-| `anthropic_auth_token` | no       | —                     | Bearer token for a custom Anthropic host (`Authorization: Bearer`). Alternative to `anthropic_api_key` — set one, not both.               |
-| `model`                | no       | `claude-sonnet-4-6`   | Anthropic model for AI-generated release notes. Overrides the built-in default; leave unset to use it.                                    |
-| `name`                 | no       | —                     | Service or library name for PR titles (e.g. `Dialog Manager` → `Release Dialog Manager 1.2.0`).                                           |
-| `branch`               | no       | `release-{version}`   | Release branch template. `{version}` is substituted. `create` mode only.                                                                  |
-| `linear_api_key`       | no       | —                     | Linear API key for ticket integration.                                                                                                    |
-| `linear_keys`          | no       | —                     | Comma-separated Linear key prefixes (e.g. `TEAM,PROJ`).                                                                                   |
-| `jira_base_url`        | no       | —                     | Jira instance base URL (used with `jira_email` + `jira_api_token`).                                                                       |
-| `jira_email`           | no       | —                     | Jira authentication email.                                                                                                                |
-| `jira_api_token`       | no       | —                     | Jira API token.                                                                                                                           |
-| `jira_keys`            | no       | —                     | Comma-separated Jira key prefixes.                                                                                                        |
-| `slack_token`          | no       | —                     | Slack bot token. Required to post release notifications.                                                                                  |
+| Input                  | Required | Default               | Description                                                                                                                                                                                                         |
+| ---------------------- | -------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mode`                 | yes      | —                     | `create` or `publish`.                                                                                                                                                                                              |
+| `bot_token`            | yes      | —                     | PAT or App installation token with `contents: write` + `pull-requests: write`. See [Permissions](#permissions).                                                                                                     |
+| `bot_username`         | no       | `github-actions[bot]` | Git author/committer login for release commits, tags, and PRs. Pass `${{ vars.BOT_USERNAME }}`.                                                                                                                     |
+| `npm_token`            | no       | —                     | NPM token for the npm-publishing release types (`lib-nodejs`, `lib-bun`, non-private `claude-plugin` members). Optional when npm trusted publishing (OIDC) is configured and the workflow grants `id-token: write`. |
+| `anthropic_api_key`    | no       | —                     | Anthropic API key. When set, generates human-readable release-note summaries.                                                                                                                                       |
+| `anthropic_base_url`   | no       | —                     | Custom Anthropic API base URL for a gateway/proxy/compatible endpoint (full URL with scheme). Unset uses the default `api.anthropic.com`.                                                                           |
+| `anthropic_auth_token` | no       | —                     | Bearer token for a custom Anthropic host (`Authorization: Bearer`). Alternative to `anthropic_api_key` — set one, not both.                                                                                         |
+| `model`                | no       | `claude-sonnet-4-6`   | Anthropic model for AI-generated release notes. Overrides the built-in default; leave unset to use it.                                                                                                              |
+| `name`                 | no       | —                     | Service or library name for PR titles (e.g. `Dialog Manager` → `Release Dialog Manager 1.2.0`).                                                                                                                     |
+| `branch`               | no       | `release-{version}`   | Release branch template. `{version}` is substituted. `create` mode only.                                                                                                                                            |
+| `linear_api_key`       | no       | —                     | Linear API key for ticket integration.                                                                                                                                                                              |
+| `linear_keys`          | no       | —                     | Comma-separated Linear key prefixes (e.g. `TEAM,PROJ`).                                                                                                                                                             |
+| `jira_base_url`        | no       | —                     | Jira instance base URL (used with `jira_email` + `jira_api_token`).                                                                                                                                                 |
+| `jira_email`           | no       | —                     | Jira authentication email.                                                                                                                                                                                          |
+| `jira_api_token`       | no       | —                     | Jira API token.                                                                                                                                                                                                     |
+| `jira_keys`            | no       | —                     | Comma-separated Jira key prefixes.                                                                                                                                                                                  |
+| `slack_token`          | no       | —                     | Slack bot token. Required to post release notifications.                                                                                                                                                            |
 
 ## Custom Anthropic host
 
@@ -133,7 +133,9 @@ Release behavior is driven by the top-level `release` field in the consumer's `p
 | `service-nodejs` | `package.json`   | No          | Yes            | No                       |
 | `service-python` | `pyproject.toml` | No          | Yes            | No                       |
 | `github-action`  | `package.json`   | No          | Yes            | Yes                      |
-| `claude-plugin`  | `plugin.json`    | No          | Yes            | No                       |
+| `claude-plugin`  | `plugin.json`    | Opt-in      | Yes            | No                       |
+
+A `claude-plugin` monorepo member publishes to npm when its `package.json` is **not** `private`; private plugin members keep the historical skip. npm auth prefers trusted publishing (OIDC) — grant `id-token: write` to the publish workflow — with `npm_token` as the fallback.
 
 Minimal `package.json`:
 
