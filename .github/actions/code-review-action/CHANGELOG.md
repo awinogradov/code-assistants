@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [8.1.2](https://github.com/awinogradov/code-assistants/compare/code-review-action@v8.1.1...code-review-action@v8.1.2) (2026-08-27)
+
+## Release Notes
+
+The review action's autopilot skills now treat all committed Graphify artifacts as read-only, preventing agents from silently overwriting them during a review or reply pass.
+
+## ✨ What's New
+
+### Read-Only Graphify Access for Coding Agents
+
+Autopilot skills (`pr-review` and `pr-answer`) now grant agents a restricted set of Graphify commands — `query`, `path`, `explain`, `affected`, and `help` — instead of the previous unrestricted wildcard. In practice, this means agents can read and reason about your dependency graph during a review, but cannot mutate it. Stack rule templates have also been updated to remove the instruction to run `graphify update .` after code changes, making committed Graphify artifacts fully immutable during agent work.
+
+For delivery teams, no configuration changes are needed. The behaviour change is automatic from this version onward: any workflow using `awinogradov/code-assistants/.github/actions/code-review-action@v1` will inherit the restricted permission set once updated to `v8.1.2`.
+
+<details><summary>Related issues</summary>
+
+- [#626: Prevent agents from updating committed Graphify artifacts](https://github.com/awinogradov/code-assistants/issues/626)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #626 | [#627](https://github.com/awinogradov/code-assistants/pull/627) | @awinogradov |
+
+### Tests
+
+* **code-review-action:** add graphify read-only contract test ([9c0e2c9](https://github.com/awinogradov/code-assistants/commit/9c0e2c9997e59fdf0074e70e1f858aed00ae1eb2))
 ## [8.1.1](https://github.com/awinogradov/code-assistants/compare/code-review-action@v8.1.0...code-review-action@v8.1.1) (2026-08-24)
 
 ## Release Notes
