@@ -465,6 +465,7 @@ The content is organized as follows:
 claude-plugins/
   autopilot/
     .claude-plugin/
+      marketplace.json
       plugin.json
     .release_notes/
       0.1.0.md
@@ -540,6 +541,7 @@ claude-plugins/
         fetch-issue.mjs
         fetch-team-members.mjs
         linearClient.mjs
+      packContract.test.ts
     skills/
       ascii-schemas/
         references/
@@ -717,6 +719,7 @@ claude-plugins/
         SKILL.md
     .mcp.json
     CHANGELOG.md
+    LICENSE.md
     MIGRATING.md
     package.json
     README.md
@@ -32780,6 +32783,30 @@ describe("discoverMembers", () => {
     });
   });
 
+  test("reads isPrivate from the member manifest", async () => {
+    await withTempDir(async (dir) => {
+      await writePkg(dir, {
+        name: "monorepo",
+        release: { members: ["packages/open", "packages/closed"] },
+      });
+      await mkdir(join(dir, "packages", "open"), { recursive: true });
+      await mkdir(join(dir, "packages", "closed"), { recursive: true });
+      await writePkg(join(dir, "packages", "open"), {
+        name: "@scope/open",
+        release: { type: "claude-plugin" },
+      });
+      await writePkg(join(dir, "packages", "closed"), {
+        name: "@scope/closed",
+        private: true,
+        release: { type: "claude-plugin" },
+      });
+
+      const result = await discoverMembers(dir);
+      expect(result.members.find((m) => m.name === "open")?.isPrivate).toBe(false);
+      expect(result.members.find((m) => m.name === "closed")?.isPrivate).toBe(true);
+    });
+  });
+
   test("expands workspaces globs and skips members without a release field", async () => {
     await withTempDir(async (dir) => {
       await writePkg(dir, {
@@ -32891,6 +32918,11 @@ export interface Member {
   relPath: string;
   /** Release type declared on the member's `package.json`. */
   releaseType: ReleaseType;
+  /**
+   * Whether the member's `package.json` declares `"private": true`. A private
+   * `claude-plugin` member keeps the historical no-npm-publish behavior.
+   */
+  isPrivate: boolean;
   /** Optional Slack channel declared on the member's `package.json`. */
   slack?: string;
 }
@@ -32989,6 +33021,7 @@ async function buildMember(memberPath: string, cwd: string): Promise<Member | un
     path: absPath,
     relPath: relative(cwd, absPath),
     releaseType: config.type,
+    isPrivate: pkgRecord.private === true,
   };
   if (config.slack !== undefined) {
     member.slack = config.slack;
@@ -34115,6 +34148,17 @@ async function setupMonorepo(dir: string): Promise<void> {
     name: "@scope/act",
     release: { type: "github-action" },
   });
+  await mkdir(join(dir, "packages", "plugin"), { recursive: true });
+  await mkdir(join(dir, "packages", "vendored"), { recursive: true });
+  await writeJson(join(dir, "packages", "plugin", "package.json"), {
+    name: "@scope/plugin",
+    release: { type: "claude-plugin" },
+  });
+  await writeJson(join(dir, "packages", "vendored", "package.json"), {
+    name: "@scope/vendored",
+    private: true,
+    release: { type: "claude-plugin" },
+  });
 }
 
 describe("resolvePublishPlan", () => {
@@ -34143,6 +34187,29 @@ describe("resolvePublishPlan", () => {
       expect(plan.member.name).toBe("act");
       expect(plan.versionTag).toBe("act@v2.5.1");
       expect(plan.majorTag).toBe("act@v2");
+      expect(plan.publishToNpm).toBe(false);
+    }));
+
+  test("publishes a non-private claude-plugin member to npm", () =>
+    withTempDir(async (dir) => {
+      await setupMonorepo(dir);
+      const plan = await resolvePublishPlan({
+        cwd: dir,
+        changedFiles: ["packages/plugin/.release_notes/3.0.0.md"],
+      });
+      expect(plan.member.name).toBe("plugin");
+      expect(plan.publishToNpm).toBe(true);
+      expect(plan.majorTag).toBeUndefined();
+    }));
+
+  test("keeps a private claude-plugin member off npm", () =>
+    withTempDir(async (dir) => {
+      await setupMonorepo(dir);
+      const plan = await resolvePublishPlan({
+        cwd: dir,
+        changedFiles: ["packages/vendored/.release_notes/3.0.0.md"],
+      });
+      expect(plan.member.name).toBe("vendored");
       expect(plan.publishToNpm).toBe(false);
     }));
 
@@ -34222,7 +34289,10 @@ export interface PublishPlan {
   versionTag: string;
   /** `<name>@v<MAJOR>` floating tag, only set for `github-action` members. */
   majorTag?: string;
-  /** Whether the member opts into NPM publish (`lib-nodejs` / `lib-bun`). */
+  /**
+   * Whether the member opts into NPM publish: `lib-nodejs` / `lib-bun` always,
+   * and `claude-plugin` when its `package.json` is not `private`.
+   */
   publishToNpm: boolean;
   /** Slack channel from the member's `release.slack`, if any. */
   slackChannel?: string;
@@ -34344,7 +34414,10 @@ export async function resolvePublishPlan(options: ResolveMemberOptions): Promise
   }
 
   const { member, version } = resolved;
-  const publishToNpm = member.releaseType === "lib-nodejs" || member.releaseType === "lib-bun";
+  const publishToNpm =
+    member.releaseType === "lib-nodejs" ||
+    member.releaseType === "lib-bun" ||
+    (member.releaseType === "claude-plugin" && !member.isPrivate);
   const plan: PublishPlan = {
     member,
     version,
@@ -40864,7 +40937,7 @@ export function buildUserMessage(
  */
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 
-import { resolveBranchTemplate } from "./run.ts";
+import { resolveBranchTemplate, resolveNpmAuthMode } from "./run.ts";
 
 const originalBranch = process.env.INPUT_BRANCH;
 
@@ -40937,6 +41010,42 @@ describe("resolveBranchTemplate", () => {
     expect(warnings[0]).toContain("::warning::");
   });
 });
+
+describe("resolveNpmAuthMode", () => {
+  test("prefers the token when NPM_TOKEN is set", () => {
+    const mode = resolveNpmAuthMode({
+      npmToken: "npm_secret",
+      idTokenRequestUrl: undefined,
+      npmVersion: "10.0.0",
+    });
+    expect(mode).toBe("token");
+  });
+
+  test("selects OIDC when id-token is granted and npm supports trusted publishing", () => {
+    const mode = resolveNpmAuthMode({
+      npmToken: "",
+      idTokenRequestUrl: "https://token.actions.example",
+      npmVersion: "11.5.1",
+    });
+    expect(mode).toBe("oidc");
+  });
+
+  test("fails fast without a token when id-token was not granted", () => {
+    expect(() =>
+      resolveNpmAuthMode({ npmToken: "", idTokenRequestUrl: undefined, npmVersion: "11.6.0" }),
+    ).toThrow(/npm_token input, or configure npm trusted publishing/);
+  });
+
+  test("fails fast when the npm CLI predates trusted publishing", () => {
+    expect(() =>
+      resolveNpmAuthMode({
+        npmToken: "",
+        idTokenRequestUrl: "https://token.actions.example",
+        npmVersion: "11.4.2",
+      }),
+    ).toThrow(/requires >= 11\.5\.1/);
+  });
+});
 </file>
 
 <file path=".github/actions/release-action/src/run.ts">
@@ -40958,6 +41067,7 @@ describe("resolveBranchTemplate", () => {
 import { appendFile } from "node:fs/promises";
 
 import { $ } from "bun";
+import semver from "semver";
 
 import { discoverMembers } from "./monorepo/discoverMembers.ts";
 import { memberMajorTag, memberVersionTag } from "./monorepo/memberTags.ts";
@@ -41115,6 +41225,36 @@ async function runMonorepoCreate(cwd: string): Promise<void> {
   await writeGithubOutput(`released=${releasedNames.join(",")}`);
 }
 
+/** How the npm publish step authenticates against the registry. */
+export type NpmAuthMode = "token" | "oidc";
+
+/**
+ * Decide how `npm publish` authenticates, failing fast before any release side
+ * effect. A configured `NPM_TOKEN` wins. Without it the runner must support
+ * npm trusted publishing: the workflow granted `id-token: write` (visible as
+ * `ACTIONS_ID_TOKEN_REQUEST_URL`) and the npm CLI is >= 11.5.1 — otherwise an
+ * old npm would surface a confusing `ENEEDAUTH` mid-release instead of this
+ * error naming both auth paths.
+ */
+export function resolveNpmAuthMode(options: {
+  npmToken: string;
+  idTokenRequestUrl: string | undefined;
+  npmVersion: string;
+}): NpmAuthMode {
+  if (options.npmToken) return "token";
+  if (!options.idTokenRequestUrl) {
+    throw new Error(
+      "npm publish needs auth: set the npm_token input, or configure npm trusted publishing for the package and grant `id-token: write` to the publish workflow.",
+    );
+  }
+  if (!semver.gte(options.npmVersion, "11.5.1")) {
+    throw new Error(
+      `npm ${options.npmVersion} cannot use trusted publishing (requires >= 11.5.1): set the npm_token input or update the npm CLI on the runner.`,
+    );
+  }
+  return "oidc";
+}
+
 async function runMonorepoPublish(cwd: string): Promise<void> {
   const discovery = await discoverMembers(cwd);
   if (discovery.mode !== "monorepo") {
@@ -41127,11 +41267,23 @@ async function runMonorepoPublish(cwd: string): Promise<void> {
 
   if (plan.publishToNpm) {
     const npmToken = process.env.NPM_TOKEN ?? "";
+    let authMode: NpmAuthMode = "token";
     if (!npmToken) {
-      throw new Error("NPM_TOKEN required to publish lib-nodejs/lib-bun member");
+      const npmVersion = (await $`npm --version`.quiet()).stdout.toString().trim();
+      authMode = resolveNpmAuthMode({
+        npmToken,
+        idTokenRequestUrl: process.env.ACTIONS_ID_TOKEN_REQUEST_URL,
+        npmVersion,
+      });
     }
     await $`bun install`.cwd(plan.member.path).quiet();
-    await $`npm config set //registry.npmjs.org/:_authToken ${npmToken}`.quiet();
+    if (authMode === "token") {
+      await $`npm config set //registry.npmjs.org/:_authToken ${npmToken}`.quiet();
+    } else {
+      console.log(
+        "NPM_TOKEN unset — publishing via npm trusted publishing (OIDC); the registry generates provenance.",
+      );
+    }
     await $`npm publish`.cwd(plan.member.path);
   }
 
@@ -42087,8 +42239,11 @@ inputs:
     required: false
   npm_token:
     description: |
-      NPM token for publishing packages.
-      Required for publish mode with lib-nodejs or lib-bun release types.
+      NPM token for publishing packages. Used in publish mode by the
+      npm-publishing release types: lib-nodejs, lib-bun, and non-private
+      claude-plugin monorepo members. Optional when npm trusted publishing
+      (OIDC) is configured for the package and the workflow grants
+      `id-token: write`; required otherwise.
     required: false
   anthropic_api_key:
     description: |
@@ -43138,25 +43293,25 @@ jobs:
 
 ## Inputs
 
-| Input                  | Required | Default               | Description                                                                                                                               |
-| ---------------------- | -------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `mode`                 | yes      | —                     | `create` or `publish`.                                                                                                                    |
-| `bot_token`            | yes      | —                     | PAT or App installation token with `contents: write` + `pull-requests: write`. See [Permissions](#permissions).                           |
-| `bot_username`         | no       | `github-actions[bot]` | Git author/committer login for release commits, tags, and PRs. Pass `${{ vars.BOT_USERNAME }}`.                                           |
-| `npm_token`            | no       | —                     | NPM token. Required for `publish` with `lib-nodejs` or `lib-bun` release types.                                                           |
-| `anthropic_api_key`    | no       | —                     | Anthropic API key. When set, generates human-readable release-note summaries.                                                             |
-| `anthropic_base_url`   | no       | —                     | Custom Anthropic API base URL for a gateway/proxy/compatible endpoint (full URL with scheme). Unset uses the default `api.anthropic.com`. |
-| `anthropic_auth_token` | no       | —                     | Bearer token for a custom Anthropic host (`Authorization: Bearer`). Alternative to `anthropic_api_key` — set one, not both.               |
-| `model`                | no       | `claude-sonnet-4-6`   | Anthropic model for AI-generated release notes. Overrides the built-in default; leave unset to use it.                                    |
-| `name`                 | no       | —                     | Service or library name for PR titles (e.g. `Dialog Manager` → `Release Dialog Manager 1.2.0`).                                           |
-| `branch`               | no       | `release-{version}`   | Release branch template. `{version}` is substituted. `create` mode only.                                                                  |
-| `linear_api_key`       | no       | —                     | Linear API key for ticket integration.                                                                                                    |
-| `linear_keys`          | no       | —                     | Comma-separated Linear key prefixes (e.g. `TEAM,PROJ`).                                                                                   |
-| `jira_base_url`        | no       | —                     | Jira instance base URL (used with `jira_email` + `jira_api_token`).                                                                       |
-| `jira_email`           | no       | —                     | Jira authentication email.                                                                                                                |
-| `jira_api_token`       | no       | —                     | Jira API token.                                                                                                                           |
-| `jira_keys`            | no       | —                     | Comma-separated Jira key prefixes.                                                                                                        |
-| `slack_token`          | no       | —                     | Slack bot token. Required to post release notifications.                                                                                  |
+| Input                  | Required | Default               | Description                                                                                                                                                                                                         |
+| ---------------------- | -------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mode`                 | yes      | —                     | `create` or `publish`.                                                                                                                                                                                              |
+| `bot_token`            | yes      | —                     | PAT or App installation token with `contents: write` + `pull-requests: write`. See [Permissions](#permissions).                                                                                                     |
+| `bot_username`         | no       | `github-actions[bot]` | Git author/committer login for release commits, tags, and PRs. Pass `${{ vars.BOT_USERNAME }}`.                                                                                                                     |
+| `npm_token`            | no       | —                     | NPM token for the npm-publishing release types (`lib-nodejs`, `lib-bun`, non-private `claude-plugin` members). Optional when npm trusted publishing (OIDC) is configured and the workflow grants `id-token: write`. |
+| `anthropic_api_key`    | no       | —                     | Anthropic API key. When set, generates human-readable release-note summaries.                                                                                                                                       |
+| `anthropic_base_url`   | no       | —                     | Custom Anthropic API base URL for a gateway/proxy/compatible endpoint (full URL with scheme). Unset uses the default `api.anthropic.com`.                                                                           |
+| `anthropic_auth_token` | no       | —                     | Bearer token for a custom Anthropic host (`Authorization: Bearer`). Alternative to `anthropic_api_key` — set one, not both.                                                                                         |
+| `model`                | no       | `claude-sonnet-4-6`   | Anthropic model for AI-generated release notes. Overrides the built-in default; leave unset to use it.                                                                                                              |
+| `name`                 | no       | —                     | Service or library name for PR titles (e.g. `Dialog Manager` → `Release Dialog Manager 1.2.0`).                                                                                                                     |
+| `branch`               | no       | `release-{version}`   | Release branch template. `{version}` is substituted. `create` mode only.                                                                                                                                            |
+| `linear_api_key`       | no       | —                     | Linear API key for ticket integration.                                                                                                                                                                              |
+| `linear_keys`          | no       | —                     | Comma-separated Linear key prefixes (e.g. `TEAM,PROJ`).                                                                                                                                                             |
+| `jira_base_url`        | no       | —                     | Jira instance base URL (used with `jira_email` + `jira_api_token`).                                                                                                                                                 |
+| `jira_email`           | no       | —                     | Jira authentication email.                                                                                                                                                                                          |
+| `jira_api_token`       | no       | —                     | Jira API token.                                                                                                                                                                                                     |
+| `jira_keys`            | no       | —                     | Comma-separated Jira key prefixes.                                                                                                                                                                                  |
+| `slack_token`          | no       | —                     | Slack bot token. Required to post release notifications.                                                                                                                                                            |
 
 ## Custom Anthropic host
 
@@ -43193,7 +43348,9 @@ Release behavior is driven by the top-level `release` field in the consumer's `p
 | `service-nodejs` | `package.json`   | No          | Yes            | No                       |
 | `service-python` | `pyproject.toml` | No          | Yes            | No                       |
 | `github-action`  | `package.json`   | No          | Yes            | Yes                      |
-| `claude-plugin`  | `plugin.json`    | No          | Yes            | No                       |
+| `claude-plugin`  | `plugin.json`    | Opt-in      | Yes            | No                       |
+
+A `claude-plugin` monorepo member publishes to npm when its `package.json` is **not** `private`; private plugin members keep the historical skip. npm auth prefers trusted publishing (OIDC) — grant `id-token: write` to the publish workflow — with `npm_token` as the fallback.
 
 Minimal `package.json`:
 
@@ -46759,6 +46916,17 @@ jobs:
 #     `pull-requests: write`, used to read PR files and publish the release.
 #   - `BOT_USERNAME` (variable, optional): git author login for release tags and the
 #     GitHub Release. Defaults to `github-actions[bot]` when unset.
+#
+# npm publishing (lib-nodejs/lib-bun members and non-private claude-plugin
+# members) authenticates via npm trusted publishing (OIDC) — hence
+# `id-token: write` below — falling back to the `NPM_TOKEN` secret when the
+# release-action receives an `npm_token` input. One-time bootstrap for a new
+# package: create the npm scope/org, publish the first version with a granular
+# `NPM_TOKEN`, configure the trusted publisher for this workflow on npmjs.com,
+# then drop the token. The `id-token: write` grant is safe on this
+# pull_request_target workflow: the job checks out `github.sha` only (no
+# PR-controlled code runs), and the grant is inert in repositories where no
+# registry-side trusted publisher names this workflow.
 
 name: Release publish
 
@@ -46774,6 +46942,7 @@ concurrency:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   publish:
@@ -47072,6 +47241,23 @@ fi
 if [ ${#branch} -gt 60 ]; then
   echo "⚠ Branch name is ${#branch} chars (aim for under 60)."
 fi
+</file>
+
+<file path="claude-plugins/autopilot/.claude-plugin/marketplace.json">
+{
+  "name": "code-assistants-autopilot",
+  "description": "Single-plugin marketplace shipped inside the @code-assistants/autopilot npm package, so the installed package directory can be added to Claude Code from its local path",
+  "owner": {
+    "name": "Tony Vi"
+  },
+  "plugins": [
+    {
+      "name": "autopilot",
+      "source": "./",
+      "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows"
+    }
+  ]
+}
 </file>
 
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
@@ -52673,6 +52859,127 @@ export function createLinearClient(apiKey) {
     },
   };
 }
+</file>
+
+<file path="claude-plugins/autopilot/lib/packContract.test.ts">
+/**
+ * Pack-contract and clean-install tests for the `@code-assistants/autopilot`
+ * npm artifact. The pack contract rejects both a missing runtime surface and
+ * unapproved content sneaking into the tarball; the clean install proves a
+ * consumer project receives the plugin manifest, marketplace manifest, skills,
+ * agents, and helper modules at the released version.
+ */
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { $ } from "bun";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+
+const memberDir = join(import.meta.dirname, "..");
+
+/** Paths every published artifact must carry (representative runtime surface). */
+const requiredPaths = [
+  "package.json",
+  "README.md",
+  "MIGRATING.md",
+  "CHANGELOG.md",
+  "LICENSE.md",
+  ".mcp.json",
+  ".claude-plugin/plugin.json",
+  ".claude-plugin/marketplace.json",
+  "skills/plan/SKILL.md",
+  "agents/expert-review.md",
+  "lib/git/branchDigest.ts",
+];
+
+/** First path segments allowed in the tarball (npm auto-packs the last two). */
+const allowedTopLevel = new Set([
+  "skills",
+  "agents",
+  "lib",
+  ".claude-plugin",
+  ".mcp.json",
+  "MIGRATING.md",
+  "CHANGELOG.md",
+  "LICENSE.md",
+  "package.json",
+  "README.md",
+]);
+
+interface PackReport {
+  filename: string;
+  version: string;
+  files: { path: string }[];
+}
+
+describe("npm artifact contract", () => {
+  let packDir: string;
+  let packedFiles: string[] = [];
+  let tarballPath = "";
+  let memberVersion = "";
+
+  beforeAll(async () => {
+    packDir = await mkdtemp(join(tmpdir(), "autopilot-pack-"));
+    memberVersion = (await Bun.file(join(memberDir, "version")).text()).trim();
+    const result = await $`npm pack --json --pack-destination ${packDir}`.cwd(memberDir).quiet();
+    const [report] = JSON.parse(result.stdout.toString()) as PackReport[];
+    if (!report) throw new Error("npm pack --json returned no report");
+    packedFiles = report.files.map((f) => f.path);
+    tarballPath = join(packDir, report.filename);
+  }, 120000);
+
+  afterAll(async () => {
+    await rm(packDir, { recursive: true, force: true });
+  });
+
+  test("ships the full runtime surface", () => {
+    const missing = requiredPaths.filter((p) => !packedFiles.includes(p));
+    expect(missing).toEqual([]);
+  });
+
+  test("ships nothing outside the approved surface", () => {
+    const unexpected = packedFiles.filter((p) => {
+      const [top] = p.split("/");
+      return top !== undefined && !allowedTopLevel.has(top);
+    });
+    expect(unexpected).toEqual([]);
+  });
+
+  test("keeps lib tests out of the artifact", () => {
+    const tests = packedFiles.filter((p) => p.startsWith("lib/") && p.endsWith(".test.ts"));
+    expect(tests).toEqual([]);
+  });
+
+  test(
+    "installs cleanly into an empty project at the released version",
+    async () => {
+      const projectDir = await mkdtemp(join(tmpdir(), "autopilot-install-"));
+      try {
+        await Bun.write(
+          join(projectDir, "package.json"),
+          `${JSON.stringify({ name: "consumer", private: true }, null, 2)}\n`,
+        );
+        await $`npm install ${tarballPath} --no-audit --no-fund --ignore-scripts`
+          .cwd(projectDir)
+          .quiet();
+
+        const installedDir = join(projectDir, "node_modules", "@code-assistants", "autopilot");
+        const plugin = (await Bun.file(join(installedDir, ".claude-plugin", "plugin.json")).json()) as {
+          version: string;
+        };
+        expect(plugin.version).toBe(memberVersion);
+
+        for (const required of requiredPaths) {
+          expect(await Bun.file(join(installedDir, required)).exists()).toBe(true);
+        }
+      } finally {
+        await rm(projectDir, { recursive: true, force: true });
+      }
+    },
+    120000,
+  );
+});
 </file>
 
 <file path="claude-plugins/autopilot/skills/ascii-schemas/references/component-patterns.md">
@@ -66644,6 +66951,30 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
 * **plugin:** declare release.type claude-plugin ([3761e45](https://github.com/awinogradov/code-assistants/commit/3761e458df7c4adaadac3d46faa4cf7895ee993e))
 </file>
 
+<file path="claude-plugins/autopilot/LICENSE.md">
+# MIT License
+
+Copyright (c) 2026 Tony Vi
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+</file>
+
 <file path="claude-plugins/autopilot/MIGRATING.md">
 # MIGRATING
 
@@ -66723,11 +67054,25 @@ Plans now recommend using the ascii-schemas skill when dealing with visual or st
 
 <file path="claude-plugins/autopilot/package.json">
 {
-  "name": "autopilot",
+  "name": "@code-assistants/autopilot",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
-  "private": true,
   "type": "module",
   "license": "MIT",
+  "repository": "https://github.com/awinogradov/code-assistants",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "skills",
+    "agents",
+    "lib",
+    "!lib/**/*.test.ts",
+    ".claude-plugin",
+    ".mcp.json",
+    "MIGRATING.md",
+    "CHANGELOG.md",
+    "LICENSE.md"
+  ],
   "release": {
     "type": "claude-plugin"
   },
@@ -66780,6 +67125,29 @@ Then install the plugin. Choose the scope that fits your workflow:
 # Install only for this repo, not shared
 /plugin install autopilot@code-assistants --scope local
 ```
+
+### From npm (version-pinned)
+
+The full plugin — `skills/`, `agents/`, `lib/`, `.claude-plugin/plugin.json`, and `.mcp.json` — ships as the public npm package `@code-assistants/autopilot`, so a consuming repository pins one immutable version in `package.json` and its lockfile records the resolved artifact with registry integrity. Per this repo's conventions, pin the exact version (no `^` or `~`):
+
+```bash
+npm install --save-exact @code-assistants/autopilot
+# or
+bun add --exact @code-assistants/autopilot
+```
+
+Dependabot and Renovate then propose upgrades through their normal dependency path — no more tracking a plugin version and a source commit SHA separately.
+
+The installed package directory is itself a single-plugin Claude Code marketplace (it ships its own `.claude-plugin/marketplace.json`), so register it from the local path — no writes to Claude's internal plugin cache:
+
+```bash
+/plugin marketplace add ./node_modules/@code-assistants/autopilot
+/plugin install autopilot@code-assistants-autopilot
+```
+
+Verified end-to-end with Claude Code 2.1.226 against the 7.1.2 artifact (`marketplace add` → `install` → plugin enabled); the pack-and-install contract is enforced continuously by [`lib/packContract.test.ts`](./lib/packContract.test.ts).
+
+npm is the dependency-managed distribution. The alternatives stay supported and unchanged: the GitHub marketplace above, [`agents-skills-sync`](../../.github/actions/agents-skills-sync/README.md) for file-sync consumers, and portable-skills copying per [RFC-0002](../../rfc/0002-portable-skills-layout.md).
 
 ### Local development
 
@@ -68403,9 +68771,11 @@ At the **root** of a monorepo, `release.members` declares the workspace paths to
 | `service-nodejs` | `package.json`   | No          | Yes            | No                       | Internal Node services         |
 | `service-python` | `pyproject.toml` | No          | Yes            | No                       | Internal Python services       |
 | `github-action`  | `package.json`   | No          | Yes            | Yes                      | Composite or TypeScript Action |
-| `claude-plugin`  | `plugin.json`    | No          | Yes            | No                       | Claude Code plugins            |
+| `claude-plugin`  | `plugin.json`    | Opt-in      | Yes            | No                       | Claude Code plugins            |
 
 Any other value is treated as unrecognized and fails the action.
+
+**`claude-plugin` npm opt-in.** A `claude-plugin` monorepo member publishes to npm exactly when its `package.json` does **not** declare `"private": true` — dropping `private` (plus normal npm publication metadata: a scoped `name`, `files`, `publishConfig.access`) is the opt-in, so existing private plugins keep the historical no-npm behavior. npm auth prefers trusted publishing (OIDC): the publish workflow grants `id-token: write` and the npm CLI must be ≥ 11.5.1; the `npm_token` input is the fallback. A brand-new package needs a one-time token-based bootstrap publish before the registry-side trusted publisher can be configured.
 
 ## Consumers
 
@@ -68463,13 +68833,31 @@ The reference implementation is `packages/actions-core/src/releaseField.ts` (`re
 {
   "name": "autopilot",
   "version": "0.4.0",
+  "private": true,
   "release": {
     "type": "claude-plugin"
   }
 }
 ```
 
-Version source switches to `plugin.json`; npm publish is skipped; GitHub Release is created.
+Version source switches to `plugin.json`; npm publish is skipped (`private` member); GitHub Release is created.
+
+### Claude plugin published to npm
+
+```json
+{
+  "name": "@code-assistants/autopilot",
+  "version": "0.4.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "release": {
+    "type": "claude-plugin"
+  }
+}
+```
+
+Same as above, but the member is not `private`, so the publish step also runs `npm publish` — see the [`claude-plugin` npm opt-in](#recognized-type-values) note for auth and bootstrap.
 
 ### Monorepo root
 
@@ -73146,6 +73534,7 @@ function classify(path: string): Target | null {
 async function discoverAll(): Promise<Target[]> {
   const patterns = [
     ".claude-plugin/marketplace.json",
+    "claude-plugins/*/.claude-plugin/marketplace.json",
     "claude-plugins/*/.claude-plugin/plugin.json",
     "claude-plugins/*/skills/*/SKILL.md",
     "claude-plugins/*/agents/*.md",
@@ -73153,7 +73542,9 @@ async function discoverAll(): Promise<Target[]> {
   const out: Target[] = [];
   for (const pattern of patterns) {
     const glob = new Glob(pattern);
-    for await (const path of glob.scan(".")) {
+    // dot: true — without it the scan silently skips the `.claude-plugin/`
+    // manifests, leaving them validated only in `--files` (lint-staged) mode.
+    for await (const path of glob.scan({ cwd: ".", dot: true })) {
       const t = classify(path);
       if (t) out.push(t);
     }
@@ -73249,10 +73640,42 @@ async function validateRulesSectionSync(): Promise<string | null> {
   return null;
 }
 
+/**
+ * Verify each claude-plugins/* member keeps its npm, Claude-plugin, and release
+ * version manifests in agreement (`package.json`, `.claude-plugin/plugin.json`,
+ * and the `version` file), and still declares `release.type` so the release
+ * pipeline keeps discovering it.
+ */
+async function validatePluginVersionSync(): Promise<string | null> {
+  for await (const pluginPath of new Glob("claude-plugins/*/.claude-plugin/plugin.json").scan({
+    cwd: ".",
+    dot: true,
+  })) {
+    const memberDir = pluginPath.slice(0, -"/.claude-plugin/plugin.json".length);
+    const pkgFile = Bun.file(`${memberDir}/package.json`);
+    if (!(await pkgFile.exists())) {
+      return `${memberDir}: missing package.json (required for the npm/release version invariant)`;
+    }
+    const pkg = (await pkgFile.json()) as { version?: string; release?: { type?: string } };
+    const plugin = (await Bun.file(pluginPath).json()) as { version?: string };
+    const versionFile = Bun.file(`${memberDir}/version`);
+    const fileVersion = (await versionFile.exists()) ? (await versionFile.text()).trim() : null;
+
+    if (typeof pkg.release?.type !== "string") {
+      return `${memberDir}/package.json: missing release.type — the member would silently drop out of the release pipeline`;
+    }
+    if (pkg.version !== plugin.version || plugin.version !== fileVersion) {
+      return `${memberDir}: version drift — package.json ${pkg.version ?? "missing"}, plugin.json ${plugin.version ?? "missing"}, version file ${fileVersion ?? "missing"}`;
+    }
+  }
+  return null;
+}
+
 async function main() {
   const args = process.argv.slice(2);
   let targets: Target[] = [];
   let checkRules = true;
+  let checkVersions = true;
 
   const filesIdx = args.indexOf("--files");
   if (filesIdx !== -1) {
@@ -73262,11 +73685,12 @@ async function main() {
       if (t) targets.push(t);
     }
     checkRules = paths.some((p) => /^rules\/[^/]+\.md$/.test(p));
+    checkVersions = paths.some((p) => p.startsWith("claude-plugins/"));
   } else {
     targets = await discoverAll();
   }
 
-  if (targets.length === 0 && !checkRules) {
+  if (targets.length === 0 && !checkRules && !checkVersions) {
     console.log("validate-plugins: no plugin files to check");
     return;
   }
@@ -73292,11 +73716,23 @@ async function main() {
     }
   }
 
+  if (checkVersions) {
+    const err = await validatePluginVersionSync();
+    if (err) {
+      failed += 1;
+      console.error(`✖ claude-plugins/* versions\n    ${err}`);
+    } else {
+      console.log("✔ claude-plugins/* version manifests in agreement");
+    }
+  }
+
   if (failed > 0) {
     console.error(`\nvalidate-plugins: ${failed} file(s) failed validation`);
     process.exit(1);
   }
-  console.log(`\nvalidate-plugins: ${targets.length + (checkRules ? 1 : 0)} check(s) OK`);
+  console.log(
+    `\nvalidate-plugins: ${targets.length + (checkRules ? 1 : 0) + (checkVersions ? 1 : 0)} check(s) OK`,
+  );
 }
 
 main().catch((e) => {
