@@ -8,6 +8,17 @@
 #     `pull-requests: write`, used to read PR files and publish the release.
 #   - `BOT_USERNAME` (variable, optional): git author login for release tags and the
 #     GitHub Release. Defaults to `github-actions[bot]` when unset.
+#
+# npm publishing (lib-nodejs/lib-bun members and non-private claude-plugin
+# members) authenticates via npm trusted publishing (OIDC) — hence
+# `id-token: write` below — falling back to the `NPM_TOKEN` secret when the
+# release-action receives an `npm_token` input. One-time bootstrap for a new
+# package: create the npm scope/org, publish the first version with a granular
+# `NPM_TOKEN`, configure the trusted publisher for this workflow on npmjs.com,
+# then drop the token. The `id-token: write` grant is safe on this
+# pull_request_target workflow: the job checks out `github.sha` only (no
+# PR-controlled code runs), and the grant is inert in repositories where no
+# registry-side trusted publisher names this workflow.
 
 name: Release publish
 
@@ -23,6 +34,7 @@ concurrency:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   publish:
