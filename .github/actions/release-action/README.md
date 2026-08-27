@@ -135,7 +135,7 @@ Release behavior is driven by the top-level `release` field in the consumer's `p
 | `github-action`  | `package.json`   | No          | Yes            | Yes                      |
 | `claude-plugin`  | `plugin.json`    | Opt-in      | Yes            | No                       |
 
-A `claude-plugin` monorepo member publishes to npm when its `package.json` is **not** `private`; private plugin members keep the historical skip. npm auth prefers trusted publishing (OIDC) — grant `id-token: write` to the publish workflow — with `npm_token` as the fallback.
+A `claude-plugin` monorepo member publishes to npm when its `package.json` is **not** `private`; private plugin members keep the historical skip. npm auth uses the `npm_token` input, or trusted publishing (OIDC) when the calling workflow can obtain an OIDC token — note GitHub does not issue OIDC tokens to `pull_request_target`-triggered runs, so the stock release-publish workflow must pass `npm_token`.
 
 Minimal `package.json`:
 
