@@ -67,9 +67,11 @@ At the **root** of a monorepo, `release.members` declares the workspace paths to
 | `service-nodejs` | `package.json`   | No          | Yes            | No                       | Internal Node services         |
 | `service-python` | `pyproject.toml` | No          | Yes            | No                       | Internal Python services       |
 | `github-action`  | `package.json`   | No          | Yes            | Yes                      | Composite or TypeScript Action |
-| `claude-plugin`  | `plugin.json`    | No          | Yes            | No                       | Claude Code plugins            |
+| `claude-plugin`  | `plugin.json`    | Opt-in      | Yes            | No                       | Claude Code plugins            |
 
 Any other value is treated as unrecognized and fails the action.
+
+**`claude-plugin` npm opt-in.** A `claude-plugin` monorepo member publishes to npm exactly when its `package.json` does **not** declare `"private": true` — dropping `private` (plus normal npm publication metadata: a scoped `name`, `files`, `publishConfig.access`) is the opt-in, so existing private plugins keep the historical no-npm behavior. npm auth prefers trusted publishing (OIDC): the publish workflow grants `id-token: write` and the npm CLI must be ≥ 11.5.1; the `npm_token` input is the fallback. A brand-new package needs a one-time token-based bootstrap publish before the registry-side trusted publisher can be configured.
 
 ## Consumers
 
@@ -127,13 +129,31 @@ The reference implementation is `packages/actions-core/src/releaseField.ts` (`re
 {
   "name": "autopilot",
   "version": "0.4.0",
+  "private": true,
   "release": {
     "type": "claude-plugin"
   }
 }
 ```
 
-Version source switches to `plugin.json`; npm publish is skipped; GitHub Release is created.
+Version source switches to `plugin.json`; npm publish is skipped (`private` member); GitHub Release is created.
+
+### Claude plugin published to npm
+
+```json
+{
+  "name": "@code-assistants/autopilot",
+  "version": "0.4.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "release": {
+    "type": "claude-plugin"
+  }
+}
+```
+
+Same as above, but the member is not `private`, so the publish step also runs `npm publish` — see the [`claude-plugin` npm opt-in](#recognized-type-values) note for auth and bootstrap.
 
 ### Monorepo root
 

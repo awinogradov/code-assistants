@@ -38,6 +38,29 @@ Then install the plugin. Choose the scope that fits your workflow:
 /plugin install autopilot@code-assistants --scope local
 ```
 
+### From npm (version-pinned)
+
+The full plugin — `skills/`, `agents/`, `lib/`, `.claude-plugin/plugin.json`, and `.mcp.json` — ships as the public npm package `@code-assistants/autopilot`, so a consuming repository pins one immutable version in `package.json` and its lockfile records the resolved artifact with registry integrity. Per this repo's conventions, pin the exact version (no `^` or `~`):
+
+```bash
+npm install --save-exact @code-assistants/autopilot
+# or
+bun add --exact @code-assistants/autopilot
+```
+
+Dependabot and Renovate then propose upgrades through their normal dependency path — no more tracking a plugin version and a source commit SHA separately.
+
+The installed package directory is itself a single-plugin Claude Code marketplace (it ships its own `.claude-plugin/marketplace.json`), so register it from the local path — no writes to Claude's internal plugin cache:
+
+```bash
+/plugin marketplace add ./node_modules/@code-assistants/autopilot
+/plugin install autopilot@code-assistants-autopilot
+```
+
+Verified end-to-end with Claude Code 2.1.226 against the 7.1.2 artifact (`marketplace add` → `install` → plugin enabled); the pack-and-install contract is enforced continuously by [`lib/packContract.test.ts`](./lib/packContract.test.ts).
+
+npm is the dependency-managed distribution. The alternatives stay supported and unchanged: the GitHub marketplace above, [`agents-skills-sync`](../../.github/actions/agents-skills-sync/README.md) for file-sync consumers, and portable-skills copying per [RFC-0002](../../rfc/0002-portable-skills-layout.md).
+
 ### Local development
 
 ```bash

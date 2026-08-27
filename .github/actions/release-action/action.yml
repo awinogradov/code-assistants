@@ -19,8 +19,11 @@ inputs:
     required: false
   npm_token:
     description: |
-      NPM token for publishing packages.
-      Required for publish mode with lib-nodejs or lib-bun release types.
+      NPM token for publishing packages. Used in publish mode by the
+      npm-publishing release types: lib-nodejs, lib-bun, and non-private
+      claude-plugin monorepo members. Optional when npm trusted publishing
+      (OIDC) is configured for the package and the workflow grants
+      `id-token: write`; required otherwise.
     required: false
   anthropic_api_key:
     description: |
