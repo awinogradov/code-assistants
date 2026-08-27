@@ -185,6 +185,7 @@ The content is organized as follows:
         graphifyEvidence.ts
         graphifyEvidenceContract.test.ts
         graphifyEvidenceFixture.test.ts
+        graphifyReadOnlyContract.test.ts
         graphifyRefinementContract.test.ts
         helperAllowlist.test.ts
         linearPlanContract.test.ts
@@ -12495,6 +12496,236 @@ describe("every exit from the tier is recorded", () => {
 
     events.push({ holder: "planning", kind: "selection", detail: "context-source: default (none)" });
     expect(validateHolderTrace(events).valid).toBe(false);
+  });
+});
+</file>
+
+<file path=".github/actions/code-review-action/src/graphifyReadOnlyContract.test.ts">
+/**
+ * Guards the Graphify read-only boundary, added for issue #626: a production run
+ * (wefortis/fortune-os#945) had an implementation agent run `graphify update .`
+ * mid-feature-branch — because the synced repository rules instructed it to — and commit
+ * an 11.8k-line graph refresh that was ~97% of the PR diff. The committed graph is a
+ * read-only context snapshot of the default branch; where a consumer regenerates it at
+ * all, a post-merge workflow owns that, never an agent run.
+ *
+ * Three surfaces carry the boundary, and this file fails if any regresses:
+ *
+ * 1. The `graphify-readonly` nested sentinel inside the repomix-snapshot shared block
+ *    (claude-plugins/autopilot/skills/shared-rules/references/repomix-snapshot.md) —
+ *    immutability, the lag caveat, the exhaustive read-only command set, the named
+ *    mutating subcommands with the `graphify-out/**` catch-all, and the override of
+ *    stale synced rules during the sync-vs-plugin rollout skew. Extracted through its
+ *    sentinel and asserted substantial first — the vacuous-pass defence
+ *    contextSourceContract.test.ts and graphifyRefinementContract.test.ts both state.
+ * 2. The four stack rule templates under rules/ — the update instruction must never
+ *    return. Scoped to rules/ only, never the repo's synced AGENTS.md copy, which lags
+ *    until the next upstream sync and would flap CI between merge and sync.
+ * 3. Every SKILL.md under claude-plugins/ — a strict allowlist over the Bash grant
+ *    surface: any `Bash(graphify …)` rule outside the enumerated read-only set fails,
+ *    wildcard or not. The scan defends itself against a glob or restructure making it
+ *    iterate nothing: the twelve known granting skills are explicit test data, each
+ *    asserted found and carrying the exact read-only set.
+ *
+ * The allowed and forbidden command names are transcribed from graphify v0.9.x; the
+ * allowlist is the load-bearing defence, so a new mutating subcommand added to the CLI
+ * later is still denied by omission. What this CANNOT prove: that a session honours the
+ * boundary at runtime, or that a downstream repository's synced AGENTS.md has caught up
+ * — CI sees text in this repository, nothing more. Runtime evidence is the absence of
+ * graph-refresh commits in agent PRs after rollout.
+ */
+import { readFile, readdir } from "node:fs/promises";
+import { join } from "node:path";
+
+import { describe, expect, test } from "bun:test";
+
+// Depth mirrors graphifyRefinementContract.test.ts in this directory — a move of the
+// action updates both in lockstep.
+const actionDir = join(import.meta.dirname, "..");
+const repoRoot = join(actionDir, "..", "..", "..");
+
+const blockPath = join(
+  repoRoot,
+  "claude-plugins/autopilot/skills/shared-rules/references/repomix-snapshot.md",
+);
+
+/** The rule files synced to consumer repositories; each carries the same Graphify bullet. */
+const rulesPaths = [
+  "rules/Bun.md",
+  "rules/Bun+React+Tailwind.md",
+  "rules/NodeJS+React.md",
+  "rules/NodeJS+React+Tailwind.md",
+].map((relative) => join(repoRoot, relative));
+
+/** Shortest the boundary statement can be; anything smaller means extraction went wrong. */
+const minBlockLength = 80;
+
+/**
+ * The exhaustive Bash grant surface for Graphify. Any `Bash(graphify …)` rule outside
+ * this set — the old wildcard included — is a mutation-capable grant and fails the scan.
+ * `Bash(command -v graphify)` is the availability check and does not match the prefix.
+ */
+const readOnlyGrants = [
+  "Bash(graphify query *)",
+  "Bash(graphify path *)",
+  "Bash(graphify explain *)",
+  "Bash(graphify affected *)",
+  "Bash(graphify --help)",
+];
+
+/** The read-only command surface the sentinel must enumerate as exhaustive. */
+const readOnlyCommands = [
+  "graphify query",
+  "graphify path",
+  "graphify explain",
+  "graphify affected",
+  "graphify --help",
+  "command -v graphify",
+];
+
+/**
+ * The mutating subcommands the sentinel must name, backticked as they appear in prose.
+ * Naming the real commands keeps the prohibition unambiguous for the agent reading it;
+ * the `graphify-out/**` catch-all covers what enumeration misses.
+ */
+const mutatingSubcommands = [
+  "`update`",
+  "`extract`",
+  "`watch`",
+  "`cluster-only`",
+  "`label`",
+  "`save-result`",
+  "`reflect`",
+];
+
+/** The twelve skills that granted `Bash(graphify *)` before #626 — the scan's floor. */
+const grantingSkills = [
+  "explore",
+  "gather-context",
+  "issue-create",
+  "linear-create",
+  "linear-plan",
+  "linear-run",
+  "plan",
+  "pr-answer",
+  "pr-resolve",
+  "pr-review",
+  "run",
+  "run-primed",
+];
+
+/** Read a file, failing with its absolute path rather than a bare ENOENT at module load. */
+async function readContract(path: string): Promise<string> {
+  try {
+    return await readFile(path, "utf8");
+  } catch (cause) {
+    throw new Error(`Cannot read contract file: ${path}`, { cause });
+  }
+}
+
+/** Extract the named sentinel-delimited block from `content`, trimmed; null when absent. */
+function extractBlock(content: string, sentinel: string): string | null {
+  const pattern = new RegExp(`<!-- ${sentinel}:start -->([\\s\\S]*?)<!-- ${sentinel}:end -->`);
+  return pattern.exec(content)?.[1].trim() ?? null;
+}
+
+/** The `**Graphify**` bullet, normalized for whitespace so wrapping is not a difference. */
+function extractGraphifyBullet(content: string): string | null {
+  const bullet = /^\s*-\s+\*\*Graphify\*\*[\s\S]*?(?=\n\s*-\s+\*\*|\n\n)/m.exec(content);
+  return bullet?.[0].replace(/\s+/g, " ").trim() ?? null;
+}
+
+const skillEntries = (await readdir(join(repoRoot, "claude-plugins"), { recursive: true }))
+  .filter((entry) => entry.endsWith("SKILL.md"))
+  .map((entry) => join(repoRoot, "claude-plugins", entry));
+
+const [blockSource, ...rulesSources] = await Promise.all([
+  readContract(blockPath),
+  ...rulesPaths.map(readContract),
+]);
+
+const skillSources = new Map(
+  await Promise.all(
+    skillEntries.map(async (path) => [path, await readContract(path)] as const),
+  ),
+);
+
+const readonly = extractBlock(blockSource, "graphify-readonly");
+
+describe("graphify read-only sentinel", () => {
+  test("the nested sentinel block exists and is substantial", () => {
+    expect(readonly).not.toBeNull();
+    expect(readonly?.length ?? 0).toBeGreaterThan(minBlockLength);
+  });
+
+  test("it lives inside the repomix-snapshot block it constrains", () => {
+    const outer = extractBlock(blockSource, "repomix-snapshot");
+    expect(outer).not.toBeNull();
+    expect(outer).toContain("graphify-readonly:start");
+  });
+
+  test("the committed graph is read-only and may lag behind the branch", () => {
+    expect(readonly).toContain("read-only");
+    expect(readonly).toContain("may lag");
+  });
+
+  test.each(readOnlyCommands)("the exhaustive read-only surface includes %s", (command) => {
+    expect(readonly).toContain(command);
+  });
+
+  test("the read-only surface is framed as exhaustive", () => {
+    expect(readonly).toContain("exhaustive");
+  });
+
+  test.each(mutatingSubcommands)("the prohibition names %s", (subcommand) => {
+    expect(readonly).toContain(subcommand);
+  });
+
+  test("anything else writing the graph is caught by the graphify-out/** catch-all", () => {
+    expect(readonly).toContain("`graphify-out/**`");
+  });
+
+  test("the boundary overrides stale synced rules during rollout skew", () => {
+    expect(readonly).toContain("still instruct");
+  });
+
+  test("a missing or broken graph falls through, never regenerates", () => {
+    expect(readonly).toContain("never regenerate");
+  });
+});
+
+describe("stack rule templates", () => {
+  test.each(rulesPaths)("%s carries no update instruction", (path) => {
+    const source = rulesSources[rulesPaths.indexOf(path)];
+    expect(source).not.toContain("graphify update");
+  });
+
+  test.each(rulesPaths)("%s states the read-only boundary in its Graphify bullet", (path) => {
+    const bullet = extractGraphifyBullet(rulesSources[rulesPaths.indexOf(path)]);
+    expect(bullet).not.toBeNull();
+    expect(bullet).toContain("read-only");
+    expect(bullet).toContain("never regenerate");
+  });
+});
+
+describe("skill grant allowlist", () => {
+  test("the scan found the known granting skills, so it cannot pass vacuously", () => {
+    expect(skillEntries.length).toBeGreaterThanOrEqual(grantingSkills.length);
+  });
+
+  test.each(grantingSkills)("skill %s carries exactly the read-only grant set", (skill) => {
+    const path = join(repoRoot, "claude-plugins/autopilot/skills", skill, "SKILL.md");
+    const source = skillSources.get(path);
+    expect(source).toBeDefined();
+    for (const grant of readOnlyGrants) expect(source).toContain(grant);
+  });
+
+  test("no SKILL.md grants Bash(graphify …) outside the read-only set", () => {
+    for (const [path, source] of skillSources) {
+      for (const rule of source.match(/Bash\(graphify[^)]*\)/g) ?? []) {
+        expect(readOnlyGrants, `${path} grants ${rule}`).toContain(rule);
+      }
+    }
   });
 });
 </file>
@@ -54114,7 +54345,11 @@ allowed-tools:
   - Grep
   - Agent
   - Bash(command -v graphify)
-  - Bash(graphify *)
+  - Bash(graphify query *)
+  - Bash(graphify path *)
+  - Bash(graphify explain *)
+  - Bash(graphify affected *)
+  - Bash(graphify --help)
   - Bash(command -v entire)
   - Bash(entire *)
   - MCP(repomix:*)
@@ -54295,7 +54530,11 @@ allowed-tools:
   - Bash(git *)
   - Bash(node *)
   - Bash(command -v graphify)
-  - Bash(graphify *)
+  - Bash(graphify query *)
+  - Bash(graphify path *)
+  - Bash(graphify explain *)
+  - Bash(graphify affected *)
+  - Bash(graphify --help)
   - Bash(command -v entire)
   - Bash(entire *)
   - MCP(repomix:*)
@@ -54497,7 +54736,11 @@ allowed-tools:
   - MCP(exa:*)
   - MCP(perplexity:*)
   - Bash(command -v graphify)
-  - Bash(graphify *)
+  - Bash(graphify query *)
+  - Bash(graphify path *)
+  - Bash(graphify explain *)
+  - Bash(graphify affected *)
+  - Bash(graphify --help)
   - MCP(repomix:*)
   - AskUserQuestion
   - Skill(autopilot:ascii-schemas)
@@ -54903,7 +55146,11 @@ allowed-tools:
   - MCP(linear:*)
   - ToolSearch
   - Bash(command -v graphify)
-  - Bash(graphify *)
+  - Bash(graphify query *)
+  - Bash(graphify path *)
+  - Bash(graphify explain *)
+  - Bash(graphify affected *)
+  - Bash(graphify --help)
   - MCP(repomix:*)
   - MCP(context7:*)
   - MCP(Ref:*)
@@ -55062,7 +55309,11 @@ allowed-tools:
   - MCP(exa:*)
   - MCP(perplexity:*)
   - Bash(command -v graphify)
-  - Bash(graphify *)
+  - Bash(graphify query *)
+  - Bash(graphify path *)
+  - Bash(graphify explain *)
+  - Bash(graphify affected *)
+  - Bash(graphify --help)
   - Bash(command -v entire)
   - Bash(entire *)
   - MCP(repomix:*)
@@ -55316,7 +55567,11 @@ allowed-tools:
   - MCP(exa:*)
   - MCP(perplexity:*)
   - Bash(command -v graphify)
-  - Bash(graphify *)
+  - Bash(graphify query *)
+  - Bash(graphify path *)
+  - Bash(graphify explain *)
+  - Bash(graphify affected *)
+  - Bash(graphify --help)
   - Bash(command -v entire)
   - Bash(entire *)
   - MCP(repomix:*)
@@ -59093,7 +59348,11 @@ allowed-tools:
   - MCP(exa:*)
   - MCP(perplexity:*)
   - Bash(command -v graphify)
-  - Bash(graphify *)
+  - Bash(graphify query *)
+  - Bash(graphify path *)
+  - Bash(graphify explain *)
+  - Bash(graphify affected *)
+  - Bash(graphify --help)
   - Bash(command -v entire)
   - Bash(entire *)
   - MCP(repomix:*)
@@ -59296,7 +59555,11 @@ allowed-tools:
   - Grep
   - Bash(gh *)
   - Bash(command -v graphify)
-  - Bash(graphify *)
+  - Bash(graphify query *)
+  - Bash(graphify path *)
+  - Bash(graphify explain *)
+  - Bash(graphify affected *)
+  - Bash(graphify --help)
   - MCP(repomix:*)
   - MCP(context7:*)
   - MCP(Ref:*)
@@ -60198,7 +60461,11 @@ allowed-tools:
   - Skill(autopilot:commits-create)
   - Skill(autopilot:pr-update)
   - Bash(command -v graphify)
-  - Bash(graphify *)
+  - Bash(graphify query *)
+  - Bash(graphify path *)
+  - Bash(graphify explain *)
+  - Bash(graphify affected *)
+  - Bash(graphify --help)
   - MCP(repomix:*)
   - MCP(context7:*)
   - MCP(Ref:*)
@@ -61135,7 +61402,11 @@ allowed-tools:
   - Bash(echo *)
   - MCP(github:*)
   - Bash(command -v graphify)
-  - Bash(graphify *)
+  - Bash(graphify query *)
+  - Bash(graphify path *)
+  - Bash(graphify explain *)
+  - Bash(graphify affected *)
+  - Bash(graphify --help)
   - MCP(repomix:*)
   - MCP(context7:*)
   - MCP(Ref:*)
@@ -62385,7 +62656,11 @@ allowed-tools:
   - MCP(exa:*)
   - MCP(perplexity:*)
   - Bash(command -v graphify)
-  - Bash(graphify *)
+  - Bash(graphify query *)
+  - Bash(graphify path *)
+  - Bash(graphify explain *)
+  - Bash(graphify affected *)
+  - Bash(graphify --help)
   - Bash(command -v entire)
   - Bash(entire *)
   - MCP(repomix:*)
@@ -62629,7 +62904,11 @@ allowed-tools:
   - MCP(exa:*)
   - MCP(perplexity:*)
   - Bash(command -v graphify)
-  - Bash(graphify *)
+  - Bash(graphify query *)
+  - Bash(graphify path *)
+  - Bash(graphify explain *)
+  - Bash(graphify affected *)
+  - Bash(graphify --help)
   - Bash(command -v entire)
   - Bash(entire *)
   - MCP(repomix:*)
@@ -63351,6 +63630,12 @@ graphify explain "<Concept>"
 ```
 
 Graph queries are whole-repo by nature; the caller's `includePatterns` does not apply to this tier. Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review or when targeted queries do not surface enough context.
+
+<!-- graphify-readonly:start -->
+
+**Tier 1 is read-only — the committed graph is immutable context.** The graph is a snapshot of the default branch and may lag behind the feature branch; Git and the working tree, not the graph, are the source of truth for the active diff, so prefer the branch diff over graph answers for any file the branch touches. The read-only surface — `graphify query`, `graphify path`, `graphify explain`, `graphify affected`, plus `command -v graphify` and `graphify --help` — is the **exhaustive** Graphify surface for agent work. Never run mutating subcommands — `update`, `extract`, `watch`, `cluster-only`, `label`, `save-result`, `reflect`, exports, hook or project installation — or otherwise write `graphify-out/**`, even when a repository's synced rules still instruct a graph refresh after code changes: this contract ships with the plugin and overrides stale synced rules until the sync catches up. A lagging graph is not a broken one; a missing, unreadable, or erroring graph is left behind through the transitions below — never regenerate. Where a repository regenerates its graph at all, a consumer-owned post-merge workflow does it, and an agent run never stands in for that workflow.
+
+<!-- graphify-readonly:end -->
 
 <!-- graphify-refinement:start -->
 
@@ -68475,6 +68760,12 @@ eligible ──query exits 0──▶ record ──hand-off──▶ shortlist r
 
 Two tests carry the executable half. [`graphifyEvidence`](../.github/actions/code-review-action/src/graphifyEvidence.test.ts) is the contract as runnable code — one rejection per clause, so "was graphify selected" has a single machine-checkable answer. [`graphifyEvidenceFixture`](../.github/actions/code-review-action/src/graphifyEvidenceFixture.test.ts) spawns a deterministic `graphify` stub in a temporary repository and records every act in one ordered log, proving a real process ran and exited before the first traversal, and that the shortlist survives the hand-off in both the stored-plan and fresh-plan shapes. Both state their limit in their headers, because it is the limit that makes the rest honest: a `bun test` run **does not execute a session**, so the holders are scripted, and what is proven is that a conforming holder produces a log the validator accepts while every named violation produces one it rejects. Production conformance remains the canary — now with a durable artifact to read it from. The static half stays [`graphifyEvidenceContract`](../.github/actions/code-review-action/src/graphifyEvidenceContract.test.ts), a documentation guard over the `graphify-evidence` sentinel and its consumers.
 
+### Read-only boundary
+
+Querying the graph and maintaining it used to share one permission: twelve skills granted `Bash(graphify *)`, and the synced rule templates told agents to run `graphify update .` after modifying code. In production that combination let an implementation run regenerate the graph against a dirty working tree and commit an 11.8k-line refresh that was ~97% of its PR diff ([#626](https://github.com/awinogradov/code-assistants/issues/626)). The committed graph is a read-only context snapshot of the default branch — the active diff already comes from Git — so the `graphify-readonly` sentinel in the shared block now makes the boundary explicit: the graph is immutable for the duration of a run and may lag behind the feature branch, the read-only surface (`query`, `path`, `explain`, `affected`, plus availability and help checks) is exhaustive, and mutating subcommands or any other write to `graphify-out/**` are forbidden. A missing or broken graph transitions to the successor tier per the reasons above, never triggers regeneration; where a repository regenerates its graph at all, a consumer-owned post-merge workflow does it.
+
+The rule templates reach downstream `AGENTS.md` files on their own sync cadence while the narrowed grants ship with the plugin release, so for the skew window a consumer's synced rules may still instruct a refresh the plugin denies — the sentinel travels with the grants and explicitly overrides stale synced rules until the sync catches up. The warning sign of that window is permission denials for `graphify update` in run logs. [`graphifyReadOnlyContract`](../.github/actions/code-review-action/src/graphifyReadOnlyContract.test.ts) guards all three surfaces: the sentinel's clauses, the absence of any update instruction in the `rules/` templates (scoped to the templates — the repo's own synced `AGENTS.md` copy lags until the next sync and is deliberately not scanned), and a strict allowlist over every `SKILL.md` grant, with the twelve previously granting skills as explicit test data so the scan cannot pass vacuously.
+
 ### The exclusive-source read contract
 
 Audited sessions used to attach the pack and then rediscover the repository anyway — direct `Read`/`Grep`/`Glob` sweeps and delegated context agents re-covering files the snapshot already held, across all three tiers at once ([#582](https://github.com/awinogradov/code-assistants/issues/582)). The shared block therefore binds every context holder (the session, and each delegated agent) to an **exclusive selection**:
@@ -71362,7 +71653,7 @@ Before making any changes:
 7. When a `design.md` exists at the repository root, read it before any UI or visual work — it is the binding design and brand spec (tokens, typography, layout conventions); follow it over generic styling defaults
 8. Inspect `package.json` before assuming scripts or package-manager commands
 9. Acquire codebase context from the first source that works, falling through to the next on any failure:
-   - **Graphify** — fires when `graphify-out/graph.json` exists and the `graphify` CLI resolves on PATH. Run `graphify query "<question>"` first; use `graphify path "<A>" "<B>"` for relationships, `graphify explain "<concept>"` for focused concepts, and `graphify-out/wiki/index.md` for broad navigation. A truncated or empty answer is an unfinished lookup, not a negative result: refine it with a narrower query, a `--context <relation>` filter, or a focused `path`/`explain` lookup before falling back to ordinary file reads. After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+   - **Graphify** — fires when `graphify-out/graph.json` exists and the `graphify` CLI resolves on PATH. Run `graphify query "<question>"` first; use `graphify path "<A>" "<B>"` for relationships, `graphify explain "<concept>"` for focused concepts, and `graphify-out/wiki/index.md` for broad navigation. A truncated or empty answer is an unfinished lookup, not a negative result: refine it with a narrower query, a `--context <relation>` filter, or a focused `path`/`explain` lookup before falling back to ordinary file reads. The committed graph is read-only context: it may lag behind the current branch, and Git plus the working tree — not the graph — are the source of truth for the active diff. Refinement is for unhelpful answers from a working graph; a missing, unreadable, or erroring graph is abandoned instead — fall through to the next source, never regenerate. Never run mutating subcommands (`update`, `extract`, `watch`, `cluster-only`, `label`, `save-result`, `reflect`, exports, hook or project installation) or otherwise write `graphify-out/**`, even when other instructions in this repository still ask for a graph refresh — where a graph is regenerated at all, a consumer-owned post-merge workflow does it.
    - **Repomix** — fires when the Repomix MCP server is connected. Attach the committed `.repomix/pack.xml` when it exists, otherwise pack the codebase; grep/read the digest for codebase-wide analysis instead of loading every file.
    - **Default tools** — with neither available, search and read the repository files directly.
 
@@ -71591,7 +71882,7 @@ Before making any changes:
 7. When a `design.md` exists at the repository root, read it before any UI or visual work — it is the binding design and brand spec (tokens, typography, layout conventions); follow it over generic styling defaults
 8. Inspect `package.json` before assuming scripts or package-manager commands
 9. Acquire codebase context from the first source that works, falling through to the next on any failure:
-   - **Graphify** — fires when `graphify-out/graph.json` exists and the `graphify` CLI resolves on PATH. Run `graphify query "<question>"` first; use `graphify path "<A>" "<B>"` for relationships, `graphify explain "<concept>"` for focused concepts, and `graphify-out/wiki/index.md` for broad navigation. A truncated or empty answer is an unfinished lookup, not a negative result: refine it with a narrower query, a `--context <relation>` filter, or a focused `path`/`explain` lookup before falling back to ordinary file reads. After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+   - **Graphify** — fires when `graphify-out/graph.json` exists and the `graphify` CLI resolves on PATH. Run `graphify query "<question>"` first; use `graphify path "<A>" "<B>"` for relationships, `graphify explain "<concept>"` for focused concepts, and `graphify-out/wiki/index.md` for broad navigation. A truncated or empty answer is an unfinished lookup, not a negative result: refine it with a narrower query, a `--context <relation>` filter, or a focused `path`/`explain` lookup before falling back to ordinary file reads. The committed graph is read-only context: it may lag behind the current branch, and Git plus the working tree — not the graph — are the source of truth for the active diff. Refinement is for unhelpful answers from a working graph; a missing, unreadable, or erroring graph is abandoned instead — fall through to the next source, never regenerate. Never run mutating subcommands (`update`, `extract`, `watch`, `cluster-only`, `label`, `save-result`, `reflect`, exports, hook or project installation) or otherwise write `graphify-out/**`, even when other instructions in this repository still ask for a graph refresh — where a graph is regenerated at all, a consumer-owned post-merge workflow does it.
    - **Repomix** — fires when the Repomix MCP server is connected. Attach the committed `.repomix/pack.xml` when it exists, otherwise pack the codebase; grep/read the digest for codebase-wide analysis instead of loading every file.
    - **Default tools** — with neither available, search and read the repository files directly.
 
@@ -71954,7 +72245,7 @@ Before making any changes:
 7. When a `design.md` exists at the repository root, read it before any UI or visual work — it is the binding design and brand spec (tokens, typography, layout conventions); follow it over generic styling defaults
 8. Inspect `package.json` before assuming scripts or package-manager commands
 9. Acquire codebase context from the first source that works, falling through to the next on any failure:
-   - **Graphify** — fires when `graphify-out/graph.json` exists and the `graphify` CLI resolves on PATH. Run `graphify query "<question>"` first; use `graphify path "<A>" "<B>"` for relationships, `graphify explain "<concept>"` for focused concepts, and `graphify-out/wiki/index.md` for broad navigation. A truncated or empty answer is an unfinished lookup, not a negative result: refine it with a narrower query, a `--context <relation>` filter, or a focused `path`/`explain` lookup before falling back to ordinary file reads. After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+   - **Graphify** — fires when `graphify-out/graph.json` exists and the `graphify` CLI resolves on PATH. Run `graphify query "<question>"` first; use `graphify path "<A>" "<B>"` for relationships, `graphify explain "<concept>"` for focused concepts, and `graphify-out/wiki/index.md` for broad navigation. A truncated or empty answer is an unfinished lookup, not a negative result: refine it with a narrower query, a `--context <relation>` filter, or a focused `path`/`explain` lookup before falling back to ordinary file reads. The committed graph is read-only context: it may lag behind the current branch, and Git plus the working tree — not the graph — are the source of truth for the active diff. Refinement is for unhelpful answers from a working graph; a missing, unreadable, or erroring graph is abandoned instead — fall through to the next source, never regenerate. Never run mutating subcommands (`update`, `extract`, `watch`, `cluster-only`, `label`, `save-result`, `reflect`, exports, hook or project installation) or otherwise write `graphify-out/**`, even when other instructions in this repository still ask for a graph refresh — where a graph is regenerated at all, a consumer-owned post-merge workflow does it.
    - **Repomix** — fires when the Repomix MCP server is connected. Attach the committed `.repomix/pack.xml` when it exists, otherwise pack the codebase; grep/read the digest for codebase-wide analysis instead of loading every file.
    - **Default tools** — with neither available, search and read the repository files directly.
 
@@ -72309,7 +72600,7 @@ Before making any changes:
 7. When a `design.md` exists at the repository root, read it before any UI or visual work — it is the binding design and brand spec (tokens, typography, layout conventions); follow it over generic styling defaults
 8. Inspect `package.json` before assuming scripts or package-manager commands
 9. Acquire codebase context from the first source that works, falling through to the next on any failure:
-   - **Graphify** — fires when `graphify-out/graph.json` exists and the `graphify` CLI resolves on PATH. Run `graphify query "<question>"` first; use `graphify path "<A>" "<B>"` for relationships, `graphify explain "<concept>"` for focused concepts, and `graphify-out/wiki/index.md` for broad navigation. A truncated or empty answer is an unfinished lookup, not a negative result: refine it with a narrower query, a `--context <relation>` filter, or a focused `path`/`explain` lookup before falling back to ordinary file reads. After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+   - **Graphify** — fires when `graphify-out/graph.json` exists and the `graphify` CLI resolves on PATH. Run `graphify query "<question>"` first; use `graphify path "<A>" "<B>"` for relationships, `graphify explain "<concept>"` for focused concepts, and `graphify-out/wiki/index.md` for broad navigation. A truncated or empty answer is an unfinished lookup, not a negative result: refine it with a narrower query, a `--context <relation>` filter, or a focused `path`/`explain` lookup before falling back to ordinary file reads. The committed graph is read-only context: it may lag behind the current branch, and Git plus the working tree — not the graph — are the source of truth for the active diff. Refinement is for unhelpful answers from a working graph; a missing, unreadable, or erroring graph is abandoned instead — fall through to the next source, never regenerate. Never run mutating subcommands (`update`, `extract`, `watch`, `cluster-only`, `label`, `save-result`, `reflect`, exports, hook or project installation) or otherwise write `graphify-out/**`, even when other instructions in this repository still ask for a graph refresh — where a graph is regenerated at all, a consumer-owned post-merge workflow does it.
    - **Repomix** — fires when the Repomix MCP server is connected. Attach the committed `.repomix/pack.xml` when it exists, otherwise pack the codebase; grep/read the digest for codebase-wide analysis instead of loading every file.
    - **Default tools** — with neither available, search and read the repository files directly.
 
