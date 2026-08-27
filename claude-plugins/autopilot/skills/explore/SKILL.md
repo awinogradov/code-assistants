@@ -9,7 +9,11 @@ allowed-tools:
   - Grep
   - Agent
   - Bash(command -v graphify)
-  - Bash(graphify *)
+  - Bash(graphify query *)
+  - Bash(graphify path *)
+  - Bash(graphify explain *)
+  - Bash(graphify affected *)
+  - Bash(graphify --help)
   - Bash(command -v entire)
   - Bash(entire *)
   - MCP(repomix:*)
