@@ -7,7 +7,7 @@
  */
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 
-import { resolveBranchTemplate } from "./run.ts";
+import { resolveBranchTemplate, resolveNpmAuthMode } from "./run.ts";
 
 const originalBranch = process.env.INPUT_BRANCH;
 
@@ -78,5 +78,41 @@ describe("resolveBranchTemplate", () => {
     expect(template).toBe("release-{member}");
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("::warning::");
+  });
+});
+
+describe("resolveNpmAuthMode", () => {
+  test("prefers the token when NPM_TOKEN is set", () => {
+    const mode = resolveNpmAuthMode({
+      npmToken: "npm_secret",
+      idTokenRequestUrl: undefined,
+      npmVersion: "10.0.0",
+    });
+    expect(mode).toBe("token");
+  });
+
+  test("selects OIDC when id-token is granted and npm supports trusted publishing", () => {
+    const mode = resolveNpmAuthMode({
+      npmToken: "",
+      idTokenRequestUrl: "https://token.actions.example",
+      npmVersion: "11.5.1",
+    });
+    expect(mode).toBe("oidc");
+  });
+
+  test("fails fast without a token when id-token was not granted", () => {
+    expect(() =>
+      resolveNpmAuthMode({ npmToken: "", idTokenRequestUrl: undefined, npmVersion: "11.6.0" }),
+    ).toThrow(/npm_token input, or configure npm trusted publishing/);
+  });
+
+  test("fails fast when the npm CLI predates trusted publishing", () => {
+    expect(() =>
+      resolveNpmAuthMode({
+        npmToken: "",
+        idTokenRequestUrl: "https://token.actions.example",
+        npmVersion: "11.4.2",
+      }),
+    ).toThrow(/requires >= 11\.5\.1/);
   });
 });
