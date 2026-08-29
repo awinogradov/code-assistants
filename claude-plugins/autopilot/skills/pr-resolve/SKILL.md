@@ -57,12 +57,20 @@ Arguments are optional. Resolve each field:
 Auto-detect the PR from the current branch:
 
 ```bash
-gh pr view --json number,title,url,baseRefName,headRefName,author
+gh pr view --json number,title,url,baseRefName,headRefName,author,mergeable
 ```
 
 If no PR found, abort: "No pull request found for the current branch. Create one first with `/autopilot:pr-create`."
 
 Store the PR number, repo owner/name (extract from url), and author login.
+
+**If `mergeable` is `CONFLICTING`, abort** — fixes pushed onto a conflicting branch stay unmergeable, so resolving review feedback here only buries the reason the pull request is stuck:
+
+```
+PR #N conflicts with <base-branch> and cannot merge. Resolve the conflict first — the Conflict Sweep in the pr-monitor skill rebases the branch onto its base the sanctioned way.
+```
+
+`mergeable` is `UNKNOWN` while GitHub is still computing mergeability, and this skill reads it once rather than in a poll loop, so a cold pull request very often answers `UNKNOWN` on the first read. Re-read it once after a few seconds; if it is still `UNKNOWN`, proceed and say so rather than treating a pending answer as a clean one. Without that re-read the guard would silently pass in exactly the case it exists for. When [`pr-monitor`](../pr-monitor/SKILL.md#conflict-sweep-shared-procedure) invokes this skill it has already swept, so this branch is reached mainly on a standalone invocation.
 
 ### 1.2 Check Working Tree
 
@@ -330,6 +338,8 @@ PR #<N>: <url>
 ## Edge Cases
 
 - **No PR found** → abort with suggestion to create one
+- **PR conflicts with its base** (`mergeable` is `CONFLICTING`) → abort and name the [Conflict Sweep](../pr-monitor/SKILL.md#conflict-sweep-shared-procedure) as the fix; fixes pushed onto a conflicting branch stay unmergeable
+- **Mergeability still `UNKNOWN` after the re-read** → proceed, saying that mergeability could not be confirmed
 - **No review comments** → "No unresolved review comments found on PR #N"
 - **All comments resolved** → "All review comments on PR #N are already resolved"
 - **No code changes needed** → skip commit/push, only post replies
