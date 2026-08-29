@@ -1,6 +1,6 @@
 ---
 name: pr-monitor
-description: Monitor a PR for review approval and CI check status, blocking until approved with all checks passing. Fixes CI failures and resolves review feedback. Use when waiting for PR approval.
+description: Monitor a PR for review approval, CI check status, and merge conflicts, blocking until approved with all checks passing. Fixes CI failures, resolves review feedback, and rebases a conflicting branch onto its base. Use when waiting for PR approval.
 argument-hint: "[--background]"
 allowed-tools:
   - Read
@@ -72,6 +72,7 @@ When invoked via the Agent tool with `run_in_background: true` (spawned by [Phas
 
 - **Do NOT invoke** `Skill(autopilot:pr-resolve)` — the user is not available for interaction
 - **Do NOT attempt to fix CI checks** — the user is not available for interaction and fixes may require judgment calls
+- **Do NOT rebase, resolve, or push** — a history rewrite has no one to authorize it here; the [Conflict Sweep](#conflict-sweep-shared-procedure) returns the summary below instead of acting
 - **Do NOT use** `AskUserQuestion` — no user interaction in background mode
 - When changes are requested or new actionable review comments are detected, **return immediately** with a structured summary instead of invoking pr-resolve:
 
@@ -98,6 +99,19 @@ When invoked via the Agent tool with `run_in_background: true` (spawned by [Phas
   Fix the failing checks and push, or run /pr-monitor again.
   ```
 
+- When the pull request conflicts with its base, **return immediately** with a structured summary:
+
+  ```
+  PR Monitor: Merge Conflict
+
+  PR #N conflicts with <base-branch> and cannot merge.
+  Conflicted: [path-1], [path-2]
+  Status: CONFLICTING
+  URL: <pr-url>
+
+  Run /autopilot:pr-monitor in the foreground to rebase the branch onto its base.
+  ```
+
 - For approved/merged/closed, return the same [Phase 3](#phase-3-exit) exit message as foreground mode
 
 **Detect background mode** per [Phase 0](#phase-0-mode-dispatch): use background behavior when the skill was launched with `--background`, when it runs inside an Agent subprocess, or when this prompt contains "background mode"; otherwise use foreground behavior.
@@ -113,7 +127,7 @@ This skill receives the following from conversation history:
 Auto-detect the PR from the current branch:
 
 ```bash
-gh pr view --json number,title,url,state,baseRefName,headRefName,author,reviewDecision,reviewRequests,statusCheckRollup
+gh pr view --json number,title,url,state,baseRefName,headRefName,headRepositoryOwner,author,reviewDecision,reviewRequests,statusCheckRollup,mergeable
 ```
 
 If no PR found, abort: "No pull request found for the current branch. Create one first with `/autopilot:pr-create`."
@@ -131,6 +145,48 @@ Run whenever `reviewDecision` is `APPROVED` — from the [§1.1](#11-early-exit-
 3. Check if HEAD changed: `git rev-parse HEAD` → compare with `headBefore`
 4. If HEAD changed (pr-resolve pushed new commits — new CI must pass and the approval may be stale), set `cooldownRemaining = 3`; the caller resumes monitoring. If HEAD unchanged, the caller decides whether to exit.
 
+### Conflict Sweep (shared procedure)
+
+Run whenever `mergeable` is `CONFLICTING` — from the [§1.1](#11-early-exit-checks) pre-loop check or the [§2.2](#22-check-pr-state) per-cycle check. Only the follow-up outputs and continue targets differ, and those stay with each caller.
+
+`mergeable` is `UNKNOWN`, not `CONFLICTING`, whenever GitHub has not finished computing mergeability — which is the normal reading for the first cycle or two after any push. `UNKNOWN` is a pending state: leave it to the next poll and do not sweep on it.
+
+Read [`git-history-policy.md`](../shared-rules/references/git-history-policy.md) before running any command below. Every step of this sweep is the policy's sanctioned synchronization path and nothing else: a conflicting branch is the one condition under which a pull-request branch genuinely needs its base's changes, and it is taken by rebase, never by merging the base in.
+
+1. **Background mode returns instead of acting.** Emit the `Status: CONFLICTING` summary from [Background Mode](#background-mode) and stop. A background run has no user to authorize a history rewrite, so it never fetches, rebases, or pushes.
+2. **Refuse and exit when the sweep is not the agent's to run.** Each of these ends monitoring at [Phase 3](#phase-3-exit) with status "conflicted", naming the reason — none is retried:
+   - `git status --porcelain` is non-empty — a rebase would fail or silently strand the changes.
+   - A rebase is already in progress (`git rev-parse --git-path rebase-merge` or `rebase-apply` exists) — never start a second one on top.
+   - `headRepositoryOwner` differs from the pull request's own repository: a fork branch the agent cannot push to.
+   - The pull request's `author.login` is not the login `gh api user --jq .login` reports. This is the policy's "never rewrite a branch you do not own" made checkable. Note that under a workflow `GITHUB_TOKEN` the authenticated identity is the bot rather than the account that opened the pull request, so the sweep is inert in CI by design.
+3. **Pin the lease.** Record `git rev-parse origin/<headRefName>` as `preRebaseSha` before anything changes. The push in step 5 leases against this exact value; a bare `--force-with-lease` is anchored to whatever the local tracking ref happens to hold, and any unrelated fetch re-anchors it and quietly degrades the push to the unleased `--force` the policy forbids.
+4. **Take the base changes by rebase:**
+   ```bash
+   git fetch origin <baseRefName>
+   git rebase origin/<baseRefName>
+   ```
+5. **A rebase that completes cleanly** pushes with the pinned lease, sets `cooldownRemaining = 3`, and returns to the caller:
+   ```bash
+   git push --force-with-lease=<headRefName>:<preRebaseSha>
+   ```
+   Any push failure is terminal: report it and exit to [Phase 3](#phase-3-exit) with status "conflicted". Never retry it, and never retry it without the lease.
+6. **A rebase that halts aborts immediately** — the working tree is never left mid-rebase:
+   ```bash
+   git diff --name-only --diff-filter=U   # capture the conflicted paths first
+   git rebase --abort
+   ```
+   Report the conflicted paths and `preRebaseSha`, then hand to step 7.
+7. **Only in foreground mode**, offer the halted rebase to the user via AskUserQuestion — mirroring the CI-unfixable prompt in [§2.2a](#22a-check-ci-status). Resolving conflicted hunks is a judgement call about intent, so it happens because the user asked for it, never because the sweep decided on its own. That is why step 6 aborts first.
+   - `question`: "PR #N conflicts with \<baseRefName\> and the rebase could not complete.\n\nConflicted paths: \<paths\>\nBranch head before rebase: \<preRebaseSha\>"
+   - `header`: "Conflict"
+   - `options`: [
+     { label: "Resolve conflicts", description: "Rebase again and resolve the conflicted hunks, then push" },
+     { label: "Stop monitoring", description: "Leave the branch untouched and exit" }
+     ]
+   - `multiSelect`: false
+   - If "Resolve conflicts": re-run step 4, resolve each conflicted path, `git add` it, `git rebase --continue` until the rebase finishes, then push per step 5.
+   - If "Stop monitoring": exit to [Phase 3](#phase-3-exit) with status "conflicted".
+
 ### 1.1 Early Exit Checks
 
 **If `state` is `MERGED`:**
@@ -140,6 +196,15 @@ Run whenever `reviewDecision` is `APPROVED` — from the [§1.1](#11-early-exit-
 **If `state` is `CLOSED`:**
 
 - Exit: "PR #N has been closed."
+
+**If `mergeable` is `CONFLICTING`:**
+
+This branch is checked before the `reviewDecision` branches below, and the ordering is load-bearing: the `APPROVED` branch exits with "already approved with all checks passing" without consulting mergeability, so a conflicted-but-approved pull request would otherwise exit clean while it cannot merge.
+
+1. Output: "PR #N conflicts with \<baseRefName\>. Running the conflict sweep..."
+2. Increment `conflictSweeps`, then run the [Conflict Sweep](#conflict-sweep-shared-procedure)
+3. If the sweep pushed a rebased branch: output "Conflict resolved by rebase. Starting monitoring..." and continue to Phase 1.2
+4. If the sweep refused, aborted, or its push failed: exit to [Phase 3](#phase-3-exit) with status "conflicted"
 
 **If `reviewDecision` is `APPROVED`:**
 
@@ -199,6 +264,7 @@ Maintain the following state across iterations:
 
 - `cooldownRemaining`: number of poll cycles to skip CI checks after a fix push (starts at 0; a push sets it to 3 so fresh CI runs have time to replace the stale failures of the superseded commit before checks are read again)
 - `fixAttempts`: map of `checkName → { attempts: number, lastRunId: string }` tracking CI fix attempts
+- `conflictSweeps`: count of [Conflict Sweep](#conflict-sweep-shared-procedure) runs, capped at **2 per `pr-monitor` invocation**. The caller increments it before invoking the sweep, following the Approval Sweep precedent that caller-side bookkeeping stays with the caller. The cap is run-scoped and deliberately **not** keyed to the base SHA: a per-SHA budget is refunded by every new commit to the base, so on an active repository it would fund unbounded force-pushes and CI reruns forever — this skill's original defect reappearing one layer up. Reaching the cap exits to [Phase 3](#phase-3-exit) with status "conflicted".
 
 ### 2.1 Sleep
 
@@ -211,7 +277,7 @@ sleep 60
 ### 2.2 Check PR State
 
 ```bash
-gh pr view <PR_NUMBER> --json state,reviewDecision,statusCheckRollup
+gh pr view <PR_NUMBER> --json state,reviewDecision,statusCheckRollup,mergeable
 ```
 
 **If `state` is `MERGED`:**
@@ -221,6 +287,16 @@ gh pr view <PR_NUMBER> --json state,reviewDecision,statusCheckRollup
 **If `state` is `CLOSED`:**
 
 - Exit to [Phase 3](#phase-3-exit) with status "closed"
+
+**If `mergeable` is `CONFLICTING`:**
+
+Checked before the `reviewDecision` branches for the same load-bearing reason as [§1.1](#11-early-exit-checks). Every outcome below names its destination explicitly — a conflicting pull request must never fall through to [§2.3](#23-check-for-new-reviews), which would resume the silent polling this branch exists to end.
+
+1. If `conflictSweeps` has reached 2, output "PR #N still conflicts with \<baseRefName\> after 2 sweeps." and exit to [Phase 3](#phase-3-exit) with status "conflicted"
+2. Output: "PR #N conflicts with \<baseRefName\>. Running the conflict sweep..."
+3. Increment `conflictSweeps`, then run the [Conflict Sweep](#conflict-sweep-shared-procedure)
+4. If the sweep pushed a rebased branch: output "Conflict resolved by rebase. Resuming monitoring..." and continue the polling loop (go to 2.1)
+5. If the sweep refused, aborted, or its push failed: exit to [Phase 3](#phase-3-exit) with status "conflicted"
 
 **If `reviewDecision` is `APPROVED` AND all checks in `statusCheckRollup` have `state === "SUCCESS"`:**
 
@@ -369,6 +445,18 @@ PR #N has been closed.
 URL: <pr-url>
 ```
 
+**Conflicted:**
+
+```
+PR Monitor Stopped
+
+PR #N conflicts with <base-branch> and cannot merge.
+Conflicted: [path-1], [path-2]
+Reason: <rebase halted / push failed / not agent-owned / sweep cap reached>
+Status: CONFLICTED
+URL: <pr-url>
+```
+
 ---
 
 ## Edge Cases
@@ -378,6 +466,10 @@ Cases the phases do not already cover:
 - **pr-resolve fails** → report error, ask user via AskUserQuestion: "Resolve review encountered an error. How would you like to proceed?" with options: Retry / Continue monitoring / Cancel
 - **CI fix attempt fails** → report error, ask user in foreground / return summary in background
 - **Fix causes a different failure** → counts as a new attempt for that check
+- **Rebase halts on conflicting content** → abort it, report the conflicted paths, and offer resolution in foreground only; never leave the tree mid-rebase
+- **Push after a sweep fails for any reason** → report and exit to [Phase 3](#phase-3-exit) with status "conflicted"; never retry, and never retry without the lease
+- **Conflicting PR on a fork, or one the agent does not own** → report and exit "conflicted"; the branch is not the agent's to rewrite
+- **Conflict sweep cap reached** → report and exit "conflicted" rather than sweeping again
 - **GitHub API rate limit (403/429)** → increase sleep interval to 120 seconds (2 minutes), warn user: "GitHub API rate limit detected. Increasing poll interval to 2 minutes."
 - **Network error** → retry API call once after 30 seconds; if still failing, warn user and ask whether to continue
 
