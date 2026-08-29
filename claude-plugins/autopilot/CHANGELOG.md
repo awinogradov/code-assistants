@@ -2,6 +2,53 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [7.3.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.2.0...autopilot@v7.3.0) (2026-08-29)
+
+## Release Notes
+
+The PR monitor agent now detects merge conflicts automatically and takes action rather than silently looping forever.
+
+## ✨ What's New
+
+### Conflict Detection in PR Monitor
+
+The `/autopilot:pr-monitor` skill now recognises when a pull request is conflicting with its base branch and responds appropriately instead of polling indefinitely with no visible action. When a conflict is detected, the agent attempts to rebase the branch onto the base. If the rebase cannot complete cleanly, it is aborted automatically and the conflicted file paths are reported so the team knows exactly where the problem lies. In foreground mode, conflict resolution is offered interactively — in background monitoring mode, the agent reports a `CONFLICTING` status and exits cleanly rather than attempting any unattended fixes.
+
+<details><summary>Related issues</summary>
+
+- [#637: PR monitor keeps polling a conflicting pull request without reacting](https://github.com/awinogradov/code-assistants/issues/637)
+- [#638: Detect and act on pull requests that conflict with their base](https://github.com/awinogradov/code-assistants/pull/638)
+</details>
+
+### Conflict Guard in PR Resolve
+
+The `/autopilot:pr-resolve` skill now aborts when it encounters a conflicting pull request, rather than pushing fixes that would remain unmergeable. This prevents the agent from applying changes to a branch that cannot yet land, keeping the PR queue clean and avoiding misleading "resolved" states.
+
+<details><summary>Related issues</summary>
+
+- [#638: Detect and act on pull requests that conflict with their base](https://github.com/awinogradov/code-assistants/pull/638)
+</details>
+
+## 📚 Documentation & Settings Updates
+
+### Conflict Handling Documented for Monitor and Resolve
+
+The skill documentation for both `/autopilot:pr-monitor` and `/autopilot:pr-resolve` now describes how conflict detection works, what the `CONFLICTING` status means, and what to expect in foreground versus background modes. Reference the updated docs after upgrading to understand the new operational behaviour.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #637 | [#638](https://github.com/awinogradov/code-assistants/pull/638) | @awinogradov |
+
+### Features
+
+* **pr-monitor:** react to a conflicting pull request ([9206b99](https://github.com/awinogradov/code-assistants/commit/9206b997cb8026a46197921cd46f18de522d3c12))
+
+### Documentation
+
+* describe conflict handling in monitor and resolve ([3a1205d](https://github.com/awinogradov/code-assistants/commit/3a1205d4cede92c08afd9e7c9f9fd6b8ec3f28d0))
 ## [7.2.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.1.2...autopilot@v7.2.0) (2026-08-27)
 
 ## Release Notes
