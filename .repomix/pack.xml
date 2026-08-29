@@ -199,6 +199,7 @@ The content is organized as follows:
         mergeCommitGuard.test.ts
         planFileOutputPurity.test.ts
         prBodyReferenceFormatting.test.ts
+        prConflictContract.test.ts
         preflightChecks.ts
         preflightSkipComment.test.ts
         preflightSkipComment.ts
@@ -14668,6 +14669,243 @@ describe("review body file links", () => {
     expect(content).toContain("[src/webhooks/config.ts](<pr-blob-url>/src/webhooks/config.ts)");
     // globs/keys stay backticked, not linked
     expect(content).toContain("code specimen, not a reference");
+  });
+});
+</file>
+
+<file path=".github/actions/code-review-action/src/prConflictContract.test.ts">
+/**
+ * Guards the merge-conflict contract in pr-monitor and pr-resolve.
+ *
+ * The rule exists because both skills polled a pull request without ever
+ * requesting GitHub's `mergeable` field, so a CONFLICTING pull request was
+ * indistinguishable from one merely awaiting review: the monitor printed
+ * "Still waiting for review" every minute against an exit condition it could
+ * never reach. A conflicted pull request cannot be approved with all checks
+ * passing, so the loop had no terminal state at all.
+ *
+ * Division of responsibility with gitHistoryPolicy.test.ts: that file owns the
+ * canonical forbidden-command regex and asserts that both these skills *load*
+ * the history block. It keeps both jobs. This file asserts what the skills do
+ * with the block once loaded — that the sweep names the explicit lease form,
+ * that every conflict path terminates, and that the two callers stay in step.
+ * The forbidden-command regex is imported from the block rather than restated,
+ * so the two files cannot disagree about what a forbidden command is.
+ *
+ * What this CANNOT prove: that a skill actually ran the sweep, aborted a real
+ * rebase, or honoured the cap. CI sees text in a file, nothing more — the same
+ * limit sharedRulesInvocation.test.ts states for its own presence guard. What
+ * it can prove is that the prose still says the things a correct run depends
+ * on, and that a reorder which would silently break the fix fails here first.
+ *
+ * Vacuous-pass defences: every extracted region must be non-empty and above a
+ * minimum length, so a renamed heading or a dropped fence cannot extract "" and
+ * satisfy a `toContain` against it.
+ */
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
+import { describe, expect, test } from "bun:test";
+
+const actionDir = join(import.meta.dirname, "..");
+const repoRoot = join(actionDir, "..", "..", "..");
+const skillsDir = join(repoRoot, "claude-plugins/autopilot/skills");
+const monitorPath = join(skillsDir, "pr-monitor/SKILL.md");
+const resolvePath = join(skillsDir, "pr-resolve/SKILL.md");
+const historyBlockPath = join(skillsDir, "shared-rules/references/git-history-policy.md");
+const docsPath = join(repoRoot, "docs/05-plan-run-skills.md");
+const readmePath = join(repoRoot, "claude-plugins/autopilot/README.md");
+
+/** Shortest a real extraction can be; anything smaller means it went wrong. */
+const minExtractionLength = 40;
+
+/** The run-scoped sweep cap. Asserted as a literal — "a digit appears" would survive any edit. */
+const sweepCap = "capped at **2 per `pr-monitor` invocation**";
+
+const [monitor, resolve, historyBlock] = await Promise.all([
+  readFile(monitorPath, "utf8"),
+  readFile(resolvePath, "utf8"),
+  readFile(historyBlockPath, "utf8"),
+]);
+
+/** Extract a `### `/`## ` section by heading, up to the next heading of the same or higher level. */
+const section = (source: string, heading: string): string =>
+  new RegExp(`^${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$[\\s\\S]*?(?=^#{1,3} )`, "m").exec(
+    source,
+  )?.[0] ?? "";
+
+const sweep = section(monitor, "### Conflict Sweep (shared procedure)");
+const earlyExit = section(monitor, "### 1.1 Early Exit Checks");
+const perCycle = section(monitor, "### 2.2 Check PR State");
+const backgroundMode = section(monitor, "### Background Mode");
+const detectPr = section(resolve, "### 1.1 Detect PR");
+
+/** The block's own forbidden-command pattern, so this file cannot disagree with it. */
+const forbiddenCommand = /#### Canonical forbidden-command regex[\s\S]*?```text\n(.+)\n```/.exec(
+  historyBlock,
+)?.[1];
+
+describe("extractions are substantial", () => {
+  test.each([
+    ["Conflict Sweep", sweep],
+    ["§1.1 Early Exit Checks", earlyExit],
+    ["§2.2 Check PR State", perCycle],
+    ["Background Mode", backgroundMode],
+    ["pr-resolve §1.1 Detect PR", detectPr],
+    ["forbidden-command regex", forbiddenCommand ?? ""],
+  ])("%s extracts a real region", (_name, extracted) => {
+    expect(extracted.length).toBeGreaterThan(minExtractionLength);
+  });
+});
+
+describe("both skills ask GitHub for mergeability", () => {
+  // Detection is the whole fix: without the field, every branch below is dead
+  // code. The pre-loop read also needs headRepositoryOwner, which is how the
+  // sweep recognises a fork it cannot push to.
+  //
+  // Only the two fenced state reads count. The Input-resolution section names a
+  // third `gh pr view` in prose that fetches the PR number alone, and widening
+  // that one to carry mergeability would say the skill re-reads state where it
+  // does not.
+  test("pr-monitor requests mergeable on both state reads", () => {
+    const reads = monitor.match(/```bash\ngh pr view[^\n]*--json[^\n]*/g) ?? [];
+    expect(reads.length).toBe(2);
+    for (const read of reads) expect(read).toContain("mergeable");
+  });
+
+  test("pr-monitor's pre-loop read requests headRepositoryOwner", () => {
+    expect(section(monitor, "## Phase 1: Detect PR")).toContain("headRepositoryOwner");
+  });
+
+  test("pr-resolve requests mergeable", () => {
+    expect(detectPr).toMatch(/gh pr view[^\n]*--json[^\n]*mergeable/);
+  });
+});
+
+describe("the sweep rewrites history only the sanctioned way", () => {
+  // A bare --force-with-lease anchors to whatever the local tracking ref holds,
+  // so an unrelated fetch degrades it to the unleased --force the policy bans.
+  // The explicit ref:sha form is the whole point; asserting only the flag name
+  // would pass on the degraded version.
+  test("pins the lease to the recorded pre-rebase SHA", () => {
+    expect(sweep).toContain("git push --force-with-lease=<headRefName>:<preRebaseSha>");
+    expect(sweep).toContain("preRebaseSha");
+  });
+
+  test("takes base changes by rebase, never by merge", () => {
+    expect(sweep).toContain("git rebase origin/<baseRefName>");
+    expect(new RegExp(forbiddenCommand!, "m").test(sweep)).toBe(false);
+  });
+
+  test("reads the history policy before running anything", () => {
+    expect(sweep).toContain("shared-rules/references/git-history-policy.md");
+  });
+
+  test("aborts a halted rebase instead of leaving the tree mid-rebase", () => {
+    expect(sweep).toContain("git rebase --abort");
+    expect(sweep).toContain("git diff --name-only --diff-filter=U");
+  });
+
+  // Resolution is a judgement call about intent. Unattended, it force-pushes a
+  // guess; the abort-then-ask ordering is what keeps a human in front of it.
+  test("offers resolution only in foreground, only after the abort", () => {
+    expect(sweep).toContain("Only in foreground mode");
+    expect(sweep.indexOf("git rebase --abort")).toBeLessThan(sweep.indexOf("AskUserQuestion"));
+  });
+
+  test("refuses on a branch the agent does not own", () => {
+    expect(sweep).toContain("gh api user --jq .login");
+    expect(sweep).toContain("headRepositoryOwner");
+  });
+});
+
+describe("every conflict path terminates", () => {
+  // The original defect was an unreachable exit condition. A cap that is not
+  // run-scoped is refunded by every new commit to the base, which reintroduces
+  // the same unbounded loop one layer up.
+  test("the sweep cap is run-scoped and stated as a literal", () => {
+    expect(monitor).toContain(sweepCap);
+    expect(monitor).toContain("not** keyed to the base SHA");
+  });
+
+  test("Phase 3 has a conflicted exit", () => {
+    expect(section(monitor, "## Phase 3: Exit")).toContain("Status: CONFLICTED");
+  });
+
+  test.each([
+    ["§1.1", earlyExit],
+    ["§2.2", perCycle],
+  ])("%s routes a failed sweep to the Phase 3 exit", (_name, branch) => {
+    expect(branch).toContain("Conflict Sweep");
+    expect(branch).toMatch(/exit to \[Phase 3\]\(#phase-3-exit\) with status "conflicted"/);
+  });
+
+  // §2.2's APPROVED branch exits "already approved with all checks passing"
+  // without consulting mergeability, so a conflicted-but-approved PR would exit
+  // clean if the conflict branch were ever moved below it.
+  test.each([
+    ["§1.1", earlyExit],
+    ["§2.2", perCycle],
+  ])("%s checks CONFLICTING before reviewDecision", (_name, branch) => {
+    expect(branch.indexOf("CONFLICTING")).toBeLessThan(branch.indexOf("`APPROVED`"));
+  });
+
+  test("background mode reports the conflict instead of acting", () => {
+    expect(backgroundMode).toContain("Status: CONFLICTING");
+    expect(backgroundMode).toContain("Do NOT rebase, resolve, or push");
+  });
+});
+
+describe("UNKNOWN is pending, not a conflict", () => {
+  // GitHub computes mergeability asynchronously, so UNKNOWN is the normal
+  // reading right after a push. Treating it as a conflict would sweep on noise.
+  test("pr-monitor leaves UNKNOWN to the next poll", () => {
+    expect(sweep).toContain("`UNKNOWN` is a pending state");
+  });
+
+  // pr-resolve reads once, with no loop to re-read for it, so without an
+  // explicit re-read the guard passes vacuously on exactly the cold PRs it is
+  // meant to stop.
+  test("pr-resolve re-reads before trusting UNKNOWN", () => {
+    expect(detectPr).toContain("Re-read it once");
+  });
+});
+
+describe("pr-resolve refuses a conflicting branch", () => {
+  test("aborts and names the sweep as the fix", () => {
+    expect(detectPr).toContain("cannot merge. Resolve the conflict first");
+    expect(detectPr).toContain("../pr-monitor/SKILL.md#conflict-sweep-shared-procedure");
+  });
+
+  // Phase 1's later subsections are anchor targets across the document; the
+  // check was folded into §1.1 precisely so none of them shifted.
+  test.each(["### 1.2 Check Working Tree", "### 1.3 Load PR Diff", "### 1.5 Project Rules"])(
+    "%s keeps its number",
+    (heading) => {
+      expect(resolve).toContain(heading);
+    },
+  );
+});
+
+describe("the three prose summaries stay in step", () => {
+  // The frontmatter description, the plugin README entry, and the docs Monitor
+  // bullet all restate the same contract. Nothing but this test stops one of
+  // them from drifting on the next edit.
+  test("pr-monitor's frontmatter description names conflicts", () => {
+    const description = /^description: (.+)$/m.exec(monitor)?.[1] ?? "";
+    expect(description.length).toBeGreaterThan(minExtractionLength);
+    expect(description).toContain("merge conflicts");
+  });
+
+  test("the docs Monitor bullet names the Conflict Sweep", async () => {
+    expect(await readFile(docsPath, "utf8")).toContain("it runs the Conflict Sweep");
+  });
+
+  test.each([
+    ["pr-monitor", "Detects a conflicting branch and rebases it onto its base"],
+    ["pr-resolve", "Aborts when the pull request conflicts with its base"],
+  ])("the README %s entry names the new behaviour", async (_name, clause) => {
+    expect(await readFile(readmePath, "utf8")).toContain(clause);
   });
 });
 </file>
@@ -60619,7 +60857,7 @@ Meaningful changes detected (`feat:` commits). The section is added without aski
 <file path="claude-plugins/autopilot/skills/pr-monitor/SKILL.md">
 ---
 name: pr-monitor
-description: Monitor a PR for review approval and CI check status, blocking until approved with all checks passing. Fixes CI failures and resolves review feedback. Use when waiting for PR approval.
+description: Monitor a PR for review approval, CI check status, and merge conflicts, blocking until approved with all checks passing. Fixes CI failures, resolves review feedback, and rebases a conflicting branch onto its base. Use when waiting for PR approval.
 argument-hint: "[--background]"
 allowed-tools:
   - Read
@@ -60691,6 +60929,7 @@ When invoked via the Agent tool with `run_in_background: true` (spawned by [Phas
 
 - **Do NOT invoke** `Skill(autopilot:pr-resolve)` — the user is not available for interaction
 - **Do NOT attempt to fix CI checks** — the user is not available for interaction and fixes may require judgment calls
+- **Do NOT rebase, resolve, or push** — a history rewrite has no one to authorize it here; the [Conflict Sweep](#conflict-sweep-shared-procedure) returns the summary below instead of acting
 - **Do NOT use** `AskUserQuestion` — no user interaction in background mode
 - When changes are requested or new actionable review comments are detected, **return immediately** with a structured summary instead of invoking pr-resolve:
 
@@ -60717,6 +60956,19 @@ When invoked via the Agent tool with `run_in_background: true` (spawned by [Phas
   Fix the failing checks and push, or run /pr-monitor again.
   ```
 
+- When the pull request conflicts with its base, **return immediately** with a structured summary:
+
+  ```
+  PR Monitor: Merge Conflict
+
+  PR #N conflicts with <base-branch> and cannot merge.
+  Conflicted: [path-1], [path-2]
+  Status: CONFLICTING
+  URL: <pr-url>
+
+  Run /autopilot:pr-monitor in the foreground to rebase the branch onto its base.
+  ```
+
 - For approved/merged/closed, return the same [Phase 3](#phase-3-exit) exit message as foreground mode
 
 **Detect background mode** per [Phase 0](#phase-0-mode-dispatch): use background behavior when the skill was launched with `--background`, when it runs inside an Agent subprocess, or when this prompt contains "background mode"; otherwise use foreground behavior.
@@ -60732,7 +60984,7 @@ This skill receives the following from conversation history:
 Auto-detect the PR from the current branch:
 
 ```bash
-gh pr view --json number,title,url,state,baseRefName,headRefName,author,reviewDecision,reviewRequests,statusCheckRollup
+gh pr view --json number,title,url,state,baseRefName,headRefName,headRepositoryOwner,author,reviewDecision,reviewRequests,statusCheckRollup,mergeable
 ```
 
 If no PR found, abort: "No pull request found for the current branch. Create one first with `/autopilot:pr-create`."
@@ -60750,6 +61002,48 @@ Run whenever `reviewDecision` is `APPROVED` — from the [§1.1](#11-early-exit-
 3. Check if HEAD changed: `git rev-parse HEAD` → compare with `headBefore`
 4. If HEAD changed (pr-resolve pushed new commits — new CI must pass and the approval may be stale), set `cooldownRemaining = 3`; the caller resumes monitoring. If HEAD unchanged, the caller decides whether to exit.
 
+### Conflict Sweep (shared procedure)
+
+Run whenever `mergeable` is `CONFLICTING` — from the [§1.1](#11-early-exit-checks) pre-loop check or the [§2.2](#22-check-pr-state) per-cycle check. Only the follow-up outputs and continue targets differ, and those stay with each caller.
+
+`mergeable` is `UNKNOWN`, not `CONFLICTING`, whenever GitHub has not finished computing mergeability — which is the normal reading for the first cycle or two after any push. `UNKNOWN` is a pending state: leave it to the next poll and do not sweep on it.
+
+Read [`git-history-policy.md`](../shared-rules/references/git-history-policy.md) before running any command below. Every step of this sweep is the policy's sanctioned synchronization path and nothing else: a conflicting branch is the one condition under which a pull-request branch genuinely needs its base's changes, and it is taken by rebase, never by merging the base in.
+
+1. **Background mode returns instead of acting.** Emit the `Status: CONFLICTING` summary from [Background Mode](#background-mode) and stop. A background run has no user to authorize a history rewrite, so it never fetches, rebases, or pushes.
+2. **Refuse and exit when the sweep is not the agent's to run.** Each of these ends monitoring at [Phase 3](#phase-3-exit) with status "conflicted", naming the reason — none is retried:
+   - `git status --porcelain` is non-empty — a rebase would fail or silently strand the changes.
+   - A rebase is already in progress (`git rev-parse --git-path rebase-merge` or `rebase-apply` exists) — never start a second one on top.
+   - `headRepositoryOwner` differs from the pull request's own repository: a fork branch the agent cannot push to.
+   - The pull request's `author.login` is not the login `gh api user --jq .login` reports. This is the policy's "never rewrite a branch you do not own" made checkable. Note that under a workflow `GITHUB_TOKEN` the authenticated identity is the bot rather than the account that opened the pull request, so the sweep is inert in CI by design.
+3. **Pin the lease.** Record `git rev-parse origin/<headRefName>` as `preRebaseSha` before anything changes. The push in step 5 leases against this exact value; a bare `--force-with-lease` is anchored to whatever the local tracking ref happens to hold, and any unrelated fetch re-anchors it and quietly degrades the push to the unleased `--force` the policy forbids.
+4. **Take the base changes by rebase:**
+   ```bash
+   git fetch origin <baseRefName>
+   git rebase origin/<baseRefName>
+   ```
+5. **A rebase that completes cleanly** pushes with the pinned lease, sets `cooldownRemaining = 3`, and returns to the caller:
+   ```bash
+   git push --force-with-lease=<headRefName>:<preRebaseSha>
+   ```
+   Any push failure is terminal: report it and exit to [Phase 3](#phase-3-exit) with status "conflicted". Never retry it, and never retry it without the lease.
+6. **A rebase that halts aborts immediately** — the working tree is never left mid-rebase:
+   ```bash
+   git diff --name-only --diff-filter=U   # capture the conflicted paths first
+   git rebase --abort
+   ```
+   Report the conflicted paths and `preRebaseSha`, then hand to step 7.
+7. **Only in foreground mode**, offer the halted rebase to the user via AskUserQuestion — mirroring the CI-unfixable prompt in [§2.2a](#22a-check-ci-status). Resolving conflicted hunks is a judgement call about intent, so it happens because the user asked for it, never because the sweep decided on its own. That is why step 6 aborts first.
+   - `question`: "PR #N conflicts with \<baseRefName\> and the rebase could not complete.\n\nConflicted paths: \<paths\>\nBranch head before rebase: \<preRebaseSha\>"
+   - `header`: "Conflict"
+   - `options`: [
+     { label: "Resolve conflicts", description: "Rebase again and resolve the conflicted hunks, then push" },
+     { label: "Stop monitoring", description: "Leave the branch untouched and exit" }
+     ]
+   - `multiSelect`: false
+   - If "Resolve conflicts": re-run step 4, resolve each conflicted path, `git add` it, `git rebase --continue` until the rebase finishes, then push per step 5.
+   - If "Stop monitoring": exit to [Phase 3](#phase-3-exit) with status "conflicted".
+
 ### 1.1 Early Exit Checks
 
 **If `state` is `MERGED`:**
@@ -60759,6 +61053,15 @@ Run whenever `reviewDecision` is `APPROVED` — from the [§1.1](#11-early-exit-
 **If `state` is `CLOSED`:**
 
 - Exit: "PR #N has been closed."
+
+**If `mergeable` is `CONFLICTING`:**
+
+This branch is checked before the `reviewDecision` branches below, and the ordering is load-bearing: the `APPROVED` branch exits with "already approved with all checks passing" without consulting mergeability, so a conflicted-but-approved pull request would otherwise exit clean while it cannot merge.
+
+1. Output: "PR #N conflicts with \<baseRefName\>. Running the conflict sweep..."
+2. Increment `conflictSweeps`, then run the [Conflict Sweep](#conflict-sweep-shared-procedure)
+3. If the sweep pushed a rebased branch: output "Conflict resolved by rebase. Starting monitoring..." and continue to Phase 1.2
+4. If the sweep refused, aborted, or its push failed: exit to [Phase 3](#phase-3-exit) with status "conflicted"
 
 **If `reviewDecision` is `APPROVED`:**
 
@@ -60818,6 +61121,7 @@ Maintain the following state across iterations:
 
 - `cooldownRemaining`: number of poll cycles to skip CI checks after a fix push (starts at 0; a push sets it to 3 so fresh CI runs have time to replace the stale failures of the superseded commit before checks are read again)
 - `fixAttempts`: map of `checkName → { attempts: number, lastRunId: string }` tracking CI fix attempts
+- `conflictSweeps`: count of [Conflict Sweep](#conflict-sweep-shared-procedure) runs, capped at **2 per `pr-monitor` invocation**. The caller increments it before invoking the sweep, following the Approval Sweep precedent that caller-side bookkeeping stays with the caller. The cap is run-scoped and deliberately **not** keyed to the base SHA: a per-SHA budget is refunded by every new commit to the base, so on an active repository it would fund unbounded force-pushes and CI reruns forever — this skill's original defect reappearing one layer up. Reaching the cap exits to [Phase 3](#phase-3-exit) with status "conflicted".
 
 ### 2.1 Sleep
 
@@ -60830,7 +61134,7 @@ sleep 60
 ### 2.2 Check PR State
 
 ```bash
-gh pr view <PR_NUMBER> --json state,reviewDecision,statusCheckRollup
+gh pr view <PR_NUMBER> --json state,reviewDecision,statusCheckRollup,mergeable
 ```
 
 **If `state` is `MERGED`:**
@@ -60840,6 +61144,16 @@ gh pr view <PR_NUMBER> --json state,reviewDecision,statusCheckRollup
 **If `state` is `CLOSED`:**
 
 - Exit to [Phase 3](#phase-3-exit) with status "closed"
+
+**If `mergeable` is `CONFLICTING`:**
+
+Checked before the `reviewDecision` branches for the same load-bearing reason as [§1.1](#11-early-exit-checks). Every outcome below names its destination explicitly — a conflicting pull request must never fall through to [§2.3](#23-check-for-new-reviews), which would resume the silent polling this branch exists to end.
+
+1. If `conflictSweeps` has reached 2, output "PR #N still conflicts with \<baseRefName\> after 2 sweeps." and exit to [Phase 3](#phase-3-exit) with status "conflicted"
+2. Output: "PR #N conflicts with \<baseRefName\>. Running the conflict sweep..."
+3. Increment `conflictSweeps`, then run the [Conflict Sweep](#conflict-sweep-shared-procedure)
+4. If the sweep pushed a rebased branch: output "Conflict resolved by rebase. Resuming monitoring..." and continue the polling loop (go to 2.1)
+5. If the sweep refused, aborted, or its push failed: exit to [Phase 3](#phase-3-exit) with status "conflicted"
 
 **If `reviewDecision` is `APPROVED` AND all checks in `statusCheckRollup` have `state === "SUCCESS"`:**
 
@@ -60988,6 +61302,18 @@ PR #N has been closed.
 URL: <pr-url>
 ```
 
+**Conflicted:**
+
+```
+PR Monitor Stopped
+
+PR #N conflicts with <base-branch> and cannot merge.
+Conflicted: [path-1], [path-2]
+Reason: <rebase halted / push failed / not agent-owned / sweep cap reached>
+Status: CONFLICTED
+URL: <pr-url>
+```
+
 ---
 
 ## Edge Cases
@@ -60997,6 +61323,10 @@ Cases the phases do not already cover:
 - **pr-resolve fails** → report error, ask user via AskUserQuestion: "Resolve review encountered an error. How would you like to proceed?" with options: Retry / Continue monitoring / Cancel
 - **CI fix attempt fails** → report error, ask user in foreground / return summary in background
 - **Fix causes a different failure** → counts as a new attempt for that check
+- **Rebase halts on conflicting content** → abort it, report the conflicted paths, and offer resolution in foreground only; never leave the tree mid-rebase
+- **Push after a sweep fails for any reason** → report and exit to [Phase 3](#phase-3-exit) with status "conflicted"; never retry, and never retry without the lease
+- **Conflicting PR on a fork, or one the agent does not own** → report and exit "conflicted"; the branch is not the agent's to rewrite
+- **Conflict sweep cap reached** → report and exit "conflicted" rather than sweeping again
 - **GitHub API rate limit (403/429)** → increase sleep interval to 120 seconds (2 minutes), warn user: "GitHub API rate limit detected. Increasing poll interval to 2 minutes."
 - **Network error** → retry API call once after 30 seconds; if still failing, warn user and ask whether to continue
 
@@ -61065,12 +61395,20 @@ Arguments are optional. Resolve each field:
 Auto-detect the PR from the current branch:
 
 ```bash
-gh pr view --json number,title,url,baseRefName,headRefName,author
+gh pr view --json number,title,url,baseRefName,headRefName,author,mergeable
 ```
 
 If no PR found, abort: "No pull request found for the current branch. Create one first with `/autopilot:pr-create`."
 
 Store the PR number, repo owner/name (extract from url), and author login.
+
+**If `mergeable` is `CONFLICTING`, abort** — fixes pushed onto a conflicting branch stay unmergeable, so resolving review feedback here only buries the reason the pull request is stuck:
+
+```
+PR #N conflicts with <base-branch> and cannot merge. Resolve the conflict first — the Conflict Sweep in the pr-monitor skill rebases the branch onto its base the sanctioned way.
+```
+
+`mergeable` is `UNKNOWN` while GitHub is still computing mergeability, and this skill reads it once rather than in a poll loop, so a cold pull request very often answers `UNKNOWN` on the first read. Re-read it once after a few seconds; if it is still `UNKNOWN`, proceed and say so rather than treating a pending answer as a clean one. Without that re-read the guard would silently pass in exactly the case it exists for. When [`pr-monitor`](../pr-monitor/SKILL.md#conflict-sweep-shared-procedure) invokes this skill it has already swept, so this branch is reached mainly on a standalone invocation.
 
 ### 1.2 Check Working Tree
 
@@ -61338,6 +61676,8 @@ PR #<N>: <url>
 ## Edge Cases
 
 - **No PR found** → abort with suggestion to create one
+- **PR conflicts with its base** (`mergeable` is `CONFLICTING`) → abort and name the [Conflict Sweep](../pr-monitor/SKILL.md#conflict-sweep-shared-procedure) as the fix; fixes pushed onto a conflicting branch stay unmergeable
+- **Mergeability still `UNKNOWN` after the re-read** → proceed, saying that mergeability could not be confirmed
 - **No review comments** → "No unresolved review comments found on PR #N"
 - **All comments resolved** → "All review comments on PR #N are already resolved"
 - **No code changes needed** → skip commit/push, only post replies
@@ -67629,7 +67969,7 @@ Answer a user comment on a PR review and update review state if needed. Used by 
 
 ### `/autopilot:pr-resolve`
 
-Address PR review comments. Fetches review feedback, categorizes by severity, makes code fixes, replies to comment threads, and updates the PR. Uses the [codebase context snapshot](#codebase-context-snapshot).
+Address PR review comments. Fetches review feedback, categorizes by severity, makes code fixes, replies to comment threads, and updates the PR. Uses the [codebase context snapshot](#codebase-context-snapshot). Aborts when the pull request conflicts with its base, since fixes pushed onto a conflicting branch stay unmergeable.
 
 ```bash
 /autopilot:pr-resolve
@@ -67637,7 +67977,7 @@ Address PR review comments. Fetches review feedback, categorizes by severity, ma
 
 ### `/autopilot:pr-monitor`
 
-Monitor a PR for review approval and CI check status. Blocks until approved with all checks passing, automatically resolving review feedback and fixing CI failures.
+Monitor a PR for review approval and CI check status. Blocks until approved with all checks passing, automatically resolving review feedback and fixing CI failures. Detects a conflicting branch and rebases it onto its base the sanctioned way, reporting and stopping when the rebase cannot complete cleanly.
 
 ```bash
 /autopilot:pr-monitor
@@ -68892,7 +69232,7 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
 - **No repository change** — available only when the finalized plan explicitly says no repository files must change, every step and `verify:` line passed, and the worktree, diff, and topic-commit checks are empty. An empty diff alone is never evidence of completion. This path emits `Outcome: no_repository_change` and performs no branch, commit, push, PR, or monitoring action.
 - **Auto-Commit** — `Skill(autopilot:commits-create)` with `--autopilot`, then `git push`.
 - **Auto-Create PR** — `Skill(autopilot:pr-create)` with `--autopilot`, then a format check on the result.
-- **Monitor** — `Skill(autopilot:pr-monitor)` polls CI and review status; on changes-requested it runs `pr-resolve` (auto "Address all") and loops until approval.
+- **Monitor** — `Skill(autopilot:pr-monitor)` polls CI, review, and mergeability status; on changes-requested it runs `pr-resolve` (auto "Address all") and loops until approval; on a conflicting branch it runs the Conflict Sweep and exits reporting the conflict if the rebase cannot complete.
 - Direct `gh pr create` / `git commit` are forbidden in autopilot mode — everything routes through the sub-skills so format stays correct.
 
 There are two variants of this flow, each replacing a different half of it. [`/autopilot:run-primed`](./15-run-primed-skill.md) keeps every phase above and replaces only the context gather, reading a SHA-validated [explore brief](./14-explore-skill.md) instead of re-mapping the repository. [`/autopilot:linear-run`](./17-linear-run-skill.md) keeps terminal selection and replaces the draft-and-review half, executing a plan that [`/autopilot:linear-plan`](./16-linear-plan-skill.md) stored on a Linear issue earlier — possibly in another session, for another person to read first. Both variants inherit the same no-change checks and repository-delivery chain instead of copying them. The paths differ in who reads the plan before it runs: `run` on a Linear input stores the plan and executes it in the same breath, while `linear-plan` → `linear-run` puts a teammate between store and execution — pick the pair when the plan should be read on the ticket first.
