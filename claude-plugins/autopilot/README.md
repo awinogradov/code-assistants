@@ -322,7 +322,7 @@ Answer a user comment on a PR review and update review state if needed. Used by 
 
 ### `/autopilot:pr-resolve`
 
-Address PR review comments. Fetches review feedback, categorizes by severity, makes code fixes, replies to comment threads, and updates the PR. Uses the [codebase context snapshot](#codebase-context-snapshot).
+Address PR review comments. Fetches review feedback, categorizes by severity, makes code fixes, replies to comment threads, and updates the PR. Uses the [codebase context snapshot](#codebase-context-snapshot). Aborts when the pull request conflicts with its base, since fixes pushed onto a conflicting branch stay unmergeable.
 
 ```bash
 /autopilot:pr-resolve
@@ -330,7 +330,7 @@ Address PR review comments. Fetches review feedback, categorizes by severity, ma
 
 ### `/autopilot:pr-monitor`
 
-Monitor a PR for review approval and CI check status. Blocks until approved with all checks passing, automatically resolving review feedback and fixing CI failures.
+Monitor a PR for review approval and CI check status. Blocks until approved with all checks passing, automatically resolving review feedback and fixing CI failures. Detects a conflicting branch and rebases it onto its base the sanctioned way, reporting and stopping when the rebase cannot complete cleanly.
 
 ```bash
 /autopilot:pr-monitor
