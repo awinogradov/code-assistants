@@ -343,6 +343,7 @@ The content is organized as follows:
         1.3.0.md
         1.3.1.md
         1.4.0.md
+        1.4.1.md
       src/
         migrations/
           migratingAppend.test.ts
@@ -32414,6 +32415,69 @@ Documentation has been added covering how Claude plugin npm publishing works, ho
 * cover npm publish gate and pack contract ([9de789a](https://github.com/awinogradov/code-assistants/commit/9de789a3dbd052ac50f27b18f13771b229f65170))
 </file>
 
+<file path=".github/actions/release-action/.release_notes/1.4.1.md">
+## [1.4.1](https://github.com/awinogradov/code-assistants/compare/release-action@v1.4.0...release-action@v1.4.1) (2026-08-29)
+
+## Release Notes
+
+The npm publish auth path for `pull_request_target`-triggered workflows is now correctly documented and wired — OIDC does not work on this trigger, and the `npm_token` input must be passed explicitly.
+
+## 🐛 Bug Fixes
+
+### npm Publish Auth on `pull_request_target` Triggers
+
+The first live npm publish run (claude-plugin 7.2.0) failed at the auth gate because the publish workflow was relying on OIDC token auth, which GitHub does not issue to `pull_request_target`-triggered runs. No `npm_token` was being passed either, leaving the publish step with no valid auth path. The fail-fast gate worked correctly — no tag or GitHub Release was created for that version — but the publish itself never completed.
+
+The workflow now explicitly passes `NPM_TOKEN` to the release action. Any repository using this action to publish npm packages must have `NPM_TOKEN` configured as a repository secret and passed via the `npm_token` input on the publish step.
+
+## 📋 Protocol & Contract Changes
+
+### npm Auth: Token Required for `pull_request_target` Publish Workflows
+
+OIDC (`id-token: write`) is no longer the documented auth path for publish jobs triggered by `pull_request_target`. Token auth via `npm_token` is the operative path for this trigger. The `id-token: write` permission remains declared so a future migration to an OIDC-capable trigger (e.g. `push`) requires no permissions change.
+
+**Before:**
+```yaml
+# publish workflow passed no npm_token input
+# id-token: write was implied as the auth path
+- uses: awinogradov/code-assistants/.github/actions/release-action@v1
+  with:
+    mode: publish
+    bot_token: ${{ secrets.BOT_TOKEN }}
+    bot_username: ${{ vars.BOT_USERNAME }}
+    slack_token: ${{ secrets.SLACK_TOKEN }}
+```
+
+**After:**
+```yaml
+# npm_token is now required for npm-publishing repositories
+- uses: awinogradov/code-assistants/.github/actions/release-action@v1
+  with:
+    mode: publish
+    bot_token: ${{ secrets.BOT_TOKEN }}
+    bot_username: ${{ vars.BOT_USERNAME }}
+    npm_token: ${{ secrets.NPM_TOKEN }}
+    slack_token: ${{ secrets.SLACK_TOKEN }}
+```
+
+## ⚙️ Configuration Required
+
+### `NPM_TOKEN` Secret for npm-Publishing Repositories
+
+Any repository using release-action to publish npm packages must have `NPM_TOKEN` configured as a repository secret and wired into the publish workflow via the `npm_token` input. This was always required for token-based auth but was previously undocumented and omitted from the reference workflow — the omission caused a live publish failure. OIDC cannot substitute for this on `pull_request_target` triggers. See the updated [release-action README](https://github.com/awinogradov/code-assistants/blob/main/.github/actions/release-action/README.md) and [docs/06-release-field.md](https://github.com/awinogradov/code-assistants/blob/main/docs/06-release-field.md) for the full inputs table.
+
+## 📚 Documentation & Settings Updates
+
+### Corrected npm Auth Claims Across Release Docs
+
+The [release-action README](https://github.com/awinogradov/code-assistants/blob/main/.github/actions/release-action/README.md), [docs/06-release-field.md](https://github.com/awinogradov/code-assistants/blob/main/docs/06-release-field.md), and the [release-publish.yml](https://github.com/awinogradov/code-assistants/blob/main/.github/workflows/release-publish.yml) workflow header have all been updated to accurately reflect that token auth is required for `pull_request_target` publish jobs. References to OIDC as a usable auth path on this trigger have been removed.
+
+
+### Documentation
+
+* correct npm auth claims for release publish ([ae69284](https://github.com/awinogradov/code-assistants/commit/ae69284e81826d1b4e39910ec808b777ed97491f))
+</file>
+
 <file path=".github/actions/release-action/src/migrations/migratingAppend.test.ts">
 /**
  * Tests for MIGRATING.md section rendering and append.
@@ -42866,6 +42930,66 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.4.1](https://github.com/awinogradov/code-assistants/compare/release-action@v1.4.0...release-action@v1.4.1) (2026-08-29)
+
+## Release Notes
+
+The npm publish auth path for `pull_request_target`-triggered workflows is now correctly documented and wired — OIDC does not work on this trigger, and the `npm_token` input must be passed explicitly.
+
+## 🐛 Bug Fixes
+
+### npm Publish Auth on `pull_request_target` Triggers
+
+The first live npm publish run (claude-plugin 7.2.0) failed at the auth gate because the publish workflow was relying on OIDC token auth, which GitHub does not issue to `pull_request_target`-triggered runs. No `npm_token` was being passed either, leaving the publish step with no valid auth path. The fail-fast gate worked correctly — no tag or GitHub Release was created for that version — but the publish itself never completed.
+
+The workflow now explicitly passes `NPM_TOKEN` to the release action. Any repository using this action to publish npm packages must have `NPM_TOKEN` configured as a repository secret and passed via the `npm_token` input on the publish step.
+
+## 📋 Protocol & Contract Changes
+
+### npm Auth: Token Required for `pull_request_target` Publish Workflows
+
+OIDC (`id-token: write`) is no longer the documented auth path for publish jobs triggered by `pull_request_target`. Token auth via `npm_token` is the operative path for this trigger. The `id-token: write` permission remains declared so a future migration to an OIDC-capable trigger (e.g. `push`) requires no permissions change.
+
+**Before:**
+```yaml
+# publish workflow passed no npm_token input
+# id-token: write was implied as the auth path
+- uses: awinogradov/code-assistants/.github/actions/release-action@v1
+  with:
+    mode: publish
+    bot_token: ${{ secrets.BOT_TOKEN }}
+    bot_username: ${{ vars.BOT_USERNAME }}
+    slack_token: ${{ secrets.SLACK_TOKEN }}
+```
+
+**After:**
+```yaml
+# npm_token is now required for npm-publishing repositories
+- uses: awinogradov/code-assistants/.github/actions/release-action@v1
+  with:
+    mode: publish
+    bot_token: ${{ secrets.BOT_TOKEN }}
+    bot_username: ${{ vars.BOT_USERNAME }}
+    npm_token: ${{ secrets.NPM_TOKEN }}
+    slack_token: ${{ secrets.SLACK_TOKEN }}
+```
+
+## ⚙️ Configuration Required
+
+### `NPM_TOKEN` Secret for npm-Publishing Repositories
+
+Any repository using release-action to publish npm packages must have `NPM_TOKEN` configured as a repository secret and wired into the publish workflow via the `npm_token` input. This was always required for token-based auth but was previously undocumented and omitted from the reference workflow — the omission caused a live publish failure. OIDC cannot substitute for this on `pull_request_target` triggers. See the updated [release-action README](https://github.com/awinogradov/code-assistants/blob/main/.github/actions/release-action/README.md) and [docs/06-release-field.md](https://github.com/awinogradov/code-assistants/blob/main/docs/06-release-field.md) for the full inputs table.
+
+## 📚 Documentation & Settings Updates
+
+### Corrected npm Auth Claims Across Release Docs
+
+The [release-action README](https://github.com/awinogradov/code-assistants/blob/main/.github/actions/release-action/README.md), [docs/06-release-field.md](https://github.com/awinogradov/code-assistants/blob/main/docs/06-release-field.md), and the [release-publish.yml](https://github.com/awinogradov/code-assistants/blob/main/.github/workflows/release-publish.yml) workflow header have all been updated to accurately reflect that token auth is required for `pull_request_target` publish jobs. References to OIDC as a usable auth path on this trigger have been removed.
+
+
+### Documentation
+
+* correct npm auth claims for release publish ([ae69284](https://github.com/awinogradov/code-assistants/commit/ae69284e81826d1b4e39910ec808b777ed97491f))
 ## [1.4.0](https://github.com/awinogradov/code-assistants/compare/release-action@v1.3.1...release-action@v1.4.0) (2026-08-27)
 
 ## Release Notes
@@ -43511,7 +43635,7 @@ Add a `release` field to your package.json to configure release behavior. See th
 <file path=".github/actions/release-action/package.json">
 {
   "name": "@code-assistants/release-action",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Composite GitHub Action that automates conventional-commit releases for npm packages, GitHub Actions, and Claude plugins.",
   "private": true,
   "type": "module",
@@ -43550,7 +43674,7 @@ Add a `release` field to your package.json to configure release behavior. See th
 <file path=".github/actions/release-action/README.md">
 # Release action
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.4.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.4.1-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that automates the release pipeline for npm packages, GitHub Actions, and Claude plugins.
@@ -43841,7 +43965,7 @@ uses: awinogradov/code-assistants/.github/actions/release-action@v1
 </file>
 
 <file path=".github/actions/release-action/version">
-1.4.0
+1.4.1
 </file>
 
 <file path=".github/actions/release-automerge/.release_notes/0.1.0.md">
