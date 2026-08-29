@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [8.1.3](https://github.com/awinogradov/code-assistants/compare/code-review-action@v8.1.2...code-review-action@v8.1.3) (2026-08-29)
+
+## Release Notes
+
+The PR monitor no longer loops indefinitely when a pull request conflicts with its base — it now detects the conflict, attempts a rebase, and handles failures safely.
+
+## ✨ What's New
+
+### Conflict Detection and Rebase in PR Monitor
+
+The `/autopilot:pr-monitor` skill can now recognize when a pull request is in a conflicting state and take meaningful action instead of polling in an endless loop. When a conflict is detected, the monitor attempts to rebase the branch onto its base. If the rebase completes cleanly, the PR is back on track automatically. If it cannot complete cleanly, the rebase is aborted and the conflicted paths are reported so the author knows exactly what needs attention.
+
+Importantly, conflict resolution is only offered interactively in foreground mode — the monitor will never silently apply fixes in an unattended background run. In background monitoring, a `CONFLICTING` status is reported and the run returns cleanly rather than spinning.
+
+The `/autopilot:pr-resolve` skill also now aborts early when it encounters a conflicting PR, rather than pushing fixes that would remain unmergeable anyway.
+
+<details><summary>Related issues</summary>
+
+- [#637: PR monitor keeps polling a conflicting pull request without reacting](https://github.com/awinogradov/code-assistants/issues/637)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #637 | [#638](https://github.com/awinogradov/code-assistants/pull/638) | @awinogradov |
+
+### Tests
+
+* add pr conflict contract test ([e73950d](https://github.com/awinogradov/code-assistants/commit/e73950d8a65b7aded2c7af9d1a1ad52dd844a05a))
 ## [8.1.2](https://github.com/awinogradov/code-assistants/compare/code-review-action@v8.1.1...code-review-action@v8.1.2) (2026-08-27)
 
 ## Release Notes
