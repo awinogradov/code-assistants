@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [7.5.1](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.5.0...autopilot@v7.5.1) (2026-09-02)
+
+## Release Notes
+
+The bundled pdf-create renderer's `js-yaml` dependency is patched to 3.15.2, clearing three denial-of-service advisories.
+
+## 🐛 Bug Fixes
+
+- Three denial-of-service advisories in the pdf-create renderer are resolved by upgrading `js-yaml` to 3.15.2; Dependabot will now open weekly PRs against the renderer lockfile to keep it current.
+
+
+### Bug Fixes
+
+* **autopilot:** bump js-yaml to 3.15.2 in pdf renderer ([b58c9f8](https://github.com/awinogradov/code-assistants/commit/b58c9f846c57414a3ee72ede46e2c7158590fc40))
 ## [7.5.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.4.0...autopilot@v7.5.0) (2026-09-02)
 
 ## Release Notes
