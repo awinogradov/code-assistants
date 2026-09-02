@@ -42,6 +42,7 @@ The `docs/` guides are numbered chapters in reading order — start at chapter 1
 | 16  | [The `linear-plan` skill](./docs/16-linear-plan-skill.md)                         | storing a scored plan on a Linear ticket so it outlives the session that drafted it                  |
 | 17  | [The `linear-run` skill](./docs/17-linear-run-skill.md)                           | executing a stored Linear plan verbatim: validate the format, or refuse and name the fix             |
 | 18  | [Portable single-source skills](./docs/18-agent-skills-export.md)                 | one authored skills layout for Claude, Codex, Kimi, and other CLIs, and the verbatim sync (RFC-0002) |
+| 19  | [Skill token budget](./docs/19-skill-token-budget.md)                             | why a skill body is charged per turn, the two rules for splitting one, and the byte-budget guard     |
 
 **Standards.**
 
