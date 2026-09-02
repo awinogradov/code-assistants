@@ -29,7 +29,7 @@ Expected form:
 
 - (no arguments) — auto-analyze staged changes
 - `"<context>"` — free-form context that helps generate a better commit message (e.g., `"add auth feature"`)
-- `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips the commit-strategy prompt and the [Phase 5](#phase-5-update-pr) PR update, and commits directly using the auto-generated messages.
+- `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips the [Phase 0](#phase-0-preflight-check) preflight (the calling chain already ran it), the commit-strategy prompt and the [Phase 5](#phase-5-update-pr) PR update, and commits directly using the auto-generated messages.
 
 ## Input resolution
 
@@ -57,7 +57,9 @@ Read [`askuserquestion-contract.md`](../shared-rules/references/askuserquestion-
 
 ## Phase 0: Preflight Check
 
-Invoke `Skill(autopilot:preflight-check)` with `mode: commits` from this conversation context. The skill verifies the current branch is appropriate for committing and warns if you are on `main`. If it outputs a "cancelled" message, stop immediately — do not proceed to [Phase 1](#phase-1-check-for-changes).
+**Autopilot bypass:** parse `$ARGUMENTS` for `--autopilot` before anything else — the same parse [Phase 1](#phase-1-check-for-changes) step 0 performs, moved here so this phase can read it. When the flag is present, skip this phase entirely. The calling chain ran its own preflight before any git mutation, so the history-policy gate is already installed; the branch came from [`branch-create`](../branch-create/SKILL.md), which validated the name against the same regex the `commits`-mode check uses; and uncommitted changes are this skill's input rather than a hazard.
+
+Otherwise invoke `Skill(autopilot:preflight-check)` with `mode: commits` from this conversation context. The skill verifies the current branch is appropriate for committing and warns if you are on `main`. If it outputs a "cancelled" message, stop immediately — do not proceed to [Phase 1](#phase-1-check-for-changes).
 
 ## Phase 1: Check for Changes
 

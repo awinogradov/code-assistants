@@ -140,7 +140,7 @@ Carry the brief's `## Conventions and standards` into the plan's applicable-stan
 
 ## Phase 4: Preflight verdict
 
-Identical to [`run`](../run/SKILL.md#phase-2-preflight-verdict): read branch, worktree, `isStaleMerged`, and `baseAhead` from the Context Map, compare the issue id against the current branch name, and invoke `Skill(autopilot:preflight-check)` only for a state the map does not cover. If it outputs "Planning cancelled", stop immediately.
+Identical to [`run`](../run/SKILL.md#phase-2-preflight-verdict): invoke `Skill(autopilot:preflight-check)` with `mode: plan` unconditionally — this is the session's single preflight and the one place the history-policy gate installs — passing the Context Map's branch, worktree, `isStaleMerged`, and `baseAhead` plus the issue-id-versus-branch-name comparison so it prompts only where the map leaves a real decision. If it outputs "Planning cancelled", stop immediately.
 
 This skill never enters plan mode — do NOT call `EnterPlanMode` or `ExitPlanMode`.
 

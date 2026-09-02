@@ -34,7 +34,7 @@ Expected forms:
 - `<ISSUE-NUMBER|LINEAR-ID> "<description>"` — issue identifier plus custom branch slug description
 - `--start` — Linear only: also move the Linear ticket to "In Progress" after the branch is created (best-effort). Ignored for GitHub and special-prefix branches.
 - `--hotfix "<description>"` / `--trivial "<description>"` / `--maintenance "<description>"` / `--proposal "<description>"` / `--security "<description>"` — special prefix branches without a GitHub issue (use `--security` for code-scanning alert fixes → `security-<slug>`)
-- `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips the [Phase 5](#phase-5-confirm-special-prefix-branch-name) confirmation prompt, which only special-prefix branches still reach. Issue and Linear branches are created directly for every caller, so the flag has no effect on them. Conflict resolution ([Phase 4](#phase-4-check-for-conflicts)) and validation errors still surface.
+- `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips the [Phase 0](#phase-0-preflight-check) preflight, which the calling chain already ran, and the [Phase 5](#phase-5-confirm-special-prefix-branch-name) confirmation prompt, which only special-prefix branches still reach. Issue and Linear branches are created directly for every caller, so the flag has no effect on their naming. Conflict resolution ([Phase 4](#phase-4-check-for-conflicts)) and validation errors still surface.
 
 ## Input resolution
 
@@ -48,7 +48,9 @@ Arguments are optional. When `$ARGUMENTS` is empty OR a field is missing, resolv
 
 ## Phase 0: Preflight Check
 
-Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversation context. The skill validates current branch state, detects stale merged branches, and ensures main is up to date before a new branch is created. If it outputs a "cancelled" message, stop immediately — do not proceed to [Phase 1](#phase-1-input-validation).
+**Autopilot bypass:** parse `$ARGUMENTS` for `--autopilot` before anything else — the same parse [Phase 1](#phase-1-input-validation) step 1 performs, moved here so this phase can read it. When the flag is present, skip this phase entirely. The calling chain ran its own preflight before any git mutation, so the history-policy gate is already installed, and the remaining `branch`-mode checks cannot change the outcome: [Phase 6](#phase-6-execute) fetches `origin` and branches from `origin/main` itself, so a stale local `main` never reaches the new branch.
+
+Otherwise invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversation context. The skill validates current branch state, detects stale merged branches, and ensures main is up to date before a new branch is created. If it outputs a "cancelled" message, stop immediately — do not proceed to [Phase 1](#phase-1-input-validation).
 
 ## Phase 1: Input Validation
 
