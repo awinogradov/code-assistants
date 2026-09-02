@@ -60067,14 +60067,14 @@ process.exit(0);
     "test": "node --import tsx --test test/*.test.ts"
   },
   "dependencies": {
-    "@react-pdf/renderer": "4.5.1",
+    "@react-pdf/renderer": "4.9.0",
     "gray-matter": "4.0.3",
-    "react": "19.2.7",
-    "tsx": "4.22.4",
-    "zod": "3.23.8"
+    "react": "19.2.8",
+    "tsx": "4.23.13",
+    "zod": "4.5.4"
   },
   "devDependencies": {
-    "@types/react": "19.2.17"
+    "@types/react": "19.2.18"
   }
 }
 </file>
