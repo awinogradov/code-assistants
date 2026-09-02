@@ -164,6 +164,7 @@ The content is organized as follows:
         8.1.1.md
         8.1.2.md
         8.1.3.md
+        8.1.4.md
       src/
         github/
           githubReview.test.ts
@@ -7521,6 +7522,38 @@ The `/autopilot:pr-resolve` skill also now aborts early when it encounters a con
 ### Tests
 
 * add pr conflict contract test ([e73950d](https://github.com/awinogradov/code-assistants/commit/e73950d8a65b7aded2c7af9d1a1ad52dd844a05a))
+</file>
+
+<file path=".github/actions/code-review-action/.release_notes/8.1.4.md">
+## [8.1.4](https://github.com/awinogradov/code-assistants/compare/code-review-action@v8.1.3...code-review-action@v8.1.4) (2026-09-02)
+
+## Release Notes
+
+Autopilot skill loading is restructured so Claude reads large reference sections on demand instead of upfront, reducing session token usage on every PR review and react run.
+
+## ✨ What's New
+
+- Rarely-reached sections of `preflight-check`, `commits-create`, `pr-update`, and `pr-monitor` are now stored in per-skill `references/` files and loaded only when needed, cutting the token overhead Claude incurs at the start of each autopilot session.
+
+<details><summary>Related issues</summary>
+
+- [#647: Reduce autopilot session token usage from repeated skill body loads](https://github.com/awinogradov/code-assistants/issues/647)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #647 | [#648](https://github.com/awinogradov/code-assistants/pull/648) | @awinogradov |
+
+### Refactoring
+
+* **autopilot:** move unreached sections to references ([2c8f445](https://github.com/awinogradov/code-assistants/commit/2c8f44523829daf41757c8a97bcceac39f8d8661))
+
+### Tests
+
+* **code-review-action:** guard skill body byte budgets ([7ee5b2e](https://github.com/awinogradov/code-assistants/commit/7ee5b2e697aacf68a96e07bdbbed45499339d327))
 </file>
 
 <file path=".github/actions/code-review-action/src/github/githubReview.test.ts">
@@ -21196,6 +21229,35 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [8.1.4](https://github.com/awinogradov/code-assistants/compare/code-review-action@v8.1.3...code-review-action@v8.1.4) (2026-09-02)
+
+## Release Notes
+
+Autopilot skill loading is restructured so Claude reads large reference sections on demand instead of upfront, reducing session token usage on every PR review and react run.
+
+## ✨ What's New
+
+- Rarely-reached sections of `preflight-check`, `commits-create`, `pr-update`, and `pr-monitor` are now stored in per-skill `references/` files and loaded only when needed, cutting the token overhead Claude incurs at the start of each autopilot session.
+
+<details><summary>Related issues</summary>
+
+- [#647: Reduce autopilot session token usage from repeated skill body loads](https://github.com/awinogradov/code-assistants/issues/647)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #647 | [#648](https://github.com/awinogradov/code-assistants/pull/648) | @awinogradov |
+
+### Refactoring
+
+* **autopilot:** move unreached sections to references ([2c8f445](https://github.com/awinogradov/code-assistants/commit/2c8f44523829daf41757c8a97bcceac39f8d8661))
+
+### Tests
+
+* **code-review-action:** guard skill body byte budgets ([7ee5b2e](https://github.com/awinogradov/code-assistants/commit/7ee5b2e697aacf68a96e07bdbbed45499339d327))
 ## [8.1.3](https://github.com/awinogradov/code-assistants/compare/code-review-action@v8.1.2...code-review-action@v8.1.3) (2026-08-29)
 
 ## Release Notes
@@ -23354,7 +23416,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/package.json">
 {
   "name": "@code-assistants/code-review-action",
-  "version": "8.1.3",
+  "version": "8.1.4",
   "description": "Composite GitHub Action that runs AI code review on pull requests via Claude Code.",
   "private": true,
   "type": "module",
@@ -23390,7 +23452,7 @@ Add the provided workflow file to `.github/workflows/ai-review.yml` to enable:
 <file path=".github/actions/code-review-action/README.md">
 # Code review action
 
-[![GitHub Release](https://img.shields.io/badge/release-v8.1.3-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v8.1.4-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that runs AI code review on pull requests using [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Has two modes:
@@ -23584,7 +23646,7 @@ uses: awinogradov/code-assistants/.github/actions/code-review-action@v1
 </file>
 
 <file path=".github/actions/code-review-action/version">
-8.1.3
+8.1.4
 </file>
 
 <file path=".github/actions/code-review-cost-monitor/.release_notes/0.1.0.md">
