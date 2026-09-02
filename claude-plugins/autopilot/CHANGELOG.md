@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [7.4.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.3.0...autopilot@v7.4.0) (2026-09-02)
+
+## Release Notes
+
+All autopilot-generated outputs — PR descriptions, review replies, release notes, and stack rules — now enforce one-fact-one-reason prose limits.
+
+## ✨ What's New
+
+- Generated PR descriptions, issue bodies, and review replies are capped at one fact and one reason per item, eliminating multi-paragraph filler across all autopilot outputs.
+- JSDoc is now enforced as a 1–3 line contract and inline comments as a 2-line *why*, with no issue history permitted in either, per the synced stack rules.
+- Release notes render as one-sentence bullets per change instead of a heading-and-paragraph block.
+- [RFC-0001](https://github.com/awinogradov/code-assistants/blob/main/rfc/0001-reference-formatting.md) is at v8 with a short-and-confident readability paragraph that backs these constraints.
+
+<details><summary>Related issues</summary>
+
+- [#643: Make generated prose short and confident across autopilot outputs](https://github.com/awinogradov/code-assistants/issues/643)
+- [#644: Make generated prose short and confident across autopilot outputs](https://github.com/awinogradov/code-assistants/pull/644)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #643 | [#644](https://github.com/awinogradov/code-assistants/pull/644) | @awinogradov |
+
+### Features
+
+* **autopilot:** make generated prose short and confident ([5e6895e](https://github.com/awinogradov/code-assistants/commit/5e6895e7de5da63671a76808fa6341c2bbbb7d29))
 ## [7.3.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.2.0...autopilot@v7.3.0) (2026-08-29)
 
 ## Release Notes
