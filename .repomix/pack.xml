@@ -47967,6 +47967,28 @@ updates:
     commit-message:
       prefix: "ci"
       include: "scope"
+
+  - package-ecosystem: "npm"
+    # The pdf-create renderer is the repository's only npm-managed manifest: a
+    # self-contained Node sub-project carrying its own package-lock.json,
+    # negated out of the Bun workspace. Nothing else here is npm — the root
+    # resolves through bun.lock, which would need `package-ecosystem: "bun"`
+    # (version updates only; Bun has no Dependabot security-update support),
+    # not this entry.
+    directory: "/claude-plugins/autopilot/skills/pdf-create/renderer"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "20:00"
+      timezone: "Asia/Dubai"
+    # One consolidated group -> a single weekly PR, as above.
+    groups:
+      pdf-create-renderer:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
 </file>
 
 <file path=".husky/commit-msg">
