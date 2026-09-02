@@ -2,6 +2,43 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [7.5.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.4.0...autopilot@v7.5.0) (2026-09-02)
+
+## Release Notes
+
+The preflight-check skill now loads once per autopilot session instead of once per creation skill, cutting repeated token overhead across `branch-create`, `commits-create`, and `pr-create` runs.
+
+## ✨ What's New
+
+- Session token usage is reduced because `preflight-check` runs once per autopilot session and its rarely-reached sections (`preflight-check`, `commits-create`, `pr-update`, `pr-monitor`) are now loaded on demand from per-skill `references/` files rather than included in every skill body — interactive invocation is unchanged.
+
+<details><summary>Related issues</summary>
+
+- [#647: Reduce autopilot session token usage from repeated skill body loads](https://github.com/awinogradov/code-assistants/issues/647)
+</details>
+
+## 📚 Documentation & Settings Updates
+
+- A skill token budget chapter has been added to the plugin docs, covering how token load is managed across autopilot sessions.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #647 | [#648](https://github.com/awinogradov/code-assistants/pull/648) | @awinogradov |
+
+### Features
+
+* **autopilot:** load preflight-check once per session ([51cbec0](https://github.com/awinogradov/code-assistants/commit/51cbec000b2240ffe2b5e5b9e383ec6ace8956af))
+
+### Documentation
+
+* add skill token budget chapter ([1106edc](https://github.com/awinogradov/code-assistants/commit/1106edcf91f6e663da948f9665c936085784f392))
+
+### Refactoring
+
+* **autopilot:** move unreached sections to references ([2c8f445](https://github.com/awinogradov/code-assistants/commit/2c8f44523829daf41757c8a97bcceac39f8d8661))
 ## [7.4.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.3.0...autopilot@v7.4.0) (2026-09-02)
 
 ## Release Notes
