@@ -524,6 +524,7 @@ claude-plugins/
       7.2.0.md
       7.3.0.md
       7.4.0.md
+      7.5.0.md
     agents/
       analyze-pr-commits.md
       analyze-staged-changes.md
@@ -48042,7 +48043,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "7.4.0",
+  "version": "7.5.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -50836,6 +50837,46 @@ All autopilot-generated outputs — PR descriptions, review replies, release not
 ### Features
 
 * **autopilot:** make generated prose short and confident ([5e6895e](https://github.com/awinogradov/code-assistants/commit/5e6895e7de5da63671a76808fa6341c2bbbb7d29))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/7.5.0.md">
+## [7.5.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.4.0...autopilot@v7.5.0) (2026-09-02)
+
+## Release Notes
+
+The preflight-check skill now loads once per autopilot session instead of once per creation skill, cutting repeated token overhead across `branch-create`, `commits-create`, and `pr-create` runs.
+
+## ✨ What's New
+
+- Session token usage is reduced because `preflight-check` runs once per autopilot session and its rarely-reached sections (`preflight-check`, `commits-create`, `pr-update`, `pr-monitor`) are now loaded on demand from per-skill `references/` files rather than included in every skill body — interactive invocation is unchanged.
+
+<details><summary>Related issues</summary>
+
+- [#647: Reduce autopilot session token usage from repeated skill body loads](https://github.com/awinogradov/code-assistants/issues/647)
+</details>
+
+## 📚 Documentation & Settings Updates
+
+- A skill token budget chapter has been added to the plugin docs, covering how token load is managed across autopilot sessions.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #647 | [#648](https://github.com/awinogradov/code-assistants/pull/648) | @awinogradov |
+
+### Features
+
+* **autopilot:** load preflight-check once per session ([51cbec0](https://github.com/awinogradov/code-assistants/commit/51cbec000b2240ffe2b5e5b9e383ec6ace8956af))
+
+### Documentation
+
+* add skill token budget chapter ([1106edc](https://github.com/awinogradov/code-assistants/commit/1106edcf91f6e663da948f9665c936085784f392))
+
+### Refactoring
+
+* **autopilot:** move unreached sections to references ([2c8f445](https://github.com/awinogradov/code-assistants/commit/2c8f44523829daf41757c8a97bcceac39f8d8661))
 </file>
 
 <file path="claude-plugins/autopilot/agents/analyze-pr-commits.md">
@@ -65616,6 +65657,43 @@ Before writing any output that mentions a file, standard, section, commit, or is
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [7.5.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.4.0...autopilot@v7.5.0) (2026-09-02)
+
+## Release Notes
+
+The preflight-check skill now loads once per autopilot session instead of once per creation skill, cutting repeated token overhead across `branch-create`, `commits-create`, and `pr-create` runs.
+
+## ✨ What's New
+
+- Session token usage is reduced because `preflight-check` runs once per autopilot session and its rarely-reached sections (`preflight-check`, `commits-create`, `pr-update`, `pr-monitor`) are now loaded on demand from per-skill `references/` files rather than included in every skill body — interactive invocation is unchanged.
+
+<details><summary>Related issues</summary>
+
+- [#647: Reduce autopilot session token usage from repeated skill body loads](https://github.com/awinogradov/code-assistants/issues/647)
+</details>
+
+## 📚 Documentation & Settings Updates
+
+- A skill token budget chapter has been added to the plugin docs, covering how token load is managed across autopilot sessions.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #647 | [#648](https://github.com/awinogradov/code-assistants/pull/648) | @awinogradov |
+
+### Features
+
+* **autopilot:** load preflight-check once per session ([51cbec0](https://github.com/awinogradov/code-assistants/commit/51cbec000b2240ffe2b5e5b9e383ec6ace8956af))
+
+### Documentation
+
+* add skill token budget chapter ([1106edc](https://github.com/awinogradov/code-assistants/commit/1106edcf91f6e663da948f9665c936085784f392))
+
+### Refactoring
+
+* **autopilot:** move unreached sections to references ([2c8f445](https://github.com/awinogradov/code-assistants/commit/2c8f44523829daf41757c8a97bcceac39f8d8661))
 ## [7.4.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.3.0...autopilot@v7.4.0) (2026-09-02)
 
 ## Release Notes
@@ -68387,14 +68465,14 @@ SOFTWARE.
     "test": "bun test lib",
     "clean": "rm -rf node_modules .turbo"
   },
-  "version": "7.4.0"
+  "version": "7.5.0"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v7.4.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v7.5.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -68908,7 +68986,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-7.4.0
+7.5.0
 </file>
 
 <file path="docs/01-workspace-structure.md">
