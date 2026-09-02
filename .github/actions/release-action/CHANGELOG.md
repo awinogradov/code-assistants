@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.5.0](https://github.com/awinogradov/code-assistants/compare/release-action@v1.4.1...release-action@v1.5.0) (2026-09-02)
+
+## Release Notes
+
+AI-generated release notes, PR descriptions, and review replies are now capped to one sentence per item across all autopilot outputs.
+
+## ✨ What's New
+
+- Release note bullets, PR descriptions, issue bodies, and review replies are each limited to one sentence — one fact and one reason — eliminating multi-paragraph prose from all autopilot outputs.
+
+<details><summary>Related issues</summary>
+
+- [#643: Make generated prose short and confident across autopilot outputs](https://github.com/awinogradov/code-assistants/issues/643)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #643 | [#644](https://github.com/awinogradov/code-assistants/pull/644) | @awinogradov |
+
+### Features
+
+* **autopilot:** make generated prose short and confident ([5e6895e](https://github.com/awinogradov/code-assistants/commit/5e6895e7de5da63671a76808fa6341c2bbbb7d29))
+* **release-action:** emit one-sentence release note bullets ([ac51009](https://github.com/awinogradov/code-assistants/commit/ac510098965d3f39ed78d4568088845686896c75))
 ## [1.4.1](https://github.com/awinogradov/code-assistants/compare/release-action@v1.4.0...release-action@v1.4.1) (2026-08-29)
 
 ## Release Notes
