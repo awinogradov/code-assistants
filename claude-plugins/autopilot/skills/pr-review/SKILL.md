@@ -266,7 +266,7 @@ Rule details: read [references/checks-testing.md](./references/checks-testing.md
 - <a id="CHECK-CPLX-006"></a>**CHECK-CPLX-006** (suggestion) — Inconsistent naming within module
 - <a id="CHECK-CPLX-007"></a>**CHECK-CPLX-007** (suggestion) — Magic numbers or magic strings
 - <a id="CHECK-CPLX-008"></a>**CHECK-CPLX-008** (suggestion) — Long parameter list (>9 total or >6 positional)
-- <a id="CHECK-CPLX-009"></a>**CHECK-CPLX-009** (suggestion) — Comment explains "what" instead of "why"
+- <a id="CHECK-CPLX-009"></a>**CHECK-CPLX-009** (suggestion) — Comment restates the code or narrates history
 
 Rule details: read [references/checks-complexity-readability.md](./references/checks-complexity-readability.md) before applying this family.
 
@@ -343,7 +343,7 @@ Stack is not relevant for PR hygiene — these apply universally.
 - <a id="CHECK-PR-004"></a>**CHECK-PR-004** (blocker) — No merge commits in feature branch
 - <a id="CHECK-PR-005"></a>**CHECK-PR-005** (suggestion) — No "fix review" or "address feedback" commits
 - <a id="CHECK-PR-006"></a>**CHECK-PR-006** (suggestion) — No unrelated file changes
-- <a id="CHECK-PR-007"></a>**CHECK-PR-007** (suggestion) — Description explains "why", not just "what"
+- <a id="CHECK-PR-007"></a>**CHECK-PR-007** (suggestion) — Description states why in one sentence and stays short
 - <a id="CHECK-PR-008"></a>**CHECK-PR-008** (blocker) — Breaking changes called out
 - <a id="CHECK-PR-009"></a>**CHECK-PR-009** (suggestion) — Release notes section present for user-facing changes
 
