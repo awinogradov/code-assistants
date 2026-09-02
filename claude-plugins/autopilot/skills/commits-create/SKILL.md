@@ -40,20 +40,11 @@ Arguments are optional. When `$ARGUMENTS` is empty:
 - **Repository conventions** — read `CONTRIBUTING.md` directly from the repository root.
 - **Existing PR** — detect via `gh pr view --json number,url 2>/dev/null` at [Phase 5](#phase-5-update-pr). No user prompt needed.
 
-## AskUserQuestion Contract (MANDATORY)
+## Interactive dialogs
 
-**Autopilot bypass:** When `autopilotMode` is true (from [Phase 1](#phase-1-check-for-changes)), this contract is moot — the strategy prompt is skipped and a validation failure aborts instead of prompting. Generate the commit message(s), commit directly, and exit without prompting.
+Three dialogs exist, and all three run only when `autopilotMode` is false: the [Phase 1](#phase-1-check-for-changes) file-selection question, the [Phase 3](#phase-3-choose-commit-strategy) commit-strategy prompt, and the validation-failure dialog that [Commit Message Validation](#commit-message-validation) escalates to after three failed attempts. A generated commit message is never presented for approval on the success path — the validation gate stands in for reading it.
 
-The rules below govern two dialogs, and both MUST follow them:
-
-- the [Phase 3](#phase-3-choose-commit-strategy) commit-strategy prompt — a plain choice, no `preview`;
-- the [validation failure dialog](#validation-failure-dialog) — reached only when three attempts fail to compose a valid message, and the one place a commit message is ever shown for review.
-
-[Phase 1](#phase-1-check-for-changes) may also ask which files to stage when the working tree has unstaged changes. That is a file-selection question rather than content presented for review, so this contract does not govern it.
-
-A generated commit message is never presented for approval on the success path; [Commit Message Validation](#commit-message-validation) is what gates it.
-
-Read [`askuserquestion-contract.md`](../shared-rules/references/askuserquestion-contract.md) and apply it to both dialogs. In this skill, `preview` belongs to the [validation failure dialog](#validation-failure-dialog) only — the strategy prompt is a plain choice and takes no `preview`.
+When `autopilotMode` is true, none of them runs: generate the message(s), commit, and exit without prompting; a validation failure aborts loudly instead. When it is false and you reach the strategy prompt or the validation-failure dialog, read [`references/interactive-dialogs.md`](./references/interactive-dialogs.md) — it carries both dialogs' exact parameters and the AskUserQuestion contract governing them.
 
 ## Phase 0: Preflight Check
 
@@ -91,21 +82,7 @@ After the agent completes, store the structured results (categories, file lists,
 Use the agent's analysis to decide the commit flow:
 
 - **If agent recommends `singleCommitRecommended: true`:** single commit flow ([Phase 4](#phase-4-execute-commits))
-- **If agent recommends `singleCommitRecommended: false`:** the changeset is large enough to consider splitting. Evaluate whether the changes represent genuinely distinct areas. If a single coherent commit message can describe all changes, use single commit flow. Otherwise, ask the user:
-
-  **Formatting Note:** Read [`askuserquestion-format.md`](../shared-rules/references/askuserquestion-format.md) and apply it before composing the `question` parameter.
-
-  Tool parameters:
-  - `question`: "How would you like to commit these changes?"
-  - `header`: "Commit strategy"
-  - `options`: [
-    { label: "Single commit (Recommended)", description: "One commit with a comprehensive message" },
-    { label: "Separate commits", description: "Create N atomic commits by category" }
-    ]
-  - `multiSelect`: false
-
-- **If user chooses "Separate commits":** Continue to [Phase 4](#phase-4-execute-commits) with grouped flow
-- **If user chooses "Single commit":** Continue to [Phase 4](#phase-4-execute-commits) with single commit flow
+- **If agent recommends `singleCommitRecommended: false`:** the changeset is large enough to consider splitting. Evaluate whether the changes represent genuinely distinct areas. If a single coherent commit message can describe all changes, use single commit flow. Otherwise ask the user, using the prompt in [`references/interactive-dialogs.md`](./references/interactive-dialogs.md#phase-3-commit-strategy-prompt) — read it now. "Separate commits" continues to [Phase 4](#phase-4-execute-commits) with the grouped flow, "Single commit" with the single-commit flow.
 
 ## Phase 4: Execute Commits
 
@@ -116,7 +93,7 @@ Use the agent's analysis to decide the commit flow:
    - The specific technical change (what was added, removed, or replaced)
    - The concrete modifications made (what files, functions, values, or behaviors changed)
 3. Generate commit message following the format below — the title must name the specific thing that changed, and the body must list the concrete modifications
-4. **WHAT-not-WHY validation**: Answer the rubric in the [WHAT-not-WHY Rule](#what-not-why-rule-mandatory) section for the generated title. If any rubric question fails, regenerate the title using only concrete technical details from the diff. Repeat up to 3 times. If the title still fails, hand it to the [validation failure dialog](#validation-failure-dialog) with the failing check named — do not commit it.
+4. **WHAT-not-WHY validation**: Answer the rubric in the [WHAT-not-WHY Rule](#what-not-why-rule-mandatory) section for the generated title. If any rubric question fails, regenerate the title using only concrete technical details from the diff. Repeat up to 3 times. If the title still fails, hand it to the [validation failure dialog](./references/interactive-dialogs.md#validation-failure-dialog) with the failing check named — do not commit it.
 5. Validate the composed candidate message with [Commit Message Validation](#commit-message-validation) — every checkable rule from the config plus commitlint when installed. On any violation, regenerate and re-validate (≤3 attempts); do not commit a message that still fails.
 6. Run `git commit -m "<message>"`. There is no confirmation step: the message is derived from a diff the user just produced, and steps 4–5 are the gate that stands in for reading it. Continue to [Phase 5](#phase-5-update-pr).
 
@@ -233,28 +210,8 @@ Treat any reported problem as a violation. Gating on the binary's existence avoi
 
 **Success = every checkable declared rule passes** (plus commitlint when it ran), not just one rule. NEVER `git commit` a message that still fails. After 3 failed attempts:
 
-- Interactive mode — open the [validation failure dialog](#validation-failure-dialog) below.
+- Interactive mode — open the [validation failure dialog](./references/interactive-dialogs.md#validation-failure-dialog) below.
 - Autopilot mode — abort loudly with the failing rule(s); leave the index/staged state untouched and create no partial commit.
-
-#### Validation failure dialog
-
-The single interactive escape hatch in this skill, shared by the [Phase 4](#phase-4-execute-commits) WHAT-not-WHY check and the 3-attempt validation failure above. Because the success path no longer shows the user a message, this dialog is the only place one is ever presented — so use it verbatim rather than improvising a prompt, and obey the [AskUserQuestion Contract](#askuserquestion-contract-mandatory).
-
-**Interactive mode only.** When `autopilotMode` is true, neither caller opens it: abort loudly with the failing rule(s), leave the index untouched, and create no partial commit.
-
-Substitute `<commit message>` with the failing message followed by a blank line and a `Fails: <rule> — <what is wrong>` line, identically on both options.
-
-Tool parameters:
-
-- `question`: "The generated commit message still fails validation. Choose an action."
-- `header`: "Invalid message"
-- `options`: [
-  { label: "Reword", description: "Provide a corrected commit message", preview: "<commit message>" },
-  { label: "Cancel", description: "Abort commit creation", preview: "<commit message>" }
-  ]
-- `multiSelect`: false
-
-If "Reword" is selected, take the user's message and re-run the whole of [Commit Message Validation](#commit-message-validation) on it — a hand-typed subject is validated too, never committed unchecked — reopening this dialog while it fails. If "Cancel" is selected, abort with "Commit cancelled." and create no commit; in the grouped flow, abort every remaining commit with "Commits cancelled."
 
 ## Phase 5: Update PR
 
@@ -271,93 +228,7 @@ After all commits are created successfully:
 
 ## Examples
 
-### Single Commit
-
-```
-feat(auth): add jwt token refresh endpoint
-
-- Added /auth/refresh endpoint that issues new access token from refresh token
-- Added 7-day expiry validation for refresh tokens
-- Returns 401 with "refresh_expired" code when token is past expiry
-```
-
-```
-fix(api): return 404 instead of 500 for missing user lookup
-
-- Changed UserService.findById to return null instead of throwing
-- Added explicit 404 response in GET /users/:id handler
-```
-
-```
-docs: add environment variables reference to readme
-```
-
-### Grouped Commits
-
-```
-Analyzing staged changes...
-
-Detected 3 categories:
-- impl: 3 files (auth.ts, auth.types.ts, index.ts)
-- test: 1 file (auth.test.ts)
-- docs: 2 files (docs/auth.md, docs/api-reference.md)
-
-How would you like to commit these changes?
-```
-
-User selects "Separate commits" via AskUserQuestion tool — the one prompt in this flow, because the analyzer recommends a strategy but does not decide it.
-
-Every category's message is then generated and validated upfront, and the commits are created in category order with no further prompting:
-
-```
-✓ Created commit: feat(auth): implement jwt validation
-✓ Created commit: test(auth): add jwt validation tests
-✓ Created commit: docs: update authentication documentation
-
-All 3 commits created successfully.
-```
-
-### Single Category (No Grouping Offered)
-
-```
-Analyzing staged changes...
-
-All changes are in 1 category (impl).
-```
-
-No strategy prompt and no message confirmation — the message is generated, validated, and committed:
-
-```
-✓ Created commit: feat(auth): implement jwt validation
-```
-
-### With an existing PR
-
-After committing on a branch that already has a PR, [Phase 5](#phase-5-update-pr) refreshes it without asking:
-
-```
-✓ Created commit: feat(auth): add password reset flow
-✓ Updated PR #15: https://github.com/org/repo/pull/15
-```
-
-On a branch with no PR, the skill finishes at the commit and says nothing about pull requests.
-
-### Validation failure
-
-When three attempts still produce an invalid message, the [validation failure dialog](#validation-failure-dialog) is the one place a message is shown for review:
-
-AskUserQuestion with:
-
-- `question`: "The generated commit message still fails validation. Choose an action."
-- `header`: "Invalid message"
-- `options`: [
-  { label: "Reword", description: "Provide a corrected commit message", preview: "feat(auth): add JWT refresh endpoint\n\n- Added /auth/refresh endpoint\n\nFails: subject-case — the subject must be all lowercase" },
-  { label: "Cancel", description: "Abort commit creation", preview: "feat(auth): add JWT refresh endpoint\n\n- Added /auth/refresh endpoint\n\nFails: subject-case — the subject must be all lowercase" }
-  ]
-
-User selects "Reword" and supplies `feat(auth): add jwt refresh endpoint`. It is re-validated, passes, and is committed.
-
-In autopilot mode the same failure aborts loudly instead, leaving the staged state untouched.
+Worked call sites for the single, grouped, and failure paths live in [`references/examples.md`](./references/examples.md) — read it when a call site is ambiguous. The message shape itself is in [Commit Message Format](#commit-message-format) above.
 
 ## Reference formatting
 

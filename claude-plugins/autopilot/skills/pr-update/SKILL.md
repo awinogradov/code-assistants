@@ -44,7 +44,7 @@ Arguments are optional. Resolve each field:
 
 ## AskUserQuestion Contract (MANDATORY)
 
-Read [`askuserquestion-contract.md`](../shared-rules/references/askuserquestion-contract.md) and apply it to the [Phase 6](#phase-6-verify-with-user) PR preview dialog — the PR content (title + body with separators) is the preview. Simple choice dialogs ([Phase 4](#phase-4-ask-user-for-context-optional) Auto-generate/Add context) are exempt from the preview requirement.
+Both dialogs and the contract governing them live in [`references/interactive-dialogs.md`](./references/interactive-dialogs.md) — [Phase 4](#phase-4-ask-user-for-context-optional) and [Phase 6](#phase-6-verify-with-user) each say when to read it. Under `--autopilot` neither runs.
 
 ## Phase 1: Detect PR
 
@@ -89,22 +89,7 @@ After the agent completes, store the structured results (commit log, diff summar
 
 **Autopilot bypass:** if `--autopilot` was passed, skip this phase — proceed with auto-generation.
 
-Use **AskUserQuestion tool** to ask if user wants to highlight anything:
-
-**Formatting Note:** Read [`askuserquestion-format.md`](../shared-rules/references/askuserquestion-format.md) and apply it before composing the `question` parameter.
-
-Tool parameters:
-
-- `question`: "Updating PR #<N>. Would you like to highlight anything specific in the updated description?"
-- `header`: "PR context"
-- `options`: [
-  { label: "Auto-generate", description: "Generate title and description from commits and diff" },
-  { label: "Add context", description: "Provide specific points to emphasize" }
-  ]
-- `multiSelect`: false
-
-- If "Add context" selected: ask user for their input, then incorporate into generation
-- If "Auto-generate" selected: proceed directly
+Otherwise ask whether the user wants to highlight anything, using the dialog in [`references/interactive-dialogs.md`](./references/interactive-dialogs.md#phase-4-ask-user-for-context-optional) — read it now. "Add context" incorporates the user's input into generation; "Auto-generate" proceeds directly.
 
 ## Phase 5: Generate Updated PR Title and Body
 
@@ -134,48 +119,7 @@ Read [`pr-body-grammar.md`](../shared-rules/references/pr-body-grammar.md) and c
 
 **Autopilot bypass:** if `--autopilot` was passed, skip the dialog — compose the full PR content (title + body), run the [Phase 5](#phase-5-generate-updated-pr-title-and-body) Title self-check, and proceed directly to [Phase 7](#phase-7-push-and-update).
 
-Present the updated PR using **AskUserQuestion tool** with preview.
-
-1. Compose the full PR content (title + description with separators) as a single string, after running the [Phase 5](#phase-5-generate-updated-pr-title-and-body) Title self-check on the title.
-
-2. Confirm using AskUserQuestion tool:
-
-   **Tool call structure: See AskUserQuestion Contract above. All rules are mandatory.**
-
-   Tool parameters:
-   - `question`: "Review the updated pull request and choose an action."
-   - `header`: "Update PR"
-   - `options`:
-
-     **If `--release-notes` was NOT used AND no breaking changes AND meaningful changes detected:**
-     [
-     { label: "Update PR", description: "Apply changes to PR #<N>", preview: "<full PR content>" },
-     { label: "Add release notes", description: "Generate a release notes section for the changelog", preview: "<full PR content>" },
-     { label: "Edit content", description: "Modify title or description", preview: "<full PR content>" },
-     { label: "Cancel", description: "Keep the PR unchanged", preview: "<full PR content>" }
-     ]
-
-     **Otherwise (flag used, breaking changes auto-added, or no meaningful changes):**
-     [
-     { label: "Update PR", description: "Apply changes to PR #<N>", preview: "<full PR content>" },
-     { label: "Edit content", description: "Modify title or description", preview: "<full PR content>" },
-     { label: "Cancel", description: "Keep the PR unchanged", preview: "<full PR content>" }
-     ]
-
-   - `multiSelect`: false
-
-   All options use the same `preview` content (full PR title + body) since the user is choosing an action, not content. The preview enables a side-by-side layout in the UI.
-
-3. If user selects "Add release notes":
-   - Generate the **Release notes:** section (same rules as [Phase 5](#phase-5-generate-updated-pr-title-and-body))
-   - Insert it into the PR body between the description and issue links sections (with `---` separators)
-   - Re-present the full PR content using AskUserQuestion with preview (without the "Add release notes" option)
-
-4. If user selects "Edit content": ask what to change, regenerate, re-present
-
-5. If user selects "Cancel": abort with "PR update cancelled."
-
-6. Only proceed after user selects "Update PR"
+Otherwise present the updated PR for review, using the dialog in [`references/interactive-dialogs.md`](./references/interactive-dialogs.md#phase-6-verify-with-user) — read it now. It carries the two option sets (they differ by whether release notes are still offerable), the shared-preview rule, and the handling for each choice. Only proceed to [Phase 7](#phase-7-push-and-update) after the user selects "Update PR".
 
 ## Phase 7: Push and Update
 
@@ -190,55 +134,4 @@ Present the updated PR using **AskUserQuestion tool** with preview.
 
 ## Examples
 
-### Basic update after new commits (abbreviated for readability)
-
-```
-User: /update-pr
-
-Detecting PR for current branch...
-Found PR #42: Allow editor theme selection per workspace
-
-Gathering context...
-- 5 commits since main
-- 8 files changed
-```
-
-[Phase 4](#phase-4-ask-user-for-context-optional) AskUserQuestion with:
-
-- `question`: "Updating PR #42. Would you like to highlight anything specific in the updated description?"
-- `header`: "PR context"
-
-User selects "Auto-generate".
-
-[Phase 6](#phase-6-verify-with-user) AskUserQuestion parameters:
-
-- `question`: "Review the updated pull request and choose an action."
-- `header`: "Update PR"
-- `options`: `Update PR` / `Add release notes` / `Edit content` / `Cancel`, with the descriptions listed in [Phase 6](#phase-6-verify-with-user)
-- `multiSelect`: false
-
-Preview (every option carries this same full preview string):
-
-```
-Allow editor theme selection per workspace
-
-Users can now pick an editor theme per workspace. This makes long review sessions easier on the eyes and matches the rest of their IDE.
-
-- Added editor_theme per-workspace setting
-- Falls back to the system theme if no preference is set
-- Added validation for theme names
-
----
-
-**Issues:**
-
-Closes #749
-```
-
-User selects "Update PR".
-
-```
-✓ Updated PR #42: https://github.com/org/repo/pull/42
-```
-
-Further worked examples: read [references/examples.md](./references/examples.md) when a call site is ambiguous.
+Worked call sites live in [`references/examples.md`](./references/examples.md) — read it when a call site is ambiguous.

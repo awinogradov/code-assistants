@@ -68,51 +68,9 @@ Interactive — blocks the conversation, invokes `pr-resolve` when changes are r
 
 ### Background Mode
 
-When invoked via the Agent tool with `run_in_background: true` (spawned by [Phase 0](#phase-0-mode-dispatch) of this skill), the skill operates non-interactively:
+There is no user to interact with, so the skill reports instead of acting: it never invokes [`pr-resolve`](../pr-resolve/SKILL.md), never attempts a CI fix, never rewrites history, and never calls `AskUserQuestion`. On changes requested, new actionable comments, failing checks, or a conflict it returns immediately with a structured summary; approved, merged, and closed return the same [Phase 3](#phase-3-exit) exit message as foreground mode.
 
-- **Do NOT invoke** `Skill(autopilot:pr-resolve)` — the user is not available for interaction
-- **Do NOT attempt to fix CI checks** — the user is not available for interaction and fixes may require judgment calls
-- **Do NOT rebase, resolve, or push** — a history rewrite has no one to authorize it here; the [Conflict Sweep](#conflict-sweep-shared-procedure) returns the summary below instead of acting
-- **Do NOT use** `AskUserQuestion` — no user interaction in background mode
-- When changes are requested or new actionable review comments are detected, **return immediately** with a structured summary instead of invoking pr-resolve:
-
-  ```
-  PR Monitor: Changes Requested
-
-  PR #N has review feedback that needs attention.
-  Status: CHANGES_REQUESTED
-  URL: <pr-url>
-
-  Run /pr-resolve to address the feedback.
-  ```
-
-- When CI checks fail, **return immediately** with a structured summary:
-
-  ```
-  PR Monitor: CI Checks Failed
-
-  PR #N has failing CI checks.
-  Failed: [check-name-1], [check-name-2]
-  Status: CHECKS_FAILED
-  URL: <pr-url>
-
-  Fix the failing checks and push, or run /pr-monitor again.
-  ```
-
-- When the pull request conflicts with its base, **return immediately** with a structured summary:
-
-  ```
-  PR Monitor: Merge Conflict
-
-  PR #N conflicts with <base-branch> and cannot merge.
-  Conflicted: [path-1], [path-2]
-  Status: CONFLICTING
-  URL: <pr-url>
-
-  Run /autopilot:pr-monitor in the foreground to rebase the branch onto its base.
-  ```
-
-- For approved/merged/closed, return the same [Phase 3](#phase-3-exit) exit message as foreground mode
+Read [`references/background-mode.md`](./references/background-mode.md) for those summary formats before emitting one.
 
 **Detect background mode** per [Phase 0](#phase-0-mode-dispatch): use background behavior when the skill was launched with `--background`, when it runs inside an Agent subprocess, or when this prompt contains "background mode"; otherwise use foreground behavior.
 
@@ -147,45 +105,11 @@ Run whenever `reviewDecision` is `APPROVED` — from the [§1.1](#11-early-exit-
 
 ### Conflict Sweep (shared procedure)
 
-Run whenever `mergeable` is `CONFLICTING` — from the [§1.1](#11-early-exit-checks) pre-loop check or the [§2.2](#22-check-pr-state) per-cycle check. Only the follow-up outputs and continue targets differ, and those stay with each caller.
+Run whenever `mergeable` is `CONFLICTING` — from the [§1.1](#11-early-exit-checks) pre-loop check or the [§2.2](#22-check-pr-state) per-cycle check. The procedure is in [`references/conflict-sweep.md`](./references/conflict-sweep.md); read it at that point. Only the follow-up outputs and continue targets differ between callers, and those stay with each caller.
 
-`mergeable` is `UNKNOWN`, not `CONFLICTING`, whenever GitHub has not finished computing mergeability — which is the normal reading for the first cycle or two after any push. `UNKNOWN` is a pending state: leave it to the next poll and do not sweep on it.
+Every command this skill runs is bound by [`git-history-policy.md`](../shared-rules/references/git-history-policy.md) — the sweep's rebase and lease-pinned push are the policy's one sanctioned synchronization path, and the [§2.2a](#22a-check-ci-status) fix push is a plain fast-forward or nothing. Neither the sweep nor a CI fix may merge the base branch into the pull request.
 
-Read [`git-history-policy.md`](../shared-rules/references/git-history-policy.md) before running any command below. Every step of this sweep is the policy's sanctioned synchronization path and nothing else: a conflicting branch is the one condition under which a pull-request branch genuinely needs its base's changes, and it is taken by rebase, never by merging the base in.
-
-1. **Background mode returns instead of acting.** Emit the `Status: CONFLICTING` summary from [Background Mode](#background-mode) and stop. A background run has no user to authorize a history rewrite, so it never fetches, rebases, or pushes.
-2. **Refuse and exit when the sweep is not the agent's to run.** Each of these ends monitoring at [Phase 3](#phase-3-exit) with status "conflicted", naming the reason — none is retried:
-   - `git status --porcelain` is non-empty — a rebase would fail or silently strand the changes.
-   - A rebase is already in progress (`git rev-parse --git-path rebase-merge` or `rebase-apply` exists) — never start a second one on top.
-   - `headRepositoryOwner` differs from the pull request's own repository: a fork branch the agent cannot push to.
-   - The pull request's `author.login` is not the login `gh api user --jq .login` reports. This is the policy's "never rewrite a branch you do not own" made checkable. Note that under a workflow `GITHUB_TOKEN` the authenticated identity is the bot rather than the account that opened the pull request, so the sweep is inert in CI by design.
-3. **Pin the lease.** Record `git rev-parse origin/<headRefName>` as `preRebaseSha` before anything changes. The push in step 5 leases against this exact value; a bare `--force-with-lease` is anchored to whatever the local tracking ref happens to hold, and any unrelated fetch re-anchors it and quietly degrades the push to the unleased `--force` the policy forbids.
-4. **Take the base changes by rebase:**
-   ```bash
-   git fetch origin <baseRefName>
-   git rebase origin/<baseRefName>
-   ```
-5. **A rebase that completes cleanly** pushes with the pinned lease, sets `cooldownRemaining = 3`, and returns to the caller:
-   ```bash
-   git push --force-with-lease=<headRefName>:<preRebaseSha>
-   ```
-   Any push failure is terminal: report it and exit to [Phase 3](#phase-3-exit) with status "conflicted". Never retry it, and never retry it without the lease.
-6. **A rebase that halts aborts immediately** — the working tree is never left mid-rebase:
-   ```bash
-   git diff --name-only --diff-filter=U   # capture the conflicted paths first
-   git rebase --abort
-   ```
-   Report the conflicted paths and `preRebaseSha`, then hand to step 7.
-7. **Only in foreground mode**, offer the halted rebase to the user via AskUserQuestion — mirroring the CI-unfixable prompt in [§2.2a](#22a-check-ci-status). Resolving conflicted hunks is a judgement call about intent, so it happens because the user asked for it, never because the sweep decided on its own. That is why step 6 aborts first.
-   - `question`: "PR #N conflicts with \<baseRefName\> and the rebase could not complete.\n\nConflicted paths: \<paths\>\nBranch head before rebase: \<preRebaseSha\>"
-   - `header`: "Conflict"
-   - `options`: [
-     { label: "Resolve conflicts", description: "Rebase again and resolve the conflicted hunks, then push" },
-     { label: "Stop monitoring", description: "Leave the branch untouched and exit" }
-     ]
-   - `multiSelect`: false
-   - If "Resolve conflicts": re-run step 4, resolve each conflicted path, `git add` it, `git rebase --continue` until the rebase finishes, then push per step 5.
-   - If "Stop monitoring": exit to [Phase 3](#phase-3-exit) with status "conflicted".
+`mergeable` is `UNKNOWN`, not `CONFLICTING`, whenever GitHub has not finished computing mergeability — the normal reading for the first cycle or two after any push. `UNKNOWN` is a pending state: leave it to the next poll and do not sweep on it.
 
 ### 1.1 Early Exit Checks
 
@@ -216,7 +140,7 @@ This branch is checked before the `reviewDecision` branches below, and the order
    - Exit: "PR #N is already approved with all checks passing. No monitoring needed."
 4. If HEAD unchanged AND checks are not all passing:
    - Output: "PR #N is approved but has failing CI checks. Attempting to fix..."
-   - Run the **CI Fix Workflow** (see [§2.2a](#22a-check-ci-status))
+   - Run the **CI Fix Workflow** in [`references/ci-remediation.md`](./references/ci-remediation.md)
    - After fix, output: "CI fixes pushed. Starting monitoring..."
    - Continue to Phase 1.2
 
@@ -230,7 +154,7 @@ This branch is checked before the `reviewDecision` branches below, and the order
 **If checks are failing** (any check in `statusCheckRollup` with `state` that is not `SUCCESS` and not `PENDING` and not `EXPECTED`):
 
 1. Output: "PR #N has failing CI checks. Attempting to fix..."
-2. Run the **CI Fix Workflow** (see [§2.2a](#22a-check-ci-status))
+2. Run the **CI Fix Workflow** in [`references/ci-remediation.md`](./references/ci-remediation.md)
 3. After fix, output: "CI fixes pushed. Starting monitoring..."
 4. Continue to Phase 1.2
 
@@ -332,45 +256,7 @@ Parse the JSON output. For each check:
 
 A check that reads a stale or superseded event — one whose failure is about the event and not about the code — is reported to the user, never refreshed by changing the branch. Do not merge or rebase base-branch changes into the PR to provoke a fresh `synchronize` event: the task did not require those changes, and the resulting diff misrepresents the pull request. This is the failure mode the git history policy exists to prevent.
 
-**If any checks have `bucket === "fail"`:**
-
-For each failing check, extract the run-id from the `link` field: parse the URL path segment after `/runs/` and before `/job/` (or end of path). Compare with `fixAttempts[checkName].lastRunId` — if the run-id is different, reset `attempts` to 0 for that check (new run detected).
-
-**If `attempts < 2` for the failing check** (foreground mode only):
-
-1. Output: "CI check '\<name\>' failed. Attempting fix (attempt N/2)..."
-2. Get failure logs (truncate to last 200 lines):
-   ```bash
-   gh run view <run-id> --log-failed 2>&1 | tail -200
-   ```
-   If output is empty (cancelled run), output: "No logs available for cancelled run. Waiting for new run..." and skip fix.
-3. Analyze the error output to determine fix type:
-   - Lint errors → read files, apply fixes with Edit tool
-   - Type errors → read files, fix type issues with Edit tool
-   - Test failures → read test files, fix assertions/logic with Edit tool
-4. After fixes, commit via `Skill(autopilot:commits-create)` and push:
-   ```bash
-   git push
-   ```
-   Read [`git-history-policy.md`](../shared-rules/references/git-history-policy.md) before this push. A plain fast-forward is all this step is allowed to do: if the push is rejected as non-fast-forward, report it and stop rather than merging the base branch or force-pushing.
-5. Set `cooldownRemaining = 3` (skip CI checks for next 3 poll cycles)
-6. Update `fixAttempts[checkName] = { attempts: N+1, lastRunId: <run-id> }`
-7. Output: "CI fix pushed. Cooling down for 3 poll cycles before re-checking..."
-8. Continue polling loop (go to 2.1)
-
-**If `attempts >= 2`:**
-
-1. Output to user via AskUserQuestion:
-   - `question`: "CI check '\<name\>' has failed 2 fix attempts. The issue may require manual intervention.\n\nFailed check: \<name\>\nLast error: \<brief summary\>\nURL: \<link\>"
-   - `header`: "CI unfixable"
-   - `options`: [
-     { label: "Retry once more", description: "Try one more fix attempt" },
-     { label: "Skip this check", description: "Ignore this check and continue monitoring" },
-     { label: "Cancel", description: "Stop monitoring" }
-     ]
-   - If "Retry once more": reset attempts to 0, run fix again
-   - If "Skip this check": add check name to a skip list, continue monitoring
-   - If "Cancel": stop monitoring
+**If any checks have `bucket === "fail"`:** run the CI Fix Workflow in [`references/ci-remediation.md`](./references/ci-remediation.md) — read it now. It owns the per-check attempt accounting, the log analysis and fix push, the post-push cooldown, and the AskUserQuestion escalation once a check has failed two fix attempts. Background mode does not run it at all.
 
 **If all checks have `bucket === "pass"`:**
 
