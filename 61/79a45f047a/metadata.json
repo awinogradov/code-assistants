@@ -1,0 +1,25 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "6179a45f047a",
+  "strategy": "manual-commit",
+  "branch": "issue-643-short-confident-prose",
+  "checkpoints_count": 6,
+  "files_touched": null,
+  "sessions": [
+    {
+      "metadata": "/61/79a45f047a/0/metadata.json",
+      "transcript": "/61/79a45f047a/0/full.jsonl",
+      "compact_transcript": "/61/79a45f047a/0/transcript.jsonl",
+      "content_hash": "/61/79a45f047a/0/content_hash.txt",
+      "prompt": "/61/79a45f047a/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 12067,
+    "cache_creation_tokens": 402336,
+    "cache_read_tokens": 11194079,
+    "output_tokens": 83679,
+    "api_call_count": 62
+  }
+}
