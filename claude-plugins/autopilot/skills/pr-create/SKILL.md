@@ -30,7 +30,7 @@ Expected flags (all optional, any order):
 - `--release-notes` — force a release notes section into the body; [Phase 4](#phase-4-generate-pr-description) already adds one for breaking or meaningful changes
 - `--closes #N,#M` — additional issue numbers to close on merge (comma-separated, GitHub issue numbers)
 - `--related #X,#Y` — related issues to link without closing (comma-separated, GitHub issue numbers)
-- `--autopilot` — non-interactive mode used by `/autopilot:run`. The PR is created from the generated title and body without confirmation for every caller, so the flag changes only the [Phase 1](#phase-1-validate-current-state) invalid-branch path: instead of asking how to proceed, it aborts loudly.
+- `--autopilot` — non-interactive mode used by `/autopilot:run`. The PR is created from the generated title and body without confirmation for every caller, so the flag changes two things: [Phase 0](#phase-0-preflight-check) replaces the preflight the calling chain already ran with a bare `git status --porcelain` guard, and the [Phase 1](#phase-1-validate-current-state) invalid-branch path aborts loudly instead of asking how to proceed.
 
 ## Input resolution
 
@@ -52,11 +52,19 @@ Do not call any skill not listed in `allowed-tools` above. The title and descrip
 
 ## Phase 0: Preflight Check
 
-Invoke `Skill(autopilot:preflight-check)` with `mode: pr` from this conversation context. The skill verifies the current branch is appropriate for opening a PR and warns if you are on `main`. If it outputs a "cancelled" message, stop immediately — do not proceed to [Phase 1](#phase-1-validate-current-state).
+**Autopilot bypass:** parse `$ARGUMENTS` for `--autopilot` before anything else — the same parse [Phase 1](#phase-1-validate-current-state) step 0 performs, moved here so this phase can read it. When the flag is present, skip the skill invocation and run the one check that still carries information the caller does not already have:
+
+```bash
+git status --porcelain
+```
+
+Non-empty output means the chain's commit step left changes behind. Abort with the file list rather than opening a PR that omits them — `--autopilot` has no user to prompt, so there is no "continue anyway" to offer. Everything else `pr`-mode preflight would do is settled by then: the history-policy gate is installed, the branch came from [`branch-create`](../branch-create/SKILL.md), and [Phase 1](#phase-1-validate-current-state) validates the branch name itself.
+
+Otherwise invoke `Skill(autopilot:preflight-check)` with `mode: pr` from this conversation context. The skill verifies the current branch is appropriate for opening a PR and warns if you are on `main`. If it outputs a "cancelled" message, stop immediately — do not proceed to [Phase 1](#phase-1-validate-current-state).
 
 ## Phase 1: Validate Current State
 
-Uncommitted-change handling is done in [Phase 0](#phase-0-preflight-check) by `preflight-check` — do not repeat it here.
+Uncommitted-change handling is done in [Phase 0](#phase-0-preflight-check) — by `preflight-check` interactively, or by the autopilot bypass's own `git status --porcelain`. Do not repeat it here.
 
 0. Parse `$ARGUMENTS`: if it contains `--autopilot`, set `autopilotMode = true` and remove the flag before further parsing. Otherwise `autopilotMode = false`.
 1. Get current branch name with `git branch --show-current`

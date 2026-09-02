@@ -101,7 +101,11 @@ Set task 2 to `completed`.
 
 ## Phase 2: Preflight verdict
 
-The Context Map carries branch, worktree, `isStaleMerged`, and `baseAhead`. Compare the issue id against the current branch name for a mismatch. For anything ambiguous, or a state the map does not cover, invoke `Skill(autopilot:preflight-check)`. If it outputs "Planning cancelled", stop immediately.
+Invoke `Skill(autopilot:preflight-check)` with `mode: plan`, **unconditionally**. This is the session's single preflight, and the one place [`preflight-check`](../preflight-check/SKILL.md)'s [history-policy gate](../preflight-check/SKILL.md#phase-0-history-policy-gate) installs — a gate that then applies for the rest of the session. A conditional invocation is what made that gate skippable: on a branch the Context Map fully described, the chain installed it never, while `branch-create`, `commits-create` and `pr-create` each re-installed it later.
+
+Pass the Context Map's branch, worktree, `isStaleMerged`, and `baseAhead`, plus the issue-id-versus-branch-name comparison, so the skill prompts only where the map leaves a real decision. If it outputs "Planning cancelled", stop immediately.
+
+Because this step ran, every later step in this chain skips its own Phase 0 preflight under `--autopilot`.
 
 `run` never enters plan mode — do NOT call `EnterPlanMode` or `ExitPlanMode`.
 
