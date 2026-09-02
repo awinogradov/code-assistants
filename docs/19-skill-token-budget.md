@@ -51,8 +51,8 @@ Applying all of the above to the five skills that re-load on the PR-review cycle
 | `preflight-check` | 12,929 B | 10,313 B | −20%   |
 | `commits-create`  | 20,537 B | 16,133 B | −21%   |
 | `pr-update`       | 13,139 B | 9,464 B  | −28%   |
-| `pr-monitor`      | 23,772 B | 17,156 B | −28%   |
+| `pr-monitor`      | 23,772 B | 17,538 B | −26%   |
 | `pr-resolve`      | 16,008 B | 16,008 B | 0%     |
-| **Total**         | 86,385 B | 69,074 B | −20%   |
+| **Total**         | 86,385 B | 69,456 B | −20%   |
 
 Bodies alone understate it, because the invocation-count fix is the larger half. Counting each injection in one `/autopilot:run` with two review cycles, the skill-body bytes entering the conversation fall from roughly 208 KB to roughly 120 KB — about −42%. Interactive sessions gain less, since they read the extracted dialogs back.
