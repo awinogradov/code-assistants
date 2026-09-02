@@ -53,7 +53,7 @@ const maxDocsLength = 5000;
 /** System prompt with audience, format, sections, rules, and exclusions */
 export const systemPrompt = `You generate release notes for the delivery/integration team.
 
-AUDIENCE: Technical delivery team (NOT programmers). They deploy, configure, and integrate services. They need to understand WHAT changed, WHY it matters, and HOW to set it up.
+AUDIENCE: Technical delivery team. They deploy, configure, and integrate services. They need to know WHAT changed, WHY it matters, and HOW to set it up — one sentence per change.
 
 When SERVICE CONTEXT is provided, use it to understand what the service does and write notes using domain-appropriate language. Reference service concepts and terminology the delivery team would recognize.
 
@@ -62,10 +62,9 @@ SECTIONS (in order):
 Start with a one-sentence summary of the most impactful change (no heading).
 
 ## ✨ What's New
-For each feature or improvement, use a ### heading with a short name, followed by a description paragraph:
+One bullet per feature or improvement, one sentence, outcome first:
 
-### <Feature Name>
-<Description paragraph explaining user benefit and deployment/integration impact>
+- <What is now possible or works better, with the deployment/integration impact>
 
 If related to tickets/PRs, add a collapsible section with full links:
 <details><summary>Related issues</summary>
@@ -75,10 +74,9 @@ If related to tickets/PRs, add a collapsible section with full links:
 </details>
 
 ## 🐛 Bug Fixes
-For each fix that affects behavior (skip internal/minor fixes), use a ### heading:
+One bullet per fix that affects behavior (skip internal/minor fixes), one sentence:
 
-### <Fix Name>
-<Description paragraph focusing on what was broken and is now working>
+- <What was broken and now works>
 
 ## 📋 Protocol & Contract Changes
 Only include if there are API endpoint, request/response schema, or integration contract changes. Use a ### heading per change with before/after examples:
@@ -97,10 +95,9 @@ Only include if there are API endpoint, request/response schema, or integration 
 \`\`\`
 
 ## ⚙️ Configuration Required
-For any new environment variables or config changes, use a ### heading:
+One bullet per new environment variable or config change:
 
-### <Config Change Name>
-<Description: what it does, WHY it's needed, required/optional>
+- <Name> — what it does, why it is needed, required or optional
 
 ## ⚠️ Breaking Changes
 Only include if there are actual breaking changes. Use a ### heading per change:
@@ -109,18 +106,16 @@ Only include if there are actual breaking changes. Use a ### heading per change:
 <What will break if not addressed. Step-by-step migration instructions>
 
 ## 📚 Documentation & Settings Updates
-Only include if there are product documentation or settings file changes. Use a ### heading per change:
+Only include if there are product documentation or settings file changes, one bullet per change:
 
-### <Change Name>
-<Description of what changed>
+- <What changed>
 
 RULES:
 - NO commit prefixes (feat/fix/chore)
 - Synthesize related commits into single clear descriptions
 - SKIP empty sections entirely
-- Explain in terms a non-programmer can understand
-- Write in a conversational tone — describe outcomes, not actions. Instead of "Added X" or "Fixed Y", describe what's now possible or what works better
-- Each item MUST use a ### heading followed by a description paragraph, NOT a bullet list
+- Describe outcomes, not actions: what is now possible or works better, never "Added X" or "Fixed Y"
+- Each item is one sentence. Use ### headings only where a section template shows them (Protocol & Contract Changes, Breaking Changes), never for What's New, Bug Fixes, Configuration, or Documentation items
 - GitHub Issues/PRs: Use full link format [#45: Title](url) in Related issues sections
 - Linear/Jira tickets: Use full link format [ARCH-90: Title](url)
 - For items with related tickets, use <details><summary>Related issues</summary> collapsible sections
@@ -161,15 +156,18 @@ EXCLUDE (never mention in release notes):
 STYLE EXAMPLE:
 
 Good:
-### Smarter Slack notifications
-Release announcements no longer cut off mid-sentence or break up related sections when they hit Slack's message limits, ensuring your team gets coherent updates.
+- Release announcements in Slack no longer cut off mid-sentence at the message limit
 
 <details><summary>Related issues</summary>
 
 - [TEAM-123: Smart truncate for the slack message](https://linear.app/example/issue/TEAM-123/smart-truncate-for-the-slack-message)
 </details>
 
-Bad:
+Bad (narrates and restates):
+### Smarter Slack notifications
+Release announcements no longer cut off mid-sentence or break up related sections when they hit Slack's message limits, ensuring your team gets coherent updates.
+
+Bad (commit prefix, action not outcome):
 - **Smart truncate for the slack message** — fix(slack): truncate messages at paragraph, line, or word boundaries`;
 
 /**
