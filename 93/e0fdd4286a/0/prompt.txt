@@ -1,0 +1,281 @@
+refresh on actula main
+
+---
+
+/explore
+
+---
+
+Contract:
+
+  I explain the problem/idea/issue and my point of view and thinking. You check codebase and deep analyze. Ask me questions for a clear context and brainstorm.
+  You checks the docs,rfc,context7,exa,ref. Then you show me what you think and we discuss and deside next steps. Also read model, anthropic, claude docs and best practices
+
+---
+
+Analyze rules in skills to write comments, jsdocs, pr descriptions, etc. Looks like not it generates too much prose but it must be short and confident — no the history of universe. For jsdocs and code comments it must be exact code explanation and motivation.
+
+---
+
+<task-notification>
+<task-id>a8375620f96c6f8f7</task-id>
+<tool-use-id>toolu_017WfZo878uhLHZ6bL5aT8AE</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-prairie-dog-quail/1cba6f5f-f5d4-45ba-8a84-34bc2e75215f/tasks/a8375620f96c6f8f7.output</output-file>
+<status>completed</status>
+<summary>Agent "Inventory prose-writing rules" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>I have full coverage. Here is the inventory.
+
+---
+
+# Prose-style instruction inventory
+
+## (a) Code comments
+
+| Location | Verbatim | Direction |
+|---|---|---|
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/AGENTS.md:168` | "Avoid obvious comments, links to exact code lines, and duplicated comments — duplication means the code needs refactoring" | LESS |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/AGENTS.md:198` | "No commented-out code - delete it (recover from version control if needed)" | LESS |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/rules/Bun.md:168`, `rules/Bun+React+Tailwind.md:295`, `rules/NodeJS+React.md:288`, `rules/NodeJS+React+Tailwind.md:291` | same "Avoid obvious comments…" line, verbatim | LESS (4 duplicate copies) |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/AGENTS.md:47` (+ all 4 `rules/*.md:47`) | "Do not remove existing code/comments unless necessary" | MORE (preserves existing prose) |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/pr-review/references/checks-complexity-readability.md:44-46` | "**CHECK-CPLX-009: Comment explains "what" instead of "why"** … Comments describing what the code does (obvious from the code) instead of why." | Shifts content toward *why* (net MORE per comment) |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/pr-review/references/checks-ai-code-smells.md:35` | "Commented-out code blocks… Ship live code only — recover history from version control instead of parking it in comments." | LESS |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/CONTRIBUTING.md:656-660` | "Uppercase keyword, colon + single space: `// TODO: &lt;description&gt;`" / "Do not use `XXX`, `HACK`, or `NOTE` markers" | Form-only; caps marker vocabulary |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/CONTRIBUTING.md:657` | "Link the tracking issue with `// @see &lt;issue-url&gt;` on the line immediately below" | MORE (mandatory extra line) |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/pr-review/references/checks-complexity-readability.md:36` | "Numeric or string literals used in logic without a named constant explaining their meaning." | MORE (forces explanatory naming/comment) |
+
+## (b) JSDoc
+
+All nine bullets below are duplicated **verbatim in five files**: `AGENTS.md:154-164`, `rules/Bun.md:154-164`, `rules/Bun+React+Tailwind.md:281-291`, `rules/NodeJS+React.md:274-284`, `rules/NodeJS+React+Tailwind.md:277-287`.
+
+| Verbatim (AGENTS.md line) | Direction |
+|---|---|
+| `:156` "Every exported interface/type must have JSDoc" | MORE (mandatory coverage) |
+| `:157` "File-level JSDoc for config modules" | MORE |
+| `:158` "Use @example where usage isn't obvious" | MORE (examples) |
+| `:159` "Use @see &lt;link&gt; to add links to documentation" | MORE |
+| `:160` "Focus on "why" and "how to use", not "what"" | MORE (motivation required) |
+| `:161` "No useless descriptions repeating function name" | LESS |
+| `:162` "Skip JSDoc only if no params AND obvious from name" | MORE (narrow escape hatch) |
+| `:163` "Use @deprecated &lt;reason&gt; to mark deprecated code" | MORE |
+| `:164` "All modules must have top level JSDoc with description and usage examples" | MORE (strongest single pro-prose rule in the repo) |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/CONTRIBUTING.md:658` "Do not place a TODO directly above a JSDoc block containing an unrelated `@see`" | Placement only |
+
+No length cap anywhere for JSDoc — `:164` mandates examples with no ceiling.
+
+## (c) Commit messages (subject + body)
+
+| Location | Verbatim | Direction |
+|---|---|---|
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/CONTRIBUTING.md:190` | "Subject: Required. Lowercase, imperative mood, no period. Must describe WHAT changed (the technical modification), not WHY (the motivation)." | LESS (bans motivation prose) |
+| `CONTRIBUTING.md:191` | "The subject … must not exceed 50 characters (commitlint `subject-max-length`)" | LESS (hard cap) |
+| `CONTRIBUTING.md:192` | "The whole header line … must not exceed 100 characters" | LESS |
+| `CONTRIBUTING.md:181` | "[body — required for feat/fix/refactor]" | MORE (mandatory body) |
+| `CONTRIBUTING.md:194` | "Do NOT reference PRs, review comments, or feedback in commit messages. Commits must be self-contained" | LESS |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/commits-create/SKILL.md:191` | "Title: lowercase, no period, imperative mood, subject ≤ 50 characters — camelCase identifiers are not allowed in the subject" | LESS |
+| `commits-create/SKILL.md:193` | "Body required for `feat`, `fix`, and `refactor`. Body bullet points list concrete modifications" | MORE (bullets) but content-restricted |
+| `commits-create/SKILL.md:200` | "The title and body describe WHAT changed, never WHY … motivation, review references, and rule citations belong nowhere in the message." | LESS — the only place the repo bans "why" outright |
+| `commits-create/SKILL.md:208-214` | "**Rubric** — answer for the drafted title (and each body bullet): … 3. Does any part state a goal, motivation, or reference…?" | LESS (gate) |
+| `commits-create/SKILL.md:173` | "The body … may be omitted for `docs`, `test`, `style`, `chore`, `ci`, `build`, `perf`, and `revert` commits where the title alone is fully descriptive." | LESS |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/commits-restructure/SKILL.md:112` | restates the whole set by reference: "subject … ≤ 50 and whole header ≤ 100 … WHAT-not-WHY subject, body required for `feat`/`fix`/`refactor`" | LESS (pointer, no new rule) |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/pr-resolve/SKILL.md:235` | "**FORBIDDEN in context passed to commits-create:** The words "review", "reviewer", "feedback", "comment"…" | LESS |
+
+## (d) PR titles and descriptions
+
+**Titles**
+
+| Location | Verbatim | Direction |
+|---|---|---|
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/CONTRIBUTING.md:358-359` | "Required, capitalized, business-focused, no period" / "Under 120 characters total" | LESS |
+| `CONTRIBUTING.md:373-379` | "PR title should be understandable: From just that single line / By someone on their first day…" | MORE (informativeness bar within the cap) |
+| `CONTRIBUTING.md:381-385` | "**Avoid:** Implementation details… Technical jargon without context… Vague descriptions" | LESS |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/shared-rules/references/pr-title-grammar.md:15-20` | "Title is a business-readable description only… 4. No period at the end 5. Total length must be under 120 characters" | LESS (canonical copy) |
+| `pr-title-grammar.md:159-164` | "#### Avoid — Implementation details (those belong in PR body) / Technical jargon without context / Vague descriptions" | LESS |
+| `pr-title-grammar.md:194-196` | "#### Intentional divergence from the CI checks … deliberately stricter and have no CI counterpart" | Documents a known divergence |
+
+**Descriptions**
+
+| Location | Verbatim | Direction |
+|---|---|---|
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/shared-rules/references/pr-body-grammar.md:19-20` | "Brief description of what and why (1-2 sentences)" / "Bullet list for important implementation details" | LESS (hard sentence cap) |
+| `pr-body-grammar.md:9-15` | "**CRITICAL — Section ordering is MANDATORY and MUST NOT be rearranged**" (3 sections, `---` separated) | MORE (fixed scaffolding) |
+| `pr-body-grammar.md:24-27` | "Do NOT hard-wrap or line-break text within paragraphs or bullet items at any column width" | Layout only |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/CONTRIBUTING.md:442-443` | "Brief description of what and why" / "Bullet list for important details" | LESS (near-duplicate of the above, no sentence count) |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/pr-review/references/checks-pr-hygiene.md:43-45` | "**CHECK-PR-007: Description explains "why", not just "what"** … should explain motivation and context, not just list changed files." | MORE |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/pr-create/SKILL.md:110` and `pr-update/SKILL.md:121` | "**Reference formatting (MANDATORY):** … render every mention of a standard consistently as a link to its versioned RFC by stable ID" | MORE (link density; identical text in both) |
+
+## (e) Issue bodies (GitHub + Linear)
+
+| Location | Verbatim | Direction |
+|---|---|---|
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/shared-rules/references/issue-body-grammar.md:9-15` | "1. `## Context` (FIRST) 2. `## What` 3. `## Why` 4. `## Scope` 5. `## Solution` (LAST)" / "Heading format MUST be exact" | MORE (5 mandatory sections) |
+| `issue-body-grammar.md:17` | "Length follows the content: include as much context as a reader needs to act on the issue, and never cap a section at a fixed paragraph count. Do not pad — every sentence must add information." | MORE (explicitly refuses a cap) + anti-filler |
+| `issue-body-grammar.md:19` | "**Context** — the situation and background only… No user impact or motivation (that is Why), no proposed fix (that is Solution)." | Redistributes; anti-repetition |
+| `issue-body-grammar.md:21` | "**Why** — user impact and business motivation only… A reader on day one should understand the stakes." | MORE |
+| `issue-body-grammar.md:22` | "With no out-of-scope items, write `_None — this is the entire change._` … never invent items to fill the section." | LESS (anti-padding) |
+| `issue-body-grammar.md:23` | "Invoke `Skill(autopilot:ascii-schemas)` whenever a diagram would aid understanding… skip it only when prose alone is unambiguous." | MORE (diagrams by default) |
+| `issue-body-grammar.md:25` | "**Linkability pass (after drafting all five sections)** … every prose mention of a file or path that exists in the repo becomes a resolvable link" | MORE |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/issue-create/SKILL.md:118-124` | "Capitalized first letter / ≤ 80 characters total / No trailing period / Business-focused, understandable by someone on their first day" | LESS (title cap) |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/linear-create/SKILL.md:76` | "**Title:** capitalized, ≤ 80 characters, no trailing period, business-focused, NOT Conventional Commits, no prefix." | LESS (duplicate of issue-create's rule, compressed to one line) |
+| `linear-create/SKILL.md:80-90` | "prepend the user's original prompt … as a collapsed section" / "treat the fence content as opaque — … never link-transformed or reworded" | MORE (extra verbatim block) |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/todo-cleanup/SKILL.md:143-150` | "Single TODO: use the description directly, cleaned up and capitalized" / body "with: The TODO text(s) / File path(s) and line number(s) / Surrounding code context" | MORE, and **bypasses the 5-section grammar entirely** |
+
+## (f) Review comments / verdicts / replies
+
+**Review bodies**
+
+| Location | Verbatim | Direction |
+|---|---|---|
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/pr-review/SKILL.md:488` | "### reviewComment Format (~30 lines max)" | LESS (whole-body cap) |
+| `pr-review/SKILL.md:492` | "**SKIP empty sections entirely. Do NOT write "None" or "N/A" - just omit the section.**" | LESS |
+| `pr-review/SKILL.md:537` | "[1 factual sentence: what this PR changes — no quality judgment]" | LESS |
+| `pr-review/SKILL.md:541`,`545`,`549` | "[Problem in 1 line]" / "[Recommendation in 1 line]" / "[Optional fix in 1 line]" | LESS |
+| `pr-review/SKILL.md:553` | "[1 sentence: what must change — ONLY for requestChanges. Omit for approve.]" | LESS |
+| `pr-review/SKILL.md:564` | "Each inline comment: 1-2 sentences, start with severity emoji, end with the rule code" | LESS |
+| `pr-review/SKILL.md:584` | "Direct, confident language" | Tone |
+| `pr-review/SKILL.md:591` | "The body is findings only: no praise, no meta-commentary, no statistics, no process narration — every sentence is either a finding or required by the template… not a hedged possibility." | LESS (strongest anti-filler rule in the repo) |
+| `pr-review/SKILL.md:145` | "Start with a greeting: ONE short sentence that @-mentions PR_AUTHOR… Vary the wording each time in your own voice; no praise, no round-labeling, no elaboration after it." | LESS + tone (voice variation) |
+| `pr-review/SKILL.md:156` | "DO NOT repeat resolved issues or summarize what was fixed" | LESS |
+| `pr-review/SKILL.md:577-579` | "NEVER mention the same issue in BOTH reviewComment AND inlineComments" | LESS |
+| `pr-review/SKILL.md:573` | "Emit `suggestion` only when confident it applies cleanly; otherwise keep the prose finding alone." | LESS |
+| `pr-review/SKILL.md:596` | "A concrete, mechanical fix goes in the structured `suggestion` field … not as a code example in the comment prose" | LESS |
+
+**Mandatory verbatim quoting (the counter-pressure)**
+
+| Location | Verbatim | Direction |
+|---|---|---|
+| `pr-review/SKILL.md:379` | "Every CHECK-RFC-001/002 finding must quote the violated clause verbatim (≤2 lines) from the standard in its detail — a finding that only paraphrases the rule is not reportable" | MORE, capped at 2 lines |
+| `pr-review/SKILL.md:398` | "Every finding must quote the violated rule verbatim (≤2 lines) in its detail" | MORE/capped (duplicate shape) |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/pr-review/references/checks-documentation.md:23` | "Quote the contradicted sentence verbatim (≤2 lines) in the finding detail" | MORE/capped |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/pr-review/references/checks-repository-principles.md:7` | "Quote the principle verbatim (≤2 lines) … a finding that only paraphrases the value is not reportable" | MORE/capped |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/pr-review/references/checks-consumer-review-rules.md:7` | "quote the violated rule verbatim (≤2 lines) in the detail" | MORE/capped |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/docs/12-code-review-repository-standards.md:39` | "Every finding quotes the violated clause verbatim (≤2 lines) and cites the standard as a link at the PR head commit" | MORE/capped (doc restatement of the same rule — 5th copy) |
+
+**Replies**
+
+| Location | Verbatim | Direction |
+|---|---|---|
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/pr-answer/SKILL.md:119` | "Always provide a reply. Keep it concise (1-5 sentences). Be direct." | LESS |
+| `pr-answer/SKILL.md:121-125` | five fixed reply shapes, e.g. "If wrong (fix already committed): "You're right, [reason]. Fixed in [&lt;sha&gt;]…"" | LESS (templated) |
+| `pr-answer/SKILL.md:185-187` | "**Include** — Direct, confident language / References to specific code when relevant / Acknowledgment when the bot was wrong" | Tone |
+| `pr-answer/SKILL.md:191-194` | "**Exclude** — Defensive language or excuses / Lengthy explanations when a short one suffices / Repeating the user's comment back to them / Code examples or implementation suggestions" | LESS |
+| `pr-answer/SKILL.md:148` | "phrase it as state, not a promise: "Noted — the blocking verdict stands until a re-review confirms the fix."" | Tone (hedge-forbidding in the other direction) |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/pr-resolve/SKILL.md:204-207` | "**Draft a reply** — concise, direct, 1-5 sentences" + three reply shapes | LESS (duplicate of pr-answer:119) |
+| `pr-resolve/SKILL.md:251-257` | "**Always mention the reviewer** with `@&lt;username&gt;` at the start" + five templated forms ("Fixed in [&lt;sha&gt;] — [brief description of what changed].") | LESS (templated) |
+| `pr-resolve/SKILL.md:259` / `pr-answer/SKILL.md:127` | near-identical ~400-word reference-formatting paragraphs mandating link rendering + self-check | MORE (link density) |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/pr-validate/SKILL.md:62` | "Be sarcastic and use emojis generously… Explain what went wrong, show how to fix it, and link to the contributing guidelines." | MORE + a tone directly opposed to every other reviewer-voice rule |
+| `pr-validate/SKILL.md:72` | "`reason` (string): If any check failed, a brief technical summary of what failed." | LESS |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/.github/actions/code-review-action/src/skipComment.ts:106-115` | "For each failed check below, write one concise sentence (20 words or fewer)… describe the failure category in plain language." / "Omit any check you cannot explain." | LESS (word cap) |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/.github/actions/code-review-action/src/reviewTipGeneration.ts:59-70` | "Write one imperative sentence of 20 words or fewer… Do not include links, URLs, file paths, code, backticks, HTML… use plain prose only." | LESS (word cap + no links) |
+| `reviewTipGeneration.ts:40` | "/** Cap on a generated tip's rendered length; over it, the candidate is rejected. */ export const maxTipLength = 200;" | LESS (enforced in code) |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/docs/03-code-review-run-summary.md:100` | "by contract no review prose is written, the APPROVE event speaks for itself" | LESS |
+
+## (g) Plan files
+
+| Location | Verbatim | Direction |
+|---|---|---|
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/plan/references/pipeline.md:31` | "## Summary — [1-2 sentences: what and why]" | LESS |
+| `pipeline.md:41` | "Reasoning belongs in `## Summary`; a step that explains itself instead of stating an action is prose, not a step." | LESS |
+| `pipeline.md:41` | "One numbered step per action, written as an imperative naming the file it touches… Every step MUST include a `verify:` line" | MORE (mandatory per-step line) |
+| `pipeline.md:37` | "`## Context source` … [the Context Map's Snapshot record, verbatim] … One line of prose says what the reader should take from it." | MORE (mandatory section), 1-line cap on the gloss |
+| `pipeline.md:57` | "a paraphrase drops the relationship on each shortlist entry" (quote, don't summarize) | MORE |
+| `pipeline.md:74` | "Limit your report to the 3–5 strongest findings — depth over breadth." | LESS (count cap) |
+| `pipeline.md:102` | "Do not include raw expert JSON in the plan output." | LESS |
+| `pipeline.md:122` | "Naming each reviewer's weakest dimension costs half a line and tells a later reader where the plan is soft" | MORE (justified half-line) |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/plan/SKILL.md:107` | "**Steelmanned Intent** — one sentence, ≤200 characters, restating the request in its strongest form" | LESS (char cap) |
+| `plan/SKILL.md:114` | "**Assumptions** — up to 5 bullets… Write "none" if there are none." | LESS (count cap) |
+| `plan/SKILL.md:155` | "for plain descriptions paraphrase into one sentence, ≤80 characters, sentence case" | LESS |
+| `plan/SKILL.md:161` | "every section describes an outcome in prose: … It carries no `AskUserQuestion` parameter block, no `Skill(...)` dispatch line, and no HTML-comment directive aimed at the agent." | Shifts to prose (MORE prose, less machinery) |
+| `plan/SKILL.md:171` | "Invoke `Skill(autopilot:ascii-schemas)` when the change touches architecture or module boundaries… embed each diagram inline" | MORE |
+| `plan/SKILL.md:212` | "apply the reference-formatting rules … to every reference it contains — link files, docs, skills, agents, and sections" | MORE |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/agents/expert-review.md:70` | "3–5 entries, strongest first; stack minor objections together rather than listing each" | LESS |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/linear-plan/SKILL.md:154` | "Emit it verbatim: replace only the `&lt;angle-bracket&gt;` placeholders and leave every other byte … exactly as written." | Fixed scaffold |
+| `linear-plan/SKILL.md:230` | "derive a candidate title … capitalized, ≤ 80 characters, no trailing period, business-focused, no prefixes" | LESS |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/explore/SKILL.md:118-138` | "Section order is fixed… **On a delta refresh, rewrite `Base:` and the three volatile sections only.** The stable sections must come through byte-identical" | MORE (9 fixed sections in `brief.md`) |
+
+## (h) Release notes
+
+| Location | Verbatim | Direction |
+|---|---|---|
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/shared-rules/references/pr-body-grammar.md:38-43` | "Short, user-facing descriptions of changes (not implementation details)" / "Use bullet points, one per distinct user-facing change" / "Keep each bullet to 1 sentence" | LESS |
+| `pr-body-grammar.md:47-49` | "The heading MUST be exactly `**Release notes:**`… DO NOT use `## Release Notes` (H2 heading)" | Form only |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/CONTRIBUTING.md:484` | "The release notes heading in PR bodies must be `**Release notes:**`… Do not use `## Release Notes`" | Duplicate of the above |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/.github/actions/release-action/src/releaseNotesPrompt.ts:62` | "Start with a one-sentence summary of the most impactful change (no heading)." | LESS |
+| `releaseNotesPrompt.ts:65` | "use a ### heading with a short name, followed by a description paragraph" | MORE (paragraph per item) |
+| `releaseNotesPrompt.ts:121` | "Explain in terms a non-programmer can understand" | MORE |
+| `releaseNotesPrompt.ts:122` | "Write in a conversational tone — describe outcomes, not actions. Instead of "Added X" or "Fixed Y", describe what's now possible" | MORE + tone |
+| `releaseNotesPrompt.ts:123` | "Each item MUST use a ### heading followed by a description paragraph, NOT a bullet list" | MORE (explicitly bans bullets) |
+| `releaseNotesPrompt.ts:119-120` | "Synthesize related commits into single clear descriptions" / "SKIP empty sections entirely" | LESS |
+| `releaseNotesPrompt.ts:109` | "&lt;What will break if not addressed. Step-by-step migration instructions&gt;" | MORE |
+| `releaseNotesPrompt.ts:153-159` | "EXCLUDE (never mention in release notes): CI/CD pipeline… Dependency version bumps without user-facing impact… Governance/legal documents…" | LESS |
+| `releaseNotesPrompt.ts:161-173` | "STYLE EXAMPLE: Good: ### Smarter Slack notifications / Bad: - **Smart truncate…** — fix(slack): truncate messages…" | MORE (worked example enforcing paragraph style) |
+| `releaseNotesPrompt.ts:45` | `const irrelevantSections = new Set(["Chores", "CI", "Tests", "Build"]);` | LESS (mechanical) |
+| `releaseNotesPrompt.ts:36` | `export const maxOutputTokens = 4096;` | LESS (hard ceiling) |
+
+## (i) Generic writing-style guidance
+
+| Location | Verbatim | Direction |
+|---|---|---|
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/rfc/0001-reference-formatting.md:33` | "Write the most helpful, readable output you can: plain, direct prose; every reference resolvable; explain the "why", not the obvious "what"." | The repo's master style sentence — MORE on why, tone |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/shared-rules/references/reference-formatting.md:19` | identical sentence (guarded byte-identical copy) | duplicate |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/.github/actions/release-action/src/releaseNotesPrompt.ts:149` | identical sentence (third inlined copy) | duplicate |
+| `reference-formatting.md:17` (and RFC `:31`) | "Self-check (MANDATORY): after composing the output, re-read it against these rules." | MORE (extra pass) |
+| `reference-formatting.md:8` | "Any prose mention of a file or path that exists in the repo is such a reference — link it" | MORE (link density everywhere) |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/shared-rules/references/agent-json-output.md:3` | "Output ONLY a single JSON object matching the schema below — no preamble, no surrounding code fence, no commentary." | LESS |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/shared-rules/references/askuserquestion-format.md:5` | "Do not use markdown formatting (bold, italic, headers) in the AskUserQuestion `question` parameter… Use plain text" | LESS |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/shared-rules/references/askuserquestion-contract.md:10` | "**`label` and `description` values are EXACT** — use the exact strings the invoking phase specifies. No abbreviations, no paraphrasing, no creative alternatives." | LESS (zero authorial latitude) |
+| `askuserquestion-contract.md:13` | "**NO shorthand or placeholders in `preview`** — never pass `"..."`, `"&lt;same content&gt;"`" | MORE (full content) |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/agents/digest-repo-standards.md:46` | "Capture only rules a plan could violate… not prose about philosophy." | LESS |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/pr-review/references/checks-documentation.md:19` | "A `docs/*.md` file exceeds ~5000 characters or documents more than one area. Split it; keep code examples minimal (link to source, explain the "why" in prose)." | Mixed: LESS per file, MORE on "why" |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/ascii-schemas/SKILL.md:68` | "**Width guideline: 80 characters** for technical schemas… aim for minimal width" | LESS |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/AGENTS.md:40` (+ 4 `rules/*.md:40`) | "Do not over-engineer… If 200 lines could be 50, rewrite" | LESS (code, but sets the repo's compression ethos) |
+| `/Users/tony_vi/.warp/worktrees/code-assistants/prairie-dog-quail/claude-plugins/autopilot/skills/pr-review/references/checks-logging.md:13` | "Progressive ("-ing", about-to-act) messages must be `debug`; completed business events are `info` in past tense" | Tense/wording rule for log prose |
+
+---
+
+# Duplicates and contradictions
+
+**Exact/near-exact duplicates**
+
+1. **JSDoc + code-comments block** — 5 verbatim copies: `AGENTS.md:154-169` and `rules/{Bun,Bun+React+Tailwind,NodeJS+React,NodeJS+React+Tailwind}.md`. Synced by `agents-rules-sync`.
+2. **RFC-0001 style block** — 3 copies: `rfc/0001-reference-formatting.md:15-35`, `shared-rules/references/reference-formatting.md`, `releaseNotesPrompt.ts:131-151` (guarded byte-identical by `sharedBlockSync`; the RFC documents this at `rfc/0001:13`).
+3. **"quote the violated rule verbatim (≤2 lines)"** — 5 copies: `pr-review/SKILL.md:379`, `:398`, `checks-documentation.md:23`, `checks-repository-principles.md:7`, `checks-consumer-review-rules.md:7`, plus a 6th prose restatement in `docs/12-code-review-repository-standards.md:39`.
+4. **"concise, direct, 1-5 sentences" reply rule** — `pr-answer/SKILL.md:119` and `pr-resolve/SKILL.md:204`, with overlapping but non-identical reply-shape templates.
+5. **PR title / branch rules** — `CONTRIBUTING.md:350-412` vs `pr-title-grammar.md:7-196`. Divergence is deliberate and documented at `pr-title-grammar.md:194-196`.
+6. **Commit rules** — `CONTRIBUTING.md:186-195` vs `commits-create/SKILL.md:189-214` (skill adds the WHAT-not-WHY rubric and camelCase ban that CONTRIBUTING lacks).
+7. **PR description content rule** — `CONTRIBUTING.md:442` ("Brief description of what and why") vs `pr-body-grammar.md:19` (same, plus "(1-2 sentences)"). The cap exists in only one of the two.
+8. **Release-notes heading rule** — `pr-body-grammar.md:47-49` and `CONTRIBUTING.md:484`.
+9. **Reference-formatting MANDATORY paragraph** — identical text in `pr-create/SKILL.md:110` and `pr-update/SKILL.md:121`; a longer near-identical variant in `pr-resolve/SKILL.md:259` and `pr-answer/SKILL.md:127`.
+
+**Contradictions**
+
+1. **"why" is simultaneously required and forbidden.** `rfc/0001:33` ("explain the "why", not the obvious "what""), `AGENTS.md:160` (JSDoc "Focus on "why""), `checks-pr-hygiene.md:45` (PR description must explain why), `checks-complexity-readability.md:44` (comments must say why) — against `CONTRIBUTING.md:190` and `commits-create/SKILL.md:200` ("The title and body describe WHAT changed, never WHY … motivation … belong nowhere in the message"). Same repo, same author-model, opposite instruction depending on artifact, with no cross-reference reconciling them.
+2. **Length-capping vs. cap-refusing philosophy.** `issue-body-grammar.md:17` — "never cap a section at a fixed paragraph count" — versus `pr-body-grammar.md:19` ("1-2 sentences") and `pipeline.md:31` ("[1-2 sentences: what and why]"). Three shared-rules/reference files under the same skill disagree on whether fixed caps are legitimate.
+3. **Reviewer tone.** `pr-review/SKILL.md:584,591` ("Direct, confident language"; "no praise, no meta-commentary… not a hedged possibility") and `pr-answer/SKILL.md:191` ("Exclude: … Lengthy explanations") versus `pr-validate/SKILL.md:62` ("Be sarcastic and use emojis generously"). Both bots comment on the same PR.
+4. **Release-notes bullets vs. paragraphs.** `pr-body-grammar.md:41-42` mandates "Use bullet points, one per distinct user-facing change / Keep each bullet to 1 sentence"; `releaseNotesPrompt.ts:123` mandates "### heading followed by a description paragraph, **NOT a bullet list**" — and `releaseNotesPrompt.ts:127` says to "prefer that content as primary source" from the PR body, i.e. it ingests exactly the bullet form it forbids. The `:173` "Bad:" example is literally a bullet.
+5. **Issue-body grammar bypassed.** `todo-cleanup/SKILL.md:147-150` prescribes a 3-item ad-hoc issue body (TODO text / paths / surrounding code) with no reference to the mandatory 5-section `issue-body-grammar.md` that `issue-create` and `linear-create` both bind to.
+6. **Greeting vs. "findings only".** `pr-review/SKILL.md:145` requires a greeting sentence; `:591` says "every sentence is either a finding or required by the template". `:146` patches this by scoping the greeting to reviews with findings, but the greeting is not in the `:536-554` body template it points at.
+
+---
+
+# Load-bearing files per output kind
+
+- **(a) code comments** — `AGENTS.md:166-169` (canonical, mirrored into `rules/*.md`); `CONTRIBUTING.md:645-679` (TODO/FIXME); `claude-plugins/autopilot/skills/pr-review/references/checks-complexity-readability.md` (enforcement).
+- **(b) JSDoc** — `AGENTS.md:152-164` only; the four `rules/*.md` are synced copies, and nothing else in the repo constrains JSDoc prose.
+- **(c) commit messages** — `CONTRIBUTING.md:163-297` (binding) + `claude-plugins/autopilot/skills/commits-create/SKILL.md:164-255` (operative, stricter); `commitlint.config.ts` is the machine gate.
+- **(d) PR titles/descriptions** — `claude-plugins/autopilot/skills/shared-rules/references/pr-title-grammar.md` and `pr-body-grammar.md` (canonical); `CONTRIBUTING.md:340-505` (human-facing source); `checks-pr-hygiene.md` (enforcement).
+- **(e) issue bodies** — `claude-plugins/autopilot/skills/shared-rules/references/issue-body-grammar.md` (sole canonical); `issue-create/SKILL.md:114-155` and `linear-create/SKILL.md:74-92` for titles and the Linear preamble.
+- **(f) review comments/verdicts/replies** — `claude-plugins/autopilot/skills/pr-review/SKILL.md:488-596` (format + tone); `pr-answer/SKILL.md:117-194` and `pr-resolve/SKILL.md:200-259` (replies); `.github/actions/code-review-action/src/skipComment.ts:106-115` and `reviewTipGeneration.ts:59-70` (action-side prompts).
+- **(g) plan files** — `claude-plugins/autopilot/skills/plan/references/pipeline.md:27-53` (template) and `plan/SKILL.md:105-171` (header, intent, prose rule); `explore/SKILL.md:116-150` for `brief.md`; `linear-plan/SKILL.md:154-232` for the stored form.
+- **(h) release notes** — `.github/actions/release-action/src/releaseNotesPrompt.ts:54-173` (the generator prompt) and `shared-rules/references/pr-body-grammar.md:29-51` (the PR-body section that feeds it).
+- **(i) generic style** — `rfc/0001-reference-formatting.md:15-35` is the single source; `shared-rules/references/reference-formatting.md` and `releaseNotesPrompt.ts:131-151` are its guarded copies. `shared-rules/references/askuserquestion-contract.md` and `agent-json-output.md` cover the non-prose output surfaces.</result>
+<usage><subagent_tokens>167510</subagent_tokens><tool_uses>51</tool_uses><duration_ms>395982</duration_ms></usage>
+</task-notification>
+
+---
+
+All places matter
+
+---
+
+ok, now we fill issue and create pr
