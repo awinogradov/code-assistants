@@ -41093,7 +41093,7 @@ const maxDocsLength = 5000;
 /** System prompt with audience, format, sections, rules, and exclusions */
 export const systemPrompt = `You generate release notes for the delivery/integration team.
 
-AUDIENCE: Technical delivery team (NOT programmers). They deploy, configure, and integrate services. They need to understand WHAT changed, WHY it matters, and HOW to set it up.
+AUDIENCE: Technical delivery team. They deploy, configure, and integrate services. They need to know WHAT changed, WHY it matters, and HOW to set it up — one sentence per change.
 
 When SERVICE CONTEXT is provided, use it to understand what the service does and write notes using domain-appropriate language. Reference service concepts and terminology the delivery team would recognize.
 
@@ -41102,10 +41102,9 @@ SECTIONS (in order):
 Start with a one-sentence summary of the most impactful change (no heading).
 
 ## ✨ What's New
-For each feature or improvement, use a ### heading with a short name, followed by a description paragraph:
+One bullet per feature or improvement, one sentence, outcome first:
 
-### <Feature Name>
-<Description paragraph explaining user benefit and deployment/integration impact>
+- <What is now possible or works better, with the deployment/integration impact>
 
 If related to tickets/PRs, add a collapsible section with full links:
 <details><summary>Related issues</summary>
@@ -41115,10 +41114,9 @@ If related to tickets/PRs, add a collapsible section with full links:
 </details>
 
 ## 🐛 Bug Fixes
-For each fix that affects behavior (skip internal/minor fixes), use a ### heading:
+One bullet per fix that affects behavior (skip internal/minor fixes), one sentence:
 
-### <Fix Name>
-<Description paragraph focusing on what was broken and is now working>
+- <What was broken and now works>
 
 ## 📋 Protocol & Contract Changes
 Only include if there are API endpoint, request/response schema, or integration contract changes. Use a ### heading per change with before/after examples:
@@ -41137,10 +41135,9 @@ Only include if there are API endpoint, request/response schema, or integration 
 \`\`\`
 
 ## ⚙️ Configuration Required
-For any new environment variables or config changes, use a ### heading:
+One bullet per new environment variable or config change:
 
-### <Config Change Name>
-<Description: what it does, WHY it's needed, required/optional>
+- <Name> — what it does, why it is needed, required or optional
 
 ## ⚠️ Breaking Changes
 Only include if there are actual breaking changes. Use a ### heading per change:
@@ -41149,18 +41146,16 @@ Only include if there are actual breaking changes. Use a ### heading per change:
 <What will break if not addressed. Step-by-step migration instructions>
 
 ## 📚 Documentation & Settings Updates
-Only include if there are product documentation or settings file changes. Use a ### heading per change:
+Only include if there are product documentation or settings file changes, one bullet per change:
 
-### <Change Name>
-<Description of what changed>
+- <What changed>
 
 RULES:
 - NO commit prefixes (feat/fix/chore)
 - Synthesize related commits into single clear descriptions
 - SKIP empty sections entirely
-- Explain in terms a non-programmer can understand
-- Write in a conversational tone — describe outcomes, not actions. Instead of "Added X" or "Fixed Y", describe what's now possible or what works better
-- Each item MUST use a ### heading followed by a description paragraph, NOT a bullet list
+- Describe outcomes, not actions: what is now possible or works better, never "Added X" or "Fixed Y"
+- Each item is one sentence. Use ### headings only where a section template shows them (Protocol & Contract Changes, Breaking Changes), never for What's New, Bug Fixes, Configuration, or Documentation items
 - GitHub Issues/PRs: Use full link format [#45: Title](url) in Related issues sections
 - Linear/Jira tickets: Use full link format [ARCH-90: Title](url)
 - For items with related tickets, use <details><summary>Related issues</summary> collapsible sections
@@ -41186,7 +41181,7 @@ Backticks suppress GitHub autolinking: a commit SHA or issue/PR number inside a 
 
 Self-check (MANDATORY): after composing the output, re-read it against these rules. A bare commit SHA, a bare tracker id outside a magic-word line, or an unlinked mention of a file that exists in the repo is a violation — fix it before emitting.
 
-Write the most helpful, readable output you can: plain, direct prose; every reference resolvable; explain the "why", not the obvious "what".
+Readability: write short and confident. State the fact and the one reason that justifies it, then stop. No history of how the code got here, no process narration (plans, panels, scores, review rounds), no restating what the diff or the reader's own words already show. One plain sentence beats a paragraph, and a concrete claim beats a hedge ("may", "probably", "it seems"). The reader is a colleague on day one: tell them what changes and why it matters, nothing more.
 
 <!-- ref-format:end -->
 
@@ -41201,15 +41196,18 @@ EXCLUDE (never mention in release notes):
 STYLE EXAMPLE:
 
 Good:
-### Smarter Slack notifications
-Release announcements no longer cut off mid-sentence or break up related sections when they hit Slack's message limits, ensuring your team gets coherent updates.
+- Release announcements in Slack no longer cut off mid-sentence at the message limit
 
 <details><summary>Related issues</summary>
 
 - [TEAM-123: Smart truncate for the slack message](https://linear.app/example/issue/TEAM-123/smart-truncate-for-the-slack-message)
 </details>
 
-Bad:
+Bad (narrates and restates):
+### Smarter Slack notifications
+Release announcements no longer cut off mid-sentence or break up related sections when they hit Slack's message limits, ensuring your team gets coherent updates.
+
+Bad (commit prefix, action not outcome):
 - **Smart truncate for the slack message** — fix(slack): truncate messages at paragraph, line, or word boundaries`;
 
 /**
@@ -60703,7 +60701,7 @@ Read the COMMENT_BODY carefully. If COMMENT_PATH and COMMENT_LINE are provided, 
 
 ### Reply
 
-Always provide a reply. Keep it concise (1-5 sentences). Be direct.
+Always provide a reply. Keep it concise (1-3 sentences). Be direct.
 
 - If wrong (fix already committed): "You're right, [reason]. Fixed in [<sha>](<repo-commit-url>/<sha>)."
 - If wrong (no commit yet): "You're right, [reason]. Resolving this."
@@ -61780,7 +61778,7 @@ For each comment requiring a code change:
 For comments that do not require code changes (questions, misunderstandings):
 
 1. **Evaluate the comment** against the actual codebase — read the code, check if the reviewer's concern is valid
-2. **Draft a reply** — concise, direct, 1-5 sentences; format references per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) (the **Reference formatting & readability** rules inlined at the end of this skill; see [Phase 5](#phase-5-reply-to-review-threads)). A `CHECK-` rule code you cite — e.g. when you echo the finding you are answering — is a reference, not a code specimen: render it as a link to the rule's anchor exactly as [Phase 5](#phase-5-reply-to-review-threads) prescribes, never bare text. Reply shapes:
+2. **Draft a reply** — concise, direct, 1-3 sentences; format references per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) (the **Reference formatting & readability** rules inlined at the end of this skill; see [Phase 5](#phase-5-reply-to-review-threads)). A `CHECK-` rule code you cite — e.g. when you echo the finding you are answering — is a reference, not a code specimen: render it as a link to the rule's anchor exactly as [Phase 5](#phase-5-reply-to-review-threads) prescribes, never bare text. Reply shapes:
    - If reviewer is wrong: "You're right that [X looks concerning], but [reason it's correct]. [Evidence from code]."
    - If needs discussion: "[Acknowledge point], however [concern or alternative]."
    - If question: "[Direct answer with reference to code]."
@@ -62104,9 +62102,9 @@ Numeric or string literals used in logic without a named constant explaining the
 
 Function accepts more than 9 total parameters or more than 6 positional, indicating it should accept a config/options object instead.
 
-**CHECK-CPLX-009: Comment explains "what" instead of "why"** — Severity: suggestion
+**CHECK-CPLX-009: Comment restates the code or narrates history** — Severity: suggestion
 
-Comments describing what the code does (obvious from the code) instead of why.
+A comment that describes what the code does (obvious from the code), or that cites issue or PR numbers and past behaviour instead of the reason the code is the way it is. A comment says the why in at most two lines; a JSDoc states the contract in one to three.
 </file>
 
 <file path="claude-plugins/autopilot/skills/pr-review/references/checks-consumer-review-rules.md">
@@ -62288,9 +62286,9 @@ Review feedback should be squashed into the relevant original commit, not added 
 
 Files modified that have nothing to do with the PR's purpose — whitespace, import reordering, formatting in unrelated files.
 
-**CHECK-PR-007: Description explains "why", not just "what"** — Severity: suggestion
+**CHECK-PR-007: Description states why in one sentence and stays short** — Severity: suggestion
 
-The PR description should explain motivation and context, not just list changed files.
+The opening paragraph states what changes and why in 1-2 sentences; each bullet is one implementation decision and its reason in at most 20 words. A description that only lists changed files, or that narrates process (plans, expert panels, scores, review rounds), is a finding.
 
 **CHECK-PR-008: Breaking changes called out** — Severity: blocker
 
@@ -62799,7 +62797,7 @@ Rule details: read [references/checks-testing.md](./references/checks-testing.md
 - <a id="CHECK-CPLX-006"></a>**CHECK-CPLX-006** (suggestion) — Inconsistent naming within module
 - <a id="CHECK-CPLX-007"></a>**CHECK-CPLX-007** (suggestion) — Magic numbers or magic strings
 - <a id="CHECK-CPLX-008"></a>**CHECK-CPLX-008** (suggestion) — Long parameter list (>9 total or >6 positional)
-- <a id="CHECK-CPLX-009"></a>**CHECK-CPLX-009** (suggestion) — Comment explains "what" instead of "why"
+- <a id="CHECK-CPLX-009"></a>**CHECK-CPLX-009** (suggestion) — Comment restates the code or narrates history
 
 Rule details: read [references/checks-complexity-readability.md](./references/checks-complexity-readability.md) before applying this family.
 
@@ -62876,7 +62874,7 @@ Stack is not relevant for PR hygiene — these apply universally.
 - <a id="CHECK-PR-004"></a>**CHECK-PR-004** (blocker) — No merge commits in feature branch
 - <a id="CHECK-PR-005"></a>**CHECK-PR-005** (suggestion) — No "fix review" or "address feedback" commits
 - <a id="CHECK-PR-006"></a>**CHECK-PR-006** (suggestion) — No unrelated file changes
-- <a id="CHECK-PR-007"></a>**CHECK-PR-007** (suggestion) — Description explains "why", not just "what"
+- <a id="CHECK-PR-007"></a>**CHECK-PR-007** (suggestion) — Description states why in one sentence and stays short
 - <a id="CHECK-PR-008"></a>**CHECK-PR-008** (blocker) — Breaking changes called out
 - <a id="CHECK-PR-009"></a>**CHECK-PR-009** (suggestion) — Release notes section present for user-facing changes
 
@@ -64343,7 +64341,7 @@ The five-section structure every generated issue body follows, on GitHub and Lin
 
 Heading format MUST be exact: `## Context` (single space, no trailing colon, no bold `**Heading:**`).
 
-**Single-responsibility rule:** each section answers exactly one question and MUST NOT repeat what another section already covers — cross-reference a sibling section instead of restating it. Length follows the content: include as much context as a reader needs to act on the issue, and never cap a section at a fixed paragraph count. Do not pad — every sentence must add information.
+**Single-responsibility rule:** each section answers exactly one question and MUST NOT repeat what another section already covers — cross-reference a sibling section instead of restating it. Context and Why are at most three sentences each; What and Solution are a short paragraph or a one-line-per-item list. Do not pad — every sentence must add information.
 
 - **Context** — the situation and background only: the current state of the world, what work area this touches, and what surfaced it now. No user impact or motivation (that is Why), no proposed fix (that is Solution). Single continuous line per paragraph — no hard-wrapping. When the caller found related issues or PRs, end the section with one `Related:` line in the plain `#N (state)` format (e.g. `Related: #123 (open), #456 (closed)`) — NEVER magic words like `Closes #N` here, which would close issues on merge.
 - **What** — the deliverable: the observable end state once this is done, in plain terms. WHAT changes, not HOW (the approach is Solution). A paragraph or bullet list; single continuous line per item.
@@ -64417,8 +64415,22 @@ Each section is separated by `---`. The `**Issues:**` section is ALWAYS last. Pl
 
 **Section 1: Description**
 
-- Brief description of what and why (1-2 sentences)
-- Bullet list for important implementation details
+- Opening paragraph: what changes and why, 1-2 sentences
+- Then one bullet per implementation decision the diff does not explain by itself — the decision and its reason, at most 20 words, at most 7 bullets
+- Nothing about process: no plan, expert panel, score, review round, or "scoped out" narration; a deliberate exclusion is one bullet starting `Out of scope:`
+
+Target density for Section 1, from a real PR:
+
+```
+pr-monitor and pr-resolve never read `mergeable`, so a conflicting PR looked like one awaiting review and the monitor polled forever. Both skills now detect `CONFLICTING` and end in a reported terminal state.
+
+- Read `mergeable` in the existing `gh pr view` calls, so detection costs no extra request
+- Conflict Sweep rebases onto the base with the push lease pinned to the pre-rebase SHA
+- A halted rebase is aborted and reported; hunks are never resolved unattended
+- `UNKNOWN` counts as pending because GitHub computes mergeability asynchronously
+- Sweeps cap at 2 per run; a per-SHA cap would refund on every base commit
+- Out of scope: `BEHIND` under a branch-up-to-date rule this repository does not enable
+```
 
 **Formatting rule (no hard-wrapping):**
 
@@ -64743,7 +64755,7 @@ Backticks suppress GitHub autolinking: a commit SHA or issue/PR number inside a 
 
 Self-check (MANDATORY): after composing the output, re-read it against these rules. A bare commit SHA, a bare tracker id outside a magic-word line, or an unlinked mention of a file that exists in the repo is a violation — fix it before emitting.
 
-Write the most helpful, readable output you can: plain, direct prose; every reference resolvable; explain the "why", not the obvious "what".
+Readability: write short and confident. State the fact and the one reason that justifies it, then stop. No history of how the code got here, no process narration (plans, panels, scores, review rounds), no restating what the diff or the reader's own words already show. One plain sentence beats a paragraph, and a concrete claim beats a hedge ("may", "probably", "it seems"). The reader is a colleague on day one: tell them what changes and why it matters, nothing more.
 
 <!-- ref-format:end -->
 </file>
@@ -72841,12 +72853,12 @@ export function readRootRelease(packageJson: unknown): RootReleaseConfig {
 <file path="rfc/0001-reference-formatting.md">
 ---
 number: 1
-version: 7
+version: 8
 title: Reference formatting & readability
 status: Accepted
 author: "@awinogradov"
 created: 2026-06-04
-updated: 2026-08-01
+updated: 2026-09-02
 ---
 
 # RFC-0001: Reference formatting & readability
@@ -72871,12 +72883,13 @@ Backticks suppress GitHub autolinking: a commit SHA or issue/PR number inside a 
 
 Self-check (MANDATORY): after composing the output, re-read it against these rules. A bare commit SHA, a bare tracker id outside a magic-word line, or an unlinked mention of a file that exists in the repo is a violation — fix it before emitting.
 
-Write the most helpful, readable output you can: plain, direct prose; every reference resolvable; explain the "why", not the obvious "what".
+Readability: write short and confident. State the fact and the one reason that justifies it, then stop. No history of how the code got here, no process narration (plans, panels, scores, review rounds), no restating what the diff or the reader's own words already show. One plain sentence beats a paragraph, and a concrete claim beats a hedge ("may", "probably", "it seems"). The reader is a colleague on day one: tell them what changes and why it matters, nothing more.
 
 <!-- ref-format:end -->
 
 ## Changelog
 
+- **v8** (2026-09-02) — The closing readability sentence is rewritten from "explain the why, not the obvious what" to a short-and-confident contract: the fact and its one reason, no history, no process narration, no hedging. The old sentence was inherited by every skill and the release prompt and grew a motivation narrative into each artifact ([#643](https://github.com/awinogradov/code-assistants/issues/643)).
 - **v7** (2026-08-01) — The emit-time self-check joins the block itself. Skills used to append their own "Reference self-check (MANDATORY)" paragraph after the read directive — 27 unguarded copies one layer above the guarded block. The block now ends with the self-check, and skills carry only the one-paragraph read directive ([#535](https://github.com/awinogradov/code-assistants/issues/535)).
 - **v6** (2026-07-25) — Distribution changed, rules unchanged. Skills no longer inline this block; they read it from the [`shared-rules`](../claude-plugins/autopilot/skills/shared-rules/SKILL.md) skill, whose `references/reference-formatting.md` this RFC pins byte-identical. Only the two runtimes that cannot read a file — the release-notes prompt and the structured-output agents — keep an inlined copy, now guarded by `sharedBlockSync` in place of `referenceFormattingSync` ([#479](https://github.com/awinogradov/code-assistants/issues/479)).
 - **v5** (2026-07-02) — Prose mentions of existing repo files are references to link, not specimens — existence is the test (planned files and paths inside commands or fenced blocks stay backticked). New external-resources rule: cite articles, posts, vendor docs, and standards as inline titled links to a URL present in context; never produce a URL from memory ([#386](https://github.com/awinogradov/code-assistants/issues/386)).
@@ -73137,19 +73150,16 @@ example/       # multiple modules: a directory, no index.ts barrel
 
 ### 11.1 JSDoc
 
-- Every exported interface/type must have JSDoc
-- File-level JSDoc for config modules
-- Use @example where usage isn't obvious
-- Use @see <link> to add links to documentation
-- Focus on "why" and "how to use", not "what"
-- No useless descriptions repeating function name
-- Skip JSDoc only if no params AND obvious from name
-- Use @deprecated <reason> to mark deprecated code
-- All modules must have top level JSDoc with description and usage examples
+- JSDoc is the contract: what the export does, the inputs and outputs the signature does not already say, and its gotchas (throws, limits, ordering) — one to three lines
+- Every exported function, interface, and type has one; skip `@param`/`@returns` lines that only repeat the name and type
+- Use `@example` only when the call shape is not obvious from the signature, `@see <link>` for the external spec a contract follows, and `@deprecated <reason>` to retire an export
+- No history: an issue number, a past bug, or how the code used to work belongs in the commit or PR, never in the JSDoc
+- Module-level JSDoc only on entry points (a script an action runs, a config module): one line on the role, plus one `@example` when it is run by hand
 
 ### 11.2 Code comments
 
-- Avoid obvious comments, links to exact code lines, and duplicated comments — duplication means the code needs refactoring
+- A comment says why the code is the way it is — the constraint, trade-off, or non-obvious fact — in at most two lines; the code says what
+- No comment that restates the code, no history (issue or PR numbers, prior bugs), no links to exact code lines; a comment needed twice means the code needs refactoring
 - Track deferred work as issue-linked `TODO`/`FIXME` comments per CONTRIBUTING.md "TODO Comments"; use the autopilot `todo-cleanup` skill to scan, create, and link issues
 
 ### 11.3 docs/ structure
@@ -73493,19 +73503,16 @@ Choose ONE backend based on the project's needs. Do not mix.
 
 ### 11.1 JSDoc
 
-- Every exported interface/type must have JSDoc
-- File-level JSDoc for config modules
-- Use @example where usage isn't obvious
-- Use @see <link> to add links to documentation
-- Focus on "why" and "how to use", not "what"
-- No useless descriptions repeating function name
-- Skip JSDoc only if no params AND obvious from name
-- Use @deprecated <reason> to mark deprecated code
-- All modules must have top level JSDoc with description and usage examples
+- JSDoc is the contract: what the export does, the inputs and outputs the signature does not already say, and its gotchas (throws, limits, ordering) — one to three lines
+- Every exported function, interface, and type has one; skip `@param`/`@returns` lines that only repeat the name and type
+- Use `@example` only when the call shape is not obvious from the signature, `@see <link>` for the external spec a contract follows, and `@deprecated <reason>` to retire an export
+- No history: an issue number, a past bug, or how the code used to work belongs in the commit or PR, never in the JSDoc
+- Module-level JSDoc only on entry points (a script an action runs, a config module): one line on the role, plus one `@example` when it is run by hand
 
 ### 11.2 Code comments
 
-- Avoid obvious comments, links to exact code lines, and duplicated comments — duplication means the code needs refactoring
+- A comment says why the code is the way it is — the constraint, trade-off, or non-obvious fact — in at most two lines; the code says what
+- No comment that restates the code, no history (issue or PR numbers, prior bugs), no links to exact code lines; a comment needed twice means the code needs refactoring
 - Track deferred work as issue-linked `TODO`/`FIXME` comments per CONTRIBUTING.md "TODO Comments"; use the autopilot `todo-cleanup` skill to scan, create, and link issues
 
 ### 11.3 docs/ structure
@@ -73849,19 +73856,16 @@ example/       # multiple modules: a directory, no index.ts barrel
 
 ### 11.1 JSDoc
 
-- Every exported interface/type must have JSDoc
-- File-level JSDoc for config modules
-- Use @example where usage isn't obvious
-- Use @see <link> to add links to documentation
-- Focus on "why" and "how to use", not "what"
-- No useless descriptions repeating function name
-- Skip JSDoc only if no params AND obvious from name
-- Use @deprecated <reason> to mark deprecated code
-- All modules must have top level JSDoc with description and usage examples
+- JSDoc is the contract: what the export does, the inputs and outputs the signature does not already say, and its gotchas (throws, limits, ordering) — one to three lines
+- Every exported function, interface, and type has one; skip `@param`/`@returns` lines that only repeat the name and type
+- Use `@example` only when the call shape is not obvious from the signature, `@see <link>` for the external spec a contract follows, and `@deprecated <reason>` to retire an export
+- No history: an issue number, a past bug, or how the code used to work belongs in the commit or PR, never in the JSDoc
+- Module-level JSDoc only on entry points (a script an action runs, a config module): one line on the role, plus one `@example` when it is run by hand
 
 ### 11.2 Code comments
 
-- Avoid obvious comments, links to exact code lines, and duplicated comments — duplication means the code needs refactoring
+- A comment says why the code is the way it is — the constraint, trade-off, or non-obvious fact — in at most two lines; the code says what
+- No comment that restates the code, no history (issue or PR numbers, prior bugs), no links to exact code lines; a comment needed twice means the code needs refactoring
 - Track deferred work as issue-linked `TODO`/`FIXME` comments per CONTRIBUTING.md "TODO Comments"; use the autopilot `todo-cleanup` skill to scan, create, and link issues
 
 ### 11.3 docs/ structure
@@ -74207,19 +74211,16 @@ example/       # multiple modules: a directory, no index.ts barrel
 
 ### 11.1 JSDoc
 
-- Every exported interface/type must have JSDoc
-- File-level JSDoc for config modules
-- Use @example where usage isn't obvious
-- Use @see <link> to add links to documentation
-- Focus on "why" and "how to use", not "what"
-- No useless descriptions repeating function name
-- Skip JSDoc only if no params AND obvious from name
-- Use @deprecated <reason> to mark deprecated code
-- All modules must have top level JSDoc with description and usage examples
+- JSDoc is the contract: what the export does, the inputs and outputs the signature does not already say, and its gotchas (throws, limits, ordering) — one to three lines
+- Every exported function, interface, and type has one; skip `@param`/`@returns` lines that only repeat the name and type
+- Use `@example` only when the call shape is not obvious from the signature, `@see <link>` for the external spec a contract follows, and `@deprecated <reason>` to retire an export
+- No history: an issue number, a past bug, or how the code used to work belongs in the commit or PR, never in the JSDoc
+- Module-level JSDoc only on entry points (a script an action runs, a config module): one line on the role, plus one `@example` when it is run by hand
 
 ### 11.2 Code comments
 
-- Avoid obvious comments, links to exact code lines, and duplicated comments — duplication means the code needs refactoring
+- A comment says why the code is the way it is — the constraint, trade-off, or non-obvious fact — in at most two lines; the code says what
+- No comment that restates the code, no history (issue or PR numbers, prior bugs), no links to exact code lines; a comment needed twice means the code needs refactoring
 - Track deferred work as issue-linked `TODO`/`FIXME` comments per CONTRIBUTING.md "TODO Comments"; use the autopilot `todo-cleanup` skill to scan, create, and link issues
 
 ### 11.3 docs/ structure
