@@ -1,11 +1,11 @@
 ---
 number: 1
-version: 7
+version: 8
 title: Reference formatting & readability
 status: Accepted
 author: "@awinogradov"
 created: 2026-06-04
-updated: 2026-08-01
+updated: 2026-09-02
 ---
 
 # RFC-0001: Reference formatting & readability
@@ -30,12 +30,13 @@ Backticks suppress GitHub autolinking: a commit SHA or issue/PR number inside a 
 
 Self-check (MANDATORY): after composing the output, re-read it against these rules. A bare commit SHA, a bare tracker id outside a magic-word line, or an unlinked mention of a file that exists in the repo is a violation — fix it before emitting.
 
-Write the most helpful, readable output you can: plain, direct prose; every reference resolvable; explain the "why", not the obvious "what".
+Readability: write short and confident. State the fact and the one reason that justifies it, then stop. No history of how the code got here, no process narration (plans, panels, scores, review rounds), no restating what the diff or the reader's own words already show. One plain sentence beats a paragraph, and a concrete claim beats a hedge ("may", "probably", "it seems"). The reader is a colleague on day one: tell them what changes and why it matters, nothing more.
 
 <!-- ref-format:end -->
 
 ## Changelog
 
+- **v8** (2026-09-02) — The closing readability sentence is rewritten from "explain the why, not the obvious what" to a short-and-confident contract: the fact and its one reason, no history, no process narration, no hedging. The old sentence was inherited by every skill and the release prompt and grew a motivation narrative into each artifact ([#643](https://github.com/awinogradov/code-assistants/issues/643)).
 - **v7** (2026-08-01) — The emit-time self-check joins the block itself. Skills used to append their own "Reference self-check (MANDATORY)" paragraph after the read directive — 27 unguarded copies one layer above the guarded block. The block now ends with the self-check, and skills carry only the one-paragraph read directive ([#535](https://github.com/awinogradov/code-assistants/issues/535)).
 - **v6** (2026-07-25) — Distribution changed, rules unchanged. Skills no longer inline this block; they read it from the [`shared-rules`](../claude-plugins/autopilot/skills/shared-rules/SKILL.md) skill, whose `references/reference-formatting.md` this RFC pins byte-identical. Only the two runtimes that cannot read a file — the release-notes prompt and the structured-output agents — keep an inlined copy, now guarded by `sharedBlockSync` in place of `referenceFormattingSync` ([#479](https://github.com/awinogradov/code-assistants/issues/479)).
 - **v5** (2026-07-02) — Prose mentions of existing repo files are references to link, not specimens — existence is the test (planned files and paths inside commands or fenced blocks stay backticked). New external-resources rule: cite articles, posts, vendor docs, and standards as inline titled links to a URL present in context; never produce a URL from memory ([#386](https://github.com/awinogradov/code-assistants/issues/386)).

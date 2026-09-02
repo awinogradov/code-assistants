@@ -276,19 +276,16 @@ example/       # multiple modules: a directory, no index.ts barrel
 
 ### 11.1 JSDoc
 
-- Every exported interface/type must have JSDoc
-- File-level JSDoc for config modules
-- Use @example where usage isn't obvious
-- Use @see <link> to add links to documentation
-- Focus on "why" and "how to use", not "what"
-- No useless descriptions repeating function name
-- Skip JSDoc only if no params AND obvious from name
-- Use @deprecated <reason> to mark deprecated code
-- All modules must have top level JSDoc with description and usage examples
+- JSDoc is the contract: what the export does, the inputs and outputs the signature does not already say, and its gotchas (throws, limits, ordering) — one to three lines
+- Every exported function, interface, and type has one; skip `@param`/`@returns` lines that only repeat the name and type
+- Use `@example` only when the call shape is not obvious from the signature, `@see <link>` for the external spec a contract follows, and `@deprecated <reason>` to retire an export
+- No history: an issue number, a past bug, or how the code used to work belongs in the commit or PR, never in the JSDoc
+- Module-level JSDoc only on entry points (a script an action runs, a config module): one line on the role, plus one `@example` when it is run by hand
 
 ### 11.2 Code comments
 
-- Avoid obvious comments, links to exact code lines, and duplicated comments — duplication means the code needs refactoring
+- A comment says why the code is the way it is — the constraint, trade-off, or non-obvious fact — in at most two lines; the code says what
+- No comment that restates the code, no history (issue or PR numbers, prior bugs), no links to exact code lines; a comment needed twice means the code needs refactoring
 - Track deferred work as issue-linked `TODO`/`FIXME` comments per CONTRIBUTING.md "TODO Comments"; use the autopilot `todo-cleanup` skill to scan, create, and link issues
 
 ### 11.3 docs/ structure

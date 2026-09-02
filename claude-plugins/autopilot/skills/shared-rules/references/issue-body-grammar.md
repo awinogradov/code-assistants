@@ -14,7 +14,7 @@ The five-section structure every generated issue body follows, on GitHub and Lin
 
 Heading format MUST be exact: `## Context` (single space, no trailing colon, no bold `**Heading:**`).
 
-**Single-responsibility rule:** each section answers exactly one question and MUST NOT repeat what another section already covers — cross-reference a sibling section instead of restating it. Length follows the content: include as much context as a reader needs to act on the issue, and never cap a section at a fixed paragraph count. Do not pad — every sentence must add information.
+**Single-responsibility rule:** each section answers exactly one question and MUST NOT repeat what another section already covers — cross-reference a sibling section instead of restating it. Context and Why are at most three sentences each; What and Solution are a short paragraph or a one-line-per-item list. Do not pad — every sentence must add information.
 
 - **Context** — the situation and background only: the current state of the world, what work area this touches, and what surfaced it now. No user impact or motivation (that is Why), no proposed fix (that is Solution). Single continuous line per paragraph — no hard-wrapping. When the caller found related issues or PRs, end the section with one `Related:` line in the plain `#N (state)` format (e.g. `Related: #123 (open), #456 (closed)`) — NEVER magic words like `Closes #N` here, which would close issues on merge.
 - **What** — the deliverable: the observable end state once this is done, in plain terms. WHAT changes, not HOW (the approach is Solution). A paragraph or bullet list; single continuous line per item.

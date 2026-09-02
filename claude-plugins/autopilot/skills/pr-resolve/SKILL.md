@@ -201,7 +201,7 @@ For each comment requiring a code change:
 For comments that do not require code changes (questions, misunderstandings):
 
 1. **Evaluate the comment** against the actual codebase — read the code, check if the reviewer's concern is valid
-2. **Draft a reply** — concise, direct, 1-5 sentences; format references per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) (the **Reference formatting & readability** rules inlined at the end of this skill; see [Phase 5](#phase-5-reply-to-review-threads)). A `CHECK-` rule code you cite — e.g. when you echo the finding you are answering — is a reference, not a code specimen: render it as a link to the rule's anchor exactly as [Phase 5](#phase-5-reply-to-review-threads) prescribes, never bare text. Reply shapes:
+2. **Draft a reply** — concise, direct, 1-3 sentences; format references per [RFC-0001](<repo-blob-url>/rfc/0001-reference-formatting.md) (the **Reference formatting & readability** rules inlined at the end of this skill; see [Phase 5](#phase-5-reply-to-review-threads)). A `CHECK-` rule code you cite — e.g. when you echo the finding you are answering — is a reference, not a code specimen: render it as a link to the rule's anchor exactly as [Phase 5](#phase-5-reply-to-review-threads) prescribes, never bare text. Reply shapes:
    - If reviewer is wrong: "You're right that [X looks concerning], but [reason it's correct]. [Evidence from code]."
    - If needs discussion: "[Acknowledge point], however [concern or alternative]."
    - If question: "[Direct answer with reference to code]."

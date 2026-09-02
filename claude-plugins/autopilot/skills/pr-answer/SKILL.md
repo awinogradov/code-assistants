@@ -116,7 +116,7 @@ Read the COMMENT_BODY carefully. If COMMENT_PATH and COMMENT_LINE are provided, 
 
 ### Reply
 
-Always provide a reply. Keep it concise (1-5 sentences). Be direct.
+Always provide a reply. Keep it concise (1-3 sentences). Be direct.
 
 - If wrong (fix already committed): "You're right, [reason]. Fixed in [<sha>](<repo-commit-url>/<sha>)."
 - If wrong (no commit yet): "You're right, [reason]. Resolving this."

@@ -41,6 +41,6 @@ Numeric or string literals used in logic without a named constant explaining the
 
 Function accepts more than 9 total parameters or more than 6 positional, indicating it should accept a config/options object instead.
 
-**CHECK-CPLX-009: Comment explains "what" instead of "why"** — Severity: suggestion
+**CHECK-CPLX-009: Comment restates the code or narrates history** — Severity: suggestion
 
-Comments describing what the code does (obvious from the code) instead of why.
+A comment that describes what the code does (obvious from the code), or that cites issue or PR numbers and past behaviour instead of the reason the code is the way it is. A comment says the why in at most two lines; a JSDoc states the contract in one to three.

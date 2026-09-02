@@ -16,8 +16,22 @@ Each section is separated by `---`. The `**Issues:**` section is ALWAYS last. Pl
 
 **Section 1: Description**
 
-- Brief description of what and why (1-2 sentences)
-- Bullet list for important implementation details
+- Opening paragraph: what changes and why, 1-2 sentences
+- Then one bullet per implementation decision the diff does not explain by itself — the decision and its reason, at most 20 words, at most 7 bullets
+- Nothing about process: no plan, expert panel, score, review round, or "scoped out" narration; a deliberate exclusion is one bullet starting `Out of scope:`
+
+Target density for Section 1, from a real PR:
+
+```
+pr-monitor and pr-resolve never read `mergeable`, so a conflicting PR looked like one awaiting review and the monitor polled forever. Both skills now detect `CONFLICTING` and end in a reported terminal state.
+
+- Read `mergeable` in the existing `gh pr view` calls, so detection costs no extra request
+- Conflict Sweep rebases onto the base with the push lease pinned to the pre-rebase SHA
+- A halted rebase is aborted and reported; hunks are never resolved unattended
+- `UNKNOWN` counts as pending because GitHub computes mergeability asynchronously
+- Sweeps cap at 2 per run; a per-SHA cap would refund on every base commit
+- Out of scope: `BEHIND` under a branch-up-to-date rule this repository does not enable
+```
 
 **Formatting rule (no hard-wrapping):**
 

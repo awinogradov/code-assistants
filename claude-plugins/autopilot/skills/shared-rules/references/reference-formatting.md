@@ -16,6 +16,6 @@ Backticks suppress GitHub autolinking: a commit SHA or issue/PR number inside a 
 
 Self-check (MANDATORY): after composing the output, re-read it against these rules. A bare commit SHA, a bare tracker id outside a magic-word line, or an unlinked mention of a file that exists in the repo is a violation — fix it before emitting.
 
-Write the most helpful, readable output you can: plain, direct prose; every reference resolvable; explain the "why", not the obvious "what".
+Readability: write short and confident. State the fact and the one reason that justifies it, then stop. No history of how the code got here, no process narration (plans, panels, scores, review rounds), no restating what the diff or the reader's own words already show. One plain sentence beats a paragraph, and a concrete claim beats a hedge ("may", "probably", "it seems"). The reader is a colleague on day one: tell them what changes and why it matters, nothing more.
 
 <!-- ref-format:end -->
