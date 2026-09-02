@@ -415,7 +415,9 @@ These skills set `user-invocable: false` — they run only when invoked programm
 
 ### `preflight-check`
 
-Validate git working state before branching, committing, or opening a PR. Mode-aware: in `plan`/`branch` modes it fetches remote and offers to pull; in `commits`/`pr` modes it warns if you are on `main` and offers to create a branch first. Invoked automatically at the start of `/autopilot:branch-create`, `/autopilot:commits-create`, `/autopilot:pr-create`, `/autopilot:plan`, and `/autopilot:run`.
+Validate git working state before branching, committing, or opening a PR. Mode-aware: in `plan`/`branch` modes it fetches remote and offers to pull; in `commits`/`pr` modes it warns if you are on `main` and offers to create a branch first. Each mode's own checks live in a `references/` file that only that mode reads.
+
+Invoked automatically at the start of `/autopilot:branch-create`, `/autopilot:commits-create`, `/autopilot:pr-create`, and `/autopilot:plan`. On the `/autopilot:run` family it runs **once per session**, unconditionally, before any git mutation — that single invocation installs the git-history policy gate for the rest of the session, and is why the three creation skills skip their own preflight under `--autopilot`. See [skill token budget](../../docs/19-skill-token-budget.md).
 
 ### `gather-context`
 
