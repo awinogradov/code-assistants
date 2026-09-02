@@ -345,6 +345,7 @@ The content is organized as follows:
         1.3.1.md
         1.4.0.md
         1.4.1.md
+        1.5.0.md
       src/
         migrations/
           migratingAppend.test.ts
@@ -520,6 +521,7 @@ claude-plugins/
       7.1.2.md
       7.2.0.md
       7.3.0.md
+      7.4.0.md
     agents/
       analyze-pr-commits.md
       analyze-staged-changes.md
@@ -32545,6 +32547,35 @@ The [release-action README](https://github.com/awinogradov/code-assistants/blob/
 * correct npm auth claims for release publish ([ae69284](https://github.com/awinogradov/code-assistants/commit/ae69284e81826d1b4e39910ec808b777ed97491f))
 </file>
 
+<file path=".github/actions/release-action/.release_notes/1.5.0.md">
+## [1.5.0](https://github.com/awinogradov/code-assistants/compare/release-action@v1.4.1...release-action@v1.5.0) (2026-09-02)
+
+## Release Notes
+
+AI-generated release notes, PR descriptions, and review replies are now capped to one sentence per item across all autopilot outputs.
+
+## ✨ What's New
+
+- Release note bullets, PR descriptions, issue bodies, and review replies are each limited to one sentence — one fact and one reason — eliminating multi-paragraph prose from all autopilot outputs.
+
+<details><summary>Related issues</summary>
+
+- [#643: Make generated prose short and confident across autopilot outputs](https://github.com/awinogradov/code-assistants/issues/643)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #643 | [#644](https://github.com/awinogradov/code-assistants/pull/644) | @awinogradov |
+
+### Features
+
+* **autopilot:** make generated prose short and confident ([5e6895e](https://github.com/awinogradov/code-assistants/commit/5e6895e7de5da63671a76808fa6341c2bbbb7d29))
+* **release-action:** emit one-sentence release note bullets ([ac51009](https://github.com/awinogradov/code-assistants/commit/ac510098965d3f39ed78d4568088845686896c75))
+</file>
+
 <file path=".github/actions/release-action/src/migrations/migratingAppend.test.ts">
 /**
  * Tests for MIGRATING.md section rendering and append.
@@ -42995,6 +43026,32 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.5.0](https://github.com/awinogradov/code-assistants/compare/release-action@v1.4.1...release-action@v1.5.0) (2026-09-02)
+
+## Release Notes
+
+AI-generated release notes, PR descriptions, and review replies are now capped to one sentence per item across all autopilot outputs.
+
+## ✨ What's New
+
+- Release note bullets, PR descriptions, issue bodies, and review replies are each limited to one sentence — one fact and one reason — eliminating multi-paragraph prose from all autopilot outputs.
+
+<details><summary>Related issues</summary>
+
+- [#643: Make generated prose short and confident across autopilot outputs](https://github.com/awinogradov/code-assistants/issues/643)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #643 | [#644](https://github.com/awinogradov/code-assistants/pull/644) | @awinogradov |
+
+### Features
+
+* **autopilot:** make generated prose short and confident ([5e6895e](https://github.com/awinogradov/code-assistants/commit/5e6895e7de5da63671a76808fa6341c2bbbb7d29))
+* **release-action:** emit one-sentence release note bullets ([ac51009](https://github.com/awinogradov/code-assistants/commit/ac510098965d3f39ed78d4568088845686896c75))
 ## [1.4.1](https://github.com/awinogradov/code-assistants/compare/release-action@v1.4.0...release-action@v1.4.1) (2026-08-29)
 
 ## Release Notes
@@ -43700,7 +43757,7 @@ Add a `release` field to your package.json to configure release behavior. See th
 <file path=".github/actions/release-action/package.json">
 {
   "name": "@code-assistants/release-action",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "description": "Composite GitHub Action that automates conventional-commit releases for npm packages, GitHub Actions, and Claude plugins.",
   "private": true,
   "type": "module",
@@ -43739,7 +43796,7 @@ Add a `release` field to your package.json to configure release behavior. See th
 <file path=".github/actions/release-action/README.md">
 # Release action
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.4.1-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v1.5.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that automates the release pipeline for npm packages, GitHub Actions, and Claude plugins.
@@ -44030,7 +44087,7 @@ uses: awinogradov/code-assistants/.github/actions/release-action@v1
 </file>
 
 <file path=".github/actions/release-action/version">
-1.4.1
+1.5.0
 </file>
 
 <file path=".github/actions/release-automerge/.release_notes/0.1.0.md">
@@ -47790,7 +47847,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "7.3.0",
+  "version": "7.4.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -50552,6 +50609,38 @@ The skill documentation for both `/autopilot:pr-monitor` and `/autopilot:pr-reso
 ### Documentation
 
 * describe conflict handling in monitor and resolve ([3a1205d](https://github.com/awinogradov/code-assistants/commit/3a1205d4cede92c08afd9e7c9f9fd6b8ec3f28d0))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/7.4.0.md">
+## [7.4.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.3.0...autopilot@v7.4.0) (2026-09-02)
+
+## Release Notes
+
+All autopilot-generated outputs — PR descriptions, review replies, release notes, and stack rules — now enforce one-fact-one-reason prose limits.
+
+## ✨ What's New
+
+- Generated PR descriptions, issue bodies, and review replies are capped at one fact and one reason per item, eliminating multi-paragraph filler across all autopilot outputs.
+- JSDoc is now enforced as a 1–3 line contract and inline comments as a 2-line *why*, with no issue history permitted in either, per the synced stack rules.
+- Release notes render as one-sentence bullets per change instead of a heading-and-paragraph block.
+- [RFC-0001](https://github.com/awinogradov/code-assistants/blob/main/rfc/0001-reference-formatting.md) is at v8 with a short-and-confident readability paragraph that backs these constraints.
+
+<details><summary>Related issues</summary>
+
+- [#643: Make generated prose short and confident across autopilot outputs](https://github.com/awinogradov/code-assistants/issues/643)
+- [#644: Make generated prose short and confident across autopilot outputs](https://github.com/awinogradov/code-assistants/pull/644)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #643 | [#644](https://github.com/awinogradov/code-assistants/pull/644) | @awinogradov |
+
+### Features
+
+* **autopilot:** make generated prose short and confident ([5e6895e](https://github.com/awinogradov/code-assistants/commit/5e6895e7de5da63671a76808fa6341c2bbbb7d29))
 </file>
 
 <file path="claude-plugins/autopilot/agents/analyze-pr-commits.md">
@@ -65198,6 +65287,35 @@ Before writing any output that mentions a file, standard, section, commit, or is
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [7.4.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.3.0...autopilot@v7.4.0) (2026-09-02)
+
+## Release Notes
+
+All autopilot-generated outputs — PR descriptions, review replies, release notes, and stack rules — now enforce one-fact-one-reason prose limits.
+
+## ✨ What's New
+
+- Generated PR descriptions, issue bodies, and review replies are capped at one fact and one reason per item, eliminating multi-paragraph filler across all autopilot outputs.
+- JSDoc is now enforced as a 1–3 line contract and inline comments as a 2-line *why*, with no issue history permitted in either, per the synced stack rules.
+- Release notes render as one-sentence bullets per change instead of a heading-and-paragraph block.
+- [RFC-0001](https://github.com/awinogradov/code-assistants/blob/main/rfc/0001-reference-formatting.md) is at v8 with a short-and-confident readability paragraph that backs these constraints.
+
+<details><summary>Related issues</summary>
+
+- [#643: Make generated prose short and confident across autopilot outputs](https://github.com/awinogradov/code-assistants/issues/643)
+- [#644: Make generated prose short and confident across autopilot outputs](https://github.com/awinogradov/code-assistants/pull/644)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #643 | [#644](https://github.com/awinogradov/code-assistants/pull/644) | @awinogradov |
+
+### Features
+
+* **autopilot:** make generated prose short and confident ([5e6895e](https://github.com/awinogradov/code-assistants/commit/5e6895e7de5da63671a76808fa6341c2bbbb7d29))
 ## [7.3.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.2.0...autopilot@v7.3.0) (2026-08-29)
 
 ## Release Notes
@@ -67940,14 +68058,14 @@ SOFTWARE.
     "test": "bun test lib",
     "clean": "rm -rf node_modules .turbo"
   },
-  "version": "7.3.0"
+  "version": "7.4.0"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v7.3.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v7.4.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -68459,7 +68577,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-7.3.0
+7.4.0
 </file>
 
 <file path="docs/01-workspace-structure.md">
