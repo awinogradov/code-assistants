@@ -224,6 +224,7 @@ The content is organized as follows:
         runSummaryFooter.ts
         sharedBlockSync.test.ts
         sharedRulesInvocation.test.ts
+        skillBodyBudget.test.ts
         skipComment.test.ts
         skipComment.ts
         submitReview.ts
@@ -566,6 +567,9 @@ claude-plugins/
           self-assign.md
         SKILL.md
       commits-create/
+        references/
+          examples.md
+          interactive-dialogs.md
         SKILL.md
       commits-restructure/
         SKILL.md
@@ -672,6 +676,10 @@ claude-plugins/
       pr-create/
         SKILL.md
       pr-monitor/
+        references/
+          background-mode.md
+          ci-remediation.md
+          conflict-sweep.md
         SKILL.md
       pr-resolve/
         SKILL.md
@@ -698,10 +706,14 @@ claude-plugins/
       pr-update/
         references/
           examples.md
+          interactive-dialogs.md
         SKILL.md
       pr-validate/
         SKILL.md
       preflight-check/
+        references/
+          mode-commits-pr.md
+          mode-plan-branch.md
         SKILL.md
       run/
         SKILL.md
@@ -752,6 +764,7 @@ docs/
   16-linear-plan-skill.md
   17-linear-run-skill.md
   18-agent-skills-export.md
+  19-skill-token-budget.md
 packages/
   actions-core/
     src/
@@ -14740,6 +14753,12 @@ describe("review body file links", () => {
  * Vacuous-pass defences: every extracted region must be non-empty and above a
  * minimum length, so a renamed heading or a dropped fence cannot extract "" and
  * satisfy a `toContain` against it.
+ *
+ * The sweep procedure and background-mode behaviour are read from the skill's
+ * `references/` files rather than from SKILL.md: both are conditional, so they
+ * were moved out of the body per docs/19-skill-token-budget.md. The contract is
+ * unchanged — only the file holding it moved — and a missing file now throws at
+ * import rather than silently extracting "".
  */
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -14750,6 +14769,8 @@ const actionDir = join(import.meta.dirname, "..");
 const repoRoot = join(actionDir, "..", "..", "..");
 const skillsDir = join(repoRoot, "claude-plugins/autopilot/skills");
 const monitorPath = join(skillsDir, "pr-monitor/SKILL.md");
+const sweepPath = join(skillsDir, "pr-monitor/references/conflict-sweep.md");
+const backgroundPath = join(skillsDir, "pr-monitor/references/background-mode.md");
 const resolvePath = join(skillsDir, "pr-resolve/SKILL.md");
 const historyBlockPath = join(skillsDir, "shared-rules/references/git-history-policy.md");
 const docsPath = join(repoRoot, "docs/05-plan-run-skills.md");
@@ -14761,10 +14782,12 @@ const minExtractionLength = 40;
 /** The run-scoped sweep cap. Asserted as a literal — "a digit appears" would survive any edit. */
 const sweepCap = "capped at **2 per `pr-monitor` invocation**";
 
-const [monitor, resolve, historyBlock] = await Promise.all([
+const [monitor, resolve, historyBlock, sweepDoc, backgroundDoc] = await Promise.all([
   readFile(monitorPath, "utf8"),
   readFile(resolvePath, "utf8"),
   readFile(historyBlockPath, "utf8"),
+  readFile(sweepPath, "utf8"),
+  readFile(backgroundPath, "utf8"),
 ]);
 
 /** Extract a `### `/`## ` section by heading, up to the next heading of the same or higher level. */
@@ -14773,10 +14796,10 @@ const section = (source: string, heading: string): string =>
     source,
   )?.[0] ?? "";
 
-const sweep = section(monitor, "### Conflict Sweep (shared procedure)");
+const sweep = sweepDoc;
 const earlyExit = section(monitor, "### 1.1 Early Exit Checks");
 const perCycle = section(monitor, "### 2.2 Check PR State");
-const backgroundMode = section(monitor, "### Background Mode");
+const backgroundMode = backgroundDoc;
 const detectPr = section(resolve, "### 1.1 Detect PR");
 
 /** The block's own forbidden-command pattern, so this file cannot disagree with it. */
@@ -19441,6 +19464,116 @@ describe("shared-rules invocation", () => {
       }
     },
   );
+});
+</file>
+
+<file path=".github/actions/code-review-action/src/skillBodyBudget.test.ts">
+/**
+ * Guards the size of every autopilot `SKILL.md`, because a skill body is charged per turn.
+ *
+ * Invoking a skill injects its whole `SKILL.md` into the conversation, and that text is
+ * re-charged as input on every subsequent request in the session. Cost is therefore
+ * `body size × invocations × turns resident`, which is why the chain-plumbing skills —
+ * loaded once per commit, per PR, per review cycle — dominated session token usage even
+ * when much larger bodies (`pr-review` at ~56 KB) cost nothing at all.
+ *
+ * The budgets below are the sizes after that cleanup plus modest headroom. They are a
+ * regression tripwire, not a target: a skill is free to sit well under its budget, and
+ * growth that earns its keep is a budget bump in the same commit, reviewed like any other
+ * change.
+ *
+ * What this CANNOT prove, in the spirit of the limit `sharedRulesInvocation.test.ts`
+ * states for its own presence guard: that a shrunken body actually costs less at runtime.
+ * Moving a section into `references/` only saves tokens when a typical invocation does not
+ * read it back, and CI sees file sizes rather than what the model read. A body that halved
+ * by relocating text every run then loads via `Read` is strictly worse and still passes
+ * here. The design rules that make an extraction sound live in
+ * `docs/19-skill-token-budget.md`; this test only stops the bodies growing again.
+ *
+ * Vacuous-pass defences, both deliberate: discovery comes from the filesystem via
+ * `walkMarkdown`, so a newly added skill is guarded without editing a test, and a skill
+ * with no budget entry fails loudly rather than being silently skipped.
+ */
+import { readFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
+
+import { describe, expect, test } from "bun:test";
+
+import { walkMarkdown } from "./markdownFiles.ts";
+
+const actionDir = join(import.meta.dirname, "..");
+const repoRoot = join(actionDir, "..", "..", "..");
+const skillsDir = join(repoRoot, "claude-plugins/autopilot/skills");
+
+/**
+ * Maximum bytes for each skill's `SKILL.md`.
+ *
+ * `pr-review` is the deliberate outlier: it runs inside `code-review-action` on a PR and
+ * never loads into an interactive session, so its size costs one CI request rather than
+ * every turn of a user's session.
+ */
+const budgets: Record<string, number> = {
+  "ascii-schemas": 8500,
+  "ask-codex": 5500,
+  "ask-gemini": 5500,
+  "branch-create": 19000,
+  "commits-create": 17000,
+  "commits-restructure": 9500,
+  "dependabot-resolve": 5500,
+  explore: 13000,
+  "gather-context": 15000,
+  "issue-create": 17000,
+  "issue-run": 9000,
+  "linear-create": 10500,
+  "linear-plan": 20000,
+  "linear-run": 21000,
+  "pdf-create": 10000,
+  plan: 15000,
+  "pr-answer": 11000,
+  "pr-create": 15500,
+  "pr-monitor": 18000,
+  "pr-resolve": 17000,
+  "pr-review": 58000,
+  "pr-update": 10000,
+  "pr-validate": 4500,
+  "preflight-check": 11000,
+  run: 18000,
+  "run-primed": 15000,
+  "shared-rules": 5000,
+  "todo-cleanup": 9000,
+};
+
+/** Every discovered `SKILL.md`, as `[skillName, absolutePath]`. */
+const skillFiles = (await walkMarkdown(skillsDir))
+  .filter((file) => basename(file) === "SKILL.md")
+  .map((file): [string, string] => [basename(dirname(file)), file])
+  .sort(([a], [b]) => a.localeCompare(b));
+
+describe("skill body budget", () => {
+  test("skills are discovered from the filesystem, not hardcoded", () => {
+    expect(skillFiles.length).toBeGreaterThan(20);
+    expect(skillFiles.map(([name]) => name)).toContain("preflight-check");
+  });
+
+  test.each(skillFiles)("%s has a budget entry", (name) => {
+    // A new skill must declare a budget; defaulting one would let it ship unguarded.
+    expect(Object.hasOwn(budgets, name)).toBe(true);
+  });
+
+  test.each(skillFiles)("%s is within its budget", async (name, file) => {
+    const budget = budgets[name];
+    if (budget === undefined) return; // reported by the entry test above
+    const bytes = Buffer.byteLength(await readFile(file, "utf8"), "utf8");
+    // Compare through a labelled string so a failure names the skill and both numbers.
+    expect(`${name}: ${bytes <= budget ? "within" : `${bytes} > ${budget}`}`).toBe(
+      `${name}: within`,
+    );
+  });
+
+  test("no budget entry names a skill that no longer exists", () => {
+    const discovered = new Set(skillFiles.map(([name]) => name));
+    expect(Object.keys(budgets).filter((name) => !discovered.has(name))).toEqual([]);
+  });
 });
 </file>
 
@@ -54463,7 +54596,7 @@ Expected forms:
 - `<ISSUE-NUMBER|LINEAR-ID> "<description>"` — issue identifier plus custom branch slug description
 - `--start` — Linear only: also move the Linear ticket to "In Progress" after the branch is created (best-effort). Ignored for GitHub and special-prefix branches.
 - `--hotfix "<description>"` / `--trivial "<description>"` / `--maintenance "<description>"` / `--proposal "<description>"` / `--security "<description>"` — special prefix branches without a GitHub issue (use `--security` for code-scanning alert fixes → `security-<slug>`)
-- `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips the [Phase 5](#phase-5-confirm-special-prefix-branch-name) confirmation prompt, which only special-prefix branches still reach. Issue and Linear branches are created directly for every caller, so the flag has no effect on them. Conflict resolution ([Phase 4](#phase-4-check-for-conflicts)) and validation errors still surface.
+- `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips the [Phase 0](#phase-0-preflight-check) preflight, which the calling chain already ran, and the [Phase 5](#phase-5-confirm-special-prefix-branch-name) confirmation prompt, which only special-prefix branches still reach. Issue and Linear branches are created directly for every caller, so the flag has no effect on their naming. Conflict resolution ([Phase 4](#phase-4-check-for-conflicts)) and validation errors still surface.
 
 ## Input resolution
 
@@ -54477,7 +54610,9 @@ Arguments are optional. When `$ARGUMENTS` is empty OR a field is missing, resolv
 
 ## Phase 0: Preflight Check
 
-Invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversation context. The skill validates current branch state, detects stale merged branches, and ensures main is up to date before a new branch is created. If it outputs a "cancelled" message, stop immediately — do not proceed to [Phase 1](#phase-1-input-validation).
+**Autopilot bypass:** parse `$ARGUMENTS` for `--autopilot` before anything else — the same parse [Phase 1](#phase-1-input-validation) step 1 performs, moved here so this phase can read it. When the flag is present, skip this phase entirely. The calling chain ran its own preflight before any git mutation, so the history-policy gate is already installed, and the remaining `branch`-mode checks cannot change the outcome: [Phase 6](#phase-6-execute) fetches `origin` and branches from `origin/main` itself, so a stale local `main` never reaches the new branch.
+
+Otherwise invoke `Skill(autopilot:preflight-check)` with `mode: branch` from this conversation context. The skill validates current branch state, detects stale merged branches, and ensures main is up to date before a new branch is created. If it outputs a "cancelled" message, stop immediately — do not proceed to [Phase 1](#phase-1-input-validation).
 
 ## Phase 1: Input Validation
 
@@ -54732,6 +54867,157 @@ User selects "Checkout existing".
 Before writing any output that mentions a file, standard, section, commit, or issue, read [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (RFC-0001) and apply it verbatim — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
 </file>
 
+<file path="claude-plugins/autopilot/skills/commits-create/references/examples.md">
+# Examples
+
+Reference for [`commits-create/SKILL.md`](../SKILL.md) — worked call sites for the single, grouped, and failure paths. Read it when a call site is ambiguous; the message shape itself is in [Commit Message Format](../SKILL.md#commit-message-format).
+
+## Single Commit
+
+```
+feat(auth): add jwt token refresh endpoint
+
+- Added /auth/refresh endpoint that issues new access token from refresh token
+- Added 7-day expiry validation for refresh tokens
+- Returns 401 with "refresh_expired" code when token is past expiry
+```
+
+```
+fix(api): return 404 instead of 500 for missing user lookup
+
+- Changed UserService.findById to return null instead of throwing
+- Added explicit 404 response in GET /users/:id handler
+```
+
+```
+docs: add environment variables reference to readme
+```
+
+## Grouped Commits
+
+```
+Analyzing staged changes...
+
+Detected 3 categories:
+- impl: 3 files (auth.ts, auth.types.ts, index.ts)
+- test: 1 file (auth.test.ts)
+- docs: 2 files (docs/auth.md, docs/api-reference.md)
+
+How would you like to commit these changes?
+```
+
+User selects "Separate commits" via AskUserQuestion tool — the one prompt in this flow, because the analyzer recommends a strategy but does not decide it.
+
+Every category's message is then generated and validated upfront, and the commits are created in category order with no further prompting:
+
+```
+✓ Created commit: feat(auth): implement jwt validation
+✓ Created commit: test(auth): add jwt validation tests
+✓ Created commit: docs: update authentication documentation
+
+All 3 commits created successfully.
+```
+
+## Single Category (No Grouping Offered)
+
+```
+Analyzing staged changes...
+
+All changes are in 1 category (impl).
+```
+
+No strategy prompt and no message confirmation — the message is generated, validated, and committed:
+
+```
+✓ Created commit: feat(auth): implement jwt validation
+```
+
+## With an existing PR
+
+After committing on a branch that already has a PR, [Phase 5](../SKILL.md#phase-5-update-pr) refreshes it without asking:
+
+```
+✓ Created commit: feat(auth): add password reset flow
+✓ Updated PR #15: https://github.com/org/repo/pull/15
+```
+
+On a branch with no PR, the skill finishes at the commit and says nothing about pull requests.
+
+## Validation failure
+
+When three attempts still produce an invalid message, the [validation failure dialog](./interactive-dialogs.md#validation-failure-dialog) is the one place a message is shown for review:
+
+AskUserQuestion with:
+
+- `question`: "The generated commit message still fails validation. Choose an action."
+- `header`: "Invalid message"
+- `options`: [
+  { label: "Reword", description: "Provide a corrected commit message", preview: "feat(auth): add JWT refresh endpoint\n\n- Added /auth/refresh endpoint\n\nFails: subject-case — the subject must be all lowercase" },
+  { label: "Cancel", description: "Abort commit creation", preview: "feat(auth): add JWT refresh endpoint\n\n- Added /auth/refresh endpoint\n\nFails: subject-case — the subject must be all lowercase" }
+  ]
+
+User selects "Reword" and supplies `feat(auth): add jwt refresh endpoint`. It is re-validated, passes, and is committed.
+
+In autopilot mode the same failure aborts loudly instead, leaving the staged state untouched.
+</file>
+
+<file path="claude-plugins/autopilot/skills/commits-create/references/interactive-dialogs.md">
+# Interactive dialogs
+
+Reference for [`commits-create/SKILL.md`](../SKILL.md) — the dialogs that exist only when `autopilotMode` is false, plus the contract governing them. Read it at the moment one of those dialogs is reached. Under `--autopilot` none of them runs, so this file stays unread and its bytes stay out of the conversation.
+
+## AskUserQuestion contract
+
+**Autopilot bypass:** When `autopilotMode` is true (from [Phase 1](../SKILL.md#phase-1-check-for-changes)), this contract is moot — the strategy prompt is skipped and a validation failure aborts instead of prompting. Generate the commit message(s), commit directly, and exit without prompting.
+
+The rules below govern two dialogs, and both MUST follow them:
+
+- the [Phase 3](../SKILL.md#phase-3-choose-commit-strategy) commit-strategy prompt — a plain choice, no `preview`;
+- the [validation failure dialog](#validation-failure-dialog) — reached only when three attempts fail to compose a valid message, and the one place a commit message is ever shown for review.
+
+[Phase 1](../SKILL.md#phase-1-check-for-changes) may also ask which files to stage when the working tree has unstaged changes. That is a file-selection question rather than content presented for review, so this contract does not govern it.
+
+A generated commit message is never presented for approval on the success path; [Commit Message Validation](../SKILL.md#commit-message-validation) is what gates it.
+
+Read [`askuserquestion-contract.md`](../../shared-rules/references/askuserquestion-contract.md) and apply it to both dialogs. In this skill, `preview` belongs to the [validation failure dialog](#validation-failure-dialog) only — the strategy prompt is a plain choice and takes no `preview`.
+
+## Phase 3 commit-strategy prompt
+
+Reached only from [Phase 3](../SKILL.md#phase-3-choose-commit-strategy), and only when the analyzer reported `singleCommitRecommended: false` **and** the changes represent genuinely distinct areas. Read [`askuserquestion-format.md`](../../shared-rules/references/askuserquestion-format.md) and apply it before composing the `question` parameter.
+
+Tool parameters:
+
+- `question`: "How would you like to commit these changes?"
+- `header`: "Commit strategy"
+- `options`: [
+  { label: "Single commit (Recommended)", description: "One commit with a comprehensive message" },
+  { label: "Separate commits", description: "Create N atomic commits by category" }
+  ]
+- `multiSelect`: false
+
+"Separate commits" continues to [Phase 4](../SKILL.md#phase-4-execute-commits) with the grouped flow; "Single commit" continues there with the single-commit flow.
+
+## Validation failure dialog
+
+The single interactive escape hatch in this skill, shared by the [Phase 4](../SKILL.md#phase-4-execute-commits) WHAT-not-WHY check and the 3-attempt validation failure above. Because the success path no longer shows the user a message, this dialog is the only place one is ever presented — so use it verbatim rather than improvising a prompt, and obey the [AskUserQuestion contract](#askuserquestion-contract).
+
+**Interactive mode only.** When `autopilotMode` is true, neither caller opens it: abort loudly with the failing rule(s), leave the index untouched, and create no partial commit.
+
+Substitute `<commit message>` with the failing message followed by a blank line and a `Fails: <rule> — <what is wrong>` line, identically on both options.
+
+Tool parameters:
+
+- `question`: "The generated commit message still fails validation. Choose an action."
+- `header`: "Invalid message"
+- `options`: [
+  { label: "Reword", description: "Provide a corrected commit message", preview: "<commit message>" },
+  { label: "Cancel", description: "Abort commit creation", preview: "<commit message>" }
+  ]
+- `multiSelect`: false
+
+If "Reword" is selected, take the user's message and re-run the whole of [Commit Message Validation](../SKILL.md#commit-message-validation) on it — a hand-typed subject is validated too, never committed unchecked — reopening this dialog while it fails. If "Cancel" is selected, abort with "Commit cancelled." and create no commit; in the grouped flow, abort every remaining commit with "Commits cancelled."
+</file>
+
 <file path="claude-plugins/autopilot/skills/commits-create/SKILL.md">
 ---
 name: commits-create
@@ -54764,7 +55050,7 @@ Expected form:
 
 - (no arguments) — auto-analyze staged changes
 - `"<context>"` — free-form context that helps generate a better commit message (e.g., `"add auth feature"`)
-- `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips the commit-strategy prompt and the [Phase 5](#phase-5-update-pr) PR update, and commits directly using the auto-generated messages.
+- `--autopilot` — non-interactive mode used by `/autopilot:run`. Skips the [Phase 0](#phase-0-preflight-check) preflight (the calling chain already ran it), the commit-strategy prompt and the [Phase 5](#phase-5-update-pr) PR update, and commits directly using the auto-generated messages.
 
 ## Input resolution
 
@@ -54775,24 +55061,17 @@ Arguments are optional. When `$ARGUMENTS` is empty:
 - **Repository conventions** — read `CONTRIBUTING.md` directly from the repository root.
 - **Existing PR** — detect via `gh pr view --json number,url 2>/dev/null` at [Phase 5](#phase-5-update-pr). No user prompt needed.
 
-## AskUserQuestion Contract (MANDATORY)
+## Interactive dialogs
 
-**Autopilot bypass:** When `autopilotMode` is true (from [Phase 1](#phase-1-check-for-changes)), this contract is moot — the strategy prompt is skipped and a validation failure aborts instead of prompting. Generate the commit message(s), commit directly, and exit without prompting.
+Three dialogs exist, and all three run only when `autopilotMode` is false: the [Phase 1](#phase-1-check-for-changes) file-selection question, the [Phase 3](#phase-3-choose-commit-strategy) commit-strategy prompt, and the validation-failure dialog that [Commit Message Validation](#commit-message-validation) escalates to after three failed attempts. A generated commit message is never presented for approval on the success path — the validation gate stands in for reading it.
 
-The rules below govern two dialogs, and both MUST follow them:
-
-- the [Phase 3](#phase-3-choose-commit-strategy) commit-strategy prompt — a plain choice, no `preview`;
-- the [validation failure dialog](#validation-failure-dialog) — reached only when three attempts fail to compose a valid message, and the one place a commit message is ever shown for review.
-
-[Phase 1](#phase-1-check-for-changes) may also ask which files to stage when the working tree has unstaged changes. That is a file-selection question rather than content presented for review, so this contract does not govern it.
-
-A generated commit message is never presented for approval on the success path; [Commit Message Validation](#commit-message-validation) is what gates it.
-
-Read [`askuserquestion-contract.md`](../shared-rules/references/askuserquestion-contract.md) and apply it to both dialogs. In this skill, `preview` belongs to the [validation failure dialog](#validation-failure-dialog) only — the strategy prompt is a plain choice and takes no `preview`.
+When `autopilotMode` is true, none of them runs: generate the message(s), commit, and exit without prompting; a validation failure aborts loudly instead. When it is false and you reach the strategy prompt or the validation-failure dialog, read [`references/interactive-dialogs.md`](./references/interactive-dialogs.md) — it carries both dialogs' exact parameters and the AskUserQuestion contract governing them.
 
 ## Phase 0: Preflight Check
 
-Invoke `Skill(autopilot:preflight-check)` with `mode: commits` from this conversation context. The skill verifies the current branch is appropriate for committing and warns if you are on `main`. If it outputs a "cancelled" message, stop immediately — do not proceed to [Phase 1](#phase-1-check-for-changes).
+**Autopilot bypass:** parse `$ARGUMENTS` for `--autopilot` before anything else — the same parse [Phase 1](#phase-1-check-for-changes) step 0 performs, moved here so this phase can read it. When the flag is present, skip this phase entirely. The calling chain ran its own preflight before any git mutation, so the history-policy gate is already installed; the branch came from [`branch-create`](../branch-create/SKILL.md), which validated the name against the same regex the `commits`-mode check uses; and uncommitted changes are this skill's input rather than a hazard.
+
+Otherwise invoke `Skill(autopilot:preflight-check)` with `mode: commits` from this conversation context. The skill verifies the current branch is appropriate for committing and warns if you are on `main`. If it outputs a "cancelled" message, stop immediately — do not proceed to [Phase 1](#phase-1-check-for-changes).
 
 ## Phase 1: Check for Changes
 
@@ -54824,21 +55103,7 @@ After the agent completes, store the structured results (categories, file lists,
 Use the agent's analysis to decide the commit flow:
 
 - **If agent recommends `singleCommitRecommended: true`:** single commit flow ([Phase 4](#phase-4-execute-commits))
-- **If agent recommends `singleCommitRecommended: false`:** the changeset is large enough to consider splitting. Evaluate whether the changes represent genuinely distinct areas. If a single coherent commit message can describe all changes, use single commit flow. Otherwise, ask the user:
-
-  **Formatting Note:** Read [`askuserquestion-format.md`](../shared-rules/references/askuserquestion-format.md) and apply it before composing the `question` parameter.
-
-  Tool parameters:
-  - `question`: "How would you like to commit these changes?"
-  - `header`: "Commit strategy"
-  - `options`: [
-    { label: "Single commit (Recommended)", description: "One commit with a comprehensive message" },
-    { label: "Separate commits", description: "Create N atomic commits by category" }
-    ]
-  - `multiSelect`: false
-
-- **If user chooses "Separate commits":** Continue to [Phase 4](#phase-4-execute-commits) with grouped flow
-- **If user chooses "Single commit":** Continue to [Phase 4](#phase-4-execute-commits) with single commit flow
+- **If agent recommends `singleCommitRecommended: false`:** the changeset is large enough to consider splitting. Evaluate whether the changes represent genuinely distinct areas. If a single coherent commit message can describe all changes, use single commit flow. Otherwise ask the user, using the prompt in [`references/interactive-dialogs.md`](./references/interactive-dialogs.md#phase-3-commit-strategy-prompt) — read it now. "Separate commits" continues to [Phase 4](#phase-4-execute-commits) with the grouped flow, "Single commit" with the single-commit flow.
 
 ## Phase 4: Execute Commits
 
@@ -54849,7 +55114,7 @@ Use the agent's analysis to decide the commit flow:
    - The specific technical change (what was added, removed, or replaced)
    - The concrete modifications made (what files, functions, values, or behaviors changed)
 3. Generate commit message following the format below — the title must name the specific thing that changed, and the body must list the concrete modifications
-4. **WHAT-not-WHY validation**: Answer the rubric in the [WHAT-not-WHY Rule](#what-not-why-rule-mandatory) section for the generated title. If any rubric question fails, regenerate the title using only concrete technical details from the diff. Repeat up to 3 times. If the title still fails, hand it to the [validation failure dialog](#validation-failure-dialog) with the failing check named — do not commit it.
+4. **WHAT-not-WHY validation**: Answer the rubric in the [WHAT-not-WHY Rule](#what-not-why-rule-mandatory) section for the generated title. If any rubric question fails, regenerate the title using only concrete technical details from the diff. Repeat up to 3 times. If the title still fails, hand it to the [validation failure dialog](./references/interactive-dialogs.md#validation-failure-dialog) with the failing check named — do not commit it.
 5. Validate the composed candidate message with [Commit Message Validation](#commit-message-validation) — every checkable rule from the config plus commitlint when installed. On any violation, regenerate and re-validate (≤3 attempts); do not commit a message that still fails.
 6. Run `git commit -m "<message>"`. There is no confirmation step: the message is derived from a diff the user just produced, and steps 4–5 are the gate that stands in for reading it. Continue to [Phase 5](#phase-5-update-pr).
 
@@ -54966,28 +55231,8 @@ Treat any reported problem as a violation. Gating on the binary's existence avoi
 
 **Success = every checkable declared rule passes** (plus commitlint when it ran), not just one rule. NEVER `git commit` a message that still fails. After 3 failed attempts:
 
-- Interactive mode — open the [validation failure dialog](#validation-failure-dialog) below.
+- Interactive mode — open the [validation failure dialog](./references/interactive-dialogs.md#validation-failure-dialog) below.
 - Autopilot mode — abort loudly with the failing rule(s); leave the index/staged state untouched and create no partial commit.
-
-#### Validation failure dialog
-
-The single interactive escape hatch in this skill, shared by the [Phase 4](#phase-4-execute-commits) WHAT-not-WHY check and the 3-attempt validation failure above. Because the success path no longer shows the user a message, this dialog is the only place one is ever presented — so use it verbatim rather than improvising a prompt, and obey the [AskUserQuestion Contract](#askuserquestion-contract-mandatory).
-
-**Interactive mode only.** When `autopilotMode` is true, neither caller opens it: abort loudly with the failing rule(s), leave the index untouched, and create no partial commit.
-
-Substitute `<commit message>` with the failing message followed by a blank line and a `Fails: <rule> — <what is wrong>` line, identically on both options.
-
-Tool parameters:
-
-- `question`: "The generated commit message still fails validation. Choose an action."
-- `header`: "Invalid message"
-- `options`: [
-  { label: "Reword", description: "Provide a corrected commit message", preview: "<commit message>" },
-  { label: "Cancel", description: "Abort commit creation", preview: "<commit message>" }
-  ]
-- `multiSelect`: false
-
-If "Reword" is selected, take the user's message and re-run the whole of [Commit Message Validation](#commit-message-validation) on it — a hand-typed subject is validated too, never committed unchecked — reopening this dialog while it fails. If "Cancel" is selected, abort with "Commit cancelled." and create no commit; in the grouped flow, abort every remaining commit with "Commits cancelled."
 
 ## Phase 5: Update PR
 
@@ -55004,93 +55249,7 @@ After all commits are created successfully:
 
 ## Examples
 
-### Single Commit
-
-```
-feat(auth): add jwt token refresh endpoint
-
-- Added /auth/refresh endpoint that issues new access token from refresh token
-- Added 7-day expiry validation for refresh tokens
-- Returns 401 with "refresh_expired" code when token is past expiry
-```
-
-```
-fix(api): return 404 instead of 500 for missing user lookup
-
-- Changed UserService.findById to return null instead of throwing
-- Added explicit 404 response in GET /users/:id handler
-```
-
-```
-docs: add environment variables reference to readme
-```
-
-### Grouped Commits
-
-```
-Analyzing staged changes...
-
-Detected 3 categories:
-- impl: 3 files (auth.ts, auth.types.ts, index.ts)
-- test: 1 file (auth.test.ts)
-- docs: 2 files (docs/auth.md, docs/api-reference.md)
-
-How would you like to commit these changes?
-```
-
-User selects "Separate commits" via AskUserQuestion tool — the one prompt in this flow, because the analyzer recommends a strategy but does not decide it.
-
-Every category's message is then generated and validated upfront, and the commits are created in category order with no further prompting:
-
-```
-✓ Created commit: feat(auth): implement jwt validation
-✓ Created commit: test(auth): add jwt validation tests
-✓ Created commit: docs: update authentication documentation
-
-All 3 commits created successfully.
-```
-
-### Single Category (No Grouping Offered)
-
-```
-Analyzing staged changes...
-
-All changes are in 1 category (impl).
-```
-
-No strategy prompt and no message confirmation — the message is generated, validated, and committed:
-
-```
-✓ Created commit: feat(auth): implement jwt validation
-```
-
-### With an existing PR
-
-After committing on a branch that already has a PR, [Phase 5](#phase-5-update-pr) refreshes it without asking:
-
-```
-✓ Created commit: feat(auth): add password reset flow
-✓ Updated PR #15: https://github.com/org/repo/pull/15
-```
-
-On a branch with no PR, the skill finishes at the commit and says nothing about pull requests.
-
-### Validation failure
-
-When three attempts still produce an invalid message, the [validation failure dialog](#validation-failure-dialog) is the one place a message is shown for review:
-
-AskUserQuestion with:
-
-- `question`: "The generated commit message still fails validation. Choose an action."
-- `header`: "Invalid message"
-- `options`: [
-  { label: "Reword", description: "Provide a corrected commit message", preview: "feat(auth): add JWT refresh endpoint\n\n- Added /auth/refresh endpoint\n\nFails: subject-case — the subject must be all lowercase" },
-  { label: "Cancel", description: "Abort commit creation", preview: "feat(auth): add JWT refresh endpoint\n\n- Added /auth/refresh endpoint\n\nFails: subject-case — the subject must be all lowercase" }
-  ]
-
-User selects "Reword" and supplies `feat(auth): add jwt refresh endpoint`. It is re-validated, passes, and is committed.
-
-In autopilot mode the same failure aborts loudly instead, leaving the staged state untouched.
+Worked call sites for the single, grouped, and failure paths live in [`references/examples.md`](./references/examples.md) — read it when a call site is ambiguous. The message shape itself is in [Commit Message Format](#commit-message-format) above.
 
 ## Reference formatting
 
@@ -56849,7 +57008,7 @@ Set task 3 to `completed`.
 
 ## Phase 3: Preflight verdict
 
-Identical to [`run`](../run/SKILL.md#phase-2-preflight-verdict): read branch, worktree, `isStaleMerged`, and `baseAhead` from the Context Map, compare the issue id against the current branch name, and invoke `Skill(autopilot:preflight-check)` only for a state the map does not cover. If it outputs "Planning cancelled", stop immediately.
+Identical to [`run`](../run/SKILL.md#phase-2-preflight-verdict): invoke `Skill(autopilot:preflight-check)` with `mode: plan` unconditionally — this is the session's single preflight and the one place the history-policy gate installs — passing the Context Map's branch, worktree, `isStaleMerged`, and `baseAhead` plus the issue-id-versus-branch-name comparison so it prompts only where the map leaves a real decision. If it outputs "Planning cancelled", stop immediately.
 
 This skill never enters plan mode — do NOT call `EnterPlanMode` or `ExitPlanMode`.
 
@@ -60905,7 +61064,7 @@ Expected flags (all optional, any order):
 - `--release-notes` — force a release notes section into the body; [Phase 4](#phase-4-generate-pr-description) already adds one for breaking or meaningful changes
 - `--closes #N,#M` — additional issue numbers to close on merge (comma-separated, GitHub issue numbers)
 - `--related #X,#Y` — related issues to link without closing (comma-separated, GitHub issue numbers)
-- `--autopilot` — non-interactive mode used by `/autopilot:run`. The PR is created from the generated title and body without confirmation for every caller, so the flag changes only the [Phase 1](#phase-1-validate-current-state) invalid-branch path: instead of asking how to proceed, it aborts loudly.
+- `--autopilot` — non-interactive mode used by `/autopilot:run`. The PR is created from the generated title and body without confirmation for every caller, so the flag changes two things: [Phase 0](#phase-0-preflight-check) replaces the preflight the calling chain already ran with a bare `git status --porcelain` guard, and the [Phase 1](#phase-1-validate-current-state) invalid-branch path aborts loudly instead of asking how to proceed.
 
 ## Input resolution
 
@@ -60927,11 +61086,19 @@ Do not call any skill not listed in `allowed-tools` above. The title and descrip
 
 ## Phase 0: Preflight Check
 
-Invoke `Skill(autopilot:preflight-check)` with `mode: pr` from this conversation context. The skill verifies the current branch is appropriate for opening a PR and warns if you are on `main`. If it outputs a "cancelled" message, stop immediately — do not proceed to [Phase 1](#phase-1-validate-current-state).
+**Autopilot bypass:** parse `$ARGUMENTS` for `--autopilot` before anything else — the same parse [Phase 1](#phase-1-validate-current-state) step 0 performs, moved here so this phase can read it. When the flag is present, skip the skill invocation and run the one check that still carries information the caller does not already have:
+
+```bash
+git status --porcelain
+```
+
+Non-empty output means the chain's commit step left changes behind. Abort with the file list rather than opening a PR that omits them — `--autopilot` has no user to prompt, so there is no "continue anyway" to offer. Everything else `pr`-mode preflight would do is settled by then: the history-policy gate is installed, the branch came from [`branch-create`](../branch-create/SKILL.md), and [Phase 1](#phase-1-validate-current-state) validates the branch name itself.
+
+Otherwise invoke `Skill(autopilot:preflight-check)` with `mode: pr` from this conversation context. The skill verifies the current branch is appropriate for opening a PR and warns if you are on `main`. If it outputs a "cancelled" message, stop immediately — do not proceed to [Phase 1](#phase-1-validate-current-state).
 
 ## Phase 1: Validate Current State
 
-Uncommitted-change handling is done in [Phase 0](#phase-0-preflight-check) by `preflight-check` — do not repeat it here.
+Uncommitted-change handling is done in [Phase 0](#phase-0-preflight-check) — by `preflight-check` interactively, or by the autopilot bypass's own `git status --porcelain`. Do not repeat it here.
 
 0. Parse `$ARGUMENTS`: if it contains `--autopilot`, set `autopilotMode = true` and remove the flag before further parsing. Otherwise `autopilotMode = false`.
 1. Get current branch name with `git branch --show-current`
@@ -61182,6 +61349,156 @@ Meaningful changes detected (`feat:` commits). The section is added without aski
 ---
 </file>
 
+<file path="claude-plugins/autopilot/skills/pr-monitor/references/background-mode.md">
+# Background mode
+
+Reference for [`pr-monitor/SKILL.md`](../SKILL.md) — the behaviour that replaces the foreground flow when there is no user to interact with. Read it only once [Phase 0](../SKILL.md#phase-0-mode-dispatch) has resolved the run as background. [`run`](../../run/SKILL.md) invokes this skill in the foreground, so on the autopilot chain this file stays unread.
+
+## Behaviour
+
+When invoked via the Agent tool with `run_in_background: true` (spawned by [Phase 0](../SKILL.md#phase-0-mode-dispatch) of this skill), the skill operates non-interactively:
+
+- **Do NOT invoke** `Skill(autopilot:pr-resolve)` — the user is not available for interaction
+- **Do NOT attempt to fix CI checks** — the user is not available for interaction and fixes may require judgment calls
+- **Do NOT rebase, resolve, or push** — a history rewrite has no one to authorize it here; the [Conflict Sweep](../SKILL.md#conflict-sweep-shared-procedure) returns the summary below instead of acting
+- **Do NOT use** `AskUserQuestion` — no user interaction in background mode
+- When changes are requested or new actionable review comments are detected, **return immediately** with a structured summary instead of invoking pr-resolve:
+
+  ```
+  PR Monitor: Changes Requested
+
+  PR #N has review feedback that needs attention.
+  Status: CHANGES_REQUESTED
+  URL: <pr-url>
+
+  Run /pr-resolve to address the feedback.
+  ```
+
+- When CI checks fail, **return immediately** with a structured summary:
+
+  ```
+  PR Monitor: CI Checks Failed
+
+  PR #N has failing CI checks.
+  Failed: [check-name-1], [check-name-2]
+  Status: CHECKS_FAILED
+  URL: <pr-url>
+
+  Fix the failing checks and push, or run /pr-monitor again.
+  ```
+
+- When the pull request conflicts with its base, **return immediately** with a structured summary:
+
+  ```
+  PR Monitor: Merge Conflict
+
+  PR #N conflicts with <base-branch> and cannot merge.
+  Conflicted: [path-1], [path-2]
+  Status: CONFLICTING
+  URL: <pr-url>
+
+  Run /autopilot:pr-monitor in the foreground to rebase the branch onto its base.
+  ```
+
+- For approved/merged/closed, return the same [Phase 3](../SKILL.md#phase-3-exit) exit message as foreground mode
+</file>
+
+<file path="claude-plugins/autopilot/skills/pr-monitor/references/ci-remediation.md">
+# CI remediation
+
+Reference for [`pr-monitor/SKILL.md`](../SKILL.md) — the CI Fix Workflow, reached only when a check reports `bucket === "fail"`. Its callers are [§1.1](../SKILL.md#11-early-exit-checks) and [§2.2a](../SKILL.md#22a-check-ci-status); read it at that point. On a pull request whose checks pass, it stays unread.
+
+## CI Fix Workflow
+
+**If any checks have `bucket === "fail"`:**
+
+For each failing check, extract the run-id from the `link` field: parse the URL path segment after `/runs/` and before `/job/` (or end of path). Compare with `fixAttempts[checkName].lastRunId` — if the run-id is different, reset `attempts` to 0 for that check (new run detected).
+
+**If `attempts < 2` for the failing check** (foreground mode only):
+
+1. Output: "CI check '\<name\>' failed. Attempting fix (attempt N/2)..."
+2. Get failure logs (truncate to last 200 lines):
+   ```bash
+   gh run view <run-id> --log-failed 2>&1 | tail -200
+   ```
+   If output is empty (cancelled run), output: "No logs available for cancelled run. Waiting for new run..." and skip fix.
+3. Analyze the error output to determine fix type:
+   - Lint errors → read files, apply fixes with Edit tool
+   - Type errors → read files, fix type issues with Edit tool
+   - Test failures → read test files, fix assertions/logic with Edit tool
+4. After fixes, commit via `Skill(autopilot:commits-create)` and push:
+   ```bash
+   git push
+   ```
+   Read [`git-history-policy.md`](../../shared-rules/references/git-history-policy.md) before this push. A plain fast-forward is all this step is allowed to do: if the push is rejected as non-fast-forward, report it and stop rather than merging the base branch or force-pushing.
+5. Set `cooldownRemaining = 3` (skip CI checks for next 3 poll cycles)
+6. Update `fixAttempts[checkName] = { attempts: N+1, lastRunId: <run-id> }`
+7. Output: "CI fix pushed. Cooling down for 3 poll cycles before re-checking..."
+8. Continue polling loop (go to 2.1)
+
+**If `attempts >= 2`:**
+
+1. Output to user via AskUserQuestion:
+   - `question`: "CI check '\<name\>' has failed 2 fix attempts. The issue may require manual intervention.\n\nFailed check: \<name\>\nLast error: \<brief summary\>\nURL: \<link\>"
+   - `header`: "CI unfixable"
+   - `options`: [
+     { label: "Retry once more", description: "Try one more fix attempt" },
+     { label: "Skip this check", description: "Ignore this check and continue monitoring" },
+     { label: "Cancel", description: "Stop monitoring" }
+     ]
+   - If "Retry once more": reset attempts to 0, run fix again
+   - If "Skip this check": add check name to a skip list, continue monitoring
+   - If "Cancel": stop monitoring
+</file>
+
+<file path="claude-plugins/autopilot/skills/pr-monitor/references/conflict-sweep.md">
+# Conflict sweep
+
+Reference for [`pr-monitor/SKILL.md`](../SKILL.md) — the shared procedure for a pull request whose `mergeable` is `CONFLICTING`. Read it at the moment either caller reports that state: the [§1.1](../SKILL.md#11-early-exit-checks) pre-loop check or the [§2.2](../SKILL.md#22-check-pr-state) per-cycle check. A pull request that never conflicts never reaches it.
+
+## Procedure
+
+Run whenever `mergeable` is `CONFLICTING` — from the [§1.1](../SKILL.md#11-early-exit-checks) pre-loop check or the [§2.2](../SKILL.md#22-check-pr-state) per-cycle check. Only the follow-up outputs and continue targets differ, and those stay with each caller.
+
+`mergeable` is `UNKNOWN`, not `CONFLICTING`, whenever GitHub has not finished computing mergeability — which is the normal reading for the first cycle or two after any push. `UNKNOWN` is a pending state: leave it to the next poll and do not sweep on it.
+
+Read [`git-history-policy.md`](../../shared-rules/references/git-history-policy.md) before running any command below. Every step of this sweep is the policy's sanctioned synchronization path and nothing else: a conflicting branch is the one condition under which a pull-request branch genuinely needs its base's changes, and it is taken by rebase, never by merging the base in.
+
+1. **Background mode returns instead of acting.** Emit the `Status: CONFLICTING` summary from [background mode](./background-mode.md) and stop. A background run has no user to authorize a history rewrite, so it never fetches, rebases, or pushes.
+2. **Refuse and exit when the sweep is not the agent's to run.** Each of these ends monitoring at [Phase 3](../SKILL.md#phase-3-exit) with status "conflicted", naming the reason — none is retried:
+   - `git status --porcelain` is non-empty — a rebase would fail or silently strand the changes.
+   - A rebase is already in progress (`git rev-parse --git-path rebase-merge` or `rebase-apply` exists) — never start a second one on top.
+   - `headRepositoryOwner` differs from the pull request's own repository: a fork branch the agent cannot push to.
+   - The pull request's `author.login` is not the login `gh api user --jq .login` reports. This is the policy's "never rewrite a branch you do not own" made checkable. Note that under a workflow `GITHUB_TOKEN` the authenticated identity is the bot rather than the account that opened the pull request, so the sweep is inert in CI by design.
+3. **Pin the lease.** Record `git rev-parse origin/<headRefName>` as `preRebaseSha` before anything changes. The push in step 5 leases against this exact value; a bare `--force-with-lease` is anchored to whatever the local tracking ref happens to hold, and any unrelated fetch re-anchors it and quietly degrades the push to the unleased `--force` the policy forbids.
+4. **Take the base changes by rebase:**
+   ```bash
+   git fetch origin <baseRefName>
+   git rebase origin/<baseRefName>
+   ```
+5. **A rebase that completes cleanly** pushes with the pinned lease, sets `cooldownRemaining = 3`, and returns to the caller:
+   ```bash
+   git push --force-with-lease=<headRefName>:<preRebaseSha>
+   ```
+   Any push failure is terminal: report it and exit to [Phase 3](../SKILL.md#phase-3-exit) with status "conflicted". Never retry it, and never retry it without the lease.
+6. **A rebase that halts aborts immediately** — the working tree is never left mid-rebase:
+   ```bash
+   git diff --name-only --diff-filter=U   # capture the conflicted paths first
+   git rebase --abort
+   ```
+   Report the conflicted paths and `preRebaseSha`, then hand to step 7.
+7. **Only in foreground mode**, offer the halted rebase to the user via AskUserQuestion — mirroring the CI-unfixable prompt in [§2.2a](../SKILL.md#22a-check-ci-status). Resolving conflicted hunks is a judgement call about intent, so it happens because the user asked for it, never because the sweep decided on its own. That is why step 6 aborts first.
+   - `question`: "PR #N conflicts with \<baseRefName\> and the rebase could not complete.\n\nConflicted paths: \<paths\>\nBranch head before rebase: \<preRebaseSha\>"
+   - `header`: "Conflict"
+   - `options`: [
+     { label: "Resolve conflicts", description: "Rebase again and resolve the conflicted hunks, then push" },
+     { label: "Stop monitoring", description: "Leave the branch untouched and exit" }
+     ]
+   - `multiSelect`: false
+   - If "Resolve conflicts": re-run step 4, resolve each conflicted path, `git add` it, `git rebase --continue` until the rebase finishes, then push per step 5.
+   - If "Stop monitoring": exit to [Phase 3](../SKILL.md#phase-3-exit) with status "conflicted".
+</file>
+
 <file path="claude-plugins/autopilot/skills/pr-monitor/SKILL.md">
 ---
 name: pr-monitor
@@ -61253,51 +61570,9 @@ Interactive — blocks the conversation, invokes `pr-resolve` when changes are r
 
 ### Background Mode
 
-When invoked via the Agent tool with `run_in_background: true` (spawned by [Phase 0](#phase-0-mode-dispatch) of this skill), the skill operates non-interactively:
+There is no user to interact with, so the skill reports instead of acting: it never invokes [`pr-resolve`](../pr-resolve/SKILL.md), never attempts a CI fix, never rewrites history, and never calls `AskUserQuestion`. On changes requested, new actionable comments, failing checks, or a conflict it returns immediately with a structured summary; approved, merged, and closed return the same [Phase 3](#phase-3-exit) exit message as foreground mode.
 
-- **Do NOT invoke** `Skill(autopilot:pr-resolve)` — the user is not available for interaction
-- **Do NOT attempt to fix CI checks** — the user is not available for interaction and fixes may require judgment calls
-- **Do NOT rebase, resolve, or push** — a history rewrite has no one to authorize it here; the [Conflict Sweep](#conflict-sweep-shared-procedure) returns the summary below instead of acting
-- **Do NOT use** `AskUserQuestion` — no user interaction in background mode
-- When changes are requested or new actionable review comments are detected, **return immediately** with a structured summary instead of invoking pr-resolve:
-
-  ```
-  PR Monitor: Changes Requested
-
-  PR #N has review feedback that needs attention.
-  Status: CHANGES_REQUESTED
-  URL: <pr-url>
-
-  Run /pr-resolve to address the feedback.
-  ```
-
-- When CI checks fail, **return immediately** with a structured summary:
-
-  ```
-  PR Monitor: CI Checks Failed
-
-  PR #N has failing CI checks.
-  Failed: [check-name-1], [check-name-2]
-  Status: CHECKS_FAILED
-  URL: <pr-url>
-
-  Fix the failing checks and push, or run /pr-monitor again.
-  ```
-
-- When the pull request conflicts with its base, **return immediately** with a structured summary:
-
-  ```
-  PR Monitor: Merge Conflict
-
-  PR #N conflicts with <base-branch> and cannot merge.
-  Conflicted: [path-1], [path-2]
-  Status: CONFLICTING
-  URL: <pr-url>
-
-  Run /autopilot:pr-monitor in the foreground to rebase the branch onto its base.
-  ```
-
-- For approved/merged/closed, return the same [Phase 3](#phase-3-exit) exit message as foreground mode
+Read [`references/background-mode.md`](./references/background-mode.md) for those summary formats before emitting one.
 
 **Detect background mode** per [Phase 0](#phase-0-mode-dispatch): use background behavior when the skill was launched with `--background`, when it runs inside an Agent subprocess, or when this prompt contains "background mode"; otherwise use foreground behavior.
 
@@ -61332,45 +61607,11 @@ Run whenever `reviewDecision` is `APPROVED` — from the [§1.1](#11-early-exit-
 
 ### Conflict Sweep (shared procedure)
 
-Run whenever `mergeable` is `CONFLICTING` — from the [§1.1](#11-early-exit-checks) pre-loop check or the [§2.2](#22-check-pr-state) per-cycle check. Only the follow-up outputs and continue targets differ, and those stay with each caller.
+Run whenever `mergeable` is `CONFLICTING` — from the [§1.1](#11-early-exit-checks) pre-loop check or the [§2.2](#22-check-pr-state) per-cycle check. The procedure is in [`references/conflict-sweep.md`](./references/conflict-sweep.md); read it at that point. Only the follow-up outputs and continue targets differ between callers, and those stay with each caller.
 
-`mergeable` is `UNKNOWN`, not `CONFLICTING`, whenever GitHub has not finished computing mergeability — which is the normal reading for the first cycle or two after any push. `UNKNOWN` is a pending state: leave it to the next poll and do not sweep on it.
+Every command this skill runs is bound by [`git-history-policy.md`](../shared-rules/references/git-history-policy.md) — the sweep's rebase and lease-pinned push are the policy's one sanctioned synchronization path, and the [§2.2a](#22a-check-ci-status) fix push is a plain fast-forward or nothing. Neither the sweep nor a CI fix may merge the base branch into the pull request.
 
-Read [`git-history-policy.md`](../shared-rules/references/git-history-policy.md) before running any command below. Every step of this sweep is the policy's sanctioned synchronization path and nothing else: a conflicting branch is the one condition under which a pull-request branch genuinely needs its base's changes, and it is taken by rebase, never by merging the base in.
-
-1. **Background mode returns instead of acting.** Emit the `Status: CONFLICTING` summary from [Background Mode](#background-mode) and stop. A background run has no user to authorize a history rewrite, so it never fetches, rebases, or pushes.
-2. **Refuse and exit when the sweep is not the agent's to run.** Each of these ends monitoring at [Phase 3](#phase-3-exit) with status "conflicted", naming the reason — none is retried:
-   - `git status --porcelain` is non-empty — a rebase would fail or silently strand the changes.
-   - A rebase is already in progress (`git rev-parse --git-path rebase-merge` or `rebase-apply` exists) — never start a second one on top.
-   - `headRepositoryOwner` differs from the pull request's own repository: a fork branch the agent cannot push to.
-   - The pull request's `author.login` is not the login `gh api user --jq .login` reports. This is the policy's "never rewrite a branch you do not own" made checkable. Note that under a workflow `GITHUB_TOKEN` the authenticated identity is the bot rather than the account that opened the pull request, so the sweep is inert in CI by design.
-3. **Pin the lease.** Record `git rev-parse origin/<headRefName>` as `preRebaseSha` before anything changes. The push in step 5 leases against this exact value; a bare `--force-with-lease` is anchored to whatever the local tracking ref happens to hold, and any unrelated fetch re-anchors it and quietly degrades the push to the unleased `--force` the policy forbids.
-4. **Take the base changes by rebase:**
-   ```bash
-   git fetch origin <baseRefName>
-   git rebase origin/<baseRefName>
-   ```
-5. **A rebase that completes cleanly** pushes with the pinned lease, sets `cooldownRemaining = 3`, and returns to the caller:
-   ```bash
-   git push --force-with-lease=<headRefName>:<preRebaseSha>
-   ```
-   Any push failure is terminal: report it and exit to [Phase 3](#phase-3-exit) with status "conflicted". Never retry it, and never retry it without the lease.
-6. **A rebase that halts aborts immediately** — the working tree is never left mid-rebase:
-   ```bash
-   git diff --name-only --diff-filter=U   # capture the conflicted paths first
-   git rebase --abort
-   ```
-   Report the conflicted paths and `preRebaseSha`, then hand to step 7.
-7. **Only in foreground mode**, offer the halted rebase to the user via AskUserQuestion — mirroring the CI-unfixable prompt in [§2.2a](#22a-check-ci-status). Resolving conflicted hunks is a judgement call about intent, so it happens because the user asked for it, never because the sweep decided on its own. That is why step 6 aborts first.
-   - `question`: "PR #N conflicts with \<baseRefName\> and the rebase could not complete.\n\nConflicted paths: \<paths\>\nBranch head before rebase: \<preRebaseSha\>"
-   - `header`: "Conflict"
-   - `options`: [
-     { label: "Resolve conflicts", description: "Rebase again and resolve the conflicted hunks, then push" },
-     { label: "Stop monitoring", description: "Leave the branch untouched and exit" }
-     ]
-   - `multiSelect`: false
-   - If "Resolve conflicts": re-run step 4, resolve each conflicted path, `git add` it, `git rebase --continue` until the rebase finishes, then push per step 5.
-   - If "Stop monitoring": exit to [Phase 3](#phase-3-exit) with status "conflicted".
+`mergeable` is `UNKNOWN`, not `CONFLICTING`, whenever GitHub has not finished computing mergeability — the normal reading for the first cycle or two after any push. `UNKNOWN` is a pending state: leave it to the next poll and do not sweep on it.
 
 ### 1.1 Early Exit Checks
 
@@ -61401,7 +61642,7 @@ This branch is checked before the `reviewDecision` branches below, and the order
    - Exit: "PR #N is already approved with all checks passing. No monitoring needed."
 4. If HEAD unchanged AND checks are not all passing:
    - Output: "PR #N is approved but has failing CI checks. Attempting to fix..."
-   - Run the **CI Fix Workflow** (see [§2.2a](#22a-check-ci-status))
+   - Run the **CI Fix Workflow** in [`references/ci-remediation.md`](./references/ci-remediation.md)
    - After fix, output: "CI fixes pushed. Starting monitoring..."
    - Continue to Phase 1.2
 
@@ -61415,7 +61656,7 @@ This branch is checked before the `reviewDecision` branches below, and the order
 **If checks are failing** (any check in `statusCheckRollup` with `state` that is not `SUCCESS` and not `PENDING` and not `EXPECTED`):
 
 1. Output: "PR #N has failing CI checks. Attempting to fix..."
-2. Run the **CI Fix Workflow** (see [§2.2a](#22a-check-ci-status))
+2. Run the **CI Fix Workflow** in [`references/ci-remediation.md`](./references/ci-remediation.md)
 3. After fix, output: "CI fixes pushed. Starting monitoring..."
 4. Continue to Phase 1.2
 
@@ -61517,45 +61758,7 @@ Parse the JSON output. For each check:
 
 A check that reads a stale or superseded event — one whose failure is about the event and not about the code — is reported to the user, never refreshed by changing the branch. Do not merge or rebase base-branch changes into the PR to provoke a fresh `synchronize` event: the task did not require those changes, and the resulting diff misrepresents the pull request. This is the failure mode the git history policy exists to prevent.
 
-**If any checks have `bucket === "fail"`:**
-
-For each failing check, extract the run-id from the `link` field: parse the URL path segment after `/runs/` and before `/job/` (or end of path). Compare with `fixAttempts[checkName].lastRunId` — if the run-id is different, reset `attempts` to 0 for that check (new run detected).
-
-**If `attempts < 2` for the failing check** (foreground mode only):
-
-1. Output: "CI check '\<name\>' failed. Attempting fix (attempt N/2)..."
-2. Get failure logs (truncate to last 200 lines):
-   ```bash
-   gh run view <run-id> --log-failed 2>&1 | tail -200
-   ```
-   If output is empty (cancelled run), output: "No logs available for cancelled run. Waiting for new run..." and skip fix.
-3. Analyze the error output to determine fix type:
-   - Lint errors → read files, apply fixes with Edit tool
-   - Type errors → read files, fix type issues with Edit tool
-   - Test failures → read test files, fix assertions/logic with Edit tool
-4. After fixes, commit via `Skill(autopilot:commits-create)` and push:
-   ```bash
-   git push
-   ```
-   Read [`git-history-policy.md`](../shared-rules/references/git-history-policy.md) before this push. A plain fast-forward is all this step is allowed to do: if the push is rejected as non-fast-forward, report it and stop rather than merging the base branch or force-pushing.
-5. Set `cooldownRemaining = 3` (skip CI checks for next 3 poll cycles)
-6. Update `fixAttempts[checkName] = { attempts: N+1, lastRunId: <run-id> }`
-7. Output: "CI fix pushed. Cooling down for 3 poll cycles before re-checking..."
-8. Continue polling loop (go to 2.1)
-
-**If `attempts >= 2`:**
-
-1. Output to user via AskUserQuestion:
-   - `question`: "CI check '\<name\>' has failed 2 fix attempts. The issue may require manual intervention.\n\nFailed check: \<name\>\nLast error: \<brief summary\>\nURL: \<link\>"
-   - `header`: "CI unfixable"
-   - `options`: [
-     { label: "Retry once more", description: "Try one more fix attempt" },
-     { label: "Skip this check", description: "Ignore this check and continue monitoring" },
-     { label: "Cancel", description: "Stop monitoring" }
-     ]
-   - If "Retry once more": reset attempts to 0, run fix again
-   - If "Skip this check": add check name to a skip list, continue monitoring
-   - If "Cancel": stop monitoring
+**If any checks have `bucket === "fail"`:** run the CI Fix Workflow in [`references/ci-remediation.md`](./references/ci-remediation.md) — read it now. It owns the per-check attempt accounting, the log analysis and fix push, the post-push cooldown, and the AskUserQuestion escalation once a check has failed two fix attempts. Background mode does not run it at all.
 
 **If all checks have `bucket === "pass"`:**
 
@@ -63320,6 +63523,133 @@ User selects "Update PR".
 ```
 ✓ Updated PR #45: https://github.com/org/repo/pull/45
 ```
+
+### Basic update after new commits (abbreviated for readability)
+
+```
+User: /update-pr
+
+Detecting PR for current branch...
+Found PR #42: Allow editor theme selection per workspace
+
+Gathering context...
+- 5 commits since main
+- 8 files changed
+```
+
+[Phase 4](../SKILL.md#phase-4-ask-user-for-context-optional) AskUserQuestion with:
+
+- `question`: "Updating PR #42. Would you like to highlight anything specific in the updated description?"
+- `header`: "PR context"
+
+User selects "Auto-generate".
+
+[Phase 6](../SKILL.md#phase-6-verify-with-user) AskUserQuestion parameters:
+
+- `question`: "Review the updated pull request and choose an action."
+- `header`: "Update PR"
+- `options`: `Update PR` / `Add release notes` / `Edit content` / `Cancel`, with the descriptions listed in [Phase 6](../SKILL.md#phase-6-verify-with-user)
+- `multiSelect`: false
+
+Preview (every option carries this same full preview string):
+
+```
+Allow editor theme selection per workspace
+
+Users can now pick an editor theme per workspace. This makes long review sessions easier on the eyes and matches the rest of their IDE.
+
+- Added editor_theme per-workspace setting
+- Falls back to the system theme if no preference is set
+- Added validation for theme names
+
+---
+
+**Issues:**
+
+Closes #749
+```
+
+User selects "Update PR".
+
+```
+✓ Updated PR #42: https://github.com/org/repo/pull/42
+```
+</file>
+
+<file path="claude-plugins/autopilot/skills/pr-update/references/interactive-dialogs.md">
+# Interactive dialogs
+
+Reference for [`pr-update/SKILL.md`](../SKILL.md) — the two dialogs that run only in interactive mode. Read it when [Phase 4](../SKILL.md#phase-4-ask-user-for-context-optional) or [Phase 6](../SKILL.md#phase-6-verify-with-user) is reached without `--autopilot`. Every caller in the autopilot chain passes that flag, so this file normally stays unread.
+
+Read [`askuserquestion-contract.md`](../../shared-rules/references/askuserquestion-contract.md) and apply it to the Phase 6 preview dialog — the PR content (title + body with separators) is the preview. The Phase 4 Auto-generate/Add context choice presents no content and is exempt from the preview requirement.
+
+## Phase 4: Ask User for Context (Optional)
+
+**Autopilot bypass:** if `--autopilot` was passed, skip this phase — proceed with auto-generation.
+
+Use **AskUserQuestion tool** to ask if user wants to highlight anything:
+
+**Formatting Note:** Read [`askuserquestion-format.md`](../../shared-rules/references/askuserquestion-format.md) and apply it before composing the `question` parameter.
+
+Tool parameters:
+
+- `question`: "Updating PR #<N>. Would you like to highlight anything specific in the updated description?"
+- `header`: "PR context"
+- `options`: [
+  { label: "Auto-generate", description: "Generate title and description from commits and diff" },
+  { label: "Add context", description: "Provide specific points to emphasize" }
+  ]
+- `multiSelect`: false
+
+- If "Add context" selected: ask user for their input, then incorporate into generation
+- If "Auto-generate" selected: proceed directly
+
+## Phase 6: Verify with User
+
+**Autopilot bypass:** if `--autopilot` was passed, skip the dialog — compose the full PR content (title + body), run the [Phase 5](../SKILL.md#phase-5-generate-updated-pr-title-and-body) Title self-check, and proceed directly to [Phase 7](../SKILL.md#phase-7-push-and-update).
+
+Present the updated PR using **AskUserQuestion tool** with preview.
+
+1. Compose the full PR content (title + description with separators) as a single string, after running the [Phase 5](../SKILL.md#phase-5-generate-updated-pr-title-and-body) Title self-check on the title.
+
+2. Confirm using AskUserQuestion tool:
+
+   **Tool call structure: See AskUserQuestion Contract above. All rules are mandatory.**
+
+   Tool parameters:
+   - `question`: "Review the updated pull request and choose an action."
+   - `header`: "Update PR"
+   - `options`:
+
+     **If `--release-notes` was NOT used AND no breaking changes AND meaningful changes detected:**
+     [
+     { label: "Update PR", description: "Apply changes to PR #<N>", preview: "<full PR content>" },
+     { label: "Add release notes", description: "Generate a release notes section for the changelog", preview: "<full PR content>" },
+     { label: "Edit content", description: "Modify title or description", preview: "<full PR content>" },
+     { label: "Cancel", description: "Keep the PR unchanged", preview: "<full PR content>" }
+     ]
+
+     **Otherwise (flag used, breaking changes auto-added, or no meaningful changes):**
+     [
+     { label: "Update PR", description: "Apply changes to PR #<N>", preview: "<full PR content>" },
+     { label: "Edit content", description: "Modify title or description", preview: "<full PR content>" },
+     { label: "Cancel", description: "Keep the PR unchanged", preview: "<full PR content>" }
+     ]
+
+   - `multiSelect`: false
+
+   All options use the same `preview` content (full PR title + body) since the user is choosing an action, not content. The preview enables a side-by-side layout in the UI.
+
+3. If user selects "Add release notes":
+   - Generate the **Release notes:** section (same rules as [Phase 5](../SKILL.md#phase-5-generate-updated-pr-title-and-body))
+   - Insert it into the PR body between the description and issue links sections (with `---` separators)
+   - Re-present the full PR content using AskUserQuestion with preview (without the "Add release notes" option)
+
+4. If user selects "Edit content": ask what to change, regenerate, re-present
+
+5. If user selects "Cancel": abort with "PR update cancelled."
+
+6. Only proceed after user selects "Update PR"
 </file>
 
 <file path="claude-plugins/autopilot/skills/pr-update/SKILL.md">
@@ -63369,7 +63699,7 @@ Arguments are optional. Resolve each field:
 
 ## AskUserQuestion Contract (MANDATORY)
 
-Read [`askuserquestion-contract.md`](../shared-rules/references/askuserquestion-contract.md) and apply it to the [Phase 6](#phase-6-verify-with-user) PR preview dialog — the PR content (title + body with separators) is the preview. Simple choice dialogs ([Phase 4](#phase-4-ask-user-for-context-optional) Auto-generate/Add context) are exempt from the preview requirement.
+Both dialogs and the contract governing them live in [`references/interactive-dialogs.md`](./references/interactive-dialogs.md) — [Phase 4](#phase-4-ask-user-for-context-optional) and [Phase 6](#phase-6-verify-with-user) each say when to read it. Under `--autopilot` neither runs.
 
 ## Phase 1: Detect PR
 
@@ -63414,22 +63744,7 @@ After the agent completes, store the structured results (commit log, diff summar
 
 **Autopilot bypass:** if `--autopilot` was passed, skip this phase — proceed with auto-generation.
 
-Use **AskUserQuestion tool** to ask if user wants to highlight anything:
-
-**Formatting Note:** Read [`askuserquestion-format.md`](../shared-rules/references/askuserquestion-format.md) and apply it before composing the `question` parameter.
-
-Tool parameters:
-
-- `question`: "Updating PR #<N>. Would you like to highlight anything specific in the updated description?"
-- `header`: "PR context"
-- `options`: [
-  { label: "Auto-generate", description: "Generate title and description from commits and diff" },
-  { label: "Add context", description: "Provide specific points to emphasize" }
-  ]
-- `multiSelect`: false
-
-- If "Add context" selected: ask user for their input, then incorporate into generation
-- If "Auto-generate" selected: proceed directly
+Otherwise ask whether the user wants to highlight anything, using the dialog in [`references/interactive-dialogs.md`](./references/interactive-dialogs.md#phase-4-ask-user-for-context-optional) — read it now. "Add context" incorporates the user's input into generation; "Auto-generate" proceeds directly.
 
 ## Phase 5: Generate Updated PR Title and Body
 
@@ -63459,48 +63774,7 @@ Read [`pr-body-grammar.md`](../shared-rules/references/pr-body-grammar.md) and c
 
 **Autopilot bypass:** if `--autopilot` was passed, skip the dialog — compose the full PR content (title + body), run the [Phase 5](#phase-5-generate-updated-pr-title-and-body) Title self-check, and proceed directly to [Phase 7](#phase-7-push-and-update).
 
-Present the updated PR using **AskUserQuestion tool** with preview.
-
-1. Compose the full PR content (title + description with separators) as a single string, after running the [Phase 5](#phase-5-generate-updated-pr-title-and-body) Title self-check on the title.
-
-2. Confirm using AskUserQuestion tool:
-
-   **Tool call structure: See AskUserQuestion Contract above. All rules are mandatory.**
-
-   Tool parameters:
-   - `question`: "Review the updated pull request and choose an action."
-   - `header`: "Update PR"
-   - `options`:
-
-     **If `--release-notes` was NOT used AND no breaking changes AND meaningful changes detected:**
-     [
-     { label: "Update PR", description: "Apply changes to PR #<N>", preview: "<full PR content>" },
-     { label: "Add release notes", description: "Generate a release notes section for the changelog", preview: "<full PR content>" },
-     { label: "Edit content", description: "Modify title or description", preview: "<full PR content>" },
-     { label: "Cancel", description: "Keep the PR unchanged", preview: "<full PR content>" }
-     ]
-
-     **Otherwise (flag used, breaking changes auto-added, or no meaningful changes):**
-     [
-     { label: "Update PR", description: "Apply changes to PR #<N>", preview: "<full PR content>" },
-     { label: "Edit content", description: "Modify title or description", preview: "<full PR content>" },
-     { label: "Cancel", description: "Keep the PR unchanged", preview: "<full PR content>" }
-     ]
-
-   - `multiSelect`: false
-
-   All options use the same `preview` content (full PR title + body) since the user is choosing an action, not content. The preview enables a side-by-side layout in the UI.
-
-3. If user selects "Add release notes":
-   - Generate the **Release notes:** section (same rules as [Phase 5](#phase-5-generate-updated-pr-title-and-body))
-   - Insert it into the PR body between the description and issue links sections (with `---` separators)
-   - Re-present the full PR content using AskUserQuestion with preview (without the "Add release notes" option)
-
-4. If user selects "Edit content": ask what to change, regenerate, re-present
-
-5. If user selects "Cancel": abort with "PR update cancelled."
-
-6. Only proceed after user selects "Update PR"
+Otherwise present the updated PR for review, using the dialog in [`references/interactive-dialogs.md`](./references/interactive-dialogs.md#phase-6-verify-with-user) — read it now. It carries the two option sets (they differ by whether release notes are still offerable), the shared-preview rule, and the handling for each choice. Only proceed to [Phase 7](#phase-7-push-and-update) after the user selects "Update PR".
 
 ## Phase 7: Push and Update
 
@@ -63515,58 +63789,7 @@ Present the updated PR using **AskUserQuestion tool** with preview.
 
 ## Examples
 
-### Basic update after new commits (abbreviated for readability)
-
-```
-User: /update-pr
-
-Detecting PR for current branch...
-Found PR #42: Allow editor theme selection per workspace
-
-Gathering context...
-- 5 commits since main
-- 8 files changed
-```
-
-[Phase 4](#phase-4-ask-user-for-context-optional) AskUserQuestion with:
-
-- `question`: "Updating PR #42. Would you like to highlight anything specific in the updated description?"
-- `header`: "PR context"
-
-User selects "Auto-generate".
-
-[Phase 6](#phase-6-verify-with-user) AskUserQuestion parameters:
-
-- `question`: "Review the updated pull request and choose an action."
-- `header`: "Update PR"
-- `options`: `Update PR` / `Add release notes` / `Edit content` / `Cancel`, with the descriptions listed in [Phase 6](#phase-6-verify-with-user)
-- `multiSelect`: false
-
-Preview (every option carries this same full preview string):
-
-```
-Allow editor theme selection per workspace
-
-Users can now pick an editor theme per workspace. This makes long review sessions easier on the eyes and matches the rest of their IDE.
-
-- Added editor_theme per-workspace setting
-- Falls back to the system theme if no preference is set
-- Added validation for theme names
-
----
-
-**Issues:**
-
-Closes #749
-```
-
-User selects "Update PR".
-
-```
-✓ Updated PR #42: https://github.com/org/repo/pull/42
-```
-
-Further worked examples: read [references/examples.md](./references/examples.md) when a call site is ambiguous.
+Worked call sites live in [`references/examples.md`](./references/examples.md) — read it when a call site is ambiguous.
 </file>
 
 <file path="claude-plugins/autopilot/skills/pr-validate/SKILL.md">
@@ -63649,6 +63872,93 @@ Return structured JSON output with exactly these fields:
 Before writing any output that mentions a file, standard, section, commit, or issue, read [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (RFC-0001) and apply it verbatim — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
 </file>
 
+<file path="claude-plugins/autopilot/skills/preflight-check/references/mode-commits-pr.md">
+# Mode: commits and pr
+
+Reference for [`preflight-check/SKILL.md`](../SKILL.md) — the checks only `commits` and `pr` modes run. Read it when the invoking skill passed one of those two modes, and read [`mode-plan-branch.md`](./mode-plan-branch.md) instead for the other two. One invocation is always one mode, so the other file's bytes never enter the conversation.
+
+Both modes run against a branch that already holds work, so both guard the branch itself rather than the base.
+
+## Check branch name format (commits mode only)
+
+Runs at the top of [Phase 2](../SKILL.md#phase-2-on-feature-branch), before the merged-branch check.
+
+If mode is `commits`, read the canonical branch-name regex from [`pr-title-grammar.md`](../../shared-rules/references/pr-title-grammar.md) and check `currentBranch` against it and against the length bounds beside it (5–100 characters) — an overlong name fails CI's `max_length` check just like a shape violation. `pr` mode skips this check because `pr-create` validates the branch itself in its Phase 1 (one owner per gate, no double prompt).
+
+If the name does not match, ask (header "Branch name"): branch `<currentBranch>` does not follow the naming convention and would fail the contributing-check CI once a PR is open, where the only fix is a fresh branch and a fresh PR — how to proceed?
+
+- **Continue anyway** — commit on this branch at the user's explicit request: continue to the merged-branch check.
+- **Cancel** — stop so the branch can be fixed while no PR exists and the rename is still free: output "Commit cancelled. Branch <currentBranch> does not follow the naming convention — re-create it with /autopilot:branch-create (uncommitted changes follow the checkout) or rename it with git branch -m, then retry." and abort.
+
+## Check working tree (pr mode only)
+
+Runs at the top of [Phase 2](../SKILL.md#phase-2-on-feature-branch), before the merged-branch check.
+
+If mode is `pr`, run:
+
+```bash
+git status --porcelain
+```
+
+If the output is non-empty, ask (header "Uncommitted"): uncommitted changes were detected on `<currentBranch>` — how to proceed before opening the pull request?
+
+- **Commit first** — run `/autopilot:commits-create` before creating the PR: invoke `Skill(autopilot:commits-create)`, then continue to the merged-branch check.
+- **Continue anyway** — create the PR without committing these changes: continue to the merged-branch check.
+- **Cancel** — stop so the user can handle changes first: output "Pull request cancelled. Commit or stash changes first." and abort.
+
+`commits` mode skips this check — uncommitted changes are what it exists to commit.
+
+## On main: warn instead of pulling
+
+Runs as [Phase 3](../SKILL.md#phase-3-on-main)'s mode-specific handling, after the working-tree check.
+
+Creating a commit or PR directly from `main` is almost always wrong. Do not fetch or pull. Ask (header "On main"): creating a <action noun> directly on main is usually wrong; to switch to a feature branch, cancel and run `/autopilot:branch-create` before retrying — how to proceed?
+
+- **Continue on main** — proceed anyway (hotfix/maintenance/trivial cases): output "Continuing on main." and exit skill.
+- **Cancel** — stop so the user can run `/autopilot:branch-create` first: output "<Action noun> cancelled. Run /autopilot:branch-create to switch to a feature branch, then retry." and abort.
+</file>
+
+<file path="claude-plugins/autopilot/skills/preflight-check/references/mode-plan-branch.md">
+# Mode: plan and branch
+
+Reference for [`preflight-check/SKILL.md`](../SKILL.md) — the checks only `plan` and `branch` modes run. Read it when the invoking skill passed one of those two modes, and read [`mode-commits-pr.md`](./mode-commits-pr.md) instead for the other two. One invocation is always one mode, so the other file's bytes never enter the conversation.
+
+Both modes run before the working branch exists, which is why neither checks the branch-name format and neither treats an uncommitted change as a hazard.
+
+## Compare with plan-mode issue ID
+
+Runs inside [Phase 2b](../SKILL.md#phase-2b-branch-has-unmerged-commits), after the branch issue ID has been extracted, and only in `plan` mode. `branch` mode has no target issue to compare against and skips it.
+
+Read the plan issue ID from the `/autopilot:plan` or `/autopilot:run` input earlier in conversation history. Normalize both the branch issue ID and the plan issue ID to lowercase.
+
+- If the plan input type is "plain description" (no issue ID resolved), skip the comparison.
+- If the IDs match, take the "Matching branch" row of the [feature-branch decisions](../SKILL.md#feature-branch-decisions) table.
+- If they do not match, take the "Issue mismatch" row of that table.
+
+## On main: fetch and offer to pull
+
+Runs as [Phase 3](../SKILL.md#phase-3-on-main)'s mode-specific handling, after the working-tree check.
+
+Run `git fetch origin`. If fetch fails (e.g., no remote origin), output "No remote 'origin' found. Skipping remote update check." and exit skill.
+
+**If `isWorktree` is true:**
+
+Output "Fetched latest refs from origin. Branch creation deferred to Pre-Implementation." (plan mode) or "Fetched latest refs from origin." (branch mode) and exit skill.
+
+**If `isWorktree` is false:**
+
+Check if local main is behind remote:
+
+```bash
+git rev-list HEAD..origin/main --count
+```
+
+- If count is 0: output "Branch main is up to date with origin." and exit skill.
+- If count > 0, ask (header "Updates available"): local main is `<N>` commit(s) behind origin/main — pull the latest changes before <action noun>?
+  - **Pull updates** — run `git pull origin main` to get the latest changes, output "Pulled latest changes from origin/main." and exit skill.
+  - **Continue without pulling** — proceed against current local state: output "Continuing with local state (<N> commits behind origin)." and exit skill.
+</file>
+
 <file path="claude-plugins/autopilot/skills/preflight-check/SKILL.md">
 ---
 name: preflight-check
@@ -63726,30 +64036,15 @@ If the two values differ, the session is running inside a **git worktree**. Stor
 
 ## Phase 2: On Feature Branch
 
-### Check branch name format (commits mode only)
+### Mode-specific entry check
 
-If mode is `commits`, read the canonical branch-name regex from [`pr-title-grammar.md`](../shared-rules/references/pr-title-grammar.md) and check `currentBranch` against it and against the length bounds beside it (5–100 characters) — an overlong name fails CI's `max_length` check just like a shape violation. `plan` and `branch` modes skip this check — they run before the working branch exists, including on harness-created worktree branches — and `pr` mode skips it because `pr-create` validates the branch itself in its Phase 1 (one owner per gate, no double prompt).
+Every invocation is one mode, so read the one file your mode names and nothing else — the other file's checks cannot apply to this run.
 
-If the name does not match, ask (header "Branch name"): branch `<currentBranch>` does not follow the naming convention and would fail the contributing-check CI once a PR is open, where the only fix is a fresh branch and a fresh PR — how to proceed?
+- `commits` — check the branch-name format now, per [`mode-commits-pr.md`](./references/mode-commits-pr.md).
+- `pr` — check the working tree now, per [`mode-commits-pr.md`](./references/mode-commits-pr.md).
+- `plan` and `branch` — no entry check; both run before the branch holds work. Their mode file, [`mode-plan-branch.md`](./references/mode-plan-branch.md), is read later: at [Phase 2b](#phase-2b-branch-has-unmerged-commits) for `plan`, at [Phase 3](#phase-3-on-main) for either.
 
-- **Continue anyway** — commit on this branch at the user's explicit request: continue to the merged-branch check below.
-- **Cancel** — stop so the branch can be fixed while no PR exists and the rename is still free: output "Commit cancelled. Branch <currentBranch> does not follow the naming convention — re-create it with /autopilot:branch-create (uncommitted changes follow the checkout) or rename it with git branch -m, then retry." and abort.
-
-### Check working tree (pr mode only)
-
-If mode is `pr`, run:
-
-```bash
-git status --porcelain
-```
-
-If the output is non-empty, ask (header "Uncommitted"): uncommitted changes were detected on `<currentBranch>` — how to proceed before opening the pull request?
-
-- **Commit first** — run `/autopilot:commits-create` before creating the PR: invoke `Skill(autopilot:commits-create)`, then continue below.
-- **Continue anyway** — create the PR without committing these changes: continue below.
-- **Cancel** — stop so the user can handle changes first: output "Pull request cancelled. Commit or stash changes first." and abort.
-
-For all other modes (`plan`, `branch`, `commits`), skip this check — uncommitted changes are expected in `commits` mode, irrelevant in `plan`/`branch` mode before branch creation.
+Then continue to the merged-branch check below.
 
 ### Check if branch is merged into main
 
@@ -63771,12 +64066,7 @@ This is a worktree with no unmerged commits — likely a fresh worktree or a mer
 - `plan` mode: output "Worktree detected on branch <currentBranch>. No unmerged commits. Branch creation deferred to Pre-Implementation." and exit skill.
 - Other modes: output "Worktree detected on branch <currentBranch>. No unmerged commits. Proceed with <action noun>." and exit skill.
 
-**If `isWorktree` is false:**
-
-Ask (header "Merged branch"): branch `<currentBranch>` is already merged into main and appears stale — switch to main before <action noun>?
-
-- **Switch to main** — checkout main and continue with <action noun>: run `git checkout main`, then go to [Phase 3](#phase-3-on-main).
-- **Stay on this branch** — continue with <action noun> on the current branch: output "Continuing on branch <currentBranch>" and exit skill.
+**If `isWorktree` is false:** take the "Merged branch" row of [Feature-branch decisions](#feature-branch-decisions).
 
 ### Phase 2b: Branch Has Unmerged Commits
 
@@ -63787,31 +64077,27 @@ Parse the branch name to extract an issue number:
 - Pattern: `^issue-([0-9]+)-` for standard issue branches
 - If the branch name starts with a special prefix (`hotfix-`, `trivial-`, `maintenance-`, `proposal-`, `security-`), there is no issue number to extract
 
-#### Compare with plan-mode issue ID
+#### Choose the decision row
 
-If mode is not `plan`, skip the comparison entirely and proceed to the "matching" decision point below.
+In `plan` mode, compare the branch issue ID against the target issue first — the procedure is in [`mode-plan-branch.md`](./references/mode-plan-branch.md#compare-with-plan-mode-issue-id), which also says which row a match or mismatch selects.
 
-If mode is `plan`:
+In every other mode, skip the comparison and take the "Matching branch" row of [Feature-branch decisions](#feature-branch-decisions).
 
-Read the plan issue ID from the `/autopilot:plan` or `/autopilot:run` input earlier in conversation history. Normalize both the branch issue ID and the plan issue ID to lowercase.
+### Feature-branch decisions
 
-- If the plan input type is "plain description" (no issue ID resolved), skip comparison.
+Three situations reach a decision on a feature branch. They share one set of choices, so compose the AskUserQuestion from the shared choices plus the matching situation line. Offer **Switch to main** only when `isWorktree` is false — on a worktree there is no local `main` checkout to switch to.
 
-**If issue IDs do NOT match (plan mode only):**
+Choices:
 
-Ask (header "Branch mismatch"): the current branch `<currentBranch>` (issue `<branchIssueId>`) does not match the target issue `<planIssueId>` — how to proceed?
+- **Continue on this branch** — proceed with <action noun> on the current branch: output "Continuing on branch <currentBranch>" and exit skill. In `plan` mode on a mismatched branch, add that branch creation is available after planning when `isWorktree` is true.
+- **Switch to main** — run `git checkout main`, then go to [Phase 3](#phase-3-on-main).
+- **Cancel** — stop <action noun>: output "<Action noun> cancelled by user." and abort. In `plan` mode that reads "Planning cancelled by user." — the string `plan` and `run` parse for the word "cancelled".
 
-- **Continue on this branch** — plan for <planIssueId> on branch <currentBranch> (when `isWorktree` is true, note that branch creation is available after planning): output "Continuing on branch <currentBranch>" and exit skill.
-- **Switch to main** (offer only when `isWorktree` is false) — checkout main before planning: run `git checkout main`, then go to [Phase 3](#phase-3-on-main).
-- **Cancel** — stop planning: output "Planning cancelled by user." and abort.
+Situations:
 
-**Matching branch (plan mode) or any mode other than plan:**
-
-Ask (header "Feature branch"): you are on branch `<currentBranch>` with `<N>` unmerged commit(s) — continue with <action noun> on this branch?
-
-- **Continue on this branch** — proceed with <action noun> on the current feature branch: output "Continuing on branch <currentBranch>" and exit skill.
-- **Switch to main** (offer only when `isWorktree` is false) — checkout main and start fresh: run `git checkout main`, then go to [Phase 3](#phase-3-on-main).
-- **Cancel** — stop <action noun>: output "<Action noun> cancelled by user." and abort.
+- **Merged branch**, `isWorktree` false, from [Phase 2a](#phase-2a-branch-is-merged) — header "Merged branch": branch `<currentBranch>` is already merged into main and appears stale — switch to main before <action noun>? Offers **Switch to main** and **Continue on this branch** only: a stale branch is a reason to move, never a reason to stop.
+- **Issue mismatch**, `plan` mode only — header "Branch mismatch": the current branch `<currentBranch>` (issue `<branchIssueId>`) does not match the target issue `<planIssueId>` — how to proceed? Offers all three.
+- **Matching branch**, or any mode other than `plan` — header "Feature branch": you are on branch `<currentBranch>` with `<N>` unmerged commit(s) — continue with <action noun> on this branch? Offers all three.
 
 ## Phase 3: On Main
 
@@ -63830,33 +64116,10 @@ If the output is non-empty, ask (header "Uncommitted changes"): there are uncomm
 
 ### Mode-specific handling
 
-**Mode `plan` or `branch`:**
+Read the file for your mode, as in [Phase 2](#phase-2-on-feature-branch):
 
-Run `git fetch origin`. If fetch fails (e.g., no remote origin), output "No remote 'origin' found. Skipping remote update check." and exit skill.
-
-**If `isWorktree` is true:**
-
-Output "Fetched latest refs from origin. Branch creation deferred to Pre-Implementation." (plan mode) or "Fetched latest refs from origin." (branch mode) and exit skill.
-
-**If `isWorktree` is false:**
-
-Check if local main is behind remote:
-
-```bash
-git rev-list HEAD..origin/main --count
-```
-
-- If count is 0: output "Branch main is up to date with origin." and exit skill.
-- If count > 0, ask (header "Updates available"): local main is `<N>` commit(s) behind origin/main — pull the latest changes before <action noun>?
-  - **Pull updates** — run `git pull origin main` to get the latest changes, output "Pulled latest changes from origin/main." and exit skill.
-  - **Continue without pulling** — proceed against current local state: output "Continuing with local state (<N> commits behind origin)." and exit skill.
-
-**Mode `commits` or `pr`:**
-
-Creating a commit or PR directly from `main` is almost always wrong. Do not fetch or pull. Ask (header "On main"): creating a <action noun> directly on main is usually wrong; to switch to a feature branch, cancel and run `/autopilot:branch-create` before retrying — how to proceed?
-
-- **Continue on main** — proceed anyway (hotfix/maintenance/trivial cases): output "Continuing on main." and exit skill.
-- **Cancel** — stop so the user can run `/autopilot:branch-create` first: output "<Action noun> cancelled. Run /autopilot:branch-create to switch to a feature branch, then retry." and abort.
+- `plan` or `branch` — fetch `origin` and offer to pull a behind `main`: [`mode-plan-branch.md`](./references/mode-plan-branch.md#on-main-fetch-and-offer-to-pull).
+- `commits` or `pr` — warn that committing or opening a PR on `main` is almost always wrong, and do not fetch: [`mode-commits-pr.md`](./references/mode-commits-pr.md#on-main-warn-instead-of-pulling).
 
 ## Reference formatting
 
@@ -63967,7 +64230,11 @@ Set task 2 to `completed`.
 
 ## Phase 2: Preflight verdict
 
-The Context Map carries branch, worktree, `isStaleMerged`, and `baseAhead`. Compare the issue id against the current branch name for a mismatch. For anything ambiguous, or a state the map does not cover, invoke `Skill(autopilot:preflight-check)`. If it outputs "Planning cancelled", stop immediately.
+Invoke `Skill(autopilot:preflight-check)` with `mode: plan`, **unconditionally**. This is the session's single preflight, and the one place [`preflight-check`](../preflight-check/SKILL.md)'s [history-policy gate](../preflight-check/SKILL.md#phase-0-history-policy-gate) installs — a gate that then applies for the rest of the session. A conditional invocation is what made that gate skippable: on a branch the Context Map fully described, the chain installed it never, while `branch-create`, `commits-create` and `pr-create` each re-installed it later.
+
+Pass the Context Map's branch, worktree, `isStaleMerged`, and `baseAhead`, plus the issue-id-versus-branch-name comparison, so the skill prompts only where the map leaves a real decision. If it outputs "Planning cancelled", stop immediately.
+
+Because this step ran, every later step in this chain skips its own Phase 0 preflight under `--autopilot`.
 
 `run` never enters plan mode — do NOT call `EnterPlanMode` or `ExitPlanMode`.
 
@@ -64254,7 +64521,7 @@ Carry the brief's `## Conventions and standards` into the plan's applicable-stan
 
 ## Phase 4: Preflight verdict
 
-Identical to [`run`](../run/SKILL.md#phase-2-preflight-verdict): read branch, worktree, `isStaleMerged`, and `baseAhead` from the Context Map, compare the issue id against the current branch name, and invoke `Skill(autopilot:preflight-check)` only for a state the map does not cover. If it outputs "Planning cancelled", stop immediately.
+Identical to [`run`](../run/SKILL.md#phase-2-preflight-verdict): invoke `Skill(autopilot:preflight-check)` with `mode: plan` unconditionally — this is the session's single preflight and the one place the history-policy gate installs — passing the Context Map's branch, worktree, `isStaleMerged`, and `baseAhead` plus the issue-id-versus-branch-name comparison so it prompts only where the map leaves a real decision. If it outputs "Planning cancelled", stop immediately.
 
 This skill never enters plan mode — do NOT call `EnterPlanMode` or `ExitPlanMode`.
 
@@ -68480,7 +68747,9 @@ These skills set `user-invocable: false` — they run only when invoked programm
 
 ### `preflight-check`
 
-Validate git working state before branching, committing, or opening a PR. Mode-aware: in `plan`/`branch` modes it fetches remote and offers to pull; in `commits`/`pr` modes it warns if you are on `main` and offers to create a branch first. Invoked automatically at the start of `/autopilot:branch-create`, `/autopilot:commits-create`, `/autopilot:pr-create`, `/autopilot:plan`, and `/autopilot:run`.
+Validate git working state before branching, committing, or opening a PR. Mode-aware: in `plan`/`branch` modes it fetches remote and offers to pull; in `commits`/`pr` modes it warns if you are on `main` and offers to create a branch first. Each mode's own checks live in a `references/` file that only that mode reads.
+
+Invoked automatically at the start of `/autopilot:branch-create`, `/autopilot:commits-create`, `/autopilot:pr-create`, and `/autopilot:plan`. On the `/autopilot:run` family it runs **once per session**, unconditionally, before any git mutation — that single invocation installs the git-history policy gate for the rest of the session, and is why the three creation skills skip their own preflight under `--autopilot`. See [skill token budget](../../docs/19-skill-token-budget.md).
 
 ### `gather-context`
 
@@ -71445,6 +71714,67 @@ Three ways in, by decreasing automation:
 3. **Claude Code** — none of the above: install the [autopilot plugin](../claude-plugins/autopilot/README.md), which keeps subagents, tool permissions, plan mode, and MCP wiring.
 
 The `plan` and `run-primed` skills are readable everywhere but rely on Claude Code mechanics (plan-mode approval gate; SHA-validated session briefs) that other CLIs do not reproduce.
+</file>
+
+<file path="docs/19-skill-token-budget.md">
+# Skill token budget
+
+Why a skill body costs what it does, the two rules that govern splitting one, and the guard that stops the bodies growing back.
+
+## A skill body is charged per turn
+
+Invoking a skill injects its whole `SKILL.md` into the conversation. That text is then re-charged as input on every subsequent request in the session, and each `Skill()` call injects a fresh copy. The cost of a skill is therefore:
+
+```text
+body size  ×  invocations per session  ×  turns resident afterwards
+```
+
+All three factors matter, and size is the one that matters least. `pr-review` is the largest body in the plugin at ~56 KB and costs nothing measurable, because it runs once inside `code-review-action` on a pull request and never enters an interactive session. `preflight-check` was less than a quarter of that size and reached 8% of session tokens, because the autopilot chain loaded it up to six times in a single `/autopilot:run` — once each from `branch-create`, `commits-create` and `pr-create`, plus `run` itself and one more per `pr-resolve` cycle.
+
+The lever with the best return is therefore invocation count, not byte count.
+
+## Chain plumbing loads once per session
+
+A skill that other skills call as plumbing must be invoked once per session, at the earliest point that needs it, and skipped by every later caller that the first invocation already covered.
+
+The `/autopilot:run` family does this with `preflight-check`. Its Phase 2 invokes the skill unconditionally — that invocation is where [`preflight-check`](../claude-plugins/autopilot/skills/preflight-check/SKILL.md)'s history-policy gate installs, and the gate then applies for the rest of the session. Because it ran, `branch-create`, `commits-create` and `pr-create` skip their own Phase 0 preflight whenever `--autopilot` is passed, each stating inline why its remaining checks cannot change the outcome.
+
+Note which way that trade went. The invocation was previously _conditional_ — run "only for a state the Context Map does not cover" — which saved one load and, on a branch the map fully described, installed the session's git-history gate never, while the three later call sites re-installed it three times over. Making the single invocation unconditional cut five loads and closed a correctness hole in the same change. A skip is only sound when something else already established what was skipped; `pr-create` keeps the one check that still carries independent information at its point in the chain, inline, as `git status --porcelain`.
+
+## Two rules for splitting a body
+
+Sections that a typical invocation never reaches belong in a per-skill `references/` file, read on demand. Two rules keep such a split from costing more than it saves.
+
+**Extract only unreached content.** Anything read on every run costs _more_ after extraction — the body still carries a pointer, and the full text arrives via `Read` anyway. In `commits-create` the `Commit Message Validation` gate stays in the body because it runs before every commit, while the validation-failure dialog it escalates to after three failed attempts moves out. In `pr-monitor` the Conflict Sweep moves out because it runs only when `mergeable` is `CONFLICTING`, but the Approval Sweep stays: `APPROVED` is the expected terminal state of every monitored pull request, not a rare branch. `pr-resolve` was examined and left unchanged — it is always interactive and its phases all run, so it has nothing that qualifies.
+
+**Give every extracted file a body-side trigger.** A reader who cannot see the content must still recognise the situation that calls for it, so the body keeps the heading and names the condition. This is why `Edge Cases` sections stay in the body in both `pr-monitor` and `pr-resolve`: their bullet conditions _are_ the recognition index, so relocating them would either hide the trigger or save nothing.
+
+The mode-scoped case is the cleanest win. `preflight-check` takes exactly one of four modes per invocation, so each mode's own checks live in [`mode-plan-branch.md`](../claude-plugins/autopilot/skills/preflight-check/references/mode-plan-branch.md) or [`mode-commits-pr.md`](../claude-plugins/autopilot/skills/preflight-check/references/mode-commits-pr.md), and a run reads one file and never the other. The same shape applies to content that only exists off `--autopilot`: the interactive dialogs in `commits-create` and `pr-update`, and background mode in `pr-monitor`.
+
+Prose is denser than a padded Markdown table. A routing table with four columns costs more bytes than the three lines of prose that say the same thing, and Prettier re-pads it on every edit — so state routing rules as a list unless the content is genuinely tabular.
+
+## The guard
+
+`skillBodyBudget.test.ts` in [`code-review-action`](../.github/actions/code-review-action/src/skillBodyBudget.test.ts) holds a per-skill byte budget. It fails when a body exceeds its budget **and** when a skill directory has no budget entry, so a new skill cannot ship unguarded. Discovery walks the filesystem via `walkMarkdown`, not a hardcoded list.
+
+Budgets are a regression tripwire, not a target: a skill may sit well under its budget, and growth that earns its keep is a budget bump in the same commit, reviewed like any other change.
+
+What the guard cannot prove is that a smaller body actually costs less at runtime. Moving a section into `references/` only saves tokens when a typical invocation does not read it back, and CI sees file sizes rather than what the model read — a body that halved by relocating text every run then loads via `Read` is strictly worse and still passes. The two rules above are what make an extraction sound; the guard only stops the bodies growing back.
+
+## Measured effect
+
+Applying all of the above to the five skills that re-load on the PR-review cycle:
+
+| Skill             | Before   | After    | Change |
+| ----------------- | -------- | -------- | ------ |
+| `preflight-check` | 12,929 B | 10,313 B | −20%   |
+| `commits-create`  | 20,537 B | 16,133 B | −21%   |
+| `pr-update`       | 13,139 B | 9,464 B  | −28%   |
+| `pr-monitor`      | 23,772 B | 17,538 B | −26%   |
+| `pr-resolve`      | 16,008 B | 16,008 B | 0%     |
+| **Total**         | 86,385 B | 69,456 B | −20%   |
+
+Bodies alone understate it, because the invocation-count fix is the larger half. Counting each injection in one `/autopilot:run` with two review cycles, the skill-body bytes entering the conversation fall from roughly 208 KB to roughly 120 KB — about −42%. Interactive sessions gain less, since they read the extracted dialogs back.
 </file>
 
 <file path="packages/actions-core/src/anthropicAuth.test.ts">
@@ -76378,6 +76708,7 @@ The `docs/` guides are numbered chapters in reading order — start at chapter 1
 | 16  | [The `linear-plan` skill](./docs/16-linear-plan-skill.md)                         | storing a scored plan on a Linear ticket so it outlives the session that drafted it                  |
 | 17  | [The `linear-run` skill](./docs/17-linear-run-skill.md)                           | executing a stored Linear plan verbatim: validate the format, or refuse and name the fix             |
 | 18  | [Portable single-source skills](./docs/18-agent-skills-export.md)                 | one authored skills layout for Claude, Codex, Kimi, and other CLIs, and the verbatim sync (RFC-0002) |
+| 19  | [Skill token budget](./docs/19-skill-token-budget.md)                             | why a skill body is charged per turn, the two rules for splitting one, and the byte-budget guard     |
 
 **Standards.**
 
