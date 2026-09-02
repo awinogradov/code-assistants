@@ -26,5 +26,5 @@
     "test": "bun test lib",
     "clean": "rm -rf node_modules .turbo"
   },
-  "version": "7.3.0"
+  "version": "7.4.0"
 }
