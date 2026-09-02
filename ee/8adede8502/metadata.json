@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "ee8adede8502",
+  "strategy": "manual-commit",
+  "branch": "security-js-yaml-renderer-alerts",
+  "checkpoints_count": 2,
+  "files_touched": [
+    ".github/dependabot.yml"
+  ],
+  "sessions": [
+    {
+      "metadata": "/ee/8adede8502/0/metadata.json",
+      "transcript": "/ee/8adede8502/0/full.jsonl",
+      "compact_transcript": "/ee/8adede8502/0/transcript.jsonl",
+      "content_hash": "/ee/8adede8502/0/content_hash.txt",
+      "prompt": "/ee/8adede8502/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 154,
+    "cache_creation_tokens": 209504,
+    "cache_read_tokens": 12414500,
+    "output_tokens": 60624,
+    "api_call_count": 78
+  }
+}
