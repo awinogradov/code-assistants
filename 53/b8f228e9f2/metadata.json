@@ -1,0 +1,29 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "53b8f228e9f2",
+  "strategy": "manual-commit",
+  "branch": "issue-647-skill-body-token-budget",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "claude-plugins/autopilot/skills/pr-monitor/SKILL.md",
+    "claude-plugins/autopilot/skills/preflight-check/references/mode-commits-pr.md",
+    "claude-plugins/autopilot/skills/preflight-check/references/mode-plan-branch.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/53/b8f228e9f2/0/metadata.json",
+      "transcript": "/53/b8f228e9f2/0/full.jsonl",
+      "compact_transcript": "/53/b8f228e9f2/0/transcript.jsonl",
+      "content_hash": "/53/b8f228e9f2/0/content_hash.txt",
+      "prompt": "/53/b8f228e9f2/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 278,
+    "cache_creation_tokens": 335243,
+    "cache_read_tokens": 32373696,
+    "output_tokens": 141287,
+    "api_call_count": 141
+  }
+}
