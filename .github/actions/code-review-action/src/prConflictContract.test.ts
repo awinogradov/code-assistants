@@ -25,6 +25,12 @@
  * Vacuous-pass defences: every extracted region must be non-empty and above a
  * minimum length, so a renamed heading or a dropped fence cannot extract "" and
  * satisfy a `toContain` against it.
+ *
+ * The sweep procedure and background-mode behaviour are read from the skill's
+ * `references/` files rather than from SKILL.md: both are conditional, so they
+ * were moved out of the body per docs/19-skill-token-budget.md. The contract is
+ * unchanged — only the file holding it moved — and a missing file now throws at
+ * import rather than silently extracting "".
  */
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -35,6 +41,8 @@ const actionDir = join(import.meta.dirname, "..");
 const repoRoot = join(actionDir, "..", "..", "..");
 const skillsDir = join(repoRoot, "claude-plugins/autopilot/skills");
 const monitorPath = join(skillsDir, "pr-monitor/SKILL.md");
+const sweepPath = join(skillsDir, "pr-monitor/references/conflict-sweep.md");
+const backgroundPath = join(skillsDir, "pr-monitor/references/background-mode.md");
 const resolvePath = join(skillsDir, "pr-resolve/SKILL.md");
 const historyBlockPath = join(skillsDir, "shared-rules/references/git-history-policy.md");
 const docsPath = join(repoRoot, "docs/05-plan-run-skills.md");
@@ -46,10 +54,12 @@ const minExtractionLength = 40;
 /** The run-scoped sweep cap. Asserted as a literal — "a digit appears" would survive any edit. */
 const sweepCap = "capped at **2 per `pr-monitor` invocation**";
 
-const [monitor, resolve, historyBlock] = await Promise.all([
+const [monitor, resolve, historyBlock, sweepDoc, backgroundDoc] = await Promise.all([
   readFile(monitorPath, "utf8"),
   readFile(resolvePath, "utf8"),
   readFile(historyBlockPath, "utf8"),
+  readFile(sweepPath, "utf8"),
+  readFile(backgroundPath, "utf8"),
 ]);
 
 /** Extract a `### `/`## ` section by heading, up to the next heading of the same or higher level. */
@@ -58,10 +68,10 @@ const section = (source: string, heading: string): string =>
     source,
   )?.[0] ?? "";
 
-const sweep = section(monitor, "### Conflict Sweep (shared procedure)");
+const sweep = sweepDoc;
 const earlyExit = section(monitor, "### 1.1 Early Exit Checks");
 const perCycle = section(monitor, "### 2.2 Check PR State");
-const backgroundMode = section(monitor, "### Background Mode");
+const backgroundMode = backgroundDoc;
 const detectPr = section(resolve, "### 1.1 Detect PR");
 
 /** The block's own forbidden-command pattern, so this file cannot disagree with it. */

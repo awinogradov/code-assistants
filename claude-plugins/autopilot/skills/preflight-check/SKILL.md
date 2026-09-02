@@ -74,30 +74,15 @@ If the two values differ, the session is running inside a **git worktree**. Stor
 
 ## Phase 2: On Feature Branch
 
-### Check branch name format (commits mode only)
+### Mode-specific entry check
 
-If mode is `commits`, read the canonical branch-name regex from [`pr-title-grammar.md`](../shared-rules/references/pr-title-grammar.md) and check `currentBranch` against it and against the length bounds beside it (5–100 characters) — an overlong name fails CI's `max_length` check just like a shape violation. `plan` and `branch` modes skip this check — they run before the working branch exists, including on harness-created worktree branches — and `pr` mode skips it because `pr-create` validates the branch itself in its Phase 1 (one owner per gate, no double prompt).
+Every invocation is one mode, so read the one file your mode names and nothing else — the other file's checks cannot apply to this run.
 
-If the name does not match, ask (header "Branch name"): branch `<currentBranch>` does not follow the naming convention and would fail the contributing-check CI once a PR is open, where the only fix is a fresh branch and a fresh PR — how to proceed?
+- `commits` — check the branch-name format now, per [`mode-commits-pr.md`](./references/mode-commits-pr.md).
+- `pr` — check the working tree now, per [`mode-commits-pr.md`](./references/mode-commits-pr.md).
+- `plan` and `branch` — no entry check; both run before the branch holds work. Their mode file, [`mode-plan-branch.md`](./references/mode-plan-branch.md), is read later: at [Phase 2b](#phase-2b-branch-has-unmerged-commits) for `plan`, at [Phase 3](#phase-3-on-main) for either.
 
-- **Continue anyway** — commit on this branch at the user's explicit request: continue to the merged-branch check below.
-- **Cancel** — stop so the branch can be fixed while no PR exists and the rename is still free: output "Commit cancelled. Branch <currentBranch> does not follow the naming convention — re-create it with /autopilot:branch-create (uncommitted changes follow the checkout) or rename it with git branch -m, then retry." and abort.
-
-### Check working tree (pr mode only)
-
-If mode is `pr`, run:
-
-```bash
-git status --porcelain
-```
-
-If the output is non-empty, ask (header "Uncommitted"): uncommitted changes were detected on `<currentBranch>` — how to proceed before opening the pull request?
-
-- **Commit first** — run `/autopilot:commits-create` before creating the PR: invoke `Skill(autopilot:commits-create)`, then continue below.
-- **Continue anyway** — create the PR without committing these changes: continue below.
-- **Cancel** — stop so the user can handle changes first: output "Pull request cancelled. Commit or stash changes first." and abort.
-
-For all other modes (`plan`, `branch`, `commits`), skip this check — uncommitted changes are expected in `commits` mode, irrelevant in `plan`/`branch` mode before branch creation.
+Then continue to the merged-branch check below.
 
 ### Check if branch is merged into main
 
@@ -119,12 +104,7 @@ This is a worktree with no unmerged commits — likely a fresh worktree or a mer
 - `plan` mode: output "Worktree detected on branch <currentBranch>. No unmerged commits. Branch creation deferred to Pre-Implementation." and exit skill.
 - Other modes: output "Worktree detected on branch <currentBranch>. No unmerged commits. Proceed with <action noun>." and exit skill.
 
-**If `isWorktree` is false:**
-
-Ask (header "Merged branch"): branch `<currentBranch>` is already merged into main and appears stale — switch to main before <action noun>?
-
-- **Switch to main** — checkout main and continue with <action noun>: run `git checkout main`, then go to [Phase 3](#phase-3-on-main).
-- **Stay on this branch** — continue with <action noun> on the current branch: output "Continuing on branch <currentBranch>" and exit skill.
+**If `isWorktree` is false:** take the "Merged branch" row of [Feature-branch decisions](#feature-branch-decisions).
 
 ### Phase 2b: Branch Has Unmerged Commits
 
@@ -135,31 +115,27 @@ Parse the branch name to extract an issue number:
 - Pattern: `^issue-([0-9]+)-` for standard issue branches
 - If the branch name starts with a special prefix (`hotfix-`, `trivial-`, `maintenance-`, `proposal-`, `security-`), there is no issue number to extract
 
-#### Compare with plan-mode issue ID
+#### Choose the decision row
 
-If mode is not `plan`, skip the comparison entirely and proceed to the "matching" decision point below.
+In `plan` mode, compare the branch issue ID against the target issue first — the procedure is in [`mode-plan-branch.md`](./references/mode-plan-branch.md#compare-with-plan-mode-issue-id), which also says which row a match or mismatch selects.
 
-If mode is `plan`:
+In every other mode, skip the comparison and take the "Matching branch" row of [Feature-branch decisions](#feature-branch-decisions).
 
-Read the plan issue ID from the `/autopilot:plan` or `/autopilot:run` input earlier in conversation history. Normalize both the branch issue ID and the plan issue ID to lowercase.
+### Feature-branch decisions
 
-- If the plan input type is "plain description" (no issue ID resolved), skip comparison.
+Three situations reach a decision on a feature branch. They share one set of choices, so compose the AskUserQuestion from the shared choices plus the matching situation line. Offer **Switch to main** only when `isWorktree` is false — on a worktree there is no local `main` checkout to switch to.
 
-**If issue IDs do NOT match (plan mode only):**
+Choices:
 
-Ask (header "Branch mismatch"): the current branch `<currentBranch>` (issue `<branchIssueId>`) does not match the target issue `<planIssueId>` — how to proceed?
+- **Continue on this branch** — proceed with <action noun> on the current branch: output "Continuing on branch <currentBranch>" and exit skill. In `plan` mode on a mismatched branch, add that branch creation is available after planning when `isWorktree` is true.
+- **Switch to main** — run `git checkout main`, then go to [Phase 3](#phase-3-on-main).
+- **Cancel** — stop <action noun>: output "<Action noun> cancelled by user." and abort. In `plan` mode that reads "Planning cancelled by user." — the string `plan` and `run` parse for the word "cancelled".
 
-- **Continue on this branch** — plan for <planIssueId> on branch <currentBranch> (when `isWorktree` is true, note that branch creation is available after planning): output "Continuing on branch <currentBranch>" and exit skill.
-- **Switch to main** (offer only when `isWorktree` is false) — checkout main before planning: run `git checkout main`, then go to [Phase 3](#phase-3-on-main).
-- **Cancel** — stop planning: output "Planning cancelled by user." and abort.
+Situations:
 
-**Matching branch (plan mode) or any mode other than plan:**
-
-Ask (header "Feature branch"): you are on branch `<currentBranch>` with `<N>` unmerged commit(s) — continue with <action noun> on this branch?
-
-- **Continue on this branch** — proceed with <action noun> on the current feature branch: output "Continuing on branch <currentBranch>" and exit skill.
-- **Switch to main** (offer only when `isWorktree` is false) — checkout main and start fresh: run `git checkout main`, then go to [Phase 3](#phase-3-on-main).
-- **Cancel** — stop <action noun>: output "<Action noun> cancelled by user." and abort.
+- **Merged branch**, `isWorktree` false, from [Phase 2a](#phase-2a-branch-is-merged) — header "Merged branch": branch `<currentBranch>` is already merged into main and appears stale — switch to main before <action noun>? Offers **Switch to main** and **Continue on this branch** only: a stale branch is a reason to move, never a reason to stop.
+- **Issue mismatch**, `plan` mode only — header "Branch mismatch": the current branch `<currentBranch>` (issue `<branchIssueId>`) does not match the target issue `<planIssueId>` — how to proceed? Offers all three.
+- **Matching branch**, or any mode other than `plan` — header "Feature branch": you are on branch `<currentBranch>` with `<N>` unmerged commit(s) — continue with <action noun> on this branch? Offers all three.
 
 ## Phase 3: On Main
 
@@ -178,33 +154,10 @@ If the output is non-empty, ask (header "Uncommitted changes"): there are uncomm
 
 ### Mode-specific handling
 
-**Mode `plan` or `branch`:**
+Read the file for your mode, as in [Phase 2](#phase-2-on-feature-branch):
 
-Run `git fetch origin`. If fetch fails (e.g., no remote origin), output "No remote 'origin' found. Skipping remote update check." and exit skill.
-
-**If `isWorktree` is true:**
-
-Output "Fetched latest refs from origin. Branch creation deferred to Pre-Implementation." (plan mode) or "Fetched latest refs from origin." (branch mode) and exit skill.
-
-**If `isWorktree` is false:**
-
-Check if local main is behind remote:
-
-```bash
-git rev-list HEAD..origin/main --count
-```
-
-- If count is 0: output "Branch main is up to date with origin." and exit skill.
-- If count > 0, ask (header "Updates available"): local main is `<N>` commit(s) behind origin/main — pull the latest changes before <action noun>?
-  - **Pull updates** — run `git pull origin main` to get the latest changes, output "Pulled latest changes from origin/main." and exit skill.
-  - **Continue without pulling** — proceed against current local state: output "Continuing with local state (<N> commits behind origin)." and exit skill.
-
-**Mode `commits` or `pr`:**
-
-Creating a commit or PR directly from `main` is almost always wrong. Do not fetch or pull. Ask (header "On main"): creating a <action noun> directly on main is usually wrong; to switch to a feature branch, cancel and run `/autopilot:branch-create` before retrying — how to proceed?
-
-- **Continue on main** — proceed anyway (hotfix/maintenance/trivial cases): output "Continuing on main." and exit skill.
-- **Cancel** — stop so the user can run `/autopilot:branch-create` first: output "<Action noun> cancelled. Run /autopilot:branch-create to switch to a feature branch, then retry." and abort.
+- `plan` or `branch` — fetch `origin` and offer to pull a behind `main`: [`mode-plan-branch.md`](./references/mode-plan-branch.md#on-main-fetch-and-offer-to-pull).
+- `commits` or `pr` — warn that committing or opening a PR on `main` is almost always wrong, and do not fetch: [`mode-commits-pr.md`](./references/mode-commits-pr.md#on-main-warn-instead-of-pulling).
 
 ## Reference formatting
 

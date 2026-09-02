@@ -101,3 +101,54 @@ User selects "Update PR".
 ```
 ✓ Updated PR #45: https://github.com/org/repo/pull/45
 ```
+
+### Basic update after new commits (abbreviated for readability)
+
+```
+User: /update-pr
+
+Detecting PR for current branch...
+Found PR #42: Allow editor theme selection per workspace
+
+Gathering context...
+- 5 commits since main
+- 8 files changed
+```
+
+[Phase 4](../SKILL.md#phase-4-ask-user-for-context-optional) AskUserQuestion with:
+
+- `question`: "Updating PR #42. Would you like to highlight anything specific in the updated description?"
+- `header`: "PR context"
+
+User selects "Auto-generate".
+
+[Phase 6](../SKILL.md#phase-6-verify-with-user) AskUserQuestion parameters:
+
+- `question`: "Review the updated pull request and choose an action."
+- `header`: "Update PR"
+- `options`: `Update PR` / `Add release notes` / `Edit content` / `Cancel`, with the descriptions listed in [Phase 6](../SKILL.md#phase-6-verify-with-user)
+- `multiSelect`: false
+
+Preview (every option carries this same full preview string):
+
+```
+Allow editor theme selection per workspace
+
+Users can now pick an editor theme per workspace. This makes long review sessions easier on the eyes and matches the rest of their IDE.
+
+- Added editor_theme per-workspace setting
+- Falls back to the system theme if no preference is set
+- Added validation for theme names
+
+---
+
+**Issues:**
+
+Closes #749
+```
+
+User selects "Update PR".
+
+```
+✓ Updated PR #42: https://github.com/org/repo/pull/42
+```
