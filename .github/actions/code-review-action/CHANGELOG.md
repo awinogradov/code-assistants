@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [8.1.4](https://github.com/awinogradov/code-assistants/compare/code-review-action@v8.1.3...code-review-action@v8.1.4) (2026-09-02)
+
+## Release Notes
+
+Autopilot skill loading is restructured so Claude reads large reference sections on demand instead of upfront, reducing session token usage on every PR review and react run.
+
+## ✨ What's New
+
+- Rarely-reached sections of `preflight-check`, `commits-create`, `pr-update`, and `pr-monitor` are now stored in per-skill `references/` files and loaded only when needed, cutting the token overhead Claude incurs at the start of each autopilot session.
+
+<details><summary>Related issues</summary>
+
+- [#647: Reduce autopilot session token usage from repeated skill body loads](https://github.com/awinogradov/code-assistants/issues/647)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #647 | [#648](https://github.com/awinogradov/code-assistants/pull/648) | @awinogradov |
+
+### Refactoring
+
+* **autopilot:** move unreached sections to references ([2c8f445](https://github.com/awinogradov/code-assistants/commit/2c8f44523829daf41757c8a97bcceac39f8d8661))
+
+### Tests
+
+* **code-review-action:** guard skill body byte budgets ([7ee5b2e](https://github.com/awinogradov/code-assistants/commit/7ee5b2e697aacf68a96e07bdbbed45499339d327))
 ## [8.1.3](https://github.com/awinogradov/code-assistants/compare/code-review-action@v8.1.2...code-review-action@v8.1.3) (2026-08-29)
 
 ## Release Notes
