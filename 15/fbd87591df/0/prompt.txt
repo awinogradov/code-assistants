@@ -1,0 +1,22 @@
+/autopilot:plan usage reports shows me the issue
+ Skills                  % of usage
+ autopilot:preflight-check      8%
+ autopilot:commits-create       6%
+
+This is the percentage of session tokens usage. Deep analyze this skills, read the docs, research, hardthink how we can solve this issue
+
+---
+
+You can continue now. Continue the task you were working on when the usage limit was reached; do not repeat work that is already complete.
+
+---
+
+fill the issue
+
+---
+
+go ahead
+
+---
+
+continue
