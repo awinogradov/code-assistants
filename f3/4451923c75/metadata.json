@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "f34451923c75",
+  "strategy": "manual-commit",
+  "branch": "issue-647-skill-body-token-budget",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".github/actions/code-review-action/src/skillBodyBudget.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/f3/4451923c75/0/metadata.json",
+      "transcript": "/f3/4451923c75/0/full.jsonl",
+      "compact_transcript": "/f3/4451923c75/0/transcript.jsonl",
+      "content_hash": "/f3/4451923c75/0/content_hash.txt",
+      "prompt": "/f3/4451923c75/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 280,
+    "cache_creation_tokens": 335738,
+    "cache_read_tokens": 32736256,
+    "output_tokens": 141873,
+    "api_call_count": 142
+  }
+}
