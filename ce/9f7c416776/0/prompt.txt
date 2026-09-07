@@ -1,0 +1,211 @@
+/autopilot:run #656
+refresh from main then continue
+
+---
+
+<task-notification>
+<task-id>a6cb15d9b26431046</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-metate-portal/7a0555f9-e4e3-4f91-807b-cdf788de0728/tasks/a6cb15d9b26431046.output</output-file>
+<status>completed</status>
+<summary>Agent "Digest session history" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>```json
+{
+  "available": true,
+  "sessions": [],
+  "dropped": 0,
+  "digestError": "not authenticated — run entire login"
+}
+```</result>
+<usage><subagent_tokens>14015</subagent_tokens><tool_uses>2</tool_uses><duration_ms>14087</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a2b3d24b1da083562</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-metate-portal/7a0555f9-e4e3-4f91-807b-cdf788de0728/tasks/a2b3d24b1da083562.output</output-file>
+<status>completed</status>
+<summary>Agent "Digest repo standards" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>```json
+{
+  "conventions": [
+    { "source": "CLAUDE.md", "rule": "Plan only via Skill(autopilot:plan) — no ad-hoc implementation planning; if the autopilot plugin is not installed, follow CONTRIBUTING.md" },
+    { "source": "CLAUDE.md", "rule": "No raw git commit/branch/PR/issue creation — commit only via Skill(autopilot:commits-create), branch only via Skill(autopilot:branch-create), PR only via Skill(autopilot:pr-create); no --no-verify" },
+    { "source": "CLAUDE.md", "rule": "Every changed line must trace to the request — no opportunistic refactors of adjacent code or unrelated formatting; do not over-engineer, only make directly requested changes" },
+    { "source": "CLAUDE.md", "rule": "docs/ structure: numbered chapters in reading order (NN-topic.md), matching the README Documentation table order" },
+    { "source": "docs/19-skill-token-budget.md", "rule": "In pr-monitor, keep Edge Cases and the Approval Sweep in the SKILL.md body (expected terminal-state content read every run); only content that is not read on a typical invocation (e.g. the Conflict Sweep, background-mode-only content) belongs in a per-skill references/ file" },
+    { "source": "docs/19-skill-token-budget.md", "rule": "skillBodyBudget.test.ts enforces a per-skill byte budget for pr-monitor and every other skill body — growth that earns its keep needs a budget bump in the same commit" },
+    { "source": "docs/05-plan-run-skills.md", "rule": "run's automated post-implementation chain (Phase 4 'How run differs') currently ends the Monitor step at 'approved/merged' — this is the exact prose the task must update, and run-primed/linear-run inherit it by reference rather than by restating it, so a change here must stay consistent across all three doc chapters (05, 15, 17)" },
+    { "source": "docs/15-run-primed-skill.md", "rule": "run-primed's terminal behavior is explicitly stated as 'inherited from run' — its own doc line naming the terminal path must be kept in sync with any change to run's completion policy" },
+    { "source": "docs/17-linear-run-skill.md", "rule": "linear-run states both its stored-plan and fresh-plan modes 'use the same branch, implementation, commit, pull-request, and monitoring chain with no approval gate' — this line names the terminal chain and must track run's completion-policy change" },
+    { "source": "docs/05-plan-run-skills.md", "rule": "'Direct gh pr create / git commit are forbidden in autopilot mode — everything routes through the sub-skills'; auto-merge is never part of the documented chain today, so an explicit never-auto-merge policy is an extension of, not a change to, existing behavior" }
+  ],
+  "standards": [
+    {
+      "id": "RFC-0001",
+      "title": "Reference formatting &amp; readability",
+      "status": "Accepted",
+      "path": "rfc/0001-reference-formatting.md",
+      "defaulted": false,
+      "why": "the plan edits multiple cross-referencing SKILL.md and docs/*.md files (pr-monitor, run, linear-run, run-primed, plus docs chapters 05/15/17) whose links and section references must stay resolvable per the RFC-0001 standard"
+    },
+    {
+      "id": "RFC-0002",
+      "title": "Portable single-source skills layout",
+      "status": "Accepted",
+      "path": "rfc/0002-portable-skills-layout.md",
+      "defaulted": false,
+      "why": "the change edits SKILL.md files under claude-plugins/autopilot/skills/, the single authored layout synced verbatim to other CLIs — frontmatter and inter-skill references must stay extraction-safe and vendor-neutral per SKILLS-002/SKILLS-004"
+    }
+  ],
+  "dropped": [],
+  "principles": [],
+  "digestError": null
+}
+```</result>
+<usage><subagent_tokens>53648</subagent_tokens><tool_uses>12</tool_uses><duration_ms>54638</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>aafc3d26bb6dda3d8</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-metate-portal/7a0555f9-e4e3-4f91-807b-cdf788de0728/tasks/aafc3d26bb6dda3d8.output</output-file>
+<status>completed</status>
+<summary>Agent "Expert review: DevOps Engineer" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>I'll read the files the caller pointed to before scoring.
+
+
+&lt;invoke name="Read"&gt;
+&lt;invoke_parameter name="file_path"&gt;/Users/tony_vi/.warp/worktrees/code-assistants/metate-portal/claude-plugins/autopilot/skills/pr-monitor/SKILL.md&lt;/invoke_parameter&gt;
+&lt;/invoke&gt;
+&lt;invoke_parameter name="limit"&gt;400&lt;/invoke_parameter&gt;
+&lt;/invoke&gt;
+&lt;invoke_parameter name="offset"&gt;1&lt;/invoke_parameter&gt;
+&lt;/invoke&gt;
+&lt;invoke_parameter name="limit"&gt;400&lt;/invoke_parameter&gt;
+&lt;/invoke&gt;
+&lt;invoke_parameter name="offset"&gt;1&lt;/invoke_parameter&gt;
+&lt;/invoke&gt;
+&lt;invoke_parameter name="limit"&gt;400&lt;/invoke_parameter&gt;
+&lt;/invoke&gt;
+&lt;invoke_parameter name="offset"&gt;1&lt;/invoke_parameter&gt;
+&lt;/invoke&gt;
+&lt;invoke_parameter name="limit"&gt;400&lt;/invoke_parameter&gt;
+&lt;/invoke&gt;
+&lt;invoke_parameter name="offset"&gt;1&lt;/invoke_parameter&gt;
+&lt;/invoke&gt;</result>
+<usage><subagent_tokens>13513</subagent_tokens><tool_uses>0</tool_uses><duration_ms>9495</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a48945d2a206598af</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-metate-portal/7a0555f9-e4e3-4f91-807b-cdf788de0728/tasks/a48945d2a206598af.output</output-file>
+<status>completed</status>
+<summary>Agent "Expert review: Pre-mortem Analyst" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>{
+  "expertRole": "Pre-mortem Analyst",
+  "score": 72,
+  "dimensions": {
+    "alignment": 15,
+    "completeness": 13,
+    "typeSafety": 17,
+    "testability": 15,
+    "simplicity": 12
+  },
+  "verdict": "needs-revision",
+  "findings": [
+    "Failure narrative 1 (highest likelihood): the checks gate cuts both ways and the plan handles neither edge. (a) Premature ready: the Readiness Check runs from the §1.1 tail with cooldownRemaining=0 seconds after PR creation; a fast workflow can register and finish before the review workflow's check run is created, so 'at least one registered, none pending' holds while `ai-review` has not started, and the monitor exits READY_FOR_REVIEW without the automated review the design names as a required obligation. (b) Eternal pending: 'at least one check registered when .github/workflows holds workflow files' is evaluated on the local checkout, but PRs whose final commit carries `[ci skip]` (this repo's own repomix chores do), docs-only PRs against `paths:`-filtered workflows, or portable installs (RFC-0002) into repos whose workflows never trigger on pull_request register zero checks forever, so the session sits in the same 60s loop the change exists to end. Early warning signs: ready exits whose PR later gets a symbiot-bot review on the same head; run sessions still open after 30+ minutes with 'no checks reported'. Mitigation: never run readiness from §1.1 on a head younger than one full poll; require the registered check set to be identical across two consecutive polls before treating 'none pending' as complete; add an explicit bounded exit (e.g. 'no checks registered after N sweeps' reported as blocked, not ready) instead of open-ended waiting.",
+    "Failure narrative 2: 'ready' quietly absorbs blocked work. Verdict step 3 exempts a CHANGES_REQUESTED review bound to the head once pr-resolve has replied without pushing (resolvedHead), and feedback step 4 only asks authorReplied=false. That is exactly the shape of a failed remediation (pr-resolve could not or would not change code) as well as legitimate pushback, and both exit with `Status: READY_FOR_REVIEW`; run then prints `Status: ready_for_review` and drops the `Human review:` line entirely. Six months on, the metric that decays is 'PRs autopilot called ready that still carry an open CHANGES_REQUESTED on head'. The excerpt also does not state whether authorReplied means 'author replied at all' or 'author's reply is the latest message in the thread'; if the former, a reviewer's follow-up on an already-answered thread is invisible and the monitor exits ready over an unanswered question. Mitigation: split the outcome (READY_FOR_REVIEW only when no CHANGES_REQUESTED is bound to head; a distinct handoff status such as READY_WITH_PUSHBACK / blocked otherwise), have run's Completion echo the Human review line, and verify the helper's authorReplied semantics (lastAuthorReply vs latest reviewer comment) before relying on it - the plan is unverifiable on this point from the excerpt.",
+    "Failure narrative 3: the default flip is a breaking behaviour change for every caller and the plan does not treat it as one. run, linear-run and run-primed all invoke pr-monitor without --wait-for-approval, so every existing user who relies on autopilot addressing human review comments now gets a session that ends before a human looks; the 'follow-up pointer' is printed into a terminal that the asynchronous reviewer never sees and no re-entry mechanism is specified. Recent history uses `feat(...)!` for exactly this class of change; the plan mentions no breaking marker, no README migration note, and no explicit policy argument from run. Early warning: PRs approved or commented on by humans that sit unanswered for days while the run transcript says 'complete'. Mitigation: mark the commit breaking per CONTRIBUTING, have run pass the completion policy explicitly (so the default is a run decision, not a hidden pr-monitor default), and document the re-invocation path (`/autopilot:pr-monitor` on the PR) in the same README/docs edit.",
+    "Failure narrative 4: instruction-following fidelity collapses under the added state. The body is already at 17,538/18,000 bytes and the plan adds a four-step shared procedure, a flag with input resolution, resolvedHead alongside cooldownRemaining/fixAttempts/conflictSweeps, two near-duplicate CHANGES_REQUESTED branches (§1.1 and §2.2) that now both 'continue when HEAD unchanged', a Phase 3 message and an Edge Cases entry, with the budget bump in step 3 pre-authorised rather than earned by trimming. Contract tests assert literals (headings, `Status: READY_FOR_REVIEW`, 'never from the aggregate `reviewDecision`'), not that the branches are consistent, so drift between the two CHANGES_REQUESTED paths will pass CI. The observable failure is an agent that skips the fresh/verdict steps and exits on the aggregate reviewDecision the plan forbids. Mitigation: route both CHANGES_REQUESTED branches into a single Readiness Check entry point and delete the duplicated prose; express the four gates as one compact decision table; treat a budget bump as a last resort after that trim.",
+    "Minor objections stacked: `gh pr checks` returning the 'no checks reported' error must be spelled out as 'not ready, keep polling' rather than left to the CI Fix Workflow or error handling; run/linear-run/run-primed are said to 'inherit by link' but their own contract tests (if any beyond planFileOutputPurity) are not enumerated, and `gitHistoryPolicy` is named as a verify step without the excerpt saying what it covers, so step 2's verify list is unverifiable; the `Human review:` value set (not requested / pending / changes requested on this head, all threads answered) should be an asserted literal set in prDeliveryContract so the message cannot drift from background-mode.md."
+  ],
+  "grounding": [
+    "plan text",
+    "Context Map excerpt: pr-monitor SKILL.md structure and state machine, background-mode.md, pr-resolve helper output shape, run/SKILL.md Step 3 and Completion block, contract test pattern, real GitHub data on PR #648 and symbiot-bot commit binding, gh behaviour notes, RFC-0001/0002 and docs/19 budget rule"
+  ],
+  "revision": {
+    "changed": "Gate the first Readiness Check behind one full poll and require the registered check set to be stable across two consecutive polls; add a bounded 'no checks registered' exit reported as blocked rather than looping forever. Split the handoff so READY_FOR_REVIEW requires no CHANGES_REQUESTED bound to headRefOid and pushback-without-push gets its own status that run's Completion surfaces verbatim; add a step to verify the helper's authorReplied semantics (latest-message vs ever-replied) before relying on it. Mark the commit as breaking, have run pass the completion policy explicitly, and document the re-invocation path in README/docs. Collapse the §1.1 and §2.2 CHANGES_REQUESTED branches into one Readiness Check entry point, render the four gates as a decision table, and only bump the budget after trimming. Spell out the 'no checks reported' error as not-ready, enumerate caller contract tests, and assert the Human review value set as literals in prDeliveryContract."
+  }
+}</result>
+<usage><subagent_tokens>19213</subagent_tokens><tool_uses>0</tool_uses><duration_ms>90220</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a16198b8c2104b532</task-id>
+<tool-use-id>toolu_01B9JBiJoRqxRdHqxhGy4t7d</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-metate-portal/7a0555f9-e4e3-4f91-807b-cdf788de0728/tasks/a16198b8c2104b532.output</output-file>
+<status>completed</status>
+<summary>Agent "Expert review: DevOps Engineer (retry)" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>I'll read the named files to ground the review.
+
+
+&lt;invoke name="Read"&gt;
+&lt;invoke_parameter name="file_path"&gt;/Users/tony_vi/.warp/worktrees/code-assistants/metate-portal/claude-plugins/autopilot/skills/pr-monitor/SKILL.md&lt;/invoke_parameter&gt;
+&lt;/invoke&gt;
+&lt;invoke name="Read"&gt;
+&lt;invoke_parameter name="file_path"&gt;/Users/tony_vi/.warp/worktrees/code-assistants/metate-portal/claude-plugins/autopilot/lib/github/reviewThreads.ts&lt;/invoke_parameter&gt;
+&lt;/invoke&gt;
+&lt;invoke name="Read"&gt;
+&lt;invoke_parameter name="file_path"&gt;/Users/tony_vi/.warp/worktrees/code-assistants/metate-portal/.github/actions/code-review-action/src/submitReview.ts&lt;/invoke_parameter&gt;
+&lt;invoke_parameter name="offset"&gt;240&lt;/invoke_parameter&gt;
+&lt;invoke_parameter name="limit"&gt;51&lt;/invoke_parameter&gt;
+&lt;/invoke&gt;
+&lt;invoke name="Read"&gt;
+&lt;invoke_parameter name="file_path"&gt;/Users/tony_vi/.warp/worktrees/code-assistants/metate-portal/.github/workflows/code-review.yml&lt;/invoke_parameter&gt;
+&lt;/invoke&gt;
+&lt;/invoke&gt;</result>
+<usage><subagent_tokens>12819</subagent_tokens><tool_uses>0</tool_uses><duration_ms>8241</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a0bd336caf2a4f947</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-metate-portal/7a0555f9-e4e3-4f91-807b-cdf788de0728/tasks/a0bd336caf2a4f947.output</output-file>
+<status>completed</status>
+<summary>Agent "Expert review: Tech Writer" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>{
+  "expertRole": "Boring Tech Writer",
+  "score": 74,
+  "dimensions": {
+    "alignment": 15,
+    "completeness": 14,
+    "typeSafety": 16,
+    "testability": 16,
+    "simplicity": 13
+  },
+  "verdict": "needs-revision",
+  "findings": [
+    "The new outcome is named four different ways across the contract the plan writes: the routing literal `exit ... with status \"ready\"`, the exit template `Status: READY_FOR_REVIEW`, run's Completion `Status: &lt;ready_for_review/...&gt;`, and the prose phrase \"ready for human review\". A reader grepping for the outcome cannot tell these are one state, and the contract test pins two of the variants, freezing the inconsistency. Pick one token (the template's `READY_FOR_REVIEW` is the one users see) and use it in routing text, run's Completion, background-mode.md, README, and docs/05; keep \"ready for human review\" only as the descriptive gloss.",
+    "The Ready exit message contradicts itself for two of its own listed states. Readiness criterion 3 admits a `CHANGES_REQUESTED` review that pr-resolve has answered, so the template can print `Status: READY_FOR_REVIEW` alongside `Human review: changes requested on this head, all threads answered` while GitHub shows the PR as Changes Requested; and with the §1.2 no-reviewers prompt now gated behind `--wait-for-approval`, the default path prints \"ready for human review\" together with `Human review: not requested` and gives no instruction to request one. Either narrow the readiness criteria so the headline is literally true, or reword the headline per state (e.g. \"Agent work complete; awaiting re-review\" / \"...; no reviewer requested\") and add the matching next step to the follow-up line.",
+    "The plan does not state which completion policy `run` uses or how its callers opt into the old behaviour. Step 3 currently says pr-monitor \"waits for approval or merge\"; the plan replaces the Completion status with `ready_for_review/approved/merged` (implying run invokes pr-monitor without `--wait-for-approval`) but never says so, and linear-run/run-primed inherit run's chain by link with no way to pass the flag. Similarly reviewTip.ts is listed as a file to touch with no target wording, and the proposed frontmatter drops the existing `Use when ...` trigger clause, which RFC-0002 portability depends on for skill routing. State explicitly: run calls pr-monitor without the flag, the flag is a pr-monitor-only option, the exact reviewTip.ts sentence, and restore a `Use when` clause.",
+    "\"Automated review complete\" appears in the Summary and in the Ready template (\"Checks and automated review complete for &lt;head-sha&gt;\") but none of the four Readiness Check criteria establishes it: 2 covers CI checks, 3 covers CHANGES_REQUESTED reviews, 4 covers unanswered threads. Whether the code-review-action surfaces as a check or as a review is not in the excerpt, so this is unverifiable; the plan should say which criterion satisfies the claim or drop the phrase from the template so the message does not assert something the procedure never checks.",
+    "Minor, stacked: (a) SKILL.md is at 17,538 of an 18,000-byte budget and the plan adds a shared Readiness Check section, a new exit template, flag handling, and Edge Cases, then plans to \"bump budget if needed\" — the budget exists to force trimming, so name what gets condensed instead; (b) step 6 preserves the docs/05 pinned clause but does not mention the README pinned clause \"Detects a conflicting branch and rebases it onto its base\", which the rewritten pr-monitor entry must keep verbatim; (c) run's Completion still prints `Autopilot complete.` when the status is ready_for_review — pair it with the Post-Implementation wording (\"approval and merge are asynchronous follow-ups\") so the two outputs agree on what \"complete\" means."
+  ],
+  "grounding": [
+    "plan text",
+    "Context Map excerpt: pr-monitor frontmatter and Phase 3 exit templates, README pr-monitor/run entries and pinned test clauses, docs/05 legend/flow/Monitor bullet, run Step 3 and Completion block, Post-Implementation purity constraint, reviewTip.ts string, RFC-0001/0002 notes, linear-run/run-primed inheritance note"
+  ],
+  "revision": {
+    "changed": "Unify the outcome name to a single token (READY_FOR_REVIEW) across routing literals, run Completion, background-mode.md, README, docs/05, and the contract test. Rewrite the Ready template so the headline is true per state: drop 'ready for human review' when the head has CHANGES_REQUESTED or no reviewer requested, and add the concrete next step (request a reviewer / await re-review) to the follow-up line. Add to Design: run invokes pr-monitor without --wait-for-approval; the flag is pr-monitor-only; give the exact replacement sentence for reviewTip.ts; restore a 'Use when ...' clause in the frontmatter description. Either add an explicit 'automated review completed' criterion to the Readiness Check (naming how it is detected) or remove 'automated review complete' from the template. In step 3, name the sections to condense rather than bumping the byte budget; in step 6, list the README pinned clause as preserved; align run's 'Autopilot complete.' line with the asynchronous-follow-up wording."
+  }
+}</result>
+<usage><subagent_tokens>15482</subagent_tokens><tool_uses>0</tool_uses><duration_ms>48224</duration_ms></usage>
+</task-notification>

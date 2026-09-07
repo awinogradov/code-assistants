@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "ce9f7c416776",
+  "strategy": "manual-commit",
+  "branch": "issue-656-monitor-ready-handoff",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".github/actions/code-review-action/src/reviewTip.ts",
+    ".github/actions/code-review-action/src/skillBodyBudget.test.ts",
+    "claude-plugins/autopilot/skills/pr-monitor/SKILL.md",
+    "claude-plugins/autopilot/skills/pr-monitor/references/background-mode.md",
+    "claude-plugins/autopilot/skills/run/SKILL.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/ce/9f7c416776/0/metadata.json",
+      "transcript": "/ce/9f7c416776/0/full.jsonl",
+      "compact_transcript": "/ce/9f7c416776/0/transcript.jsonl",
+      "content_hash": "/ce/9f7c416776/0/content_hash.txt",
+      "prompt": "/ce/9f7c416776/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 952,
+    "cache_creation_tokens": 265876,
+    "cache_read_tokens": 7546351,
+    "output_tokens": 95881,
+    "api_call_count": 40
+  }
+}
