@@ -61,7 +61,7 @@ const budgets: Record<string, number> = {
   plan: 15000,
   "pr-answer": 11000,
   "pr-create": 15500,
-  "pr-monitor": 18000,
+  "pr-monitor": 22500,
   "pr-resolve": 17000,
   "pr-review": 58000,
   "pr-update": 10000,

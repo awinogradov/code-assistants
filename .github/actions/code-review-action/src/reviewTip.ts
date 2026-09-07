@@ -64,7 +64,7 @@ export const reviewTips: readonly ReviewTip[] = [
   },
   {
     id: "pr-monitor",
-    text: "The [pr-monitor skill](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/pr-monitor/SKILL.md) babysits a PR — run `/autopilot:pr-monitor` and it fixes CI and resolves feedback until approval.",
+    text: "The [pr-monitor skill](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/pr-monitor/SKILL.md) babysits a PR — run `/autopilot:pr-monitor` and it fixes CI and resolves feedback until the PR is ready for human review.",
   },
   {
     id: "pr-update",

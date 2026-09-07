@@ -10,6 +10,7 @@ When invoked via the Agent tool with `run_in_background: true` (spawned by [Phas
 - **Do NOT attempt to fix CI checks** — the user is not available for interaction and fixes may require judgment calls
 - **Do NOT rebase, resolve, or push** — a history rewrite has no one to authorize it here; the [Conflict Sweep](../SKILL.md#conflict-sweep-shared-procedure) returns the summary below instead of acting
 - **Do NOT use** `AskUserQuestion` — no user interaction in background mode
+- The [Readiness Check](../SKILL.md#readiness-check-shared-procedure) still runs, with the review-thread helper as its only feedback source: an unanswered thread or a `CHANGES_REQUESTED` review bound to the head returns the Changes Requested summary below instead of invoking pr-resolve
 - When changes are requested or new actionable review comments are detected, **return immediately** with a structured summary instead of invoking pr-resolve:
 
   ```
@@ -48,4 +49,4 @@ When invoked via the Agent tool with `run_in_background: true` (spawned by [Phas
   Run /autopilot:pr-monitor in the foreground to rebase the branch onto its base.
   ```
 
-- For approved/merged/closed, return the same [Phase 3](../SKILL.md#phase-3-exit) exit message as foreground mode
+- For ready (`Status: READY_FOR_REVIEW`), approved, merged, and closed, return the same [Phase 3](../SKILL.md#phase-3-exit) exit message as foreground mode

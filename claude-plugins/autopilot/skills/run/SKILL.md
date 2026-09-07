@@ -141,7 +141,7 @@ Once every step above is done and verified, the rest runs automatically, with no
 1. Update any `README.md`, `docs/*`, and `rfc/*` this change affects. Editing the content of an Accepted RFC also means bumping its `version` frontmatter and adding a Changelog entry.
 2. Commit the change and push the branch.
 3. Open a pull request, or update the existing one.
-4. Monitor the pull request until the review approves it or it merges, addressing review feedback as it arrives.
+4. Monitor the pull request until it is ready for human review, addressing review feedback as it arrives; approval and merge are asynchronous follow-ups.
 ```
 
 For a no-repository-change candidate, replace it with this body instead:
@@ -205,19 +205,21 @@ Output the PR URL. Set task 7 to `completed`.
 
 #### Step 3: Monitor PR
 
-Set task 8 ("Monitor PR") to `in_progress`. Invoke `Skill(autopilot:pr-monitor)` in foreground mode (do NOT use the Agent tool with run_in_background). It polls for review status, invokes pr-resolve interactively if changes are requested, and waits for approval or merge.
+Set task 8 ("Monitor PR") to `in_progress`. Invoke `Skill(autopilot:pr-monitor)` in foreground mode (do NOT use the Agent tool with run_in_background) and without `--wait-for-approval`. It polls CI, review, and mergeability status, invokes pr-resolve interactively when feedback needs answering, and returns as soon as its [Readiness Check](../pr-monitor/SKILL.md#readiness-check-shared-procedure) passes for the current head (`READY_FOR_REVIEW`), or earlier on approval or merge; approval and merge are asynchronous follow-ups, not part of this chain's wait.
 
 **Autopilot override for pr-resolve:** when pr-monitor invokes pr-resolve and it presents the review-action gate via AskUserQuestion, auto-select "Address all". Replies post without prompting.
 
 #### Completion
 
-Set task 8 to `completed`. Output:
+Set task 8 to `completed`. Output the monitor's status verbatim:
 
 ```
 Autopilot complete.
 PR: <pr-url>
-Status: <approved/merged>
+Status: <READY_FOR_REVIEW/APPROVED/MERGED>
 ```
+
+When the monitor stopped instead — `CHANGES_REQUESTED` or `CONFLICTED` — output `Autopilot stopped.` with that status and the monitor's reason line; the work is not delivered.
 
 ### Persist the plan to Linear
 
