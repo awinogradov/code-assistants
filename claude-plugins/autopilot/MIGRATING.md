@@ -1,5 +1,11 @@
 # MIGRATING
 
+## From 7.5.1 to 8.0.0
+
+### Breaking changes
+
+- `/autopilot:pr-monitor` no longer blocks until a human approves. It ends with `Status: READY_FOR_REVIEW` once the current head's checks have settled and no review feedback stands unanswered, and stops with `Status: CHANGES_REQUESTED` when a reviewer's verdict on that head survives a `pr-resolve` pass without code changes. `/autopilot:run`, `/autopilot:run-primed`, and `/autopilot:linear-run` inherit this, so an autonomous session now ends at the hand-off and prints `Status: READY_FOR_REVIEW` instead of waiting. Pass `--wait-for-approval` to `/autopilot:pr-monitor` to keep the previous behaviour; later human feedback is handled by running the monitor again or `/autopilot:pr-resolve`. The skill's frontmatter gains `Bash(node *)` for the bundled review-thread helper.
+
 ## From 4.x to 5.0.0
 
 ### Breaking changes

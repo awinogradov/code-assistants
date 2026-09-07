@@ -221,7 +221,7 @@ Perform deep analysis and create a validated implementation plan. Detects tech s
 
 ### `/autopilot:run`
 
-Plan and implement without a plan-approval pause, then select one of two terminal paths. A task whose verified plan explicitly requires no repository edits reports `Outcome: no_repository_change`; a repository change is committed, opened as a PR, and monitored for review approval. A Linear-issue input additionally gets the finalized plan stored on its ticket before implementation — the same stored format `/autopilot:linear-plan` writes; see [the linear-plan skill](../../docs/16-linear-plan-skill.md). Uses the [codebase context snapshot](#codebase-context-snapshot). See [how the plan and run skills work](../../docs/05-plan-run-skills.md#how-run-differs-automated-post-implementation) for the terminal-path contract.
+Plan and implement without a plan-approval pause, then select one of two terminal paths. A task whose verified plan explicitly requires no repository edits reports `Outcome: no_repository_change`; a repository change is committed, opened as a PR, and monitored until it is ready for human review. A Linear-issue input additionally gets the finalized plan stored on its ticket before implementation — the same stored format `/autopilot:linear-plan` writes; see [the linear-plan skill](../../docs/16-linear-plan-skill.md). Uses the [codebase context snapshot](#codebase-context-snapshot). See [how the plan and run skills work](../../docs/05-plan-run-skills.md#how-run-differs-automated-post-implementation) for the terminal-path contract.
 
 ```bash
 /autopilot:run #42                                                      # From GitHub issue
@@ -330,10 +330,11 @@ Address PR review comments. Fetches review feedback, categorizes by severity, ma
 
 ### `/autopilot:pr-monitor`
 
-Monitor a PR for review approval and CI check status. Blocks until approved with all checks passing, automatically resolving review feedback and fixing CI failures. Detects a conflicting branch and rebases it onto its base the sanctioned way, reporting and stopping when the rebase cannot complete cleanly.
+Monitor a PR for CI check status and review feedback until it is ready for human review: checks settled for the current head, no unanswered feedback, no conflict. Resolves review feedback and fixes CI failures along the way, then ends with `Status: READY_FOR_REVIEW` — human approval and merge are asynchronous follow-ups, handled by running the monitor again or `/autopilot:pr-resolve` when feedback arrives. Pass `--wait-for-approval` to keep the previous behaviour of blocking until a human approves with all checks passing. Detects a conflicting branch and rebases it onto its base the sanctioned way, reporting and stopping when the rebase cannot complete cleanly.
 
 ```bash
 /autopilot:pr-monitor
+/autopilot:pr-monitor --wait-for-approval
 ```
 
 ### `/autopilot:pr-validate`
