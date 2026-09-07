@@ -54,7 +54,7 @@ The two skills share the same front half. `plan` produces the plan and stops, as
 - ③ Steelmanned intent, assumptions, and open questions — the human gate, now asked with the code already understood.
 - ④ Branch and worktree state read from the Context Map; `preflight-check` handles only what the map cannot settle.
 - ⑤ The shared pipeline: draft, review and score, finalize (see [The shared pipeline](#the-shared-pipeline)).
-- ⑥ `run` only: verify a no-repository-change result, or commit → PR → monitor until approved (see [How run differs](#how-run-differs-automated-post-implementation)).
+- ⑥ `run` only: verify a no-repository-change result, or commit → PR → monitor until ready for human review (see [How run differs](#how-run-differs-automated-post-implementation)).
 
 ## One fan-out, then decide
 
@@ -287,7 +287,7 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
               └──────────────────┘                            ▼
                                                     ┌──────────────────┐
                                                     │ Monitor until    │
-                                                    │ approved/merged  │
+                                                    │ ready for review │
                                                     └──────────────────┘
 ```
 
@@ -296,7 +296,7 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
 - **No repository change** — available only when the finalized plan explicitly says no repository files must change, every step and `verify:` line passed, and the worktree, diff, and topic-commit checks are empty. An empty diff alone is never evidence of completion. This path emits `Outcome: no_repository_change` and performs no branch, commit, push, PR, or monitoring action.
 - **Auto-Commit** — `Skill(autopilot:commits-create)` with `--autopilot`, then `git push`.
 - **Auto-Create PR** — `Skill(autopilot:pr-create)` with `--autopilot`, then a format check on the result.
-- **Monitor** — `Skill(autopilot:pr-monitor)` polls CI, review, and mergeability status; on changes-requested it runs `pr-resolve` (auto "Address all") and loops until approval; on a conflicting branch it runs the Conflict Sweep and exits reporting the conflict if the rebase cannot complete.
+- **Monitor** — `Skill(autopilot:pr-monitor)` polls CI, review, and mergeability status; on actionable feedback it runs `pr-resolve` (auto "Address all"); it returns `READY_FOR_REVIEW` once the current head's checks have settled and no feedback stands unanswered — the run ends there, and human approval and merge are asynchronous follow-ups; on a conflicting branch it runs the Conflict Sweep and exits reporting the conflict if the rebase cannot complete.
 - Direct `gh pr create` / `git commit` are forbidden in autopilot mode — everything routes through the sub-skills so format stays correct.
 
 There are two variants of this flow, each replacing a different half of it. [`/autopilot:run-primed`](./15-run-primed-skill.md) keeps every phase above and replaces only the context gather, reading a SHA-validated [explore brief](./14-explore-skill.md) instead of re-mapping the repository. [`/autopilot:linear-run`](./17-linear-run-skill.md) keeps terminal selection and replaces the draft-and-review half, executing a plan that [`/autopilot:linear-plan`](./16-linear-plan-skill.md) stored on a Linear issue earlier — possibly in another session, for another person to read first. Both variants inherit the same no-change checks and repository-delivery chain instead of copying them. The paths differ in who reads the plan before it runs: `run` on a Linear input stores the plan and executes it in the same breath, while `linear-plan` → `linear-run` puts a teammate between store and execution — pick the pair when the plan should be read on the ticket first.
