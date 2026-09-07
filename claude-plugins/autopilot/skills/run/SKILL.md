@@ -39,7 +39,7 @@ allowed-tools:
   - Skill(autopilot:pr-create)
 ---
 
-Plan and implement a task, then finish through one of two terminal paths: report a verified no-repository-change outcome, or commit, create a PR, and monitor until approved. Extended version of `/autopilot:plan` that automates the post-implementation steps.
+Plan and implement a task, then finish through one of two terminal paths: report a verified no-repository-change outcome, or commit, create a PR, and monitor until it is ready for human review. Extended version of `/autopilot:plan` that automates the post-implementation steps.
 
 **Difference from `/autopilot:plan`:** invoking `/autopilot:run` authorizes the entire flow up front — there is **no plan-approval gate**. Autopilot plans and implements without pausing, then either proves that the completed task required no repository change or delivers the repository change through a monitored PR. (`/autopilot:plan` has two gates: it stops to get the plan approved, then asks again before creating a PR.)
 
