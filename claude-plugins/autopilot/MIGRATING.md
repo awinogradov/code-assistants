@@ -78,3 +78,9 @@
 ### Breaking changes
 
 - _Document migration steps here._
+
+## From 7.5.2 to 8.0.0
+
+### Breaking changes
+
+- pr-monitor no longer blocks until a human approves; run,

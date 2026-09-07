@@ -2,6 +2,57 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [8.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.5.2...autopilot@v8.0.0) (2026-09-07)
+
+## Release Notes
+
+`pr-monitor` now exits at `READY_FOR_REVIEW` by default instead of blocking on human approval — pass `--wait-for-approval` to restore the previous behaviour.
+
+## ✨ What's New
+
+- `run`, `run-primed`, and `linear-run` complete at `READY_FOR_REVIEW` once checks settle and all threads are answered, so autonomous delivery pipelines no longer stall waiting for a human reviewer; re-run `/autopilot:pr-monitor` or `/autopilot:pr-resolve` to handle later feedback.
+
+<details><summary>Related issues</summary>
+
+- [#656: Stop PR monitoring after autonomous delivery without waiting for human review](https://github.com/awinogradov/code-assistants/issues/656)
+</details>
+
+## ⚠️ Breaking Changes
+
+### pr-monitor exits at READY_FOR_REVIEW instead of waiting for approval
+
+`pr-monitor` previously blocked until a human approved the PR; it now ends as soon as checks have settled and no review thread is unanswered, exiting with `Status: READY_FOR_REVIEW`. Any automation or workflow that relied on the agent completing only after approval will stop receiving that signal.
+
+**Migration steps:**
+
+1. Audit any scripts or CI jobs that treat a `pr-monitor` exit as "PR approved" — they must now check the status output explicitly.
+2. Pass `--wait-for-approval` to `/autopilot:pr-monitor` (and to `run`, `run-primed`, or `linear-run` if you invoke them with monitoring) to restore the previous blocking behaviour.
+3. To handle subsequent reviewer feedback, schedule a follow-up run of `/autopilot:pr-monitor` or `/autopilot:pr-resolve` after the PR receives human review.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #656 | [#657](https://github.com/awinogradov/code-assistants/pull/657) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **pr-monitor:** pr-monitor no longer blocks until a human approves; run,
+run-primed, and linear-run end at READY_FOR_REVIEW. Pass --wait-for-approval
+to keep the previous behaviour.
+
+Claude-Session: https://claude.ai/code/session_01BgoWVafn1Jxhdd2HdQBkJ9
+Entire-Checkpoint: ce9f7c416776
+
+### Features
+
+* **pr-monitor:** exit at ready-for-review hand-off ([71ee4f7](https://github.com/awinogradov/code-assistants/commit/71ee4f77cf801d52b4b663a8a77f2db3cf79bf16))
+
+### Documentation
+
+* **autopilot:** describe ready-for-review outcome ([2b8f952](https://github.com/awinogradov/code-assistants/commit/2b8f9523b69272913b59ddf67e46f328e6a458d6))
+* **run:** align intro with ready-for-review hand-off ([94a690d](https://github.com/awinogradov/code-assistants/commit/94a690df7dfd29422a0b731a4641553048bd7b9a))
 ## [7.5.2](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.5.1...autopilot@v7.5.2) (2026-09-07)
 
 ## Release Notes
