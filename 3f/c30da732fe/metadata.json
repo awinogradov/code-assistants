@@ -1,0 +1,29 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "3fc30da732fe",
+  "strategy": "manual-commit",
+  "branch": "issue-656-monitor-ready-handoff",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "claude-plugins/autopilot/MIGRATING.md",
+    "claude-plugins/autopilot/README.md",
+    "docs/05-plan-run-skills.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/3f/c30da732fe/0/metadata.json",
+      "transcript": "/3f/c30da732fe/0/full.jsonl",
+      "compact_transcript": "/3f/c30da732fe/0/transcript.jsonl",
+      "content_hash": "/3f/c30da732fe/0/content_hash.txt",
+      "prompt": "/3f/c30da732fe/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 952,
+    "cache_creation_tokens": 265876,
+    "cache_read_tokens": 7546351,
+    "output_tokens": 95881,
+    "api_call_count": 40
+  }
+}
