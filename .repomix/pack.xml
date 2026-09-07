@@ -526,6 +526,7 @@ claude-plugins/
       7.4.0.md
       7.5.0.md
       7.5.1.md
+      7.5.2.md
     agents/
       analyze-pr-commits.md
       analyze-staged-changes.md
@@ -48066,7 +48067,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "7.5.1",
+  "version": "7.5.2",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -50917,6 +50918,23 @@ The bundled pdf-create renderer's `js-yaml` dependency is patched to 3.15.2, cle
 ### Bug Fixes
 
 * **autopilot:** bump js-yaml to 3.15.2 in pdf renderer ([b58c9f8](https://github.com/awinogradov/code-assistants/commit/b58c9f846c57414a3ee72ede46e2c7158590fc40))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/7.5.2.md">
+## [7.5.2](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.5.1...autopilot@v7.5.2) (2026-09-07)
+
+## Release Notes
+
+The `pdf-create` skill's renderer dependencies are updated, including `@react-pdf/renderer` 4.9.0 which adds PDF/A conformance support.
+
+## ✨ What's New
+
+- The `pdf-create` skill can now produce PDF/A-1/2/3 (b-level) output by passing a `conformance` prop to the `Document` component, enabling archival-grade PDFs with XMP metadata and sRGB OutputIntent — fonts must be registered (not the standard 14 built-ins) to fully validate.
+
+
+### CI
+
+* **deps:** bump the pdf-create-renderer group ([d29afc6](https://github.com/awinogradov/code-assistants/commit/d29afc6b2dc5d23f10d3e2eedc35d16db94b0bd7))
 </file>
 
 <file path="claude-plugins/autopilot/agents/analyze-pr-commits.md">
@@ -65697,6 +65715,20 @@ Before writing any output that mentions a file, standard, section, commit, or is
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [7.5.2](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.5.1...autopilot@v7.5.2) (2026-09-07)
+
+## Release Notes
+
+The `pdf-create` skill's renderer dependencies are updated, including `@react-pdf/renderer` 4.9.0 which adds PDF/A conformance support.
+
+## ✨ What's New
+
+- The `pdf-create` skill can now produce PDF/A-1/2/3 (b-level) output by passing a `conformance` prop to the `Document` component, enabling archival-grade PDFs with XMP metadata and sRGB OutputIntent — fonts must be registered (not the standard 14 built-ins) to fully validate.
+
+
+### CI
+
+* **deps:** bump the pdf-create-renderer group ([d29afc6](https://github.com/awinogradov/code-assistants/commit/d29afc6b2dc5d23f10d3e2eedc35d16db94b0bd7))
 ## [7.5.1](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.5.0...autopilot@v7.5.1) (2026-09-02)
 
 ## Release Notes
@@ -68519,14 +68551,14 @@ SOFTWARE.
     "test": "bun test lib",
     "clean": "rm -rf node_modules .turbo"
   },
-  "version": "7.5.1"
+  "version": "7.5.2"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v7.5.1-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v7.5.2-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -69040,7 +69072,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-7.5.1
+7.5.2
 </file>
 
 <file path="docs/01-workspace-structure.md">
