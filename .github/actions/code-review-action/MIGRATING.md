@@ -47,3 +47,9 @@
 ### Breaking changes
 
 - _Document migration steps here._
+
+## From 8.1.4 to 9.0.0
+
+### Breaking changes
+
+- pr-monitor no longer blocks until a human approves; run,

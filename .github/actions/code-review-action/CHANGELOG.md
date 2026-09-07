@@ -2,6 +2,54 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [9.0.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v8.1.4...code-review-action@v9.0.0) (2026-09-07)
+
+## Release Notes
+
+`pr-monitor` now exits at `READY_FOR_REVIEW` by default instead of blocking until a human approves, shortening autonomous delivery loops for CI pipelines that chain on monitor completion.
+
+## ✨ What's New
+
+- `pr-monitor` exits with `Status: READY_FOR_REVIEW` once checks have settled and all threads are answered, so autonomous delivery pipelines no longer stall waiting for a human approval gate — pass `--wait-for-approval` to restore the previous blocking behaviour.
+- `pr-monitor` exits with `Status: CHANGES_REQUESTED` when a reviewer's verdict on the current head stands after every thread was answered without code changes, giving pipelines a clear signal to stop retrying.
+- Later human feedback is handled by re-running `/autopilot:pr-monitor` or `/autopilot:pr-resolve`, keeping the handoff model explicit.
+
+<details><summary>Related issues</summary>
+
+- [#656: Stop PR monitoring after autonomous delivery without waiting for human review](https://github.com/awinogradov/code-assistants/issues/656)
+</details>
+
+## ⚠️ Breaking Changes
+
+### `pr-monitor` no longer waits for human approval by default
+
+`run`, `run-primed`, and `linear-run` all end at `READY_FOR_REVIEW` in v9.0.0; any workflow or script that relied on `pr-monitor` blocking until a human approves will now proceed immediately at that point instead.
+
+**Migration:** pass `--wait-for-approval` to `pr-monitor` (and to the `run`, `run-primed`, and `linear-run` entry points that delegate to it) to keep the previous blocking behaviour.
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #656 | [#657](https://github.com/awinogradov/code-assistants/pull/657) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **pr-monitor:** pr-monitor no longer blocks until a human approves; run,
+run-primed, and linear-run end at READY_FOR_REVIEW. Pass --wait-for-approval
+to keep the previous behaviour.
+
+Claude-Session: https://claude.ai/code/session_01BgoWVafn1Jxhdd2HdQBkJ9
+Entire-Checkpoint: ce9f7c416776
+
+### Features
+
+* **pr-monitor:** exit at ready-for-review hand-off ([71ee4f7](https://github.com/awinogradov/code-assistants/commit/71ee4f77cf801d52b4b663a8a77f2db3cf79bf16))
+
+### Tests
+
+* **code-review-action:** guard delivery contract ([db23754](https://github.com/awinogradov/code-assistants/commit/db23754f87ae0416dd79f7a4f4215a6edb14ee32))
 ## [8.1.4](https://github.com/awinogradov/code-assistants/compare/code-review-action@v8.1.3...code-review-action@v8.1.4) (2026-09-02)
 
 ## Release Notes
