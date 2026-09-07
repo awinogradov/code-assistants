@@ -202,6 +202,7 @@ The content is organized as follows:
         planFileOutputPurity.test.ts
         prBodyReferenceFormatting.test.ts
         prConflictContract.test.ts
+        prDeliveryContract.test.ts
         preflightChecks.ts
         preflightSkipComment.test.ts
         preflightSkipComment.ts
@@ -15008,6 +15009,185 @@ describe("the three prose summaries stay in step", () => {
 });
 </file>
 
+<file path=".github/actions/code-review-action/src/prDeliveryContract.test.ts">
+/**
+ * Guards the autonomous-delivery completion contract in pr-monitor and its callers.
+ *
+ * The rule exists because the monitor's only success exit was approval with green
+ * checks, so an autonomous `run` session kept polling every minute after it had done
+ * everything an agent can do: human review is an asynchronous handoff, not unfinished
+ * work. The monitor now ends with a distinct READY_FOR_REVIEW outcome once the current
+ * head's obligations are complete, stops with CHANGES_REQUESTED when a reviewer's
+ * verdict on that head stands after every thread was answered, and keeps the old wait
+ * only behind `--wait-for-approval`.
+ *
+ * Division of responsibility with prConflictContract.test.ts: that file owns the
+ * merge-conflict paths and the CONFLICTING-before-APPROVED ordering. This file asserts
+ * the readiness path — that it exists, that it is proved per head rather than from the
+ * aggregate `reviewDecision`, that both the initial inspection and the polling loop
+ * reach it, and that the callers and prose summaries name the new outcome.
+ *
+ * What this CANNOT prove: that a run actually took two check readings or exited on the
+ * right head. CI sees text in a file, nothing more — the limit every contract test here
+ * states. What it can prove is that the prose still says the things a correct run
+ * depends on, and that an edit which quietly restores the indefinite wait fails first.
+ *
+ * Vacuous-pass defences: every extracted region must be non-empty and above a minimum
+ * length, so a renamed heading cannot extract "" and satisfy a `toContain` against it.
+ */
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
+import { describe, expect, test } from "bun:test";
+
+const actionDir = join(import.meta.dirname, "..");
+const repoRoot = join(actionDir, "..", "..", "..");
+const skillsDir = join(repoRoot, "claude-plugins/autopilot/skills");
+const monitorPath = join(skillsDir, "pr-monitor/SKILL.md");
+const backgroundPath = join(skillsDir, "pr-monitor/references/background-mode.md");
+const runPath = join(skillsDir, "run/SKILL.md");
+const docsPath = join(repoRoot, "docs/05-plan-run-skills.md");
+const readmePath = join(repoRoot, "claude-plugins/autopilot/README.md");
+
+/** Shortest a real extraction can be; anything smaller means it went wrong. */
+const minExtractionLength = 40;
+
+/** The completion-policy flag, asserted as a literal wherever the policy is described. */
+const waitFlag = "--wait-for-approval";
+
+const [monitor, backgroundDoc, run, docs, readme] = await Promise.all([
+  readFile(monitorPath, "utf8"),
+  readFile(backgroundPath, "utf8"),
+  readFile(runPath, "utf8"),
+  readFile(docsPath, "utf8"),
+  readFile(readmePath, "utf8"),
+]);
+
+/** Extract a `### `/`## ` section by heading, up to the next heading of the same or higher level. */
+const section = (source: string, heading: string): string =>
+  new RegExp(`^${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$[\\s\\S]*?(?=^#{1,3} )`, "m").exec(
+    source,
+  )?.[0] ?? "";
+
+const readiness = section(monitor, "### Readiness Check (shared procedure)");
+const earlyExit = section(monitor, "### 1.1 Early Exit Checks");
+const reviewers = section(monitor, "### 1.2 Check for Reviewers");
+const perCycle = section(monitor, "### 2.2 Check PR State");
+const actOnFindings = section(monitor, "### 2.5 Act on Findings");
+const exit = section(monitor, "## Phase 3: Exit");
+const description = /^description: (.+)$/m.exec(monitor)?.[1] ?? "";
+const argumentHint = /^argument-hint: (.+)$/m.exec(monitor)?.[1] ?? "";
+
+describe("extractions are substantial", () => {
+  test.each([
+    ["Readiness Check", readiness],
+    ["§1.1 Early Exit Checks", earlyExit],
+    ["§1.2 Check for Reviewers", reviewers],
+    ["§2.2 Check PR State", perCycle],
+    ["§2.5 Act on Findings", actOnFindings],
+    ["Phase 3 Exit", exit],
+    ["frontmatter description", description],
+  ])("%s extracts a real region", (_name, extracted) => {
+    expect(extracted.length).toBeGreaterThan(minExtractionLength);
+  });
+});
+
+describe("the completion policy is a flag, separate from execution mode", () => {
+  test("the frontmatter names the handoff, the flag, and the trigger", () => {
+    expect(description).toContain("ready for human review");
+    expect(description).toContain("merge conflicts");
+    expect(description).toContain("Use when");
+    expect(argumentHint).toContain("--background");
+    expect(argumentHint).toContain(waitFlag);
+  });
+
+  // The old prompt offered "wait or cancel" to a session that could have finished on
+  // its own. It keeps its purpose only when the caller asked to wait for a human.
+  test("the no-reviewers prompt applies only under the flag", () => {
+    expect(reviewers).toContain(waitFlag);
+  });
+
+  test("the readiness check keeps polling under the flag instead of exiting", () => {
+    expect(readiness).toContain(waitFlag);
+  });
+
+  test("the skill never merges", () => {
+    expect(monitor).toContain("never merges");
+  });
+});
+
+describe("readiness is proved per head", () => {
+  // GitHub's aggregate reviewDecision carries approvals and change requests from
+  // superseded commits, so it can neither prove nor block readiness for this head.
+  test("evidence is bound to the head, never the aggregate decision", () => {
+    expect(readiness).toContain("headRefOid");
+    expect(readiness).toContain("commit_id");
+    expect(readiness).toContain("never the aggregate `reviewDecision`");
+  });
+
+  test("feedback state comes from the review-thread helper", () => {
+    expect(readiness).toContain("fetch-pr-reviews.ts");
+    expect(readiness).toContain("authorReplied");
+  });
+
+  // One reading can pass while the review workflow's check run does not exist yet:
+  // a fast workflow registers and finishes first. Two readings apart close that race.
+  test("checks settle only across two readings", () => {
+    expect(readiness).toContain("two consecutive readings");
+    expect(readiness).toContain("no checks reported");
+  });
+
+  test("the check routes to both terminal exits", () => {
+    expect(readiness).toMatch(/exit to \[Phase 3\]\(#phase-3-exit\) with status "ready-for-review"/);
+    expect(readiness).toMatch(/exit to \[Phase 3\]\(#phase-3-exit\) with status "changes-requested"/);
+  });
+});
+
+describe("both inspection points reach the readiness check", () => {
+  test.each([
+    ["§1.1", earlyExit],
+    ["§2.5", actOnFindings],
+  ])("%s runs the Readiness Check", (_name, branch) => {
+    expect(branch).toContain("Readiness Check");
+  });
+
+  // The per-cycle CHANGES_REQUESTED branch used to re-invoke pr-resolve every minute
+  // on a verdict nothing could change; the readiness check owns that path now.
+  test("§2.2 no longer owns a CHANGES_REQUESTED branch", () => {
+    expect(perCycle).not.toContain("`CHANGES_REQUESTED`");
+  });
+
+  test("Phase 3 has the ready and changes-requested exits", () => {
+    expect(exit).toContain("Status: READY_FOR_REVIEW");
+    expect(exit).toContain("Status: CHANGES_REQUESTED");
+  });
+
+  test("background mode returns the ready exit", () => {
+    expect(backgroundDoc).toContain("READY_FOR_REVIEW");
+  });
+});
+
+describe("the callers and prose summaries stay in step", () => {
+  test("run's chain ends at the handoff and reports it distinctly", () => {
+    expect(run).toContain("READY_FOR_REVIEW");
+    expect(run).toContain("approval and merge are asynchronous follow-ups");
+    expect(run).not.toContain("Status: <approved/merged>");
+  });
+
+  test("the docs Monitor bullet names the handoff and keeps the Conflict Sweep", () => {
+    expect(docs).toContain("ready for human review");
+    expect(docs).toContain("it runs the Conflict Sweep");
+    expect(docs).not.toContain("Monitor until approved/merged");
+  });
+
+  test("the README pr-monitor entry names the handoff, the flag, and the conflict clause", () => {
+    expect(readme).toContain("ready for human review");
+    expect(readme).toContain(waitFlag);
+    expect(readme).toContain("Detects a conflicting branch and rebases it onto its base");
+  });
+});
+</file>
+
 <file path=".github/actions/code-review-action/src/preflightChecks.ts">
 /**
  * Preflight PR check status polling before AI code review.
@@ -16900,7 +17080,7 @@ export const reviewTips: readonly ReviewTip[] = [
   },
   {
     id: "pr-monitor",
-    text: "The [pr-monitor skill](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/pr-monitor/SKILL.md) babysits a PR — run `/autopilot:pr-monitor` and it fixes CI and resolves feedback until approval.",
+    text: "The [pr-monitor skill](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/skills/pr-monitor/SKILL.md) babysits a PR — run `/autopilot:pr-monitor` and it fixes CI and resolves feedback until the PR is ready for human review.",
   },
   {
     id: "pr-update",
@@ -19567,7 +19747,7 @@ const budgets: Record<string, number> = {
   plan: 15000,
   "pr-answer": 11000,
   "pr-create": 15500,
-  "pr-monitor": 18000,
+  "pr-monitor": 22500,
   "pr-resolve": 17000,
   "pr-review": 58000,
   "pr-update": 10000,
@@ -61523,6 +61703,7 @@ When invoked via the Agent tool with `run_in_background: true` (spawned by [Phas
 - **Do NOT attempt to fix CI checks** — the user is not available for interaction and fixes may require judgment calls
 - **Do NOT rebase, resolve, or push** — a history rewrite has no one to authorize it here; the [Conflict Sweep](../SKILL.md#conflict-sweep-shared-procedure) returns the summary below instead of acting
 - **Do NOT use** `AskUserQuestion` — no user interaction in background mode
+- The [Readiness Check](../SKILL.md#readiness-check-shared-procedure) still runs, with the review-thread helper as its only feedback source: an unanswered thread or a `CHANGES_REQUESTED` review bound to the head returns the Changes Requested summary below instead of invoking pr-resolve
 - When changes are requested or new actionable review comments are detected, **return immediately** with a structured summary instead of invoking pr-resolve:
 
   ```
@@ -61561,7 +61742,7 @@ When invoked via the Agent tool with `run_in_background: true` (spawned by [Phas
   Run /autopilot:pr-monitor in the foreground to rebase the branch onto its base.
   ```
 
-- For approved/merged/closed, return the same [Phase 3](../SKILL.md#phase-3-exit) exit message as foreground mode
+- For ready (`Status: READY_FOR_REVIEW`), approved, merged, and closed, return the same [Phase 3](../SKILL.md#phase-3-exit) exit message as foreground mode
 </file>
 
 <file path="claude-plugins/autopilot/skills/pr-monitor/references/ci-remediation.md">
@@ -61663,8 +61844,8 @@ Read [`git-history-policy.md`](../../shared-rules/references/git-history-policy.
 <file path="claude-plugins/autopilot/skills/pr-monitor/SKILL.md">
 ---
 name: pr-monitor
-description: Monitor a PR for review approval, CI check status, and merge conflicts, blocking until approved with all checks passing. Fixes CI failures, resolves review feedback, and rebases a conflicting branch onto its base. Use when waiting for PR approval.
-argument-hint: "[--background]"
+description: Monitor a PR for CI check status, review feedback, and merge conflicts until it is ready for human review, approved, or merged. Fixes CI failures, resolves review feedback, and rebases a conflicting branch onto its base; pass --wait-for-approval to keep polling until a human approves. Use when a pull request is open and needs to reach its hand-off.
+argument-hint: "[--background] [--wait-for-approval]"
 allowed-tools:
   - Read
   - Edit
@@ -61675,6 +61856,7 @@ allowed-tools:
   - Bash(git *)
   - Bash(gh *)
   - Bash(bun *)
+  - Bash(node *)
   - Bash(sleep *)
   - AskUserQuestion
   - Skill(autopilot:pr-resolve)
@@ -61683,12 +61865,13 @@ allowed-tools:
 
 # PR Monitor
 
-Monitor a pull request for review approval and CI check status. Polls review state and CI checks every minute, invokes `pr-resolve` when changes are requested, and automatically fixes CI failures (lint, type errors, test failures). Blocks until the PR is approved with all checks passing.
+Monitor a pull request until the agent's obligations for its current head are complete. Polls review state and CI checks every minute, invokes `pr-resolve` when feedback needs answering, fixes CI failures (lint, type errors, test failures), and ends with a distinct **ready for human review** outcome once checks have settled and no feedback stands against the head. Approval and merge are asynchronous follow-ups, not part of the wait, unless `--wait-for-approval` asks for them. This skill never merges a pull request.
 
 ## When to Use
 
-- When waiting for a PR to be approved before proceeding
+- After opening a PR, to carry it to the hand-off — the `run` chain invokes it this way
 - When a user invokes `/autopilot:pr-monitor` to launch a background monitor
+- With `--wait-for-approval`, when a session must block until a human approves
 
 ## Input
 
@@ -61697,12 +61880,14 @@ Arguments: `$ARGUMENTS`
 Expected flags (all optional):
 
 - `--background` — launch as a background agent (non-interactive mode described below). When omitted and the skill is invoked directly by a user, run foreground mode. When invoked from another skill/agent (e.g., via the Agent tool with `run_in_background: true`), the calling context supplies the background signal — treat that equivalently to `--background`.
+- `--wait-for-approval` — completion policy, independent of the execution mode: keep polling past readiness until the PR is approved with all checks passing, merged, or closed. Without it the [Readiness Check](#readiness-check-shared-procedure) is the terminal test; [`run`](../run/SKILL.md) never passes it.
 
 ## Input resolution
 
 Arguments are optional. Resolve each field:
 
 - **Mode (foreground vs background)** — `$ARGUMENTS` flag → calling context (if invoked via Agent tool with `run_in_background: true`, use background) → default foreground. Do NOT prompt.
+- **Completion policy** — `$ARGUMENTS` flag → default ready-for-review hand-off. Do NOT prompt.
 - **PR number** — detect via `gh pr view --json number,url,headRefName` on the current branch. Abort with a clear message if no PR exists.
 
 ## Phase 0: Mode Dispatch
@@ -61712,7 +61897,7 @@ If `$ARGUMENTS` contains `--background` AND the skill was invoked directly (not 
 ```
 Use the Agent tool with:
 - `subagent_type`: "general-purpose"
-- `prompt`: "Invoke Skill(autopilot:pr-monitor). Monitor the PR in background mode — poll for review approval AND CI check status but do NOT invoke pr-resolve interactively or fix CI checks. Instead, return immediately when changes are requested or checks fail with a structured summary."
+- `prompt`: "Invoke Skill(autopilot:pr-monitor). Monitor the PR in background mode — poll for readiness, review approval AND CI check status but do NOT invoke pr-resolve interactively or fix CI checks. Instead, return immediately when changes are requested or checks fail with a structured summary."
 - `description`: "Monitor PR reviews"
 - `run_in_background`: true
 ```
@@ -61727,11 +61912,11 @@ This skill supports two modes:
 
 ### Foreground Mode (default)
 
-Interactive — blocks the conversation, invokes `pr-resolve` when changes are requested, and automatically fixes CI failures.
+Interactive — blocks the conversation, invokes `pr-resolve` when feedback needs answering, and automatically fixes CI failures.
 
 ### Background Mode
 
-There is no user to interact with, so the skill reports instead of acting: it never invokes [`pr-resolve`](../pr-resolve/SKILL.md), never attempts a CI fix, never rewrites history, and never calls `AskUserQuestion`. On changes requested, new actionable comments, failing checks, or a conflict it returns immediately with a structured summary; approved, merged, and closed return the same [Phase 3](#phase-3-exit) exit message as foreground mode.
+There is no user to interact with, so the skill reports instead of acting: it never invokes [`pr-resolve`](../pr-resolve/SKILL.md), never attempts a CI fix, never rewrites history, and never calls `AskUserQuestion`. On changes requested, unanswered actionable comments, failing checks, or a conflict it returns immediately with a structured summary; ready, approved, merged, and closed return the same [Phase 3](#phase-3-exit) exit message as foreground mode.
 
 Read [`references/background-mode.md`](./references/background-mode.md) for those summary formats before emitting one.
 
@@ -61748,16 +61933,16 @@ This skill receives the following from conversation history:
 Auto-detect the PR from the current branch:
 
 ```bash
-gh pr view --json number,title,url,state,baseRefName,headRefName,headRepositoryOwner,author,reviewDecision,reviewRequests,statusCheckRollup,mergeable
+gh pr view --json number,title,url,state,baseRefName,headRefName,headRefOid,headRepositoryOwner,author,reviewDecision,reviewRequests,statusCheckRollup,mergeable
 ```
 
 If no PR found, abort: "No pull request found for the current branch. Create one first with `/autopilot:pr-create`."
 
-Store PR number, owner/repo (extract from url), title, and state.
+Store PR number, owner/repo (extract from url), title, state, and `headRefOid`.
 
 ### Approval Sweep (shared procedure)
 
-Run whenever `reviewDecision` is `APPROVED` — from the [§1.1](#11-early-exit-checks) pre-loop check or the [§2.2](#22-check-pr-state) per-cycle check. Only the follow-up outputs and continue targets differ, and those stay with each caller.
+Run whenever `reviewDecision` is `APPROVED` — from the [§1.1](#11-early-exit-checks) pre-loop check or the [§2.2](#22-check-pr-state) per-cycle check — and from the [Readiness Check](#readiness-check-shared-procedure) when feedback is actionable. Only the follow-up outputs and continue targets differ, and those stay with each caller.
 
 1. Record current HEAD: `git rev-parse HEAD` → store as `headBefore`
 2. Invoke `Skill(autopilot:pr-resolve)` to evaluate unresolved suggestions and nitpicks. The skill will exit early if no actionable comments remain. For each suggestion:
@@ -61773,6 +61958,15 @@ Run whenever `mergeable` is `CONFLICTING` — from the [§1.1](#11-early-exit-ch
 Every command this skill runs is bound by [`git-history-policy.md`](../shared-rules/references/git-history-policy.md) — the sweep's rebase and lease-pinned push are the policy's one sanctioned synchronization path, and the [§2.2a](#22a-check-ci-status) fix push is a plain fast-forward or nothing. Neither the sweep nor a CI fix may merge the base branch into the pull request.
 
 `mergeable` is `UNKNOWN`, not `CONFLICTING`, whenever GitHub has not finished computing mergeability — the normal reading for the first cycle or two after any push. `UNKNOWN` is a pending state: leave it to the next poll and do not sweep on it.
+
+### Readiness Check (shared procedure)
+
+The default terminal test, run from the [§1.1](#11-early-exit-checks) tail and from [§2.5](#25-act-on-findings) every cycle. It proves the agent's obligations for the **current head** are complete, or names the blocker so the caller keeps polling. Evidence is per head: `headRefOid` from the state read, each review's `commit_id` from the [§2.3](#23-check-for-new-reviews) read, and thread state from the review-thread helper (`fetch-pr-reviews.ts`, invoked per [`github-review-fetch.md`](../shared-rules/references/github-review-fetch.md)). The proof is never the aggregate `reviewDecision`, which carries verdicts from superseded commits.
+
+1. **Fresh** — `cooldownRemaining` is 0 and `mergeable` is not `UNKNOWN`; otherwise not ready.
+2. **Feedback answered** — actionable feedback is a `CHANGES_REQUESTED` review whose `commit_id` equals `headRefOid`, a thread the helper lists with `authorReplied` false, or one whose newest reply in the [§2.4](#24-check-for-new-comments) list is not the PR author's; a non-null `fetchError` is not ready, never "no feedback". On anything actionable, foreground runs [Approval Sweep](#approval-sweep-shared-procedure) steps 1–4 (a push sets the cooldown and the caller keeps polling); when nothing was pushed and a `CHANGES_REQUESTED` review is still bound to the head, the reviewer's decision stands until they re-read: exit to [Phase 3](#phase-3-exit) with status "changes-requested", never loop on it. Background returns its Changes Requested summary instead.
+3. **Checks settled** — two consecutive readings of `gh pr checks` at least 60 seconds apart list the same check names, every one `pass` or `skipping`; [§1.1](#11-early-exit-checks) has no earlier reading, so it takes one, sleeps 60 seconds, and takes another. A "no checks reported" error is an empty reading; when `.github/workflows/` exists, five consecutive empty readings settle as empty and the exit says so. This is also the automated-review proof: a review workflow registers a check on the head, so a review in flight is a pending check and a completed one has posted the verdict step 2 read.
+4. **Ready** — exit to [Phase 3](#phase-3-exit) with status "ready-for-review". Under `--wait-for-approval`, output "PR #N is ready for human review. Waiting for approval as requested." once and keep polling.
 
 ### 1.1 Early Exit Checks
 
@@ -61807,13 +62001,6 @@ This branch is checked before the `reviewDecision` branches below, and the order
    - After fix, output: "CI fixes pushed. Starting monitoring..."
    - Continue to Phase 1.2
 
-**If `reviewDecision` is `CHANGES_REQUESTED`:**
-
-1. Output: "PR #N has changes requested. Invoking resolve-review..."
-2. Invoke `Skill(autopilot:pr-resolve)`
-3. After skill completes, output: "Review feedback addressed. Starting monitoring..."
-4. Continue to Phase 1.2 (do not exit — the PR still needs approval after fixes)
-
 **If checks are failing** (any check in `statusCheckRollup` with `state` that is not `SUCCESS` and not `PENDING` and not `EXPECTED`):
 
 1. Output: "PR #N has failing CI checks. Attempting to fix..."
@@ -61821,36 +62008,27 @@ This branch is checked before the `reviewDecision` branches below, and the order
 3. After fix, output: "CI fixes pushed. Starting monitoring..."
 4. Continue to Phase 1.2
 
+**Otherwise** (including `reviewDecision` of `CHANGES_REQUESTED`, whose feedback the check's step 2 answers): run the [Readiness Check](#readiness-check-shared-procedure). A ready or changes-requested result exits; otherwise output the blocker and continue to Phase 1.2
+
 ### 1.2 Check for Reviewers
 
-If `reviewRequests` is empty (no reviewers assigned), present using AskUserQuestion:
-
-Tool parameters:
-
-- `question`: "No reviewers assigned to PR #N. The monitor will wait but nobody can approve."
-- `header`: "No reviewers"
-- `options`: [
-  { label: "Continue waiting", description: "Poll until reviewers are assigned and approve" },
-  { label: "Cancel", description: "Stop monitoring" }
-  ]
-- `multiSelect`: false
-
-If "Cancel", stop.
+Only under `--wait-for-approval` — without it the monitor completes on its own and the ready exit names the missing reviewer. If `reviewRequests` is empty, ask via AskUserQuestion (header "No reviewers"): no reviewers are assigned to PR #N, so the monitor will wait but nobody can approve — **Continue waiting** (poll until reviewers are assigned and approve) or **Cancel** (stop monitoring). Read [`askuserquestion-format.md`](../shared-rules/references/askuserquestion-format.md) before composing it.
 
 ### 1.3 Start Monitoring
 
-Output: "Monitoring PR #N: \<title\>\nPolling every 1 minute. Watching for review approval and CI check status..."
+Output: "Monitoring PR #N: \<title\>\nPolling every 1 minute. Watching for readiness, review feedback and CI check status..."
 
 ---
 
 ## Phase 2: Polling Loop
 
-Enter a loop that repeats until the PR is approved with all checks passing, merged, or closed.
+Enter a loop that repeats until the [Readiness Check](#readiness-check-shared-procedure) exits, or the PR is approved with all checks passing, merged, closed, or conflicted.
 
 Maintain the following state across iterations:
 
 - `cooldownRemaining`: number of poll cycles to skip CI checks after a fix push (starts at 0; a push sets it to 3 so fresh CI runs have time to replace the stale failures of the superseded commit before checks are read again)
 - `fixAttempts`: map of `checkName → { attempts: number, lastRunId: string }` tracking CI fix attempts
+- `lastCheckNames` and `emptyCheckReadings`: the previous cycle's `gh pr checks` names and the count of consecutive empty readings, for the Readiness Check's settled test
 - `conflictSweeps`: count of [Conflict Sweep](#conflict-sweep-shared-procedure) runs, capped at **2 per `pr-monitor` invocation**. The caller increments it before invoking the sweep, following the Approval Sweep precedent that caller-side bookkeeping stays with the caller. The cap is run-scoped and deliberately **not** keyed to the base SHA: a per-SHA budget is refunded by every new commit to the base, so on an active repository it would fund unbounded force-pushes and CI reruns forever — this skill's original defect reappearing one layer up. Reaching the cap exits to [Phase 3](#phase-3-exit) with status "conflicted".
 
 ### 2.1 Sleep
@@ -61864,7 +62042,7 @@ sleep 60
 ### 2.2 Check PR State
 
 ```bash
-gh pr view <PR_NUMBER> --json state,reviewDecision,statusCheckRollup,mergeable
+gh pr view <PR_NUMBER> --json state,reviewDecision,statusCheckRollup,mergeable,headRefOid
 ```
 
 **If `state` is `MERGED`:**
@@ -61877,7 +62055,7 @@ gh pr view <PR_NUMBER> --json state,reviewDecision,statusCheckRollup,mergeable
 
 **If `mergeable` is `CONFLICTING`:**
 
-Checked before the `reviewDecision` branches for the same load-bearing reason as [§1.1](#11-early-exit-checks). Every outcome below names its destination explicitly — a conflicting pull request must never fall through to [§2.3](#23-check-for-new-reviews), which would resume the silent polling this branch exists to end.
+Checked before the `reviewDecision` branch for the same load-bearing reason as [§1.1](#11-early-exit-checks). Every outcome below names its destination explicitly — a conflicting pull request must never fall through to [§2.3](#23-check-for-new-reviews), which would resume the silent polling this branch exists to end.
 
 1. If `conflictSweeps` has reached 2, output "PR #N still conflicts with \<baseRefName\> after 2 sweeps." and exit to [Phase 3](#phase-3-exit) with status "conflicted"
 2. Output: "PR #N conflicts with \<baseRefName\>. Running the conflict sweep..."
@@ -61894,12 +62072,7 @@ Checked before the `reviewDecision` branches for the same load-bearing reason as
 3. If HEAD unchanged:
    - Exit to [Phase 3](#phase-3-exit) with status "approved"
 
-**If `reviewDecision` is `CHANGES_REQUESTED`:**
-
-1. Output: "Review feedback detected on PR #N. Invoking resolve-review..."
-2. Invoke `Skill(autopilot:pr-resolve)`
-3. After skill completes, output: "Review feedback addressed. Resuming monitoring..."
-4. Continue polling loop (go to 2.1)
+Changes requested are not a branch here: the [Readiness Check](#readiness-check-shared-procedure) at [§2.5](#25-act-on-findings) answers them once per cycle, against the head they were made on.
 
 ### 2.2a Check CI Status
 
@@ -61944,20 +62117,13 @@ Analyze the reviews array. Track the timestamp of each poll iteration to identif
 gh api repos/<OWNER>/<REPO>/pulls/<PR_NUMBER>/comments
 ```
 
-Check for comments with `created_at` timestamps newer than the last poll iteration.
+Check for comments with `created_at` timestamps newer than the last poll iteration, and keep the list: the Readiness Check reads each thread's newest reply from it.
 
 ### 2.5 Act on Findings
 
-**If CHANGES_REQUESTED or new actionable comments found:**
+Run the [Readiness Check](#readiness-check-shared-procedure): the [§2.3](#23-check-for-new-reviews) and [§2.4](#24-check-for-new-comments) findings are its step 2 input, and this cycle's `gh pr checks` reading is compared with `lastCheckNames` for step 3. A ready or changes-requested result exits to [Phase 3](#phase-3-exit). Otherwise:
 
-1. Output: "Review feedback detected on PR #N. Invoking resolve-review..."
-2. Invoke `Skill(autopilot:pr-resolve)`
-3. After skill completes, output: "Review feedback addressed. Resuming monitoring..."
-4. Continue polling loop (go to 2.1)
-
-**If PENDING (no new reviews or comments):**
-
-1. Output: "PR #N: Still waiting for review. Next check in 1 minute."
+1. Output: "PR #N: not ready — \<blocker\>. Next check in 1 minute."
 2. Continue polling loop (go to 2.1)
 
 ---
@@ -61965,6 +62131,19 @@ Check for comments with `created_at` timestamps newer than the last poll iterati
 ## Phase 3: Exit
 
 Output completion message based on exit status:
+
+**Ready for review:**
+
+```
+PR Monitor Complete
+
+PR #N is ready for human review. Checks settled for <head-sha> (<n> passed, <m> skipped); no unanswered feedback.
+Status: READY_FOR_REVIEW
+Reviewers: <requested logins, or "none requested — request one">
+URL: <pr-url>
+
+Approval and merge are asynchronous follow-ups. Later feedback is handled by /autopilot:pr-resolve, or by running /autopilot:pr-monitor again.
+```
 
 **Approved:**
 
@@ -61994,6 +62173,16 @@ PR #N has been closed.
 URL: <pr-url>
 ```
 
+**Changes requested:**
+
+```
+PR Monitor Stopped
+
+PR #N has changes requested on <head-sha> by <login>. Every thread was answered without code changes, so the reviewer's decision stands until they re-review.
+Status: CHANGES_REQUESTED
+URL: <pr-url>
+```
+
 **Conflicted:**
 
 ```
@@ -62015,6 +62204,7 @@ Cases the phases do not already cover:
 - **pr-resolve fails** → report error, ask user via AskUserQuestion: "Resolve review encountered an error. How would you like to proceed?" with options: Retry / Continue monitoring / Cancel
 - **CI fix attempt fails** → report error, ask user in foreground / return summary in background
 - **Fix causes a different failure** → counts as a new attempt for that check
+- **Verdict on the head survives pr-resolve** → exit "changes-requested"; the same verdict must never re-trigger pr-resolve on the next cycle
 - **Rebase halts on conflicting content** → abort it, report the conflicted paths, and offer resolution in foreground only; never leave the tree mid-rebase
 - **Push after a sweep fails for any reason** → report and exit to [Phase 3](#phase-3-exit) with status "conflicted"; never retry, and never retry without the lease
 - **Conflicting PR on a fork, or one the agent does not own** → report and exit "conflicted"; the branch is not the agent's to rewrite
@@ -64329,7 +64519,7 @@ allowed-tools:
   - Skill(autopilot:pr-create)
 ---
 
-Plan and implement a task, then finish through one of two terminal paths: report a verified no-repository-change outcome, or commit, create a PR, and monitor until approved. Extended version of `/autopilot:plan` that automates the post-implementation steps.
+Plan and implement a task, then finish through one of two terminal paths: report a verified no-repository-change outcome, or commit, create a PR, and monitor until it is ready for human review. Extended version of `/autopilot:plan` that automates the post-implementation steps.
 
 **Difference from `/autopilot:plan`:** invoking `/autopilot:run` authorizes the entire flow up front — there is **no plan-approval gate**. Autopilot plans and implements without pausing, then either proves that the completed task required no repository change or delivers the repository change through a monitored PR. (`/autopilot:plan` has two gates: it stops to get the plan approved, then asks again before creating a PR.)
 
@@ -64431,7 +64621,7 @@ Once every step above is done and verified, the rest runs automatically, with no
 1. Update any `README.md`, `docs/*`, and `rfc/*` this change affects. Editing the content of an Accepted RFC also means bumping its `version` frontmatter and adding a Changelog entry.
 2. Commit the change and push the branch.
 3. Open a pull request, or update the existing one.
-4. Monitor the pull request until the review approves it or it merges, addressing review feedback as it arrives.
+4. Monitor the pull request until it is ready for human review, addressing review feedback as it arrives; approval and merge are asynchronous follow-ups.
 ```
 
 For a no-repository-change candidate, replace it with this body instead:
@@ -64495,19 +64685,21 @@ Output the PR URL. Set task 7 to `completed`.
 
 #### Step 3: Monitor PR
 
-Set task 8 ("Monitor PR") to `in_progress`. Invoke `Skill(autopilot:pr-monitor)` in foreground mode (do NOT use the Agent tool with run_in_background). It polls for review status, invokes pr-resolve interactively if changes are requested, and waits for approval or merge.
+Set task 8 ("Monitor PR") to `in_progress`. Invoke `Skill(autopilot:pr-monitor)` in foreground mode (do NOT use the Agent tool with run_in_background) and without `--wait-for-approval`. It polls CI, review, and mergeability status, invokes pr-resolve interactively when feedback needs answering, and returns as soon as its [Readiness Check](../pr-monitor/SKILL.md#readiness-check-shared-procedure) passes for the current head (`READY_FOR_REVIEW`), or earlier on approval or merge; approval and merge are asynchronous follow-ups, not part of this chain's wait.
 
 **Autopilot override for pr-resolve:** when pr-monitor invokes pr-resolve and it presents the review-action gate via AskUserQuestion, auto-select "Address all". Replies post without prompting.
 
 #### Completion
 
-Set task 8 to `completed`. Output:
+Set task 8 to `completed`. Output the monitor's status verbatim:
 
 ```
 Autopilot complete.
 PR: <pr-url>
-Status: <approved/merged>
+Status: <READY_FOR_REVIEW/APPROVED/MERGED>
 ```
+
+When the monitor stopped instead — `CHANGES_REQUESTED` or `CONFLICTED` — output `Autopilot stopped.` with that status and the monitor's reason line; the work is not delivered.
 
 ### Persist the plan to Linear
 
@@ -68448,6 +68640,12 @@ SOFTWARE.
 <file path="claude-plugins/autopilot/MIGRATING.md">
 # MIGRATING
 
+## From 7.5.1 to 8.0.0
+
+### Breaking changes
+
+- `/autopilot:pr-monitor` no longer blocks until a human approves. It ends with `Status: READY_FOR_REVIEW` once the current head's checks have settled and no review feedback stands unanswered, and stops with `Status: CHANGES_REQUESTED` when a reviewer's verdict on that head survives a `pr-resolve` pass without code changes. `/autopilot:run`, `/autopilot:run-primed`, and `/autopilot:linear-run` inherit this, so an autonomous session now ends at the hand-off and prints `Status: READY_FOR_REVIEW` instead of waiting. Pass `--wait-for-approval` to `/autopilot:pr-monitor` to keep the previous behaviour; later human feedback is handled by running the monitor again or `/autopilot:pr-resolve`. The skill's frontmatter gains `Bash(node *)` for the bundled review-thread helper.
+
 ## From 4.x to 5.0.0
 
 ### Breaking changes
@@ -68779,7 +68977,7 @@ Perform deep analysis and create a validated implementation plan. Detects tech s
 
 ### `/autopilot:run`
 
-Plan and implement without a plan-approval pause, then select one of two terminal paths. A task whose verified plan explicitly requires no repository edits reports `Outcome: no_repository_change`; a repository change is committed, opened as a PR, and monitored for review approval. A Linear-issue input additionally gets the finalized plan stored on its ticket before implementation — the same stored format `/autopilot:linear-plan` writes; see [the linear-plan skill](../../docs/16-linear-plan-skill.md). Uses the [codebase context snapshot](#codebase-context-snapshot). See [how the plan and run skills work](../../docs/05-plan-run-skills.md#how-run-differs-automated-post-implementation) for the terminal-path contract.
+Plan and implement without a plan-approval pause, then select one of two terminal paths. A task whose verified plan explicitly requires no repository edits reports `Outcome: no_repository_change`; a repository change is committed, opened as a PR, and monitored until it is ready for human review. A Linear-issue input additionally gets the finalized plan stored on its ticket before implementation — the same stored format `/autopilot:linear-plan` writes; see [the linear-plan skill](../../docs/16-linear-plan-skill.md). Uses the [codebase context snapshot](#codebase-context-snapshot). See [how the plan and run skills work](../../docs/05-plan-run-skills.md#how-run-differs-automated-post-implementation) for the terminal-path contract.
 
 ```bash
 /autopilot:run #42                                                      # From GitHub issue
@@ -68888,10 +69086,11 @@ Address PR review comments. Fetches review feedback, categorizes by severity, ma
 
 ### `/autopilot:pr-monitor`
 
-Monitor a PR for review approval and CI check status. Blocks until approved with all checks passing, automatically resolving review feedback and fixing CI failures. Detects a conflicting branch and rebases it onto its base the sanctioned way, reporting and stopping when the rebase cannot complete cleanly.
+Monitor a PR for CI check status and review feedback until it is ready for human review: checks settled for the current head, no unanswered feedback, no conflict. Resolves review feedback and fixes CI failures along the way, then ends with `Status: READY_FOR_REVIEW` — human approval and merge are asynchronous follow-ups, handled by running the monitor again or `/autopilot:pr-resolve` when feedback arrives. Pass `--wait-for-approval` to keep the previous behaviour of blocking until a human approves with all checks passing. Detects a conflicting branch and rebases it onto its base the sanctioned way, reporting and stopping when the rebase cannot complete cleanly.
 
 ```bash
 /autopilot:pr-monitor
+/autopilot:pr-monitor --wait-for-approval
 ```
 
 ### `/autopilot:pr-validate`
@@ -69903,7 +70102,7 @@ The two skills share the same front half. `plan` produces the plan and stops, as
 - ③ Steelmanned intent, assumptions, and open questions — the human gate, now asked with the code already understood.
 - ④ Branch and worktree state read from the Context Map; `preflight-check` handles only what the map cannot settle.
 - ⑤ The shared pipeline: draft, review and score, finalize (see [The shared pipeline](#the-shared-pipeline)).
-- ⑥ `run` only: verify a no-repository-change result, or commit → PR → monitor until approved (see [How run differs](#how-run-differs-automated-post-implementation)).
+- ⑥ `run` only: verify a no-repository-change result, or commit → PR → monitor until ready for human review (see [How run differs](#how-run-differs-automated-post-implementation)).
 
 ## One fan-out, then decide
 
@@ -70136,7 +70335,7 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
               └──────────────────┘                            ▼
                                                     ┌──────────────────┐
                                                     │ Monitor until    │
-                                                    │ approved/merged  │
+                                                    │ ready for review │
                                                     └──────────────────┘
 ```
 
@@ -70145,7 +70344,7 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
 - **No repository change** — available only when the finalized plan explicitly says no repository files must change, every step and `verify:` line passed, and the worktree, diff, and topic-commit checks are empty. An empty diff alone is never evidence of completion. This path emits `Outcome: no_repository_change` and performs no branch, commit, push, PR, or monitoring action.
 - **Auto-Commit** — `Skill(autopilot:commits-create)` with `--autopilot`, then `git push`.
 - **Auto-Create PR** — `Skill(autopilot:pr-create)` with `--autopilot`, then a format check on the result.
-- **Monitor** — `Skill(autopilot:pr-monitor)` polls CI, review, and mergeability status; on changes-requested it runs `pr-resolve` (auto "Address all") and loops until approval; on a conflicting branch it runs the Conflict Sweep and exits reporting the conflict if the rebase cannot complete.
+- **Monitor** — `Skill(autopilot:pr-monitor)` polls CI, review, and mergeability status; on actionable feedback it runs `pr-resolve` (auto "Address all"); it returns `READY_FOR_REVIEW` once the current head's checks have settled and no feedback stands unanswered — the run ends there, and human approval and merge are asynchronous follow-ups; on a conflicting branch it runs the Conflict Sweep and exits reporting the conflict if the rebase cannot complete.
 - Direct `gh pr create` / `git commit` are forbidden in autopilot mode — everything routes through the sub-skills so format stays correct.
 
 There are two variants of this flow, each replacing a different half of it. [`/autopilot:run-primed`](./15-run-primed-skill.md) keeps every phase above and replaces only the context gather, reading a SHA-validated [explore brief](./14-explore-skill.md) instead of re-mapping the repository. [`/autopilot:linear-run`](./17-linear-run-skill.md) keeps terminal selection and replaces the draft-and-review half, executing a plan that [`/autopilot:linear-plan`](./16-linear-plan-skill.md) stored on a Linear issue earlier — possibly in another session, for another person to read first. Both variants inherit the same no-change checks and repository-delivery chain instead of copying them. The paths differ in who reads the plan before it runs: `run` on a Linear input stores the plan and executes it in the same breath, while `linear-plan` → `linear-run` puts a teammate between store and execution — pick the pair when the plan should be read on the ticket first.
