@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [7.5.2](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.5.1...autopilot@v7.5.2) (2026-09-07)
+
+## Release Notes
+
+The `pdf-create` skill's renderer dependencies are updated, including `@react-pdf/renderer` 4.9.0 which adds PDF/A conformance support.
+
+## ✨ What's New
+
+- The `pdf-create` skill can now produce PDF/A-1/2/3 (b-level) output by passing a `conformance` prop to the `Document` component, enabling archival-grade PDFs with XMP metadata and sRGB OutputIntent — fonts must be registered (not the standard 14 built-ins) to fully validate.
+
+
+### CI
+
+* **deps:** bump the pdf-create-renderer group ([d29afc6](https://github.com/awinogradov/code-assistants/commit/d29afc6b2dc5d23f10d3e2eedc35d16db94b0bd7))
 ## [7.5.1](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.5.0...autopilot@v7.5.1) (2026-09-02)
 
 ## Release Notes
