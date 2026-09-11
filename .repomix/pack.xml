@@ -550,6 +550,7 @@ claude-plugins/
       github/
         fetch-issue.ts
         fetch-pr-reviews.ts
+        fetchIssueReadOnly.test.ts
         issueContext.test.ts
         issueContext.ts
         prWatch.test.ts
@@ -578,7 +579,10 @@ claude-plugins/
         SKILL.md
       branch-create/
         references/
+          examples.md
+          linear-branch.md
           self-assign.md
+          special-prefix-dialog.md
         SKILL.md
       commits-create/
         references/
@@ -716,6 +720,7 @@ claude-plugins/
           checks-surface-correctness.md
           checks-surface-naming-structure.md
           checks-testing.md
+          findings-format.md
         SKILL.md
       pr-update/
         references/
@@ -13060,7 +13065,7 @@ describe("consumers record the shortlist", () => {
  * Pins the review-thread helper's Bash allow rule in action.yml. The helper
  * (claude-plugins/autopilot/lib/github/fetch-pr-reviews.ts) tunnels a read-only
  * `gh api graphql` reviewThreads query past the Bash-layer graphql disallow — a
- * deliberate exception that stays safe only while the single allow rule pins the
+ * deliberate exception that stays safe only while each allow rule pins its
  * script to the literal `${CLAUDE_PLUGIN_ROOT}` path (the trusted installed
  * plugin, set from steps.plugin.outputs.dir). An absolute-path wildcard such as
  * `node /*…/fetch-pr-reviews.ts` would also match the reviewed PR's own untrusted
@@ -13079,9 +13084,13 @@ const allowedToolsLines = actionYml
   .split("\n")
   .filter((line) => line.includes("CLAUDE_ALLOWED_TOOLS:"));
 
-/** The one safe rule — the script is pinned to the literal ${CLAUDE_PLUGIN_ROOT} path. */
-const pinnedHelperRule =
-  'Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.ts":*)';
+/** Trusted helper paths; issue lookup is available only in the review step. */
+const pinnedHelperRule = 'Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.ts":*)';
+
+const githubIssueRule =
+  'Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-issue.ts" --read-only:*)';
+const linearIssueRule = 'Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/linear/fetch-issue.mjs" --review:*)';
+const pinnedRules = new Set([pinnedHelperRule, githubIssueRule, linearIssueRule]);
 
 describe("review-thread helper allowlist", () => {
   test("both Claude steps declare an allowlist", () => {
@@ -13113,12 +13122,20 @@ describe("review-thread helper allowlist", () => {
           line.includes("CLAUDE_ALLOWED_TOOLS:") || line.includes("CLAUDE_DISALLOWED_TOOLS:"),
       );
     const nodeRules = toolsLines.flatMap((line) => line.match(/Bash\(node[^)]*\)/g) ?? []);
-    // The ONLY permitted node rule is the ${CLAUDE_PLUGIN_ROOT}-anchored one. An
+    // Every permitted node rule is pinned to a trusted installed helper. An
     // absolute-path (`node /…`) or wildcard (`node /*…`) rule would also match the
     // reviewed PR's own checkout of the helper file — CHECK-SEC-003.
     for (const rule of nodeRules) {
-      expect(rule).toBe(pinnedHelperRule);
+      expect(pinnedRules.has(rule)).toBe(true);
     }
+  });
+
+  test("only review grants issue helpers, with GitHub read-only mode required", () => {
+    const [review, reaction] = allowedToolsLines;
+    expect(review).toContain(githubIssueRule);
+    expect(review).toContain(linearIssueRule);
+    expect(reaction).not.toContain(githubIssueRule);
+    expect(reaction).not.toContain(linearIssueRule);
   });
 });
 </file>
@@ -14626,7 +14643,16 @@ const sharedReferences = join(skillsDir, "shared-rules/references");
 // generation phase. Reword it only alongside this test.
 const applyInstruction = "reference-formatting rules in [`reference-formatting.md`]";
 
-const skills = ["pr-create", "pr-update", "plan", "gather-context", "run", "issue-create", "linear-create", "pr-review"];
+const skills = [
+  "pr-create",
+  "pr-update",
+  "plan",
+  "gather-context",
+  "run",
+  "issue-create",
+  "linear-create",
+  "pr-review",
+];
 
 describe("output reference-formatting wiring", () => {
   test.each(skills)("%s instructs the body generator to apply RFC-0001", async (skill) => {
@@ -14658,13 +14684,19 @@ describe("linear issue linking (issue #387)", () => {
     expect(content).toContain("shared-rules/references/pr-body-grammar.md");
   });
 
-  test.each(prBodySkills)("%s instructs a bare-reference self-check on the drafted body", async (skill) => {
-    const content = await readFile(join(skillsDir, skill, "SKILL.md"), "utf8");
-    expect(content).toContain("self-check the drafted body");
-  });
+  test.each(prBodySkills)(
+    "%s instructs a bare-reference self-check on the drafted body",
+    async (skill) => {
+      const content = await readFile(join(skillsDir, skill, "SKILL.md"), "utf8");
+      expect(content).toContain("self-check the drafted body");
+    },
+  );
 
   test("pr-review cites the linked ticket as a link built from the issue url", async () => {
-    const content = await readFile(join(skillsDir, "pr-review", "SKILL.md"), "utf8");
+    const content = await readFile(
+      join(skillsDir, "pr-review", "references/findings-format.md"),
+      "utf8",
+    );
     expect(content).toContain("cite it as a markdown link built from");
   });
 
@@ -14685,22 +14717,37 @@ describe("linear issue linking (issue #387)", () => {
 // repo via refs/pull/N/head.
 describe("review body file links", () => {
   const reviewSkill = join(skillsDir, "pr-review", "SKILL.md");
+  const findingsFormat = join(skillsDir, "pr-review", "references/findings-format.md");
+
+  test("loads findings formatting only when findings remain", async () => {
+    const content = await readFile(reviewSkill, "utf8");
+    expect(content).toContain(
+      "Only when findings remain, read [findings-format.md](./references/findings-format.md)",
+    );
+    expect(content).toContain(
+      "Do not load either reference for a skipped review or an empty approval",
+    );
+  });
 
   test("defines the PR blob base from the reviewed head commit", async () => {
     const content = await readFile(reviewSkill, "utf8");
     expect(content).toContain("https://github.com/<REPO>/blob/<headRefOid>");
-    expect(content).toContain("reviewDecision,headRefOid");
+    const metadataFields = content
+      .match(/gh pr view <PR_NUMBER>[^\n]*--json ([\w,]+)/)?.[1]
+      .split(",");
+    expect(metadataFields).toContain("reviewDecision");
+    expect(metadataFields).toContain("headRefOid");
   });
 
   test("templates demonstrate the linked finding-location and anchor forms", async () => {
-    const content = await readFile(reviewSkill, "utf8");
+    const content = await readFile(findingsFormat, "utf8");
     expect(content).toContain("[src/path/to/file.ts:NN](<pr-blob-url>/src/path/to/file.ts#LNN)");
     expect(content).toContain("?plain=1#L");
     expect(content).toContain("#<heading-anchor>");
   });
 
   test("scopes linking to resolvable targets with a pre-emit self-check", async () => {
-    const content = await readFile(reviewSkill, "utf8");
+    const content = await readFile(findingsFormat, "utf8");
     expect(content).toContain("NEVER linked by guess");
     expect(content).toContain("bare 7–40-char hex token");
   });
@@ -14709,7 +14756,7 @@ describe("review body file links", () => {
   // backticked forms (inline-comment own anchor, the NOT `processor.ts:66` contrast)
   // must not trip them.
   test("the backticked finding-location templates do not resurface", async () => {
-    const content = await readFile(reviewSkill, "utf8");
+    const content = await readFile(findingsFormat, "utf8");
     expect(content).not.toContain("- `src/path/to/file.ts:NN` -");
     expect(content).not.toContain("`src/webhooks/payment.ts:45`");
     expect(content).not.toContain("`src/webhooks/payment.ts:62`");
@@ -14721,7 +14768,7 @@ describe("review body file links", () => {
   // no example modeled an in-prose mention. These pin the broadened self-check plus a worked
   // example that links a no-line mention while sparing a glob code specimen.
   test("links no-line prose/summary mentions while sparing code-specimen paths", async () => {
-    const content = await readFile(reviewSkill, "utf8");
+    const content = await readFile(findingsFormat, "utf8");
     // self-check broadened: covers no-line mentions and the summary sentence
     expect(content).toContain("with OR without a line number");
     expect(content).toContain("including the summary sentence");
@@ -15838,9 +15885,7 @@ describe("primed brief contract", () => {
   });
 
   test.each(rejectingVerdicts)("the %s verdict carries an actionable message", (verdict) => {
-    const message = runPrimed
-      .split("\n")
-      .find((line) => line.startsWith(`- ${verdict} —`));
+    const message = runPrimed.split("\n").find((line) => line.startsWith(`- ${verdict} —`));
     expect(`${verdict}: ${message ?? "<no message line>"}`).toContain("/autopilot:run");
   });
 
@@ -15870,6 +15915,14 @@ describe("primed brief contract", () => {
     for (const value of ["`task`", "`broad`", "`primed`"]) {
       expect(`Scope bullet: ${scope ?? "<absent>"}`).toContain(value);
     }
+  });
+
+  test("broad acquisition omits unused history and the branch digest", () => {
+    expect(gatherContext).toContain(
+      "**Broad scope:** skip the Entire settings read, history agent, and branch-digest helper",
+    );
+    expect(gatherContext).toContain("none — caller-owned volatile refresh");
+    expect(gatherContext).toContain("none — not requested");
   });
 
   test("ordinary run is unchanged — it still gathers context and knows no brief", () => {
@@ -16700,7 +16753,7 @@ describe("review-context-bundle contract", () => {
     expect(skill).toContain(`\`version\` field equals \`${bundleVersion}\``);
   });
 
-  test("the bundle substitutes data acquisition only, with both paths sharing §1.3", () => {
+  test("the bundle substitutes data acquisition only, with both paths sharing §1.2", () => {
     expect(skill).toContain("substitutes for data acquisition only");
     expect(skill).toContain("This decision procedure is the same on both data paths");
   });
@@ -16720,9 +16773,9 @@ describe("review-context-bundle contract", () => {
 
   test("the legacy discovery sections survive as the fallback path", () => {
     expect(skill).toContain("### 1.1 PR Context");
-    expect(skill).toContain("### 1.2 Load Context via Sub-Agents");
+    expect(skill).toContain("### 1.3 Load Supporting Context");
     expect(skill).toContain(
-      "run [§1.1](#11-pr-context)–[§1.2](#12-load-context-via-sub-agents) unchanged",
+      "then classify the round before acquiring its surface or supporting context",
     );
   });
 
@@ -16742,10 +16795,10 @@ describe("review-context-bundle contract", () => {
 /**
  * Guards the review-round contract (issue #622) across its three holders: the
  * substantive-anchor predicate (`buildReviewContext.ts`), the pr-review skill
- * prose that owns round policy (SKILL.md §1.3 plus the §1.0 routing bullet and
+ * prose that owns round policy (SKILL.md §1.2 plus the §1.0 routing bullet and
  * the Graphify boundary), and the publication binding (`submitReview.ts`
  * `commit_id`). The predicate is pinned twice on purpose — behaviorally via
- * `isSubstantiveReview` and textually via the §1.3 prose — because the two
+ * `isSubstantiveReview` and textually via the §1.2 prose — because the two
  * encodings live in different files and either drifting alone silently splits
  * anchor selection between the builder and the skill, which is the exact
  * failure the issue exists to remove.
@@ -16774,7 +16827,7 @@ const submitPath = join(actionDir, "src", "submitReview.ts");
 const minDocLength = 1000;
 
 /**
- * The substantive-anchor taxonomy: [state, body, substantive]. §1.3 prose and
+ * The substantive-anchor taxonomy: [state, body, substantive]. §1.2 prose and
  * the builder predicate must agree on every row.
  */
 const anchorTaxonomy: Array<[string, string | null, boolean]> = [
@@ -16788,7 +16841,7 @@ const anchorTaxonomy: Array<[string, string | null, boolean]> = [
   ["DISMISSED", "old blocker text", false],
 ];
 
-/** The four state-machine arms §1.3 must name, one guarded phrase each. */
+/** The four state-machine arms §1.2 must name, one guarded phrase each. */
 const stateMachineArms = [
   "No substantive prior review",
   "Review skipped: no commits since the reviewed head",
@@ -16830,7 +16883,7 @@ describe("substantive-anchor predicate", () => {
 });
 
 describe("round state machine", () => {
-  test.each(stateMachineArms)("§1.3 names the arm: %s", (arm) => {
+  test.each(stateMachineArms)("§1.2 names the arm: %s", (arm) => {
     expect(skill).toContain(arm);
   });
 
@@ -16846,6 +16899,25 @@ describe("round state machine", () => {
     expect(skill).toContain("round-surface:");
     expect(skill).toContain("round-surface-fallback:");
     expect(skill).toContain("never review a silently truncated patch");
+  });
+});
+
+describe("review acquisition order", () => {
+  test("round selection precedes supporting context", () => {
+    const round = skill.indexOf("### 1.2 Review Round Handling");
+    const context = skill.indexOf("### 1.3 Load Supporting Context");
+    expect(round).toBeGreaterThan(0);
+    expect(context).toBeGreaterThan(round);
+    const metadata = skill.slice(skill.indexOf("### 1.1 PR Context"), round);
+    expect(metadata).not.toContain("gh pr diff");
+    expect(skill).toContain("An identical-head skip returns immediately without diff");
+  });
+
+  test("issue lookup is direct and read-only", () => {
+    expect(skill).toContain('fetch-issue.ts" --read-only');
+    expect(skill).toContain("lib/linear/fetch-issue.mjs");
+    expect(skill).not.toContain("subagent_type");
+    expect(skill).toContain("head_limit: 20");
   });
 });
 
@@ -21233,12 +21305,13 @@ runs:
           ${{ inputs.review_prompt }} REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} PR_AUTHOR: ${{ steps.pr.outputs.author }} RULES_DOC_URL: ${{ inputs.rules_doc_url }} CONTEXT_BUNDLE: ${{ steps.bundle.outputs.path }}
         CLAUDE_RUN_MODE: review
         CLAUDE_MODEL: ${{ inputs.model }}
-        # The single Bash(node …) rule permits ONLY the bundled read-only review-thread helper at the
+        # These Bash(node …) rules permit ONLY bundled read-only review/issue helpers at the
         # literal ${CLAUDE_PLUGIN_ROOT} path (set below from the trusted plugin-install output), so it can
         # never match the reviewed PR's own checkout of that file — no absolute-path wildcard, no -e/--require
         # flag injection. The helper intentionally performs the read-only reviewThreads GraphQL query that the
-        # direct Bash(gh api graphql:*) disallow blocks — a reviewed exception, not an accident.
-        CLAUDE_ALLOWED_TOOLS: 'Bash(gh:*),Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.ts":*),mcp__repomix__*,mcp__context7__*,mcp__Ref__*,mcp__exa__*,mcp__perplexity__*,Read,Glob,Grep'
+        # direct Bash(gh api graphql:*) disallow blocks. The issue helper requires --read-only,
+        # which rejects --assign before I/O; no general node permission is granted.
+        CLAUDE_ALLOWED_TOOLS: 'Bash(gh:*),Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.ts":*),Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-issue.ts" --read-only:*),Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/linear/fetch-issue.mjs" --review:*),mcp__repomix__*,mcp__context7__*,mcp__Ref__*,mcp__exa__*,mcp__perplexity__*,Read,Glob,Grep'
         CLAUDE_DISALLOWED_TOOLS: "Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh issue comment:*),Bash(gh api * -X *:*),Bash(gh api * --method *:*),Bash(gh api * -f *:*),Bash(gh api * -F *:*),Bash(gh api * --field *:*),Bash(gh api * --raw-field *:*),Bash(gh api * --input *:*),Bash(gh api graphql:*)"
         CLAUDE_JSON_SCHEMA: '{"type":"object","properties":{"verdict":{"type":"string","enum":["approve","requestChanges","comment"]},"reviewComment":{"type":"string"},"inlineComments":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"},"body":{"type":"string"},"startLine":{"type":"integer"},"suggestion":{"type":"string"}},"required":["path","line","body"]}}},"required":["verdict","reviewComment"]}'
         CLAUDE_PLUGIN_DIR: ${{ steps.plugin.outputs.dir }}
@@ -23865,7 +23938,9 @@ Review mode runs one deterministic **Build review context** step ([`buildReviewC
 
 The version-1 contract lives in [`reviewContextBundle.ts`](src/reviewContextBundle.ts): every bound (file entries, diff bytes, threads, review bodies) is an exported constant, every truncation is flagged in the payload, and each fallible section is either complete data or an explicit `{ available: false, reason }` — rate limits (`rate-limited`) are distinguished from endpoint failures. Re-reviews carry an explicit delta from the **substantive anchor** — the reviewer's latest `APPROVED`/`CHANGES_REQUESTED` review, or a `COMMENTED` one with a non-empty top-level body; an empty `COMMENTED` review created by replying inside an inline thread never advances the anchor (issue [#622](https://github.com/awinogradov/code-assistants/issues/622)). A force-pushed or diverged ref degrades the delta explicitly rather than pretending nothing changed. The diff is streamed to a separate file with the byte cap enforced mid-stream, never buffered.
 
-The builder acquires raw facts only — round **policy** (full vs incremental vs skip, and the review surface for each) is owned by the `pr-review` skill's §1.3 state machine, which routes the delta's reason strings: `compare-status-identical` skips, `compare-status-diverged`/`compare-status-behind`/`ref-missing` force a full review. [`reviewRoundContract.test.ts`](src/reviewRoundContract.test.ts) pins the skill prose and the builder's `isSubstantiveReview` predicate to each other — editors of the skill's §1.3 wording should expect that test to fail until both sides agree. De-poisoning the anchor shifts telemetry: expect fewer `compare-status-identical` deltas and more `ahead` ones after upgrading. On publication, [`submitReview.ts`](src/submitReview.ts) binds the created review to the expected head SHA via `commit_id`, so a head that moves after review cannot claim the verdict.
+The builder acquires raw facts only — round **policy** (full vs incremental vs skip, and the review surface for each) is owned by the `pr-review` skill's §1.2 state machine, which routes the delta's reason strings: `compare-status-identical` skips, `compare-status-diverged`/`compare-status-behind`/`ref-missing` force a full review. [`reviewRoundContract.test.ts`](src/reviewRoundContract.test.ts) pins the skill prose and the builder's `isSubstantiveReview` predicate to each other — editors of the skill's §1.2 wording should expect that test to fail until both sides agree. De-poisoning the anchor shifts telemetry: expect fewer `compare-status-identical` deltas and more `ahead` ones after upgrading. On publication, [`submitReview.ts`](src/submitReview.ts) binds the created review to the expected head SHA via `commit_id`, so a head that moves after review cannot claim the verdict.
+
+The skill classifies the round before reading a patch or acquiring supporting context. An already-reviewed head exits immediately; an incremental round reads the compare patch, and reads the full diff only on fallback. The builder still writes the full-diff artifact outside model context. Review issue lookups use the bundled GitHub and Linear helpers directly; the action grants only their trusted installed paths, with `--read-only` required for GitHub. Issue payload truncation and lookup errors stay visible, and TODO searches retain at most 20 matches.
 
 The step is fail-open: it always writes its `path` output (empty on any failure, with a warning annotation), and the skill treats an empty or invalid bundle as `bundle-fallback:` — running its legacy in-session discovery unchanged, so manual local runs and builder outages degrade instead of breaking. In-session follow-ups for missing or truncated fields are budgeted (3 per session) and trace-recorded as `bundle-followup:` lines. Builder telemetry (duration, request count, payload bytes, truncation, cache use) flows through the `BUNDLE_TELEMETRY` env into the run summary, where the session's follow-up count and fallback status join it — see the run-summary footer below and the post-merge verification tracked on issue [#605](https://github.com/awinogradov/code-assistants/issues/605).
 
@@ -51559,7 +51634,7 @@ model: sonnet
 
 You are a repository standards digester. Read the project's own documentation — the source of truth that overrides defaults — and return a compact digest of what a plan must comply with. Do not output intermediate steps — only the final structured block.
 
-The point of this agent is context isolation: the full text of a README, three RFCs, and CLAUDE.md is far larger than the handful of clauses a plan actually has to honor. Read widely here so the parent reads nothing.
+Return only clauses that affect the task. Merge duplicate rules from the same source; omit generic advice and implementation history. Preserve each rule’s conditions and exceptions.
 
 **Constraints:**
 
@@ -51572,7 +51647,10 @@ The point of this agent is context isolation: the full text of a README, three R
 The invoking skill provides in the prompt:
 
 - **Repository root** (e.g., `/path/to/repo`) — absolute path.
+- **Scope** (optional) — `task` by default; `broad` reads repository-wide conventions.
 - **Task summary** (optional) — a one-line description of the planned change, used to rank which standards are relevant. When absent, select by breadth instead of match strength.
+
+- **Already captured rules** (optional) — on a narrowed follow-up, return only missing clauses from the requested source or module.
 
 ## Phase 0: Consumer review rules file
 
@@ -51593,7 +51671,7 @@ When the file is absent (or empty), run Phases 1–3 as written.
 
 ## Phase 1: Conventions
 
-Read the root `README.md` and the docs it links; treat `docs/` as the source of truth for project-specific conventions. When the root README carries no docs index, fall back to `docs/README.md`, then to the Glob `docs/*.md` file names.
+Read the root `README.md` and inventory all names under `docs/`. Use the README documentation index to select project-wide conventions and documents relevant to the task, then read those sections only; an index link is not an instruction to read every document. At `Scope: broad`, cover conventions across the principal modules. When the README has no index, use `docs/README.md`, then the file inventory. Inspect ambiguous candidates before excluding them, and honor any explicit repository-required reads. Treat `docs/` as the source of truth for project-specific conventions.
 
 Read `CLAUDE.md` at the repository root when present. Capture only rules a plan could violate — naming, file organization, import rules, anti-patterns, workflow mandates — not prose about philosophy.
 
@@ -51603,8 +51681,10 @@ Run this phase only when `rfc/` exists at the repository root.
 
 1. **Inventory** — read the `rfc/README.md` index table into `{id, title, status, path}`. When it is absent, Glob `rfc/[0-9]*.md` and read each file's frontmatter block. Derive a missing id or title from the `NNNN-slug` filename (or the first H1). A missing or unparseable `status` counts as Draft — record it as `defaulted: true`. `Superseded` entries are never sources.
 2. **Selection** — match each entry's title and slug tokens against the task summary and the domains it visibly touches (log calls → a logging standard, HTTP routes → an API standard, new files → a file-structure standard). When in doubt whether a standard applies, load it.
-3. **Cap** — at most 3 standards, ranked by match strength. Every candidate dropped by the cap goes into `dropped` with its id and title. Never truncate silently.
+3. **Cap** — at most 3 standards, ranked by match strength. Record candidates excluded by this selection in `dropped`, subject to the output bound below; report any overflow. Selection limits never waive an applicable Accepted standard.
 4. **Status meaning** — `Accepted` is ratified and blocking: a plan must not violate a clause. `Draft` is advisory.
+
+Read the selected standards’ applicable clauses and include their requirements in `conventions`; metadata alone is not a standards digest.
 
 ## Phase 3: Principles
 
@@ -51620,44 +51700,20 @@ Output ONLY a single JSON object matching the schema below — no preamble, no s
 
 <!-- agent-json:end -->
 
-| Field         | Type     | Constraint                                                                                                           |
-| ------------- | -------- | -------------------------------------------------------------------------------------------------------------------- |
-| `conventions` | object[] | `{ "source": string, "rule": string }` per project convention a plan could violate; `source` is a repo-relative path |
-| `standards`   | object[] | `{ "id": string, "title": string, "status": string, "path": string, "defaulted": boolean, "why": string }`; max 3    |
-| `dropped`     | object[] | `{ "id": string, "title": string }` per candidate the cap excluded; empty array when none were dropped               |
-| `principles`  | object[] | `{ "title": string, "path": string, "value": string }` per matched principle; empty array when the folder is absent  |
-| `digestError` | string   | `null` (or omitted) on success; a short reason when a source existed but could not be read                           |
+- `conventions`: up to 12 `{ "source": string, "rule": string }` entries. Source is a repo-relative path; rule is at most 40 words.
+- `standards`: up to 3 `{ "id": string, "title": string, "status": string, "path": string, "defaulted": boolean, "why": string }` entries; why is at most 20 words.
+- `dropped`: up to 10 `{ "id": string, "title": string }` candidates excluded from standards selection.
+- `principles`: up to 6 `{ "title": string, "path": string, "value": string }` entries; value is at most 30 words.
+- `overflow`: `{ "conventions": number, "dropped": number, "principles": number }`, counting relevant entries omitted by output bounds; all zero on complete output.
+- `digestError`: string of at most 40 words describing a missing/unreadable source or incomplete summary; null on success.
+
+Rank entries by their effect on the requested change: binding constraints first, then concrete conventions and relevant values. Keep original source paths, IDs, titles, and statuses; word bounds apply to summaries, not identifiers. Do not cut a rule mid-clause or remove an exception to meet a limit. If a rule cannot fit faithfully, omit it, count it in `overflow`, and name its source in `digestError`.
+
+Any nonzero overflow also sets `digestError` to `incomplete — narrow the standards query`, naming the affected category and source when known. Do not claim this digest is complete. A caller must retrieve omitted applicable constraints before deciding affected work; it may request a narrower module or named source, carrying already captured rules so the follow-up returns only missing clauses. The same bounds apply to each response. An overflow count of zero says the output bound omitted nothing; `dropped` still records the separate RFC-selection cap.
 
 Report absence explicitly rather than by omission: when `rfc/` does not exist, `standards` and `dropped` are empty arrays — that is the audit record that nothing applied.
 
-Example:
-
-```json
-{
-  "conventions": [
-    { "source": "CLAUDE.md", "rule": "camelCase for constants, not SCREAMING_SNAKE_CASE" },
-    {
-      "source": "docs/01-workspace-structure.md",
-      "rule": "source .ts lives under src/; *.config.ts stays at the root"
-    }
-  ],
-  "standards": [
-    {
-      "id": "RFC-0001",
-      "title": "Reference formatting",
-      "status": "Accepted",
-      "path": "rfc/0001-reference-formatting.md",
-      "defaulted": false,
-      "why": "The plan writes markdown containing file and section references"
-    }
-  ],
-  "dropped": [{ "id": "RFC-0002", "title": "Service logging standard" }],
-  "principles": [],
-  "digestError": null
-}
-```
-
-Emit the raw object, not the fenced form.
+Emit the raw object, not a fenced example. Include all fields, with empty arrays and zero overflow counts where applicable. The consumer-rules shortcut still returns one standards entry and empty `dropped`/`principles`; include relevant clauses in `conventions` under the same bounds.
 </file>
 
 <file path="claude-plugins/autopilot/agents/digest-session-history.md">
@@ -52641,14 +52697,14 @@ process.stdout.write(JSON.stringify(output));
 <file path="claude-plugins/autopilot/lib/github/fetch-issue.ts">
 #!/usr/bin/env node
 // Fetches a GitHub issue deterministically and prints the provider-agnostic
-// issue contract to stdout. Invoked by the gather-context skill in place of the
-// resolve-issue-context delegated agent's GitHub path (the agent itself remains
-// for the pr-review CI path); Linear inputs use lib/linear/fetch-issue.mjs.
+// issue contract to stdout. Gathering and review skills invoke it directly;
+// Linear inputs use lib/linear/fetch-issue.mjs.
 //
 // Runs under Node's native type stripping (Node >=24) and Bun — no build step;
 // the file ships as source at ${CLAUDE_PLUGIN_ROOT}/lib/github/.
 //
-// Usage:  node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-issue.ts" <owner/repo> <issue-number> [--assign]
+// Review callers pass --read-only; combining it with --assign fails before any I/O.
+// Usage:  node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-issue.ts" <owner/repo> <issue-number> [--assign | --read-only]
 //
 // Always exits 0 and always prints a single JSON object: on any failure it
 // prints the degraded shape with a non-null `resolveError`, so the caller can
@@ -52705,7 +52761,11 @@ const assigneesOf = (stdout: string | null): string[] | null => {
   }
 };
 
-async function selfAssign(repo: string, issueNumber: number, context: IssueContext): Promise<string> {
+async function selfAssign(
+  repo: string,
+  issueNumber: number,
+  context: IssueContext,
+): Promise<string> {
   const login = (await ghRead(["api", "user", "--jq", ".login"])).stdout?.trim() ?? null;
   const preconditions = {
     login,
@@ -52769,10 +52829,11 @@ async function selfAssign(repo: string, issueNumber: number, context: IssueConte
 
 async function main(): Promise<HelperOutput> {
   const startedAt = Date.now();
-  const args = process.argv.slice(2).filter((arg) => arg !== "--assign");
+  const readOnly = process.argv.includes("--read-only");
+  const args = process.argv.slice(2).filter((arg) => arg !== "--assign" && arg !== "--read-only");
   const assign = process.argv.includes("--assign");
   const [repo, numberArg] = args;
-  const issueNumber = Number.parseInt(numberArg ?? "", 10);
+  const issueNumber = Number(numberArg);
 
   const finish = (context: IssueContext, degradedReads: string[]): HelperOutput => ({
     ...context,
@@ -52784,11 +52845,21 @@ async function main(): Promise<HelperOutput> {
     },
   });
 
-  if (!repo || !repo.includes("/") || Number.isNaN(issueNumber)) {
+  if (readOnly && assign) {
+    return finish(degradedIssueContext(null, "--read-only forbids --assign"), []);
+  }
+
+  if (
+    args.length !== 2 ||
+    !repo ||
+    !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo) ||
+    !/^[1-9][0-9]*$/.test(numberArg ?? "") ||
+    !Number.isSafeInteger(issueNumber)
+  ) {
     return finish(
       degradedIssueContext(
         Number.isNaN(issueNumber) ? null : issueNumber,
-        "usage: fetch-issue.ts <owner/repo> <issue-number> [--assign] — arguments missing or invalid",
+        "usage: fetch-issue.ts <owner/repo> <issue-number> [--assign | --read-only] — arguments missing or invalid",
       ),
       [],
     );
@@ -52969,6 +53040,72 @@ process.stderr.write(`fetch-pr-reviews telemetry: ${JSON.stringify(output.teleme
 process.stdout.write(JSON.stringify(output));
 </file>
 
+<file path="claude-plugins/autopilot/lib/github/fetchIssueReadOnly.test.ts">
+/** Ensures invalid issue-helper arguments are rejected before any GitHub request. */
+import { join } from "node:path";
+
+import { describe, expect, test } from "bun:test";
+
+const helperPath = join(import.meta.dirname, "fetch-issue.ts");
+
+describe("review issue lookup", () => {
+  test.each([
+    ["--read-only", "owner/repo", "42", "--assign"],
+    ["--assign", "owner/repo", "42", "--read-only"],
+  ])("rejects assignment regardless of flag order: %j", async (...args) => {
+    const child = Bun.spawn([process.execPath, helperPath, ...args], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    const result = JSON.parse(stdout);
+    expect(exitCode).toBe(0);
+    expect(result.resolveError).toBe("--read-only forbids --assign");
+    expect(result.telemetry.requestCount).toBe(0);
+    expect(stderr).toContain("fetch-issue telemetry:");
+  });
+});
+
+describe("issue lookup argument validation", () => {
+  test.each([
+    { label: "missing repository", args: [] },
+    { label: "missing issue number", args: ["owner/repo"] },
+    { label: "extra argument", args: ["owner/repo", "42", "extra"] },
+    { label: "missing owner", args: ["/repo", "42"] },
+    { label: "missing repository name", args: ["owner/", "42"] },
+    { label: "extra path segment", args: ["owner/repo/extra", "42"] },
+    { label: "repository whitespace", args: ["owner/re po", "42"] },
+    { label: "non-numeric issue", args: ["owner/repo", "abc"] },
+    { label: "numeric prefix", args: ["owner/repo", "42abc"] },
+    { label: "zero issue", args: ["owner/repo", "0"] },
+    { label: "zero-padded issue", args: ["owner/repo", "042"] },
+    { label: "negative issue", args: ["owner/repo", "-1"] },
+    { label: "fractional issue", args: ["owner/repo", "1.5"] },
+    { label: "unsafe integer", args: ["owner/repo", "9007199254740992"] },
+  ])("rejects $label without GitHub requests", async ({ args }) => {
+    const child = Bun.spawn([process.execPath, helperPath, "--read-only", ...args], {
+      env: { ...process.env, PATH: "" },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    const result = JSON.parse(stdout);
+    expect(exitCode).toBe(0);
+    expect(result.resolveError).toContain("arguments missing or invalid");
+    expect(result.telemetry.requestCount).toBe(0);
+    expect(stderr).toContain("fetch-issue telemetry:");
+  });
+});
+</file>
+
 <file path="claude-plugins/autopilot/lib/github/issueContext.test.ts">
 import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
@@ -53114,8 +53251,7 @@ describe("buildIssueContext", () => {
 <file path="claude-plugins/autopilot/lib/github/issueContext.ts">
 // Pure transforms for GitHub issue retrieval: guard the parsed `gh issue view`
 // payload and reduce it to the provider-agnostic issue contract the
-// gather-context skill consumes in place of the resolve-issue-context delegated
-// agent (the agent itself remains for the pr-review CI path). No I/O lives here —
+// gathering and review skills consume without a delegated agent. No I/O lives here —
 // the CLI in fetch-issue.ts is a thin shell around these functions, so the
 // fixture tests in issueContext.test.ts exercise the exact production paths.
 //
@@ -55550,16 +55686,22 @@ describe("watch-pr CLI", () => {
 <file path="claude-plugins/autopilot/lib/linear/fetch-issue.mjs">
 #!/usr/bin/env node
 // Fetches a Linear issue and prints the resolve-issue-context JSON contract
-// to stdout. Invoked by the resolve-issue-context agent — the plugin bundles
+// to stdout. Invoked directly by gathering/review skills or the issue agent — the plugin bundles
 // no Linear MCP server, so this helper is that agent's only Linear read path.
 //
-// Usage:  LINEAR_API_KEY=lin_api_xxx node fetch-issue.mjs ENG-123
+// Usage:  LINEAR_API_KEY=lin_api_xxx node fetch-issue.mjs [--review] ENG-123
+// --review bounds descriptions/comments and reports truncation.
 //
 // Always exits 0 and always prints a single JSON object: on any failure it
 // prints the degraded shape with a non-null `resolveError`, so the caller can
 // surface the error and STOP rather than proceed against missing data.
 
 import { createLinearClient } from "./linearClient.mjs";
+
+// Review bounds match the GitHub helper; planning callers retain full descriptions.
+const maxDescriptionLength = 16_000;
+const maxComments = 30;
+const maxCommentLength = 2_000;
 
 const degraded = (id, error) => ({
   source: id ? `Linear ${id}` : "Linear",
@@ -55571,11 +55713,13 @@ const degraded = (id, error) => ({
   assignee: null,
   description: null,
   comments: [],
+  truncated: false,
   resolveError: error,
 });
 
 async function main() {
-  const id = process.argv[2];
+  const review = process.argv.includes("--review");
+  const [id] = process.argv.slice(2).filter((arg) => arg !== "--review");
   const apiKey = process.env.LINEAR_API_KEY;
 
   if (!id) return degraded(null, "unresolved — no Linear issue ID provided");
@@ -55585,6 +55729,9 @@ async function main() {
     const issue = await createLinearClient(apiKey).fetchIssue(id);
     if (!issue) return degraded(id, `unresolved — Linear issue ${id} not found`);
 
+    const description = issue.description ?? "";
+    const comments = issue.comments?.nodes ?? [];
+
     return {
       source: `Linear ${issue.identifier}`,
       issueId: issue.identifier,
@@ -55593,12 +55740,17 @@ async function main() {
       labels: (issue.labels?.nodes ?? []).map((label) => label.name),
       url: issue.url ?? null,
       assignee: null,
-      description: issue.description ?? "",
-      comments: (issue.comments?.nodes ?? []).map((comment) => ({
+      description: review ? description.slice(0, maxDescriptionLength) : description,
+      comments: (review ? comments.slice(0, maxComments) : comments).map((comment) => ({
         author: comment.user?.displayName ?? "unknown",
         date: (comment.createdAt ?? "").slice(0, 10),
-        body: comment.body ?? "",
+        body: review ? (comment.body ?? "").slice(0, maxCommentLength) : (comment.body ?? ""),
       })),
+      truncated:
+        review &&
+        (description.length > maxDescriptionLength ||
+          comments.length > maxComments ||
+          comments.some((comment) => (comment.body ?? "").length > maxCommentLength)),
       resolveError: null,
     };
   } catch (error) {
@@ -56532,6 +56684,89 @@ gemini -r "latest" "This is Claude (<your current model name>) following up. I d
 Before writing any output that mentions a file, standard, section, commit, or issue, read [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (RFC-0001) and apply it verbatim — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
 </file>
 
+<file path="claude-plugins/autopilot/skills/branch-create/references/examples.md">
+# Branch examples
+
+An issue branch is created without a dialog; a special-prefix branch confirms via the one [Phase 5](../SKILL.md#phase-5-confirm-special-prefix-branch-name) template. Two worked cases below; Linear follows the issue case and the other special prefixes follow the hotfix case.
+
+### GitHub issue (auto-generated slug)
+
+```
+/autopilot:branch-create 123
+
+Fetching GitHub issue #123...
+Title: "Add JWT token refresh endpoint for authentication service"
+```
+
+No confirmation dialog — the name is derived from the issue, so [Phase 5](../SKILL.md#phase-5-confirm-special-prefix-branch-name) is skipped and the branch is created directly.
+
+```
+✓ Branch created: issue-123-jwt-refresh
+✓ Pushed to origin with tracking
+```
+
+### Special prefix (--hotfix)
+
+```
+/autopilot:branch-create --hotfix "memory leak in editor"
+```
+
+AskUserQuestion with the [Phase 5](../SKILL.md#phase-5-confirm-special-prefix-branch-name) template, both options' `<preview>` resolved to `hotfix-memory-leak-editor\n\nType: HOTFIX\nFrom: origin/main`.
+
+User selects "Create branch".
+
+```
+✓ Branch created: hotfix-memory-leak-editor
+✓ Pushed to origin with tracking
+```
+
+### Branch already exists
+
+```
+/autopilot:branch-create 123
+
+Branch issue-123-jwt-refresh already exists locally.
+```
+
+AskUserQuestion with:
+
+- `question`: "Branch issue-123-jwt-refresh already exists. How would you like to proceed?"
+- `header`: "Conflict"
+- `options`: Checkout existing / Create with suffix / Different description
+
+User selects "Checkout existing".
+
+```
+✓ Switched to branch: issue-123-jwt-refresh
+```
+
+## Slug examples
+
+**Examples:**
+
+| Issue Title                                                           | Generated Slug       |
+| --------------------------------------------------------------------- | -------------------- |
+| "Add JWT token refresh endpoint for authentication service"           | `jwt-refresh`        |
+| "Fix race condition in audio streaming when multiple clients connect" | `audio-race-fix`     |
+| "Implement user preference settings page with dark mode toggle"       | `user-preferences`   |
+| "Refactor database connection pooling for better performance"         | `db-pool-refactor`   |
+| "Provide agent prompt to generate branch name"                        | `branch-name-prompt` |
+</file>
+
+<file path="claude-plugins/autopilot/skills/branch-create/references/linear-branch.md">
+# Linear branch operations
+
+## Fetch the ticket
+
+**If `provider` is `linear`:** fetch the ticket via the Linear MCP `get_issue` tool with `{ "id": "<LINEAR-ID>" }` and read its `title` (for the slug) and `state.name`; if no Linear MCP tool resolves (see the access note below), stop with its `No Linear MCP available …` message instead of continuing without ticket data. Skip the main skill’s GitHub `gh` steps and do NOT self-assign — Linear assignment is deferred to a later phase; emit `unassigned — Linear assignment deferred`. Then continue to [Phase 3](../SKILL.md#phase-3-generate-branch-slug).
+
+**Linear MCP access:** Read [`linear-mcp-access.md`](../../shared-rules/references/linear-mcp-access.md) and apply its tool-resolution rule, using the bare tool names `get_issue`, `list_issue_statuses`, `save_issue`.
+
+## Start the ticket
+
+**If `provider` is `linear` AND `--start` was passed:** move the ticket to "In Progress" — best-effort, never blocks the branch. Resolve the target state id with the Linear MCP `list_issue_statuses` tool for the ticket's team, then call the Linear MCP `save_issue` tool with `{ "id": "<LINEAR-ID>", "state": "<In Progress state>" }` — tool resolution per [Fetch the ticket](#fetch-the-ticket). On success, emit `✓ Ticket <LINEAR-ID> moved to In Progress`; when no Linear MCP tool resolves under any prefix, emit `issue not started — no Linear MCP available (check /mcp or connect one)`; on any other failure, emit `issue not started — <reason>`. Always continue — but the emitted line MUST reach the branch result, never only intermediate text.
+</file>
+
 <file path="claude-plugins/autopilot/skills/branch-create/references/self-assign.md">
 # Self-Assign Execution Steps
 
@@ -56577,6 +56812,30 @@ Resolve it with these steps:
    - `EDIT_EXIT != 0` → `unassigned — gh edit error: <first line of $STDERR>`
 
 In all cases, continue to [Phase 3](../SKILL.md#phase-3-generate-branch-slug).
+</file>
+
+<file path="claude-plugins/autopilot/skills/branch-create/references/special-prefix-dialog.md">
+# Special-prefix confirmation
+
+Read only for a special-prefix branch without `--autopilot`.
+
+Only special-prefix branches (`--hotfix`, `--trivial`, `--maintenance`, `--proposal`, `--security`) reach this phase: their prefix and slug come from a free-form description rather than from an issue, so there is a real choice to confirm. Present branch details and confirm using **AskUserQuestion tool**.
+
+**Preview substitution rules (MANDATORY):** The `<prefix>`, `<PREFIX>`, and `<slug>` tokens in the template below are PLACEHOLDERS. Before invoking AskUserQuestion, substitute each with the concrete value you resolved in earlier phases (e.g., `<prefix>` → `hotfix`, `<PREFIX>` → `HOTFIX`, `<slug>` → `memory-leak-editor`). NEVER pass the literal `<prefix>-<slug>\n\nType: <PREFIX>...` string — every option's `preview` must contain the fully resolved branch preview string. No shorthand (`"..."`, `"<same>"`, empty string) is permitted; always write out the full resolved preview for every option.
+
+**One dialog template.** Tool parameters:
+
+- `question`: "Review the branch name and choose an action."
+- `header`: "Create branch"
+- `options`: [
+  { label: "Create branch", description: "Create and push to origin with tracking", preview: "<preview>" },
+  { label: "Edit slug", description: "Modify the branch name slug", preview: "<preview>" }
+  ]
+- `multiSelect`: false
+
+Both options carry the same `<preview>` content since the user is choosing an action, not content; the shared preview enables a side-by-side layout in the UI. Substitute `<preview>` with `<prefix>-<slug>\n\nType: <PREFIX>\nFrom: origin/main` — e.g. `hotfix-memory-leak-editor\n\nType: HOTFIX\nFrom: origin/main`.
+
+Only proceed to [Phase 6](../SKILL.md#phase-6-execute) after user selects "Create branch". If "Edit slug" selected, ask for new slug and regenerate branch name.
 </file>
 
 <file path="claude-plugins/autopilot/skills/branch-create/SKILL.md">
@@ -56659,9 +56918,7 @@ Otherwise invoke `Skill(autopilot:preflight-check)` with `mode: branch` from thi
 
 **Skip this phase entirely for special prefix flag branches (--hotfix, --trivial, --maintenance, --proposal, --security).**
 
-**If `provider` is `linear`:** fetch the ticket via the Linear MCP `get_issue` tool with `{ "id": "<LINEAR-ID>" }` and read its `title` (for the slug) and `state.name`; if no Linear MCP tool resolves (see the access note below), stop with its `No Linear MCP available …` message instead of continuing without ticket data. Skip the GitHub `gh` steps below and do NOT self-assign — Linear assignment is deferred to a later phase; emit `unassigned — Linear assignment deferred`. Then continue to [Phase 3](#phase-3-generate-branch-slug). The steps below apply to **GitHub** issues only.
-
-**Linear MCP access:** Read [`linear-mcp-access.md`](../shared-rules/references/linear-mcp-access.md) and apply its tool-resolution rule, using the bare tool names `get_issue`, `list_issue_statuses`, `save_issue`.
+**If `provider` is `linear`:** read [linear-branch.md](./references/linear-branch.md#fetch-the-ticket) and follow its fetch path instead of the GitHub steps below.
 
 1. **Determine the repository** and bind it to `REPO` so every `gh` call in this phase targets the same repo (important in worktrees and multi-remote checkouts):
 
@@ -56723,16 +56980,6 @@ Otherwise invoke `Skill(autopilot:preflight-check)` with `mode: branch` from thi
    - 3-5 words maximum
    - Capture the essence of what's being done
 
-**Examples:**
-
-| Issue Title                                                           | Generated Slug       |
-| --------------------------------------------------------------------- | -------------------- |
-| "Add JWT token refresh endpoint for authentication service"           | `jwt-refresh`        |
-| "Fix race condition in audio streaming when multiple clients connect" | `audio-race-fix`     |
-| "Implement user preference settings page with dark mode toggle"       | `user-preferences`   |
-| "Refactor database connection pooling for better performance"         | `db-pool-refactor`   |
-| "Provide agent prompt to generate branch name"                        | `branch-name-prompt` |
-
 **Construct full branch name:**
 
 - **GitHub:** `issue-<number>-<slug>`
@@ -56776,23 +57023,7 @@ Otherwise invoke `Skill(autopilot:preflight-check)` with `mode: branch` from thi
 
 **Autopilot bypass:** If `autopilotMode` is true (from [Phase 1](#phase-1-input-validation)), skip this entire phase and proceed directly to [Phase 6](#phase-6-execute) with the resolved branch name. Do NOT call AskUserQuestion.
 
-Only special-prefix branches (`--hotfix`, `--trivial`, `--maintenance`, `--proposal`, `--security`) reach this phase: their prefix and slug come from a free-form description rather than from an issue, so there is a real choice to confirm. Present branch details and confirm using **AskUserQuestion tool**.
-
-**Preview substitution rules (MANDATORY):** The `<prefix>`, `<PREFIX>`, and `<slug>` tokens in the template below are PLACEHOLDERS. Before invoking AskUserQuestion, substitute each with the concrete value you resolved in earlier phases (e.g., `<prefix>` → `hotfix`, `<PREFIX>` → `HOTFIX`, `<slug>` → `memory-leak-editor`). NEVER pass the literal `<prefix>-<slug>\n\nType: <PREFIX>...` string — every option's `preview` must contain the fully resolved branch preview string. No shorthand (`"..."`, `"<same>"`, empty string) is permitted; always write out the full resolved preview for every option.
-
-**One dialog template.** Tool parameters:
-
-- `question`: "Review the branch name and choose an action."
-- `header`: "Create branch"
-- `options`: [
-  { label: "Create branch", description: "Create and push to origin with tracking", preview: "<preview>" },
-  { label: "Edit slug", description: "Modify the branch name slug", preview: "<preview>" }
-  ]
-- `multiSelect`: false
-
-Both options carry the same `<preview>` content since the user is choosing an action, not content; the shared preview enables a side-by-side layout in the UI. Substitute `<preview>` with `<prefix>-<slug>\n\nType: <PREFIX>\nFrom: origin/main` — e.g. `hotfix-memory-leak-editor\n\nType: HOTFIX\nFrom: origin/main`.
-
-Only proceed to [Phase 6](#phase-6-execute) after user selects "Create branch". If "Edit slug" selected, ask for new slug and regenerate branch name.
+For a special-prefix branch without `--autopilot`, read [special-prefix-dialog.md](./references/special-prefix-dialog.md), obtain the branch-name decision, then continue to Phase 6 only after confirmation.
 
 ## Phase 6: Execute
 
@@ -56811,7 +57042,7 @@ Only proceed to [Phase 6](#phase-6-execute) after user selects "Create branch". 
    git push -u origin <branch-name>
    ```
 
-3. **If `provider` is `linear` AND `--start` was passed:** move the ticket to "In Progress" — best-effort, never blocks the branch. Resolve the target state id with the Linear MCP `list_issue_statuses` tool for the ticket's team, then call the Linear MCP `save_issue` tool with `{ "id": "<LINEAR-ID>", "state": "<In Progress state>" }` — tool resolution per the [Phase 2](#phase-2-fetch-github-issue) Linear MCP access note. On success, emit `✓ Ticket <LINEAR-ID> moved to In Progress`; when no Linear MCP tool resolves under any prefix, emit `issue not started — no Linear MCP available (check /mcp or connect one)`; on any other failure, emit `issue not started — <reason>`. Always continue — but the emitted line MUST reach the step 4 output block, never only intermediate text.
+3. **If `provider` is `linear` AND `--start` was passed:** follow [Start the ticket](./references/linear-branch.md#start-the-ticket), then include its outcome in the result below. Skip this reference for every other branch.
 
 4. **Output result:**
 
@@ -56829,58 +57060,7 @@ Only proceed to [Phase 6](#phase-6-execute) after user selects "Create branch". 
 
 ## Examples
 
-An issue branch is created without a dialog; a special-prefix branch confirms via the one [Phase 5](#phase-5-confirm-special-prefix-branch-name) template. Two worked cases below; Linear follows the issue case and the other special prefixes follow the hotfix case.
-
-### GitHub issue (auto-generated slug)
-
-```
-/autopilot:branch-create 123
-
-Fetching GitHub issue #123...
-Title: "Add JWT token refresh endpoint for authentication service"
-```
-
-No confirmation dialog — the name is derived from the issue, so [Phase 5](#phase-5-confirm-special-prefix-branch-name) is skipped and the branch is created directly.
-
-```
-✓ Branch created: issue-123-jwt-refresh
-✓ Pushed to origin with tracking
-```
-
-### Special prefix (--hotfix)
-
-```
-/autopilot:branch-create --hotfix "memory leak in editor"
-```
-
-AskUserQuestion with the [Phase 5](#phase-5-confirm-special-prefix-branch-name) template, both options' `<preview>` resolved to `hotfix-memory-leak-editor\n\nType: HOTFIX\nFrom: origin/main`.
-
-User selects "Create branch".
-
-```
-✓ Branch created: hotfix-memory-leak-editor
-✓ Pushed to origin with tracking
-```
-
-### Branch already exists
-
-```
-/autopilot:branch-create 123
-
-Branch issue-123-jwt-refresh already exists locally.
-```
-
-AskUserQuestion with:
-
-- `question`: "Branch issue-123-jwt-refresh already exists. How would you like to proceed?"
-- `header`: "Conflict"
-- `options`: Checkout existing / Create with suffix / Different description
-
-User selects "Checkout existing".
-
-```
-✓ Switched to branch: issue-123-jwt-refresh
-```
+Read [examples.md](./references/examples.md) only when slug selection or a branch outcome is unclear.
 
 ## Reference formatting
 
@@ -57670,9 +57850,7 @@ allowed-tools:
   - Skill(autopilot:pr-create)
 ---
 
-Prime the session with a broad picture of this repository, write it to disk so it survives compaction, then hand control back and take fixes one at a time.
-
-This is the third on-ramp into a repository, and it exists because the other two do not fit a common shape of work. [`plan`](../plan/SKILL.md) and [`run`](../run/SKILL.md) both require a target and then carry the session through draft, a plan file, a branch, and a pull request. Arriving with an _area_ rather than a task — and following it with a few surgical edits — means inventing a target for `plan` and discarding everything it drags along. `explore` is the same context quality with none of that machinery.
+Map the repository, persist the context brief, then stop for the user’s next instruction. Subsequent surgical fixes use the brief without a plan, branch, or PR chain.
 
 ## When to Use
 
@@ -57717,9 +57895,7 @@ Skill(autopilot:gather-context)
 
 Pass input type `plain-description`, **`Scope: broad`**, the repository and repository root, and a task summary of `broad architecture map`. There is no issue id.
 
-Two consequences of that input are worth knowing rather than rediscovering. `Scope: broad` is what makes the codebase pass read the snapshot breadth-first instead of hunting for what a change touches. And `plain-description` gates off the issue and TODO resolvers, so no sub-agent runs whose output this brief would discard.
-
-Do not re-implement the fan-out here. It has one owner; a hand-mirrored copy would rot the first time an agent is added to one side and not the other.
+`Scope: broad` selects repository-wide context and skips history and the branch digest, which this brief does not consume. `plain-description` skips issue and TODO resolution. Use gather-context’s fan-out; do not duplicate it.
 
 ## Phase 2: Diagrams (full prime only)
 
@@ -57749,7 +57925,7 @@ git cherry origin/main HEAD                                 # every line "-" ⇒
 git rev-list --count HEAD..origin/main                      # baseAhead
 ```
 
-**This phase owns the volatile sections outright — do not source them from the Context Map.** [Phase 1](#phase-1-acquire-context-full-prime-only) also reports in-flight changes and git state, but it does not run on a delta refresh, so anything sourced from it cannot honor the "rewritten on every invocation" contract. A brief primed once and refreshed thereafter would keep showing the branch as it stood at the first prime — and since an explore session's whole purpose is producing commits, that is the common case, not an edge case. On a full prime these commands simply recompute what the map already said; the duplicate cost is a few `git` calls, and it buys a volatile half that is genuinely volatile on both paths.
+**This phase owns the volatile sections outright.** Run it on both full primes and delta refreshes. Broad acquisition skips the branch digest, so this is the sole volatile refresh. Never source these sections from the Context Map or the previous brief.
 
 Read `isStaleMerged` from `git cherry` rather than from a commit count: a branch whose commits already landed upstream under rebase-rewritten SHAs still shows a non-empty `git log origin/main..HEAD`, and testing only for emptiness reads a finished branch as active work.
 
@@ -57796,7 +57972,7 @@ Every **stable** section is written from the Context Map, and the transformation
 | Related TODOs        | dropped — never populated for this skill's input |
 | Issue / alert        | dropped — always `none` for this skill's input   |
 
-The last four rows are the load-bearing ones. In-flight changes and git state are the map's only volatile output, and the map exists solely on a full prime, so reading them from it would make two "volatile" sections silently freeze after the first prime — [Phase 3](#phase-3-recompute-the-volatile-sections) recomputes both instead. Related TODOs and Issue / alert are never populated at all, because this skill passes `plain-description` and both of those resolvers are gated on issue inputs.
+The map supplies stable sections only. Broad acquisition omits unused history and Git digests; Phase 3 supplies fresh volatile sections.
 
 `## Data flow` carries the [Phase 2](#phase-2-diagrams-full-prime-only) diagram and has no Context Map source. `## Test and verify` must name the **exact commands** to run, because every later fix is verified with one of them.
 
@@ -57846,12 +58022,7 @@ allowed-tools:
   - MCP(repomix:*)
 ---
 
-Acquire every piece of context a planning pass needs, in one parallel fan-out, and return a single **Context Map**. The caller reads the map and nothing else.
-
-Two properties make this skill worth its own seam:
-
-- **One fan-out.** Input _detection_ is pure string matching and performs no I/O, so the issue id is known before anything is fetched. Input _resolution_ is what costs time, and it parallelizes with standards, branch, and snapshot acquisition. There is no reason to stage these.
-- **Digests, not documents.** Every sub-agent and bundled helper returns a bounded JSON object. The full text of a README, three RFCs, and an unbounded branch diff never reaches the caller's context. Deterministic acquisition — the branch digest, the issue fetch, the TODO search — runs as direct bounded calls rather than delegated agents, per the pattern [#606](https://github.com/awinogradov/code-assistants/pull/606) proved on the review path.
+Acquire context once, in parallel, and return the **Context Map**. Use bounded helper outputs; keep raw API responses and transcripts out of the parent context.
 
 ## Input
 
@@ -57862,39 +58033,39 @@ The invoking skill provides in the prompt:
 - **Repository** (e.g., `awinogradov/code-assistants`) and **repository root** (absolute path).
 - **Linear team** — for `linear-issue` only, the matched tracker's team.
 - **Task summary** — the raw task text, used to rank standards and scope the codebase pass.
-- **Scope** — `task` (the default), `broad`, or `primed`, selecting how [Phase 2](#phase-2-scope-the-codebase-pass) reads the snapshot. Optional: `plan` and `run` omit it and get `task`. `primed` additionally gates off one [Phase 1](#phase-1-fan-out) agent, so this input is a fan-out selector and not only a read strategy — see [`run-primed`](../run-primed/SKILL.md), the only caller that passes it.
+- **Scope** — `task` (default), `broad` (explore), or `primed` (validated brief). `broad` skips session history and the branch digest; explore owns the volatile refresh. `primed` skips the standards agent and reads only task-specific gaps.
 
 ## Phase 1: Fan out
 
 Issue **every** call below in a **single message** so they run concurrently. Do not stage them; do not wait on one before starting another.
 
-**Sub-agents** (each returns a bounded JSON object — see the agent's own output schema):
+**Sub-agents** — pass repository root and task summary to each:
 
-| Agent                                                                                                                                          | When                       | Prompt                                                                                                     |
-| ---------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| [`digest-repo-standards`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/digest-repo-standards.md)   | Except `Scope: primed`     | `Repository root: [path]. Task summary: [summary].`                                                        |
-| [`resolve-alert-context`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/resolve-alert-context.md)   | `code-scanning-alert` only | `Fetch alert context. Alert number: [n]. Repository: [owner/repo].`                                        |
-| [`digest-session-history`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/digest-session-history.md) | Entire enabled (see below) | `Repository root: [path]. Task summary: [summary]. Relevant files: [paths the task text names, when any].` |
+- [digest-repo-standards](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/digest-repo-standards.md): except `Scope: primed`; also pass `Scope` so broad reads remain deliberate.
+- [resolve-alert-context](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/resolve-alert-context.md): code-scanning alerts only; pass alert number and repository.
+- [digest-session-history](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/digest-session-history.md): only when scope is not `broad` and Entire is enabled; pass relevant files named by the task.
 
 **Direct calls** in the same message:
 
-- **Snapshot** — follow the ordered source chain in [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md); this skill passes no `includePatterns`. Emit the block's `context-source:` trace line for the tier you selected, including the `outputId` when it was the repomix tier. On the graph tier the line waits for a query that **exited zero** and emit the whole evidence record, trace and shortlist together — a label written before the first query records an intention, not a selection. A graph pass that cannot produce a valid record leaves through the block's `superseding graphify (<reason>)` transition and the successor tier selects normally; a partial record is never the cheaper option. The fan-out is not complete until that line exists: it is what [Phase 3](#phase-3-emit-the-context-map) hands to the caller, and a caller cannot enforce a selection it was never told about.
+- **Snapshot** — follow [repomix-snapshot.md](../shared-rules/references/repomix-snapshot.md), without `includePatterns`. Retain its complete evidence record. Declare graphify only after a query **exited zero** and produced a usable shortlist; otherwise use its `superseding graphify` transition. Do not repeat that contract here or reacquire a source already selected by this context holder.
 - **Stack** — Read `package.json` and extract `agents.rules`.
-- **Branch digest** — always: one Bash call to the bundled helper, `node "${CLAUDE_PLUGIN_ROOT}/lib/git/digest-branch.ts"` (Node ≥ 24 or Bun; when `CLAUDE_PLUGIN_ROOT` is unset, build the absolute path from this skill's own base directory). It prints one bounded JSON object — `branch`, `isWorktree`, `commits[]`, `files[]`, `isStaleMerged`, `baseAhead`, `truncated`, `digestError`, `telemetry` — covering git state too, so no separate `git branch`/`git rev-parse` calls run. The full invocation and output contract live in [the helper's header](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/lib/git/digest-branch.ts). A failed `cherry`/`rev-list` read yields `isStaleMerged`/`baseAhead` as `null` — treat null as unknown, never as false/0.
+- **Branch digest** — except `Scope: broad`: one Bash call to the bundled helper, `node "${CLAUDE_PLUGIN_ROOT}/lib/git/digest-branch.ts"` (Node ≥ 24 or Bun; when `CLAUDE_PLUGIN_ROOT` is unset, build the absolute path from this skill's own base directory). It prints one bounded JSON object — `branch`, `isWorktree`, `commits[]`, `files[]`, `isStaleMerged`, `baseAhead`, `truncated`, `digestError`, `telemetry` — covering git state too, so no separate `git branch`/`git rev-parse` calls run. The full invocation and output contract live in [the helper's header](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/lib/git/digest-branch.ts). A failed `cherry`/`rev-list` read yields `isStaleMerged`/`baseAhead` as `null` — treat null as unknown, never as false/0.
 - **Issue context** — issue inputs only: one Bash call to the provider's bundled helper, in place of a delegated agent. GitHub: `node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-issue.ts" <owner/repo> <issue-number>`, appending `--assign` exactly when the caller passes `Auto-assign current user: true` (contract in [the helper's header](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/lib/github/fetch-issue.ts)). Linear: `LINEAR_API_KEY="$LINEAR_API_KEY" node "${CLAUDE_PLUGIN_ROOT}/lib/linear/fetch-issue.mjs" <LINEAR-ID>`. Both print the provider-agnostic issue contract with `resolveError` naming any failure.
 - **Related TODOs** — issue inputs only: one bounded Grep call by this skill (no sub-agent). Search the issue reference forms — for GitHub number `N` both `issues/N` and `#N`, for Linear id `ID` both `issue/ID` and the bare `ID` token — in content mode with `head_limit` ≤ 20, keeping each match as `path:line — text`.
 
-**Entire enabled** means `.entire/settings.json` at the repository root exists and carries `"enabled": true` — check it with the Read tool before the fan-out, so repositories without [Entire](https://docs.entire.io/overview) never pay the agent spawn. The agent re-verifies the CLI itself and degrades to a `digestError` result on missing binary or auth; like every digest, that failure is recorded, never fatal.
+**Broad scope:** skip the Entire settings read, history agent, and branch-digest helper. Read `git status --porcelain` and `git diff --name-only origin/main...HEAD` only to identify working-tree and branch paths the snapshot cannot show; these are context pointers, not a volatile-state digest. Emit `none — caller-owned volatile refresh` for In-flight changes and Git state, and `none — not requested` for Session history. Explore recomputes its volatile sections once after acquisition.
 
-`digest-repo-standards` is the one agent `Scope: primed` skips: that caller holds a validated brief whose conventions came from this same digest on this same revision, so re-running it is duplicate cost rather than fresh information. The branch-digest helper still runs at every scope — `isStaleMerged` and `baseAhead` describe the checkout in front of you, which a brief written elsewhere cannot know.
+**Entire enabled:** outside broad scope, read `.entire/settings.json` before the fan-out; run history only for `"enabled": true`. Report CLI/auth failures without retrying. At `primed` scope, take standards from the validated brief; the branch digest still runs because Git state can change independently.
 
 **Failure handling.** A resolver that returns `unresolved` with a non-null `resolveError` is fatal — surface the error and stop, so nothing proceeds against a misfetched target. A _digest_ failure is not fatal: record `digestError` in the map and continue, because a plan without a standards digest is degraded, not wrong. A helper **process** failure — non-zero exit despite the exit-0 design, stdout that is not one JSON object, a missing Node runtime — maps to the same class as the field that helper feeds: fatal for the issue helper, degraded for the branch digest. Surface it either way; never silently re-run the work through a delegated agent.
+
+**Standards overflow:** retain the digest's `overflow` counts and `digestError` in Applicable standards. Nonzero overflow is incomplete context, never “no applicable rules.” Before deciding work affected by omitted constraints, retrieve the named source or request a narrower standards digest, passing already captured clauses to avoid repeating them. Do not rerun the broad inventory. If the missing constraints remain unresolved, state that limit and leave the affected decision open. A broad explore brief records the incompleteness for its next consumer.
 
 ## Phase 2: Scope the codebase pass
 
 Only now is the task's subject matter known, so this pass runs after the fan-out returns.
 
-Search the snapshot for the implementations, patterns, and tests the change touches, using the read contract of the selected source — `graphify` queries when the graph tier was selected, `mcp__repomix__grep_repomix_output` with ranged `mcp__repomix__read_repomix_output` when the repomix tier was, or `Grep`/`Glob`/`Read` directly when only default tools remain. On the graph tier that read contract is the block's [query discipline](../shared-rules/references/repomix-snapshot.md): a truncated or empty first answer is refined with a narrower graph operation before any file read, and the pass ends at the shortlist and the `graphify-trace:` line [Phase 3](#phase-3-emit-the-context-map) carries. A graph or pack reflects the base at its last refresh, so reach for live Grep/Glob/Read **only** for working-tree code it cannot show — the branch digest already reports what is in flight — and record each such read with the one-line `context-fallback: <reason> <path>` note from the [shared block's taxonomy](../shared-rules/references/repomix-snapshot.md) (here usually `post-snapshot-mutation`). Do not crawl the tree for anything the selected source answers.
+Use the selected source's read contract for implementations, patterns, and tests. Apply its refinement limits and fallback taxonomy; read changed or untracked paths directly only with a recorded reason. Fold any additional evidence into the map.
 
 **At `broad` scope there is no change to narrow to**, so read the snapshot breadth-first instead: the principal modules and their boundaries, the entry points, and the conventions that govern them. Fill `Relevant files` and `Patterns to mirror` at that altitude — the modules a newcomer must know and the conventions they must copy, rather than the handful a specific edit would touch.
 
@@ -57915,19 +58086,15 @@ Emit these sections in this order. This is the caller's entire view of the repos
 **Patterns to mirror** — [existing implementation — what to copy from it]
 **Key types** — [interfaces, types, Zod schemas in play]
 **Test conventions** — [how this area is tested; fixtures that apply]
-**In-flight changes** — [one-line summary this skill composes from the branch digest's commit subjects and file stats, and isStaleMerged / baseAhead when relevant]
-**Session history** — [from digest-session-history: commit/file → session/checkpoint links; "none" when Entire is unavailable or nothing matched]
-**Applicable standards** — [id + status (mark "defaulted" when inferred) + one line on why the plan must honor it; then dropped candidates; "none" when nothing matched]
+**In-flight changes** — [broad: "none — caller-owned volatile refresh"; otherwise one-line summary this skill composes from the branch digest's commit subjects and file stats, and isStaleMerged / baseAhead when relevant]
+**Session history** — [broad: "none — not requested"; otherwise from digest-session-history: commit/file → session/checkpoint links; "none" when Entire is unavailable or nothing matched]
+**Applicable standards** — [id + status (mark "defaulted" when inferred) + one line on why the plan must honor it; then dropped candidates, overflow counts, and digestError; "none" when nothing matched]
 **Stack** — [agents.rules value, and the deltas it resolves to]
-**Git state** — [from the branch digest: branch, isWorktree, isStaleMerged, baseAhead — null tri-states reported as unknown]
+**Git state** — [broad: "none — caller-owned volatile refresh"; otherwise from the branch digest: branch, isWorktree, isStaleMerged, baseAhead — null tri-states reported as unknown]
 **Snapshot** — [the evidence record emitted in Phase 1, verbatim — the `context-source:` line for later phases to reuse, and on the graph tier the `graphify-trace:` line and the `graphify-shortlist:` bullets with the relationship justifying each]
 ```
 
-Three fields carry decisions the caller would otherwise recompute badly:
-
-- **`isStaleMerged`** — a branch whose commits already landed upstream under rewritten SHAs still shows a non-empty `git log origin/main..HEAD`. A caller testing only for emptiness reads a finished branch as active work. Trust this field over a commit count.
-- **Applicable standards** — this doubles as the plan's audit log of what it planned against, including what the selection cap dropped. At `Scope: primed` the digest did not run, so write it as supplied by the caller's validated brief and name that brief — never leave it reading `none`, which would claim no standard applied rather than that one was sourced elsewhere.
-- **Snapshot on the graph tier** — the shortlist is what a later phase can actually reuse; the source name alone tells it where the context came from but not what the pass found, which is how a graph pass ends up repeated as a tree crawl. The `graphify-trace:` line travels with it so the caller can see how the shortlist was reached — a trace reading `truncated=yes queries=1` says the shortlist is the truncated first answer and should be treated as incomplete. Carry all three lines or none: a caller that receives the label without the trace and the bullets is entitled to reject the selection outright, because there is nothing in it to consume.
+Preserve `isStaleMerged` and unknown/null Git states from the helper. At `primed` scope, name the brief supplying Applicable standards. Carry the Snapshot evidence record verbatim, including relationships on shortlist entries; never substitute a source label alone.
 
 When you write the Context Map, apply the reference-formatting rules in [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (RFC-0001, read it first) to every reference it contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
 </file>
@@ -64646,6 +64813,98 @@ Tests using `setTimeout`, fixed delays, or retry loops to wait for conditions �
 - Example: `await new Promise(r => setTimeout(r, 500)); expect(queue).toBeEmpty()`.
 </file>
 
+<file path="claude-plugins/autopilot/skills/pr-review/references/findings-format.md">
+# Findings format
+
+Read only when a review has findings. For a first review, start with one short sentence mentioning PR_AUTHOR; no praise or round label. Follow-up reviews omit the greeting.
+
+Section names are fixed because downstream tooling keys on them — use exactly the four defined in the body template below (🚧 Blockers, 🙋‍♂️ Suggestions, 💡 Nitpicks, and the closing verdict header).
+
+**SKIP empty sections entirely. Do NOT write "None" or "N/A" - just omit the section.**
+
+**Ticket references:** when the body cites the linked ticket, cite it as a markdown link built from the [§1.3](../SKILL.md#13-load-supporting-context) issue helper’s `url` (e.g. `[ENG-123](https://linear.app/<workspace>/issue/ENG-123)`) — a bare tracker id GitHub does not auto-link is dead text; fall back to the bare id only when no URL is resolvable. GitHub issue numbers stay bare (`#42` auto-links).
+
+**File and doc links:** define `<pr-blob-url>` = `https://github.com/<REPO>/blob/<headRefOid>` (`headRefOid` from [§1.1](../SKILL.md#11-pr-context); valid for fork PRs too — PR head commits stay reachable in the base repo via `refs/pull/N/head`). Percent-encode path characters that break markdown links (spaces → `%20`, parentheses → `%28`/`%29`, `:` → `%3A`). Then:
+
+- **Locations and mentions** — every finding location AND every file/doc/RFC mention in prose renders as a link, wherever it appears: the leading finding location, the summary sentence, mid-description text, and inside `inlineComments` bodies. With a known line: `[<path>:<NN>](<pr-blob-url>/<path>#L<NN>)` (ranges `#L<start>-L<end>`). With no line — a plain prose mention of a repo file/doc — drop the fragment and still link the path: `[<path>](<pr-blob-url>/<path>)`. A bare `RFC-NNNN` links to its doc via the [§1.4](../SKILL.md#14-project-context-read-before-reviewing) standards inventory even when a trailing `§X` section anchor is unresolvable (link the document; omit the anchor).
+- **Only resolvable targets** — link a path from the [§1.1](../SKILL.md#11-pr-context) `files` list or one the [§1.3](../SKILL.md#13-load-supporting-context) snapshot / `Glob` / `gh` lookup confirmed; a standard's id resolves to its path via the [§1.4](../SKILL.md#14-project-context-read-before-reviewing) standards inventory. An id with no resolved path, or a path with no blob at head (deleted, or a renamed-from old path), is NEVER linked by guess — keep it backticked/bare; a fabricated 404 is worse than no link. A token that is not a real target — a glob or pattern (`*.steps.ts`), a bare directory, a config key (`agents.trackers`), or an illustrative name that resolves to no repo blob — is a code specimen, not a reference: keep it backticked and never link it.
+- **Anchors** — a line cite into a `.md` target inserts `?plain=1` before `#L` so the anchor lands (e.g. `[docs/setup.md:96](<pr-blob-url>/docs/setup.md?plain=1#L96)`); a section cite uses the rendered heading-anchor form `<pr-blob-url>/<path>#<heading-anchor>`, no `?plain=1`; never combine the two.
+- **Inline-comment exception** — an inline comment's own anchored location stays a backticked full path (GitHub anchors it).
+- **Self-check** — before emitting the structured output, scan the entire `reviewComment` (including the summary sentence, not just finding lines) and every `inlineComments` body: outside code spans/fences, any resolvable repo-relative file or doc path — with OR without a line number — a bare `RFC-NNNN` id, or a bare 7–40-char hex token is a violation unless it is one of the two allowed forms above (inline own anchor; unresolvable/no-blob-at-head path). Link paths per these rules and SHAs as `https://github.com/<REPO>/commit/<sha>`. A path that resolves to no repo blob (a glob, pattern, config key, or illustrative name) is NOT a violation — leave it backticked.
+
+**If reviewComment is non-empty, use these verdict headers at the END:**
+
+- `verdict: "requestChanges"` → `### ⛔ Request Changes`
+- `verdict: "approve"` (with suggestions/nitpicks) → `### 👍 Approve`
+- `verdict: "comment"` → `### 💬 Comment`
+
+A non-empty body links its mentions per **File and doc links**: the summary sentence links its doc mention — "Points the retry policy in [docs/webhooks.md](<pr-blob-url>/docs/webhooks.md) at the new handler." — and mid-description prose links a no-line file mention — "the `retry*` helpers in [src/webhooks/config.ts](<pr-blob-url>/src/webhooks/config.ts) still assume single-attempt delivery" — while a glob like `*.steps.ts` stays a backticked code specimen.
+
+**reviewComment body template (ONLY when there are findings):**
+
+Every blocker, suggestion, and nitpick line ends with its rule code rendered per [§2.5](../SKILL.md#25-rule-codes) (single, shared, and no-code forms as defined there).
+
+```markdown
+[1 factual sentence: what this PR changes — no quality judgment]
+
+### 🚧 Blockers
+
+1. **[Title]** - [src/path/to/file.ts:NN](<pr-blob-url>/src/path/to/file.ts#LNN) - [Problem in 1 line] [CHECK-BUG-XXX](<RULES_DOC_URL>#check-bug-xxx)
+
+### 🙋‍♂️ Suggestions
+
+- [src/path/to/file.ts:NN](<pr-blob-url>/src/path/to/file.ts#LNN) - [Recommendation in 1 line] [CHECK-AI-XXX](<RULES_DOC_URL>#check-ai-xxx)
+
+### 💡 Nitpicks
+
+- [src/path/to/file.ts:NN](<pr-blob-url>/src/path/to/file.ts#LNN) - [Optional fix in 1 line] [CHECK-CPLX-XXX](<RULES_DOC_URL>#check-cplx-xxx)
+
+### ⛔ Request Changes / ### 👍 Approve
+
+[1 sentence: what must change — ONLY for requestChanges. Omit for approve.]
+```
+
+### inlineComments Usage
+
+Add inline comments for issues with specific code locations:
+
+- **🚧 Blocker** - Always add inline comment at exact location if location is specific
+- **🙋‍♂️ Suggestion** - Add if location is specific
+- **💡 Nitpicks** - Optional, can be in summary only
+
+Each inline comment: 1-2 sentences, start with severity emoji, end with the rule code rendered per [§2.5](../SKILL.md#25-rule-codes).
+
+### Code suggestions
+
+Add an optional `suggestion` to an inline comment when the fix is concrete and mechanical — a rename, a guard clause, a corrected operator — and you can write it as exact replacement text. The action renders it as a one-click GitHub suggestion block ("Commit suggestion").
+
+- `suggestion` REPLACES the anchored line(s). Reproduce the original line(s) verbatim except for your change, **including leading indentation** — GitHub applies the text as-is, so a stray space silently reindents the file.
+- Provide raw replacement code only: no ` ```suggestion ` fence, no `+`/`-` diff markers, no prose (the action wraps it).
+- Single-line fix: set `line` only. Multi-line fix: set `startLine` (first line) and `line` (last line) over a **contiguous range fully inside the diff**. If the fix touches lines outside the diff, describe it in prose and omit `suggestion`.
+- Emit `suggestion` only when confident it applies cleanly; otherwise keep the prose finding alone.
+
+### Deduplication Rules
+
+Give each finding one detailed explanation. For an inline finding, put the explanation in `inlineComments` and a short title, linked location, and rule code in `reviewComment`; do not repeat the detail. For an out-of-diff finding, put the detail in `reviewComment` only. The summary remains a self-contained inventory for later review rounds.
+
+### Include
+
+- ALWAYS full paths for all file references, rendered per **File and doc links** (e.g. `[src/services/payment/processor.ts:66](<pr-blob-url>/src/services/payment/processor.ts#L66)`, NOT `processor.ts:66`)
+- Direct, confident language
+- Clear verdict (rationale only when requesting changes)
+- Rule code rendered per [§2.5](../SKILL.md#25-rule-codes) on every finding line (blocker, suggestion, nitpick) and every `inlineComments.body`
+- File, section, doc, commit, and issue references follow the reference-formatting rules in [`reference-formatting.md`](../../shared-rules/references/reference-formatting.md) (read it first) — build the links per **File and doc links** above. Exception: an inline comment is already anchored to its file and line by GitHub, so keep its location as a backticked full path (e.g. `src/services/payment/processor.ts:66`); apply the linking rules to the review-body prose and to any cross-file or out-of-diff reference inside inline bodies
+
+### Exclude
+
+The body is findings only: no praise, no meta-commentary, no statistics, no process narration — every sentence is either a finding or required by the template, and each finding states a fact and the change it calls for, not a hedged possibility. With no issues, approve silently.
+
+Two format contracts downstream tooling keys on:
+
+- No top-level (`##`) markdown headers — the body's only headers are the template's `###` sections
+- A concrete, mechanical fix goes in the structured `suggestion` field (see [Code suggestions](#code-suggestions)), which renders as a one-click GitHub suggestion block — not as a code example in the comment prose
+</file>
+
 <file path="claude-plugins/autopilot/skills/pr-review/SKILL.md">
 ---
 name: pr-review
@@ -64655,8 +64914,10 @@ allowed-tools:
   - Read
   - Glob
   - Grep
-  - Agent
   - Bash(gh *)
+  - Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.ts":*)
+  - Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-issue.ts" --read-only:*)
+  - Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/linear/fetch-issue.mjs" --review:*)
   - Bash(echo *)
   - MCP(github:*)
   - Bash(command -v graphify)
@@ -64705,80 +64966,38 @@ You review the whole PR yourself in a single pass: load context, evaluate the di
 
 When `CONTEXT_BUNDLE` carries a non-empty path, Read that file once. It is valid when it parses as JSON and its `version` field equals `1` — the versioned contract lives in [`reviewContextBundle.ts`](https://github.com/awinogradov/code-assistants/blob/main/.github/actions/code-review-action/src/reviewContextBundle.ts). A valid bundle **substitutes for data acquisition only** — every decision procedure below runs unchanged over bundle-sourced data:
 
-- It replaces the [§1.1](#11-pr-context) `gh pr view` / `gh pr diff` calls and the [§1.2](#12-load-context-via-sub-agents) review-thread helper: `identity`/`refs` carry the PR metadata and SHAs, `changedFiles` the bounded file list (`totalFiles` stays exact when truncated), `checks` the check state, and `reviewState` the prior verdicts, review bodies, and unresolved inline threads.
-- Read the diff exactly once from the file `diff.path` references — the same never-embed-twice rule as [§1.1](#11-pr-context).
-- [§1.3](#13-review-round-handling) takes its round from `round`: `firstReview: true` is the first-review branch; otherwise `round.lastReviewedSha` names the substantive anchor and `round.delta` what changed since it. Route an unavailable delta by its `reason` — `compare-status-identical` means the head is already reviewed (the [§1.3](#13-review-round-handling) skip arm); `compare-status-diverged`, `compare-status-behind`, and `ref-missing` mean rewritten or unavailable history, so the full diff is the review surface. `delta.files` is informational only; the review surface is materialized per [§1.3](#13-review-round-handling) — never assume "nothing changed".
-- The [§1.2](#12-load-context-via-sub-agents) codebase snapshot and the issue-linked agents still run — the bundle does not cover them; extract the linked issue from `identity.body`.
+- It replaces the [§1.1](#11-pr-context) `gh pr view` / `gh pr diff` calls and the [§1.3](#13-load-supporting-context) review-thread helper: `identity`/`refs` carry the PR metadata and SHAs, `changedFiles` the bounded file list (`totalFiles` stays exact when truncated), `checks` the check state, and `reviewState` the prior verdicts, review bodies, and unresolved inline threads.
+- Defer reading `diff.path` until the round selects a full review. An incremental round reads only its compare patch; an identical head reads neither.
+- [§1.2](#12-review-round-handling) takes its round from `round`: `firstReview: true` is the first-review branch; otherwise `round.lastReviewedSha` names the substantive anchor and `round.delta` what changed since it. Route an unavailable delta by its `reason` — `compare-status-identical` means the head is already reviewed (the [§1.2](#12-review-round-handling) skip arm); `compare-status-diverged`, `compare-status-behind`, and `ref-missing` mean rewritten or unavailable history, so the full diff is the review surface. `delta.files` is informational only; the review surface is materialized per [§1.2](#12-review-round-handling) — never assume "nothing changed".
+- Classify the round next in [§1.2](#12-review-round-handling). Only a non-skipped round proceeds to [§1.3](#13-load-supporting-context) for supporting context.
 
 **Targeted follow-ups are budgeted.** A concrete missing field, a section with `truncated: true`, or a section with `available: false` permits a targeted fetch — at most **3 per session**. Record each, before running it, as a machine-readable trace line: `bundle-followup: <field> <command>`. Past the budget, proceed on the bounded data and say so in the [§1.5](#15-context-map) Context Map. Never re-fetch data the bundle already carries — rediscovery is exactly the cost the bundle exists to remove.
 
-**Fallback.** When `CONTEXT_BUNDLE` is absent or empty, the file is unreadable, the JSON does not parse, or `version` is not `1`, record one machine-readable trace line — `bundle-fallback: <absent|unreadable|invalid-json|invalid-version>` — and run [§1.1](#11-pr-context)–[§1.2](#12-load-context-via-sub-agents) unchanged. Manual local runs take this path by design.
+**Fallback.** When `CONTEXT_BUNDLE` is absent or empty, the file is unreadable, the JSON does not parse, or `version` is not `1`, record one machine-readable trace line — `bundle-fallback: <absent|unreadable|invalid-json|invalid-version>` — and fetch metadata through [§1.1](#11-pr-context), then classify the round before acquiring its surface or supporting context. Manual local runs take this path by design.
 
 ### 1.1 PR Context
 
 Skip this section's fetches when [§1.0](#10-consume-the-context-bundle-action-supplied) consumed a valid bundle — it already carries all of this data; the prose below still defines what the data means.
 
-Fetch PR metadata and the diff:
+Fetch PR metadata only:
 
 ```bash
-gh pr view <PR_NUMBER> -R <REPO> --json title,body,files,commits,reviews,latestReviews,comments,reviewDecision,headRefOid,baseRefOid
-gh pr diff <PR_NUMBER> -R <REPO>
+gh pr view <PR_NUMBER> -R <REPO> --json title,body,files,commits,reviews,latestReviews,comments,reviewDecision,headRefName,headRefOid,baseRefOid
 ```
 
-Fetch the diff exactly once and review it in-model. Never embed the diff more than once.
+Proceed to [§1.2](#12-review-round-handling) before loading a diff, threads, issue context, TODOs, or a codebase snapshot. Never embed the selected diff more than once.
 
-This `gh pr view` output is the authoritative source for the PR title/body/diff and prior-review verdicts: `reviews`/`latestReviews` carry each prior review's verdict and summary body (the body lists that round's findings). Per-line inline annotations are NOT in any `gh pr view` field — load them via the deterministic review-thread helper run in [§1.2](#12-load-context-via-sub-agents). A denied or empty fetch must never be silently treated as "no prior findings" (that path produces an empty, content-free approval).
+This `gh pr view` output is the authoritative source for the PR metadata and prior-review verdicts: `reviews`/`latestReviews` carry each prior review's verdict and summary body (the body lists that round's findings). Per-line inline annotations are NOT in any `gh pr view` field — load them via the deterministic review-thread helper run in [§1.3](#13-load-supporting-context). A denied or empty fetch must never be silently treated as "no prior findings" (that path produces an empty, content-free approval).
 
-Treat the prior review **bodies** ([§1.1](#11-pr-context)) plus the inline threads loaded by the helper ([§1.2](#12-load-context-via-sub-agents)) as the record of past findings: the review skill writes a self-contained summary body for every non-empty review (see [reviewComment Format](#reviewcomment-format-30-lines-max)), and the inline threads carry the per-line detail. With both loaded, a follow-up review sees exactly what each prior round flagged and where — do not bail when one source is empty; cross-check the other.
+Treat the prior review **bodies** ([§1.1](#11-pr-context)) plus the inline threads loaded by the helper ([§1.3](#13-load-supporting-context)) as the record of past findings: the review skill writes a self-contained summary body for every non-empty review (see [reviewComment Format](#reviewcomment-format-30-lines-max)), and the inline threads carry the per-line detail. With both loaded, a follow-up review sees exactly what each prior round flagged and where — do not bail when one source is empty; cross-check the other.
 
-### 1.2 Load Context via Sub-Agents
+### 1.2 Review Round Handling
 
-Extract the linked issue ID from PR metadata. Check in order, stop at first match:
-
-1. **PR body `Issues:` section** — lines starting with `Closes` or `Related to` followed by a ticket ID; the id may be bare (`#12`, `ENG-123`) or inside a tracker issue URL (`https://linear.app/<workspace>/issue/ENG-123/<slug>`) — extract the `#N` / `KEY-N` token either way
-2. **Branch name** — leading `[a-z]+-[0-9]+` segment, convert to UPPERCASE
-
-Load the remaining context in parallel — the codebase snapshot, the prior inline review threads, and (when an issue is linked) the linked-issue context plus the related TODOs / issue references in the codebase. Prior-review verdicts and summary bodies already come from the [§1.1](#11-pr-context) `gh pr view` output; the deterministic review-thread helper adds the per-line inline annotations in one bounded Bash call, returning a categorized payload (raw API output stays out of this context). When [§1.0](#10-consume-the-context-bundle-action-supplied) consumed a valid bundle, skip the review-thread helper — `reviewState.unresolvedThreads` already carries the inline threads — and run only the snapshot and the issue-linked agents below.
-
-Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the ordered context-acquisition chain; this skill passes the review-scoped `includePatterns` (repomix tier only) shown below. Read [`github-review-fetch.md`](../shared-rules/references/github-review-fetch.md) for the review-thread helper invocation and its output contract.
-
-```
-Acquire codebase context: follow the shared repomix-snapshot chain,
-  passing `includePatterns`: ".claude/**, **.md, **.yml, .github/**"
-
-Fetch review threads: run the shared github-review-fetch helper via Bash
-  with <REPO>, <PR_NUMBER>, and <PR_AUTHOR>
-
-Agent (resolve-issue-context) — only if linked issue found:
-  Use the Agent tool with:
-  - `subagent_type`: "autopilot:resolve-issue-context"
-  - `prompt`: "Fetch issue context. Issue number: [N]. Repository: <REPO>."
-  - `description`: "Resolve issue context"
-
-Agent (search-codebase-todos) — only if linked issue found:
-  Use the Agent tool with:
-  - `subagent_type`: "autopilot:search-codebase-todos"
-  - `prompt`: "Search for TODOs. Issue number: [N]."
-  - `description`: "Search codebase TODOs and issue references"
-```
-
-If no issue number found, output: "No linked issue — skipping issue comparison" and skip the issue-context agent.
-
-If a `gh` call fails (auth/network error) inside an agent or the helper reports a non-null `fetchError`, continue with whatever context loaded — never treat a degraded review-thread fetch as "no prior findings" (the shared block defines the degradation fields), and skip issue comparison only when `resolve-issue-context` itself found no issue.
-
-After all calls complete, store the selected context source (and its `outputId` when the repomix tier was selected), the categorized review threads from the helper, the issue context from `resolve-issue-context`, and the TODOs / issue references from `search-codebase-todos`. Use these plus the prior-review verdicts from [§1.1](#11-pr-context) for the round handling below.
-
-**Read the pack, don't dump it.** The context source exists so you can pull _targeted_ context on demand — via its read contract: `graphify` queries on the graph tier, or `grep_repomix_output` (regex + `contextLines`) and `read_repomix_output` with a specific `startLine`/`endLine` slice on the repomix tier. NEVER `read_repomix_output` over the whole range (that loads the entire codebase into context). When the diff is self-contained and needs no cross-file lookup (the common case), don't read the pack at all — pull cross-file context only for checks that need it (e.g. architecture reuse, duplicated logic).
-
-**Graphify is context, never surface.** The changed-file list and the review surface come from Git/GitHub ([§1.0](#10-consume-the-context-bundle-action-supplied)/[§1.1](#11-pr-context) and the [§1.3](#13-review-round-handling) round contract) — never from Graphify. On the graph tier, Graphify answers questions that originate from the active review surface: callers of a changed symbol, a contract or invariant outside the diff, an existing shared helper, duplicated logic elsewhere. Its results may explain a finding on that surface, but must never expand an incremental round into a review of unrelated code.
-
-### 1.3 Review Round Handling
-
-This decision procedure is the same on both data paths: the bundle path sources "previous reviews by REVIEWER" from `round` and `reviewState` ([§1.0](#10-consume-the-context-bundle-action-supplied)), the legacy path from [§1.1](#11-pr-context)–[§1.2](#12-load-context-via-sub-agents). A bundle whose `reviewState` is `available: false` never means "no prior reviews" — that is a degraded fetch; verify with a budgeted follow-up before treating the round as a first review. This section owns the round contract end to end: anchor selection, round classification, the review surface, and reconciliation — a consumer host supplies raw GitHub facts and publication, never its own round policy.
+This decision procedure is the same on both data paths: the bundle path sources "previous reviews by REVIEWER" from `round` and `reviewState` ([§1.0](#10-consume-the-context-bundle-action-supplied)), the legacy path from [§1.1](#11-pr-context). A bundle whose `reviewState` is `available: false` never means "no prior reviews" — that is a degraded fetch; verify with a budgeted follow-up before treating the round as a first review. This section owns the round contract end to end: anchor selection, round classification, the review surface, and reconciliation — a consumer host supplies raw GitHub facts and publication, never its own round policy.
 
 **The substantive anchor.** The durable review anchor is the latest **substantive** review authored by REVIEWER, keyed by the review's structured `commit_id` — never a SHA parsed from review prose. A review is substantive when its state is `APPROVED` or `CHANGES_REQUESTED` (even with an empty body), or `COMMENTED` with a non-empty top-level body (a full review emitted by this skill always writes one). An empty `COMMENTED` review — GitHub's side effect of a reviewer replying inside an inline thread — and a `DISMISSED` review (a verdict explicitly revoked) never advance the anchor. A valid bundle's `round` already encodes this selection ([`buildReviewContext.ts`](https://github.com/awinogradov/code-assistants/blob/main/.github/actions/code-review-action/src/buildReviewContext.ts) implements the same predicate as `isSubstantiveReview`, and [`reviewRoundContract.test.ts`](https://github.com/awinogradov/code-assistants/blob/main/.github/actions/code-review-action/src/reviewRoundContract.test.ts) pins the two to each other); on the legacy path, apply the predicate yourself over the [§1.1](#11-pr-context) `reviews` list.
 
-**Round state machine.** Classify before reviewing. Never infer a force-push from whether the old anchor object still exists — GitHub retains orphaned commits; ancestry/compare status is the contract:
+**Round state machine.** Classify before diff or supporting-context acquisition. Never infer a force-push from whether the old anchor object still exists — GitHub retains orphaned commits; ancestry/compare status is the contract:
 
 | State                                                                            | Review behavior                                                                                 |
 | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
@@ -64787,32 +65006,36 @@ This decision procedure is the same on both data paths: the bundle path sources 
 | Anchor is an ancestor of head (delta available, compare status `ahead`)          | Incremental: review the exact anchor-to-head patch, plus revalidate prior unresolved findings   |
 | `compare-status-diverged`, `compare-status-behind`, or `ref-missing`             | Full PR review — rewritten history is untrusted; conflict resolution may have changed any patch |
 
+On the legacy path, compare a non-identical anchor with the head using `gh api repos/<REPO>/compare/<anchor>...<headSha> --jq '{status, total_commits, fileCount: (.files | length)}'`. An unavailable compare forces a full review; report why. If prior-review metadata is unavailable or truncated, recover the anchor with a targeted review-history fetch before skipping or claiming a first review. Unresolved history remains degraded, never an empty history.
+
+**Full surface.** Only for a first/full review or an incremental fallback: read the bundle's `diff.path` once when available and not truncated; otherwise fetch `gh pr diff <PR_NUMBER> -R <REPO>` once. Surface unavailable or truncated full diffs explicitly; do not approve on an incomplete surface. An identical-head skip returns immediately without diff, snapshot, thread, issue, or TODO acquisition.
+
 **Incremental surface.** Materialize the patch once via the GitHub compare API with the diff media type — `gh api repos/<REPO>/compare/<anchor>...<headSha> -H "Accept: application/vnd.github.diff"` — because a shallow checkout cannot assume the anchor object exists locally. Record it, before running it, as a machine-readable trace line: `round-surface: <anchor>...<headSha>`. This is the round's defined surface acquisition, not counted against the [§1.0](#10-consume-the-context-bundle-action-supplied) follow-up budget. When the fetch fails (404 — the refs moved since the bundle was built; 406 — diff too large), the range hits the compare caps (250 commits / 300 files), or the fetched patch covers fewer files than the delta reports, degrade to a full PR review and record `round-surface-fallback: <reason>` — never review a silently truncated patch, and never run an incremental round on an empty surface.
 
-**First review (no substantive prior review by REVIEWER):**
+After selecting and materializing the surface, acquire supporting context below, then reconcile prior findings.
 
-- Start with a greeting: ONE short sentence that @-mentions PR_AUTHOR — the @-mention is what triggers their notification. Vary the wording each time in your own voice; no praise, no round-labeling, no elaboration after it.
-- **Precedence:** Greeting applies only when the review has findings (blockers, suggestions, or nitpicks). For first-time approvals with no issues, use the minimal approval format — empty `reviewComment`, no body text at all.
+### 1.3 Load Supporting Context
 
-**Follow-up review (substantive prior review by REVIEWER exists):**
+Run only after [§1.2](#12-review-round-handling) selected a non-skipped review surface. Fetch supporting context in parallel where independent:
 
-1. Read all previous review findings from the `reviews`/`latestReviews` bodies ([§1.1](#11-pr-context)) and the per-line inline threads from the review-thread helper ([§1.2](#12-load-context-via-sub-agents)) — the reconciliation record needs no model-session memory. Both sources are bounded on the bundle path (20 prior reviews, 100 threads); a `truncated: true` flag there permits a budgeted follow-up, never a silent drop of prior findings.
-2. Check if issues were addressed by re-examining the round's review surface for each finding named in those bodies
-3. Compare current findings against previous review
-4. **SKIP (no structured JSON)** if: all findings are identical to previous review, OR no new findings and no unresolved issues
-5. If previous review was CHANGES_REQUESTED and all blockers are now fixed with no new findings → approve with empty `reviewComment` (no body text)
-6. Only submit a full review body if there are genuinely NEW findings or unresolved issues to confirm
-7. DO NOT repeat resolved issues or summarize what was fixed
-8. Outdated inline comments from previous reviews are auto-resolved by the bot
+- **Review threads:** when no valid bundle supplies them, run the bounded helper in [github-review-fetch.md](../shared-rules/references/github-review-fetch.md). A non-null `fetchError` or unavailable/truncated bundle section stays explicit; use budgeted follow-ups for bundle gaps. Never treat a failed fetch as no prior findings.
+- **Codebase:** follow [repomix-snapshot.md](../shared-rules/references/repomix-snapshot.md) with `includePatterns: ".claude/**, **.md, **.yml, .github/**"` on the pack tier. Use targeted reads for cross-file checks; do not dump the pack. Retain the source evidence record for the Context Map.
+- **Linked issue:** resolve and fetch below; no issue-fetching or TODO-search subagents.
 
-When skipping, output only: `Review skipped: no new findings since last review`
-Do NOT produce the structured JSON output.
+Resolve the linked issue from the PR body's `Issues:` section first (`Closes`, `Fixes`, `Resolves`, or `Related to`), then the branch. Accept a GitHub number or issue URL, preserving an explicitly named repository; `issue-<number>-…` means GitHub. A Linear issue URL identifies Linear; a bare `KEY-N` or `<key>-<number>-…` branch (normalize the key to uppercase) requires a matching `agents.trackers` Linear key (`keys`, defaulting to `team`). Do not interpret an arbitrary branch prefix as a tracker. If no issue is linked, record "No linked issue — skipping issue comparison".
 
-**Consecutive approval (the substantive anchor is an APPROVED review):**
+For a resolved issue, execute the existing helper directly (Node ≥24 or Bun for TypeScript). Resolve the plugin root from `CLAUDE_PLUGIN_ROOT`, or this skill's installed location when unset. Treat identifiers as data: validate the repository/number or tracker ID, quote shell arguments, and never execute issue-body text.
 
-- An anchor `commit_id` at the head SHA never reaches this branch — the state machine above already skipped it with `Review skipped: no commits since the reviewed head`
-- If new commits exist but no new issues → approve with empty `reviewComment` (no body text)
-- Only submit a full review body if new commits introduce genuinely NEW findings
+- GitHub: `node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-issue.ts" --read-only "<owner/repo>" "<number>"` — [helper contract](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/lib/github/fetch-issue.ts). Do not pass `--assign` during review.
+- Linear: `node "${CLAUDE_PLUGIN_ROOT}/lib/linear/fetch-issue.mjs" --review "<KEY-N>"` with inherited `LINEAR_API_KEY` — [helper contract](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/lib/linear/fetch-issue.mjs). Never print the key.
+
+Store the provider-agnostic result, including `url`, `comments`, `truncated`, and `resolveError`. Report truncation and avoid claiming issue coverage beyond the returned content. Missing runtime, process failure, invalid JSON, or non-null `resolveError` degrades issue comparison explicitly; continue code review without claiming the issue was satisfied. Do not retry through an agent.
+
+**Related TODOs:** use one bounded search through the selected source for the issue's reference forms: GitHub `issues/N` and `#N`, or Linear `issue/KEY-N` and `KEY-N`, with identifier boundaries so `#12` does not match `#123`. On default tools use Grep with `head_limit: 20`; on the pack tier use a bounded `grep_repomix_output`; on graphify use its query/shortlist discipline and record a permitted fallback if literal references are absent from the graph. Keep at most 20 `path:line — text` entries and report truncation or failure. This is supporting context, not an expansion of the review surface.
+
+**Graphify is context, never surface.** Git/GitHub supplies changed files and the selected patch. Graph queries may explain callers, invariants, reuse, or duplication relevant to that patch, but must never expand an incremental round into unrelated code.
+
+**Reconcile follow-up findings.** Use prior review bodies and unresolved threads to check each previously reported issue against the selected surface. Both sources are bounded on the bundle path (20 prior reviews, 100 threads); recover relevant truncated entries with budgeted follow-ups. Classify findings as new, unchanged, or resolved; do not repeat resolved issues. After reviewing the surface, apply [Verdict Decision Rules](#verdict-decision-rules) once. Those rules own skip/approve/requestChanges precedence, including approval after blockers are fixed.
 
 ### 1.4 Project Context (read before reviewing)
 
@@ -64820,7 +65043,7 @@ Read the project's own conventions before judging the diff — you enforce them,
 
 - **`CODE_REVIEW.md` (consumer review rules — check first)** — if a non-empty `CODE_REVIEW.md` exists at the repository root, read it in full as the applicable-standards source and SKIP the README + `docs/*`, `rfc/`, and `principles/` bullets below: the file is the consumer's distilled, review-ready rules corpus, so its rules apply as written there — ids, severities, source citations; a rule with no declared severity is a suggestion. The [Consumer Review Rules check](#consumer-review-rules) enforces it. A `CODE_REVIEW.md` the diff itself modifies is enforced at its **base-branch version** — fetch it via `gh api repos/<REPO>/contents/CODE_REVIEW.md?ref=<baseRefOid>` (from [§1.1](#11-pr-context)) — so a PR cannot legalize its own diff by editing the rules. The CLAUDE.md bullet and the external lookups below apply on both branches of this check.
 - **CLAUDE.md (stack rules)** — read the repository-root `CLAUDE.md`; map each changed line to the rule it must satisfy.
-- **README + `docs/*` (project conventions)** — read the root `README.md` and the docs it links; treat `docs/` as the source of truth for project-specific conventions. When the root README carries no docs index, fall back to `docs/README.md`, then to the Glob `docs/*.md` file names.
+- **README + `docs/*` (project conventions)** — read the root `README.md`, inventory all names under `docs/`, and select project-wide conventions and sections relevant to the review surface from the documentation index. Inspect ambiguous candidates; honor explicit repository-required reads. Treat `docs/` as the source of truth. With no README index, use `docs/README.md`, then the file inventory.
 - **`rfc/` (versioned standards)** — if `rfc/` exists at the repository root, build a standards inventory and read the diff-relevant standards; the [Repository Standards checks](#repository-standards-rfcs) enforce them:
   - **Inventory** — read the `rfc/README.md` index table into `{id, title, status, path}`; when it is absent, Glob `rfc/[0-9]*.md` and read each file's frontmatter block. Derive a missing id/title from the `NNNN-slug` filename (or the first H1). A missing or unparseable `status` counts as Draft — record it as defaulted. `Superseded` entries are never enforcement sources.
   - **Selection** — match each entry's title+slug tokens against the changed file paths and the diff's visible domains (log calls → a logging standard, HTTP routes → an API standard, new files → a file-structure standard). When in doubt whether a standard applies, load it — capped at 3 standards per review, ranked by match strength; record dropped candidates in the Context Map (no silent truncation).
@@ -64834,9 +65057,9 @@ Read the project's own conventions before judging the diff — you enforce them,
 [Phase 1](#phase-1-context-loading) is the single context-gathering pass. Record a compact map; [Phase 2](#phase-2-review-the-diff) reasons over it without re-fetching the diff or re-reading the pack:
 
 - **PR diff** — changed files and the one-line role of each change ([§1.1](#11-pr-context)).
-- **Linked-issue requirements** — acceptance criteria from `resolve-issue-context` ([§1.2](#12-load-context-via-sub-agents)), or "no linked issue".
-- **Related work** — TODOs and `#<issue>` references in the codebase from `search-codebase-todos` ([§1.2](#12-load-context-via-sub-agents)): flag whether the diff resolves or conflicts with a related TODO, leaves a referenced issue half-addressed, or duplicates work tracked elsewhere; "none" when no issue is linked or none found.
-- **Prior-review findings** — unresolved findings from prior review bodies ([§1.1](#11-pr-context)) and inline threads from the review-thread helper ([§1.2](#12-load-context-via-sub-agents)); empty on first review.
+- **Linked-issue requirements** — acceptance criteria from the issue helper ([§1.3](#13-load-supporting-context)), or "no linked issue".
+- **Related work** — TODOs and `#<issue>` references in the codebase from the bounded issue-reference search ([§1.3](#13-load-supporting-context)): flag whether the diff resolves or conflicts with a related TODO, leaves a referenced issue half-addressed, or duplicates work tracked elsewhere; "none" when no issue is linked or none found.
+- **Prior-review findings** — unresolved findings from prior review bodies ([§1.1](#11-pr-context)) and inline threads from the review-thread helper ([§1.3](#13-load-supporting-context)); empty on first review.
 - **Project conventions** — the CLAUDE.md / README / `docs/*` points that bear on the diff ([§1.4](#14-project-context-read-before-reviewing)).
 - **Applicable standards** — name the source first. When the [§1.4](#14-project-context-read-before-reviewing) check-first tier fired: `CODE_REVIEW.md`, plus the rule ids that bear on the diff. Otherwise the discovered inventory: the standards and any `principles/` values selected in [§1.4](#14-project-context-read-before-reviewing), each as id + status (marked "defaulted" when the status was inferred) with a one-line why, plus any dropped candidates; "none" when nothing matched or the sources are absent. This map is the audit log of what was loaded and why.
 - **Codebase pointers** — only the targeted pack-`grep` hits pulled for cross-file checks; "none" when the diff is self-contained.
@@ -65102,17 +65325,16 @@ Map `severity` to its emoji when rendering in [Phase 3](#phase-3-submit-review):
 
 ### Verdict Decision Rules
 
-This mapping is exhaustive and deterministic — every review lands in exactly one case. Apply it as written:
+First handle missing required evidence: report an inconclusive review with `verdict: "comment"` and a concise limitation; unavailable data never proves a finding resolved or an issue satisfied. Then apply the first matching case below. Do not make a separate skip decision during reconciliation:
 
-0. **Nothing new to report** → no structured output (review skipped)
-   - Follow-up with identical findings as previous review
-   - Follow-up with no findings and no unresolved issues
-   - Already approved + no new commits since last approval
-1. **Any 🚧 Blockers exist** → `verdict: "requestChanges"` — stated as required changes, not as a conditional approval ("Once X is fixed, approve")
-2. **No blockers, only 🙋‍♂️ suggestions** → `verdict: "approve"` (suggestions are non-blocking)
-3. **No issues at all** → `verdict: "approve"`, `reviewComment: ""`
+1. **Anchor equals head:** already exited in [round handling](#12-review-round-handling) with `Review skipped: no commits since the reviewed head`; no structured output.
+2. **No current blockers and either prior blockers were fixed or an approved anchor has new commits:** approve. If findings remain, include them; otherwise use empty `reviewComment` and `inlineComments: []`. This verdict update takes precedence over the unchanged/empty follow-up skip.
+3. **Other follow-up with no new findings and either a finding set identical to the prior review or no unresolved findings:** output only `Review skipped: no new findings since last review`; no structured output.
+4. **Any blockers remain:** `verdict: "requestChanges"` with findings and required changes.
+5. **Only suggestions and/or nitpicks remain:** `verdict: "approve"` with findings; neither severity blocks approval.
+6. **First review with no findings:** `verdict: "approve"`, `reviewComment: ""`, `inlineComments: []`.
 
-A non-empty body's closing verdict header must match the `verdict` field per the header mapping in [reviewComment Format](#reviewcomment-format-30-lines-max).
+The detailed findings format is required only for responses with findings.
 
 ---
 
@@ -65120,129 +65342,21 @@ A non-empty body's closing verdict header must match the `verdict` field per the
 
 ### Structured Output Schema
 
-```json
-{
-  "verdict": "approve" | "requestChanges" | "comment",
-  "reviewComment": "...",
-  "inlineComments": [
-    {"path": "src/file.ts", "line": 42, "body": "🚧 Issue description"},
-    {"path": "src/other.ts", "line": 15, "body": "🙋‍♂️ Suggestion here"},
-    {"path": "src/calc.ts", "line": 8, "startLine": 7, "body": "🚧 Off-by-one in the running sum [CHECK-BUG-001](<RULES_DOC_URL>#check-bug-001)", "suggestion": "    for (let i = 0; i < n; i++)\n        total += items[i];"}
-  ]
-}
-```
+For a non-skipped review, emit `verdict` (`approve`, `requestChanges`, or `comment`), `reviewComment` (string), and `inlineComments` (array). Each inline comment has `path`, `line`, and `body`; `startLine` and `suggestion` are optional and governed by [Code suggestions](#code-suggestions).
 
-`startLine` (first line of a multi-line range) and `suggestion` (verbatim replacement for the anchored line(s)) are optional per-comment fields — emit them only for concrete, mechanical fixes (see [Code suggestions](#code-suggestions)).
+An empty approval is exactly:
+
+```json
+{ "verdict": "approve", "reviewComment": "", "inlineComments": [] }
+```
 
 ### reviewComment Format (~30 lines max)
 
-Section names are fixed because downstream tooling keys on them — use exactly the four defined in the body template below (🚧 Blockers, 🙋‍♂️ Suggestions, 💡 Nitpicks, and the closing verdict header).
-
-**SKIP empty sections entirely. Do NOT write "None" or "N/A" - just omit the section.**
-
-**Ticket references:** when the body cites the linked ticket, cite it as a markdown link built from the [§1.2](#12-load-context-via-sub-agents) `resolve-issue-context` `url` (e.g. `[ENG-123](https://linear.app/<workspace>/issue/ENG-123)`) — a bare tracker id GitHub does not auto-link is dead text; fall back to the bare id only when no URL is resolvable. GitHub issue numbers stay bare (`#42` auto-links).
-
-**File and doc links:** define `<pr-blob-url>` = `https://github.com/<REPO>/blob/<headRefOid>` (`headRefOid` from [§1.1](#11-pr-context); valid for fork PRs too — PR head commits stay reachable in the base repo via `refs/pull/N/head`). Percent-encode path characters that break markdown links (spaces → `%20`, parentheses → `%28`/`%29`, `:` → `%3A`). Then:
-
-- **Locations and mentions** — every finding location AND every file/doc/RFC mention in prose renders as a link, wherever it appears: the leading finding location, the summary sentence, mid-description text, and inside `inlineComments` bodies. With a known line: `[<path>:<NN>](<pr-blob-url>/<path>#L<NN>)` (ranges `#L<start>-L<end>`). With no line — a plain prose mention of a repo file/doc — drop the fragment and still link the path: `[<path>](<pr-blob-url>/<path>)`. A bare `RFC-NNNN` links to its doc via the [§1.4](#14-project-context-read-before-reviewing) standards inventory even when a trailing `§X` section anchor is unresolvable (link the document; omit the anchor).
-- **Only resolvable targets** — link a path from the [§1.1](#11-pr-context) `files` list or one the [§1.2](#12-load-context-via-sub-agents) snapshot / `Glob` / `gh` lookup confirmed; a standard's id resolves to its path via the [§1.4](#14-project-context-read-before-reviewing) standards inventory. An id with no resolved path, or a path with no blob at head (deleted, or a renamed-from old path), is NEVER linked by guess — keep it backticked/bare; a fabricated 404 is worse than no link. A token that is not a real target — a glob or pattern (`*.steps.ts`), a bare directory, a config key (`agents.trackers`), or an illustrative name that resolves to no repo blob — is a code specimen, not a reference: keep it backticked and never link it.
-- **Anchors** — a line cite into a `.md` target inserts `?plain=1` before `#L` so the anchor lands (e.g. `[docs/setup.md:96](<pr-blob-url>/docs/setup.md?plain=1#L96)`); a section cite uses the rendered heading-anchor form `<pr-blob-url>/<path>#<heading-anchor>`, no `?plain=1`; never combine the two.
-- **Inline-comment exception** — an inline comment's own anchored location stays a backticked full path (GitHub anchors it).
-- **Self-check** — before emitting the structured output, scan the entire `reviewComment` (including the summary sentence, not just finding lines) and every `inlineComments` body: outside code spans/fences, any resolvable repo-relative file or doc path — with OR without a line number — a bare `RFC-NNNN` id, or a bare 7–40-char hex token is a violation unless it is one of the two allowed forms above (inline own anchor; unresolvable/no-blob-at-head path). Link paths per these rules and SHAs as `https://github.com/<REPO>/commit/<sha>`. A path that resolves to no repo blob (a glob, pattern, config key, or illustrative name) is NOT a violation — leave it backticked.
-
-**Empty vs non-empty `reviewComment`** follows the canonical [Verdict Decision Rules](#verdict-decision-rules): use empty `""` for an approval with no findings (rule 3) — the `verdict` field drives the GitHub event, so no body text is needed; use a non-empty body for any review with findings or a `requestChanges` verdict; and when there is nothing new to report, emit no structured output at all (rule 0).
-
-**If reviewComment is non-empty, use these verdict headers at the END:**
-
-- `verdict: "requestChanges"` → `### ⛔ Request Changes`
-- `verdict: "approve"` (with suggestions/nitpicks) → `### 👍 Approve`
-- `verdict: "comment"` → `### 💬 Comment`
-
-**Example: approve with no findings (most common case)**
-
-```json
-{
-  "verdict": "approve",
-  "reviewComment": "",
-  "inlineComments": []
-}
-```
-
-**Conditional fields:**
-
-| Field           | When it applies                                                                                                                                                                  |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `startLine`     | Only for a multi-line range — `startLine` is the first line, `line` the last (see [Code suggestions](#code-suggestions))                                                         |
-| `suggestion`    | Only when a concrete, mechanical fix exists as exact replacement text (see [Code suggestions](#code-suggestions))                                                                |
-| `reviewComment` | Empty `""` only when approving with no findings ([Verdict Decision Rules](#verdict-decision-rules) rule 3); non-empty for any review with findings or a `requestChanges` verdict |
-
-A non-empty body links its mentions per **File and doc links**: the summary sentence links its doc mention — "Points the retry policy in [docs/webhooks.md](<pr-blob-url>/docs/webhooks.md) at the new handler." — and mid-description prose links a no-line file mention — "the `retry*` helpers in [src/webhooks/config.ts](<pr-blob-url>/src/webhooks/config.ts) still assume single-attempt delivery" — while a glob like `*.steps.ts` stays a backticked code specimen.
-
-**reviewComment body template (ONLY when there are findings):**
-
-Every blocker, suggestion, and nitpick line ends with its rule code rendered per [§2.5](#25-rule-codes) (single, shared, and no-code forms as defined there).
-
-```markdown
-[1 factual sentence: what this PR changes — no quality judgment]
-
-### 🚧 Blockers
-
-1. **[Title]** - [src/path/to/file.ts:NN](<pr-blob-url>/src/path/to/file.ts#LNN) - [Problem in 1 line] [CHECK-BUG-XXX](<RULES_DOC_URL>#check-bug-xxx)
-
-### 🙋‍♂️ Suggestions
-
-- [src/path/to/file.ts:NN](<pr-blob-url>/src/path/to/file.ts#LNN) - [Recommendation in 1 line] [CHECK-AI-XXX](<RULES_DOC_URL>#check-ai-xxx)
-
-### 💡 Nitpicks
-
-- [src/path/to/file.ts:NN](<pr-blob-url>/src/path/to/file.ts#LNN) - [Optional fix in 1 line] [CHECK-CPLX-XXX](<RULES_DOC_URL>#check-cplx-xxx)
-
-### ⛔ Request Changes / ### 👍 Approve
-
-[1 sentence: what must change — ONLY for requestChanges. Omit for approve.]
-```
-
-### inlineComments Usage
-
-Add inline comments for issues with specific code locations:
-
-- **🚧 Blocker** - Always add inline comment at exact location if location is specific
-- **🙋‍♂️ Suggestion** - Add if location is specific
-- **💡 Nitpicks** - Optional, can be in summary only
-
-Each inline comment: 1-2 sentences, start with severity emoji, end with the rule code rendered per [§2.5](#25-rule-codes).
+Only when findings remain, read [findings-format.md](./references/findings-format.md) for the body template, inline comments, links, and deduplication rules. Apply the reference-formatting rules in [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) when writing findings. Do not load either reference for a skipped review or an empty approval. `<pr-blob-url>` means `https://github.com/<REPO>/blob/<headRefOid>`.
 
 ### Code suggestions
 
-Add an optional `suggestion` to an inline comment when the fix is concrete and mechanical — a rename, a guard clause, a corrected operator — and you can write it as exact replacement text. The action renders it as a one-click GitHub suggestion block ("Commit suggestion").
-
-- `suggestion` REPLACES the anchored line(s). Reproduce the original line(s) verbatim except for your change, **including leading indentation** — GitHub applies the text as-is, so a stray space silently reindents the file.
-- Provide raw replacement code only: no ` ```suggestion ` fence, no `+`/`-` diff markers, no prose (the action wraps it).
-- Single-line fix: set `line` only. Multi-line fix: set `startLine` (first line) and `line` (last line) over a **contiguous range fully inside the diff**. If the fix touches lines outside the diff, describe it in prose and omit `suggestion`.
-- Emit `suggestion` only when confident it applies cleanly; otherwise keep the prose finding alone.
-
-### Deduplication Rules
-
-- NEVER mention the same issue in BOTH reviewComment AND inlineComments
-- If adding inline comment → mention location in reviewComment but don't repeat full description
-- If issue location is out-of-diff → put in reviewComment only, skip inlineComments
-
-### Include
-
-- ALWAYS full paths for all file references, rendered per **File and doc links** (e.g. `[src/services/payment/processor.ts:66](<pr-blob-url>/src/services/payment/processor.ts#L66)`, NOT `processor.ts:66`)
-- Direct, confident language
-- Clear verdict (rationale only when requesting changes)
-- Rule code rendered per [§2.5](#25-rule-codes) on every finding line (blocker, suggestion, nitpick) and every `inlineComments.body`
-- File, section, doc, commit, and issue references follow the reference-formatting rules in [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (read it first) — build the links per **File and doc links** above. Exception: an inline comment is already anchored to its file and line by GitHub, so keep its location as a backticked full path (e.g. `src/services/payment/processor.ts:66`); apply the linking rules to the review-body prose and to any cross-file or out-of-diff reference inside inline bodies
-
-### Exclude
-
-The body is findings only: no praise, no meta-commentary, no statistics, no process narration — every sentence is either a finding or required by the template, and each finding states a fact and the change it calls for, not a hedged possibility. With no issues, approve silently.
-
-Two format contracts downstream tooling keys on:
-
-- No top-level (`##`) markdown headers — the body's only headers are the template's `###` sections
-- A concrete, mechanical fix goes in the structured `suggestion` field (see [Code suggestions](#code-suggestions)), which renders as a one-click GitHub suggestion block — not as a code example in the comment prose
+Only for a concrete mechanical fix, follow [Code suggestions](./references/findings-format.md#code-suggestions); otherwise omit `suggestion`. The reference is already loaded for reviews with findings.
 </file>
 
 <file path="claude-plugins/autopilot/skills/pr-update/references/examples.md">
@@ -66250,6 +66364,8 @@ Run a tracked issue end to end in a session an [`explore`](../explore/SKILL.md) 
 
 Everything after [Phase 3](#phase-3-merge-the-working-context) is `run`, unchanged and referenced rather than restated. Like `run`, invoking this skill authorizes the whole flow: there is no plan-approval gate.
 
+A brief whose conventions report standards overflow or an incomplete digest does not establish all applicable rules. Retrieve the omitted constraints through a task-scoped standards lookup before deciding affected work; never treat the brief’s revision check as proof of completeness.
+
 ## Input
 
 Arguments: `$ARGUMENTS`
@@ -66947,25 +67063,15 @@ Readability: write short and confident. State the fact and the one reason that j
 
 ### Codebase context: select one source, then read only it
 
-Codebase context comes from an ordered source chain. Check the tiers top-down and select the first one that works; any failure inside a tier falls through to the next rather than aborting.
+Select exactly one source per context holder (session or delegated agent), in tier order. Reuse that selection for subsequent repository questions; do not run graph, pack, and tree discovery in parallel. Skip inaccessible tiers and record why:
 
-Selection is **exclusive and per context holder**: the session and each delegated agent select for themselves, and each holder selects exactly one source, records the selection once, and serves every repository-content question from that source for the rest of its run. Running the tiers side by side — graph queries plus pack reads plus tree crawling in one holder — is the duplication this contract exists to prevent, whichever tier was selected. Record the selection as a single trace line when the source is chosen:
-
-```
+```text
 context-source: graphify | repomix <outputId> | default <reason>
 ```
 
-A holder whose toolset cannot reach a tier selects the highest tier it can actually use and records why — an agent with only `Read`/`Glob` has no repomix MCP tools, so it selects `context-source: default (no repomix MCP tools)` and that selection is legitimate, not a fallback.
+An agent without graph or Repomix tools uses `context-source: default (no repomix MCP tools)`. Existing evidence from this holder remains valid until a recorded transition replaces it.
 
-**Tier 1 — graphify knowledge graph.** Fires when the consuming repository carries a committed graph: `graphify-out/graph.json` exists at the repository root AND the `graphify` CLI resolves on PATH (`command -v graphify`). For natural-language codebase questions, query the graph first — no LLM, no network:
-
-```
-graphify query "<plain-language question>"
-graphify path "<EntityA>" "<EntityB>"
-graphify explain "<Concept>"
-```
-
-Graph queries are whole-repo by nature; the caller's `includePatterns` does not apply to this tier. Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review or when targeted queries do not surface enough context.
+**Tier 1 — graphify knowledge graph.** Eligible only when `graphify-out/graph.json` exists and `command -v graphify` succeeds. Start with `graphify query "<question>"`; use `graphify path "<A>" "<B>"` or `graphify explain "<concept>"` for relationships. `includePatterns` does not apply. Read `graphify-out/GRAPH_REPORT.md` only for broad architecture or when focused queries are insufficient.
 
 <!-- graphify-readonly:start -->
 
@@ -66975,115 +67081,71 @@ Graph queries are whole-repo by nature; the caller's `includePatterns` does not 
 
 <!-- graphify-refinement:start -->
 
-**Tier 1 query discipline — one query is not a lookup.** A graph is an iterative instrument, so a single broad question is the start of the pass, not the end of it. Scope the first query to the workspace, path, or domain when the task names one, then classify what came back:
+**Query discipline.** Scope the first query to the task's workspace, path, or domain. Classify the response:
 
-- **focused** — a usable answer with no truncation notice. Build the shortlist from it.
-- **truncated** — the answer is cut to fit the token budget. graphify v0.9.x announces this at the top of its output, e.g. `[!] TRUNCATED: showing 52 of 918 nodes`; treat any equivalent notice the installed CLI prints the same way. The answer may be among the cut nodes, so this is an incomplete lookup, not a negative result.
-- **empty** — no nodes matched, e.g. `No matching nodes found.`. The vocabulary missed, not the graph.
-- **error** — the CLI failed (non-zero exit, `error: graph file not found`). The tier is unusable.
+- **focused:** usable, untruncated answer; build the shortlist.
+- **truncated:** `[!] TRUNCATED` or equivalent notice; refine, never treat omitted results as absent.
+- **empty:** no matching nodes; retry using a file or symbol name from the repository.
+- **error:** non-zero exit or unreadable graph; transition immediately.
 
-**Refine before you traverse.** On a truncated or empty answer, the next operation is another graph operation — narrowing it is the whole point of having a graph — issued **before any context-gathering file read**:
+Refine a truncated or empty answer **before any context-gathering file read**: narrow the entity/path, use `--context <relation>`, or use `explain`, `path`, or `affected` when supported by `graphify --help`. Raising `--budget` is never the sole response to truncation.
 
-- ask a narrower question naming the entity, symbol, or path the first answer surfaced;
-- constrain the relations with `--context <relation>` (repeatable) rather than widening the search;
-- go focused instead of broad: `graphify explain "<Symbol>"` for one node and its neighbors, `graphify path "<A>" "<B>"` for how two entities connect, and `graphify affected "<X>"` for reverse impact where `graphify --help` shows that subcommand;
-- on an empty answer, re-ask once in the codebase's own vocabulary (a file or symbol name rather than a concept).
+Use at most three refinement queries after the first. Keep a shortlist of at most ten files/entities, each with its relationship to the task. Direct reads are limited to shortlisted entries; other context reads require `context-fallback:` below. Editing or verifying your own changes is not context gathering.
 
-Raising `--budget` is a supplement, never the sole response to truncation: it re-floods the same broad answer instead of narrowing it, and the cut nodes were cut for a reason.
-
-An error answer refines nothing — fall through immediately.
-
-**Bounded, then done.** Spend at most three refinement queries after the first. The pass ends at a **shortlist** of at most ten files or entities, each carried with the relationship that justifies it (`src/app/AppShell.tsx — renders Sidebar, imports useLayout`). The shortlist is this tier's equivalent of an `outputId`: it is what the pass hands to whatever consumes it, and a consumer that receives only the source name received nothing reusable.
-
-Direct `Read` of repository content during the pass is limited to shortlisted entries — that is the tier's read contract, and it is how exact implementation detail is obtained once the graph has named where to look. Any other context-gathering read still carries its `context-fallback: <reason> <path>` line from the taxonomy below; reads made to edit a file, or to verify your own change, are not context gathering and need no line.
-
-Close the pass with one trace line:
-
-```
+```text
 graphify-trace: queries=<n> truncated=<yes|no> shortlist=<n> outside-reads=<n>
 ```
 
-`queries` counts every graph invocation in the pass including the first; `truncated` is `yes` when any round came back truncated; `shortlist` is the number of entries the pass produced; `outside-reads` totals the `context-fallback:` lines emitted during it. A trace reading `truncated=yes` with `queries=1` is a contract violation on its face — it records a truncated answer that was never refined — and a reviewer should read it as one.
-
-When the three rounds are spent and no usable shortlist exists, this tier has failed rather than answered. Fall through and record the replacement as a single line, `context-source: repomix <outputId> superseding graphify (refinement-exhausted)`, so exactly one source stays live and the abandoned one is visible rather than implied. That line is one of the transitions defined below.
+Count all graph invocations, whether any answer was truncated, shortlist entries, and recorded outside reads. `truncated=yes` with `queries=1` is a violation. If refinement ends without a usable shortlist, transition with `superseding graphify (refinement-exhausted)`.
 
 <!-- graphify-refinement:end -->
 
 <!-- graphify-evidence:start -->
 
-**Tier 1 selection is earned, not declared.** Write `context-source: graphify` only once at least one graph invocation has **exited zero** and returned a usable answer — `focused`, or `truncated` that refinement then narrowed. Availability is not evidence: a committed graph and a resolving CLI make the tier _eligible_, and the first query is what tests that eligibility. A label written ahead of the query records an intention, and an intention is indistinguishable in a transcript from a pass that never happened.
+**Selection evidence.** Availability is not evidence. Emit `context-source: graphify` only after at least one invocation **exited zero** and produced a usable answer, including any required refinement. Pass this complete record to consumers:
 
-The tier hands on an **evidence record**, not a source name — three consecutive lines, the last opening a bullet per shortlist entry:
-
-```
+```text
 context-source: graphify
-graphify-trace: queries=3 truncated=yes shortlist=4 outside-reads=1
+graphify-trace: queries=2 truncated=yes shortlist=2 outside-reads=0
 graphify-shortlist:
 - src/app/AppShell.tsx — renders Sidebar, imports useLayout
 - src/hooks/useLayout.ts — the hook AppShell depends on
 ```
 
-Each bullet is `<path or entity> — <relationship>`, the same em-dash form the refinement discipline above uses: the relationship is what makes the entry reusable, because a bare path tells the next holder where you looked but not why, and it re-derives the reasoning by traversing. A record whose `graphify-trace:` is absent, whose count reads `queries=0`, or whose shortlist is empty is **not a selection** — it is an unrecorded one, and a consumer must treat it as no selection at all rather than as a weaker version of one.
+Each bullet names a path/entity and its relationship. Missing trace, `queries=0`, or an empty shortlist is **not a selection**. Consumers use the shortlist before traversal; a label alone or paths without relationships are unrecorded context, not permission to rediscover silently.
 
-**Consumption is the other half.** A holder that receives the record answers repository questions from the shortlist before any context-gathering traversal, and a holder that receives only the source name, or only paths stripped of their relationships, received nothing reusable and must say so instead of quietly re-collecting the repository. This is what makes the tier survive the gap between a planning session and the implementation session that follows it.
+**Transitions.** When leaving graphify, emit the successor's full selection:
 
-**Leaving the tier is recorded, never silent.** Whenever tier 1 is eligible but rejected, or fails part-way, write one line before the successor selects:
-
-```
+```text
 context-source: <successor> superseding graphify (<reason>)
 ```
 
-`<successor>` is a full selection in its own right — `repomix <outputId>` or `default <reason>` — so the line names what took over rather than only what was abandoned; where both slots carry a reason, the parenthesized one always explains the graph. `<reason>` is exactly one of:
-
-- `unavailable` — no `graphify-out/graph.json` at the repository root, or no `graphify` on PATH. The tier was never reachable.
-- `error` — an invocation exited non-zero, or the graph was unreadable. The tier was reachable and broke.
-- `refinement-exhausted` — the three refinement rounds are spent with no usable shortlist.
-
-These three explain **why a tier was left**, and they are not the `context-fallback:` reasons from the taxonomy below, which explain a single read outside a selection that is **still live**. A transition ends a source; a fallback is a permitted exception within one. Recording a transition is always cheaper than emitting a partial record: a graph pass that cannot produce evidence should cost the tier, not the run.
+`<successor>` is `repomix <outputId>` or `default <reason>`. The graph reason is exactly `unavailable` (missing graph or CLI), `error` (failed invocation/unreadable graph), or `refinement-exhausted` (no usable shortlist after refinement). A transition replaces the source; `context-fallback:` permits one outside read while the selection is still live.
 
 <!-- graphify-evidence:end -->
 
-**Tier 2 — repomix pack.** Prefer the committed pack over re-packing — the refresh is merge-triggered, so the pack is current for anything already on the default branch.
+**Tier 2 — repomix pack.** Attach the committed pack before considering a fresh pack:
 
-```
-Acquire codebase snapshot (prefer the committed pack to avoid re-packing):
-  Check whether `.repomix/pack.xml` exists at the repository root.
-  - If it exists, call `mcp__repomix__attach_packed_output` with:
-    - `path`: [repository root absolute path]/.repomix/pack.xml
-  - If it is absent (or the attach fails), fall back to `mcp__repomix__pack_codebase` with:
-    - `directory`: [repository root absolute path]
-    - `compress`: true
-    - `includePatterns`: [only when the invoking skill specifies one — omit the key entirely otherwise]
-```
+- If `.repomix/pack.xml` exists, call `mcp__repomix__attach_packed_output` with its absolute `path`.
+- If absent or attachment fails, fall back to `mcp__repomix__pack_codebase` with repository-root `directory` and `compress: true`. Pass `includePatterns` only when the caller supplied it; otherwise omit the key.
+- Store `outputId`. Search with `mcp__repomix__grep_repomix_output` and read matched slices with `mcp__repomix__read_repomix_output`, specifying `startLine`/`endLine` — never a full-range read. Pack size is never a valid reason to fall back to tree reads.
 
-**`includePatterns` is caller-supplied and tier-2-only.** The fall-back pack is scoped only when the invoking skill names a pattern — the review and reply skills pass `".claude/**, **.md, **.yml, .github/**"` because they reason over configuration and prose rather than application code. A skill that needs the whole tree omits the key.
+**Tier 3 — default tools.** If graph and pack are unusable or inaccessible, use `Grep`/`Glob` and read matched files, plus Git through Bash. Record the reason in `context-source:`.
 
-**Tier 3 — default tools.** With neither a graph nor a working repomix path, use plain `Grep`/`Glob`/`Read` on the repository plus `git` via Bash. This tier is the single last resort for every consumer — a skill does not define its own fallback.
+**Outside reads.** Any context read outside a selected source must carry one of these reasons beside the access:
 
-**Per-tier read contract.** What "search and read the snapshot" means downstream depends on the selected source:
-
-- Tier 1 returns no `outputId` — answer codebase questions with further `graphify` queries and targeted `Read` of the files the graph names.
-- Tier 2 — store the returned `outputId`; search the snapshot with `mcp__repomix__grep_repomix_output` and read matched regions with `mcp__repomix__read_repomix_output` using `startLine`/`endLine`. Do not read the full pack.
-- Tier 3 — search with `Grep`/`Glob` and read only the matched files.
-
-**Bounded operations on an oversized pack.** Pack size is never a valid reason to fall back to direct reads: serve an oversized pack through `mcp__repomix__grep_repomix_output` (regex plus context lines) and `mcp__repomix__read_repomix_output` with explicit `startLine`/`endLine` slices — never a full-range read, and never a switch to tree crawling because the pack is large.
-
-**Fallback taxonomy — reading outside the selected source.** After selection, a direct `Read`/`Grep`/`Glob` of repository content the selected source should answer is permitted only for a recorded reason, emitted as one line beside the access:
-
-```
+```text
 context-fallback: <reason> <path>
 ```
 
-with `<reason>` exactly one of:
+- `absent-or-excluded` — content missing from the source or excluded by its scope.
+- `truncated-or-unreadable` — damaged source region or failed graph lookup.
+- `stale-snapshot` — the snapshot predates a relevant base change.
+- `byte-verification` — exact bytes or whitespace are required.
+- `generated-or-untracked` — content a committed snapshot cannot contain.
+- `post-snapshot-mutation` — branch/working-tree changes newer than the snapshot.
 
-- `absent-or-excluded` — the content is not in the selected source (not packed, or excluded by `includePatterns`).
-- `truncated-or-unreadable` — the source is damaged where this content lives: a truncated or unreadable pack region, or a graph query that errors.
-- `stale-snapshot` — the snapshot predates a base-branch change this task depends on.
-- `byte-verification` — exact byte-level content is required (hashes, whitespace-sensitive edits) that a snapshot cannot guarantee.
-- `generated-or-untracked` — generated or untracked content a committed snapshot never contains.
-- `post-snapshot-mutation` — working-tree changes made after the snapshot, including this session's own edits; the branch diff already reports what is in flight, so this stays a targeted read, never re-exploration.
-
-A read with no reason from this list does not happen — re-ask the selected source instead. Broad rediscovery after selection (repository-wide `Read`/`Grep`/`Glob` sweeps, or delegating a context agent to re-cover content the selected source already answers) is never valid.
+Without a matching reason, query the selected source. Outside reads remain targeted; never repeat broad discovery or delegate a second traversal of content the source already answers. Git and the working tree are authoritative for changed files.
 
 <!-- repomix-snapshot:end -->
 </file>
@@ -71769,7 +71831,7 @@ The snapshot follows the shared ordered source chain: a committed graphify knowl
 
 A resolver returning `unresolved` with a non-null `resolveError` is fatal: the skill surfaces the error and stops rather than proceeding against a misfetched target. A _digest_ failure is not fatal — it is recorded and planning continues, because a plan without a standards digest is degraded, not wrong.
 
-The fan-out takes an optional `Scope` input — `task` or `broad`. Both skills here omit it and get `task`, the change-scoped pass described above; `broad` reads the snapshot breadth-first instead and is used only by [the `explore` skill](./14-explore-skill.md), a third on-ramp for work that starts from an area rather than a target. The emitted Context Map has the same sections either way.
+The fan-out takes an optional `Scope`: `task` (default), `broad`, or `primed`. Plan and run use task-specific acquisition. [Explore](./14-explore-skill.md) uses broad architecture reads but skips unused history and the branch digest; [run-primed](./15-run-primed-skill.md) reuses validated standards. The Context Map retains its section shape at every scope. Standards discovery inventories the documentation index and file names, then reads relevant conventions instead of following every index link.
 
 ## Phase 2 — Intent, assumptions, and the human gate
 
@@ -73068,7 +73130,7 @@ Two further properties made the map unsuitable for a steer-as-you-go session. It
 
 `explore` invokes `gather-context` rather than re-implementing it. These are prompt files with no import mechanism, so a "mirrored" roster is a hand-copy — and it would rot the first time a sub-agent is added to one side and not the other, with no guard relating the two skills.
 
-The only change on that shared path is one optional input:
+The shared path uses `Scope` to select reads and acquisition:
 
 | `Scope`          | Codebase pass                                                            |
 | ---------------- | ------------------------------------------------------------------------ |
@@ -73076,11 +73138,9 @@ The only change on that shared path is one optional input:
 | `broad`          | principal modules and boundaries, entry points, the conventions in force |
 | `primed`         | only the task-specific gaps a validated brief does not already cover     |
 
-The Context Map's section shape is identical at every scope. `plan` and `run` omit `Scope` and get `task`, so each addition is additive and default-preserving — the blast radius is confined to callers that pass a non-default value. `primed` was added later for [`run-primed`](./15-run-primed-skill.md) and goes one step further than `broad`: it also gates off the standards digest, making `Scope` a fan-out selector rather than only a read strategy.
+The Context Map keeps the same sections at every scope. `task` remains the default; `primed` skips standards already supplied by a validated brief. `broad` skips the branch digest and session history, including the Entire availability check, because explore recomputes volatile state and does not consume history. It reads only changed-path pointers to account for files newer than the snapshot.
 
-`explore` also passes input type `plain-description`, which gates off `resolve-issue-context` and `search-codebase-todos`. No sub-agent runs whose output the brief would discard.
-
-Local workspace state deliberately stays in `explore` rather than joining the Context Map: it is four bounded `git` calls, not a digest, and `plan`/`run` did not ask for it.
+`plain-description` also skips issue and TODO lookup. Broad maps explicitly mark Git state and In-flight changes as caller-owned, and Session history as not requested. Explore's volatile phase still runs once on both full primes and delta refreshes, independently of the map.
 
 ## The brief
 
@@ -73782,6 +73842,20 @@ Applying all of the above to the five skills that re-load on the PR-review cycle
 | **Total**         | 86,385 B | 69,456 B | −20%   |
 
 Bodies alone understate it, because the invocation-count fix is the larger half. Counting each injection in one `/autopilot:run` with two review cycles, the skill-body bytes entering the conversation fall from roughly 208 KB to roughly 120 KB — about −42%. Interactive sessions gain less, since they read the extracted dialogs back.
+
+## Acquire only consumed context
+
+[Gather-context](../claude-plugins/autopilot/skills/gather-context/SKILL.md) uses scope to omit work its caller does not consume. Broad exploration skips the history agent and branch digest; explore refreshes volatile state once. Standards discovery selects relevant documents from the index and inventory, preserving explicit repository-required reads.
+
+[PR review](../claude-plugins/autopilot/skills/pr-review/SKILL.md) classifies the round before loading its patch and supporting context. Identical heads stop there; incremental rounds avoid reading the full-diff artifact unless they fall back. Direct issue helpers replace mechanical delegation, retain explicit errors/truncation, and cannot assign an issue in review mode.
+
+Keep operational instructions in the skill: conditions, actions, evidence fields, limits, and failure behavior. Maintenance rationale belongs in docs; the [snapshot history](./09-repomix-pack.md#the-exclusive-source-read-contract) explains why the shared source contract exists. Removing repeated rationale does not remove its safeguards. File-size reductions show instruction savings only; runtime token and latency savings require observing representative sessions.
+
+## Conditional references and bounded digests
+
+[Branch creation](../claude-plugins/autopilot/skills/branch-create/SKILL.md) loads Linear operations only for Linear tickets, confirmation details only for interactive special-prefix branches, and examples only when the branch choice is unclear. [Review findings formatting](../claude-plugins/autopilot/skills/pr-review/references/findings-format.md) loads only for a review with findings. Round handling owns the same-head exit; the main review skill owns the remaining verdict decisions. Findings have one detailed explanation, with a short summary entry when the detail appears inline.
+
+The [standards digest](../claude-plugins/autopilot/agents/digest-repo-standards.md) caps conventions at 12 entries of 40 words, selected standards at 3, dropped candidates at 10, and principles at 6 entries of 30 words. These are output limits, not permission to disregard constraints: preserve conditions and exceptions, report omitted entries in `overflow`, and mark the digest incomplete. Gather-context carries that status into its Context Map; primed runs retrieve missing applicable clauses before deciding affected work. Narrow follow-ups pass already captured rules to avoid returning the same clauses again.
 </file>
 
 <file path="docs/20-pr-watcher.md">
