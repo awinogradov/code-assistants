@@ -62,7 +62,7 @@ Additional free-form context may follow any form (e.g., `#42 I think we should s
 
 ## Explicit brief input
 
-Accept `--brief <path>` and strip it before issue detection. Never infer this flag from conversation history. Before gathering, read [brief-validation.md](../gather-context/references/brief-validation.md); on any non-valid verdict, report it and stop with the option to refresh explore or rerun without `--brief`. On success, pass the brief and **`Scope: primed`** to gather-context, following [brief-reuse.md](../gather-context/references/brief-reuse.md) for current-code and standards gaps. Without the flag, use ordinary task gathering. Stored-plan file seeds also apply when a Linear run receives a brief.
+For `--brief <path>`, follow the shared [explicit brief procedure](../gather-context/references/brief-validation.md#optional-brief-flag) before issue detection and gathering.
 
 ## Task Progress Protocol
 
