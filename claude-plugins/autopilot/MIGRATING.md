@@ -1,5 +1,11 @@
 # MIGRATING
 
+## From 8.0.0 to 9.0.0
+
+### Breaking changes
+
+- The domain-expert review panel is removed from every skill and flow: the `expert-review` agent, the shared pipeline's review-and-score step, the per-stack expert tables, and the `--experts-review` flag are gone, and no opt-in path re-enables them. `/autopilot:plan` and `/autopilot:linear-plan` no longer accept `--experts-review`; pass the issue alone. The planning pipeline is now draft → finalize, so plan files carry no `Score:` line and stored Linear plans carry no `Score:` field in their `Format: v1` header (now `Format: v1 · Base: <sha> · Stored by …`). Plans stored by earlier versions keep their `Score:` field and remain valid: `/autopilot:linear-run` never parsed it. Task tables shrink by one (`plan` 4, `run` and `run-primed` 7, `linear-plan` 5).
+
 ## From 7.5.1 to 8.0.0
 
 ### Breaking changes

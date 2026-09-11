@@ -88,7 +88,7 @@ The matrix below lists every skill that reads `agents`, the key(s) it reads, and
 
 ### Stack → planning deltas (used by `/plan` and `/run`)
 
-Planning is stack-agnostic except for three values — example libraries for documentation lookup, the expert-panel roster, and verify-line examples. Both skills resolve them from one delta table; there is no per-stack planning skill to delegate to.
+Planning is stack-agnostic except for two values — example libraries for documentation lookup and verify-line examples. Both skills resolve them from one delta table; there is no per-stack planning skill to delegate to.
 
 | `rules` value           | Delta set      |
 | ----------------------- | -------------- |
@@ -178,9 +178,9 @@ To add a new stack:
 1. Add a rule file under `rules/<Name>.md`.
 2. Add the value to the `rules` table in this document.
 3. Update the stack-mapping tables inside the consumer skills:
-   - `claude-plugins/autopilot/skills/plan/references/stack-deltas.md` (routing table plus the three deltas; serves both `/plan` and `/run`)
+   - `claude-plugins/autopilot/skills/plan/references/stack-deltas.md` (routing table plus the two deltas; serves both `/plan` and `/run`)
    - `claude-plugins/autopilot/skills/pr-review/SKILL.md`
    - `claude-plugins/autopilot/skills/todo-cleanup/SKILL.md`
-4. Add the stack's three planning deltas — example libraries, expert table, verify examples — as a new section in `stack-deltas.md`. A stack does not get its own planning skill: the pipeline is stack-agnostic, and the deltas are the only real differences.
+4. Add the stack's two planning deltas — example libraries and verify examples — as a new section in `stack-deltas.md`. A stack does not get its own planning skill: the pipeline is stack-agnostic, and the deltas are the only real differences.
 
 To add a new language: extend the language-to-pattern table in `claude-plugins/autopilot/skills/todo-cleanup/SKILL.md` and mirror the change here.

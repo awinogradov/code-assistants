@@ -63,7 +63,7 @@ Why `Read` and not the `Skill` tool: a skill loads its whole `SKILL.md`, so ther
 Two runtimes cannot read a file, so they keep a literal copy. Both are single-sourced anyway — only the delivery differs.
 
 - [`releaseNotesPrompt.ts`](../.github/actions/release-action/src/releaseNotesPrompt.ts) is passed to the Anthropic API as a raw system prompt rather than through the Claude Code SDK, so it has no tools at all.
-- The seven structured-output agents declare their own `tools`, and [`expert-review`](../claude-plugins/autopilot/agents/expert-review.md) declares `tools: []`. Granting `Read` to seven agents plus a round-trip each, to deduplicate 184 characters, costs more than it saves.
+- The structured-output agents declare their own restrictive `tools`. Granting `Read` to every agent plus a round-trip each, to deduplicate 184 characters, costs more than it saves.
 
 Do not "fix" either by adding a read directive; neither can execute one.
 

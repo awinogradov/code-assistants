@@ -62,18 +62,17 @@ Identical to the `plan` skill — see [its Input resolution section](../plan/SKI
 
 ## Task Progress Protocol
 
-Create all 8 tasks with TaskCreate, in order, before any work. Set each to `in_progress` at the start of its phase and `completed` at the end.
+Create all 7 tasks with TaskCreate, in order, before any work. Set each to `in_progress` at the start of its phase and `completed` at the end.
 
-| #   | Subject          | ActiveForm            |
-| --- | ---------------- | --------------------- |
-| 1   | Resolve input    | Resolving input       |
-| 2   | Gather context   | Gathering context     |
-| 3   | Draft plan       | Drafting plan         |
-| 4   | Review and score | Reviewing and scoring |
-| 5   | Finalize plan    | Finalizing plan       |
-| 6   | Commit changes   | Committing changes    |
-| 7   | Create PR        | Creating PR           |
-| 8   | Monitor PR       | Monitoring PR         |
+| #   | Subject        | ActiveForm         |
+| --- | -------------- | ------------------ |
+| 1   | Resolve input  | Resolving input    |
+| 2   | Gather context | Gathering context  |
+| 3   | Draft plan     | Drafting plan      |
+| 4   | Finalize plan  | Finalizing plan    |
+| 5   | Commit changes | Committing changes |
+| 6   | Create PR      | Creating PR        |
+| 7   | Monitor PR     | Monitoring PR      |
 
 ## Task
 
@@ -81,7 +80,7 @@ $ARGUMENTS
 
 ## Phase 0: Resolve input
 
-Create the 8 tasks, then set task 1 to `in_progress`.
+Create the 7 tasks, then set task 1 to `in_progress`.
 
 Detect the input type and id per [input-detection.md](../plan/references/input-detection.md) — the detection table and its tracker gating. Skip that file's create-issue flags section; it is plan-only. Detection is pure string matching and performs **no I/O**; do not fetch anything here.
 
@@ -113,9 +112,9 @@ Because this step ran, every later step in this chain skips its own Phase 0 pref
 
 The [Common Instructions in `plan/SKILL.md`](../plan/SKILL.md#common-instructions) apply here unchanged — documentation lookup scaled to the task, repository standards from the Context Map, the plan file header rule, CLAUDE.md compliance, and ASCII schemas.
 
-## Phase 3: Draft, review, and finalize
+## Phase 3: Draft and finalize
 
-Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft (task 3), review and score (task 4), finalize (task 5) — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md).
+Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft (task 3), finalize (task 4) — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md).
 
 ## Phase 4: Embed branch creation and the autopilot chain
 
@@ -166,7 +165,7 @@ Take this exit only when all of the following are true:
 
 If the plan expected repository changes but the diff is empty, the task is incomplete: report that mismatch and stop. If implementation discovered repository changes or topic commits, do not take this exit; create the deferred branch when needed and continue through Auto-Commit.
 
-When every condition passes, do not invoke `branch-create`, `commits-create`, `git push`, `pr-create`, `pr-update`, or `pr-monitor`. Set tasks 6–8 to `completed` as not applicable, then output:
+When every condition passes, do not invoke `branch-create`, `commits-create`, `git push`, `pr-create`, `pr-update`, or `pr-monitor`. Set tasks 5–7 to `completed` as not applicable, then output:
 
 ```
 Autopilot complete.
@@ -180,15 +179,15 @@ Otherwise continue with the repository-delivery steps below.
 
 #### Step 1: Auto-Commit
 
-Set task 6 ("Commit changes") to `in_progress`. Invoke `Skill(autopilot:commits-create)` with `--autopilot`. The flag suppresses the commit-strategy prompt and the skill's own PR update (this chain creates or updates the PR itself in Step 2), and turns a validation failure into a loud abort instead of a prompt. Follow the skill's full workflow — do NOT run `git commit` directly.
+Set task 5 ("Commit changes") to `in_progress`. Invoke `Skill(autopilot:commits-create)` with `--autopilot`. The flag suppresses the commit-strategy prompt and the skill's own PR update (this chain creates or updates the PR itself in Step 2), and turns a validation failure into a loud abort instead of a prompt. Follow the skill's full workflow — do NOT run `git commit` directly.
 
 If the commit fails due to a pre-commit hook, check `git status` for modified files (the hook may have auto-formatted), re-stage with `git add -u`, and retry once. If it still fails, report the error and stop.
 
-After committing, push: `git push -u origin <branch>`. Set task 6 to `completed`.
+After committing, push: `git push -u origin <branch>`. Set task 5 to `completed`.
 
 #### Step 2: Auto-Create PR
 
-Set task 7 ("Create PR") to `in_progress`.
+Set task 6 ("Create PR") to `in_progress`.
 
 PR creation and updates go through `Skill(autopilot:pr-create)` and `Skill(autopilot:pr-update)`, which own the PR title and body grammar. Never fall back to raw `gh pr create` or `gh pr edit`, even when a skill call fails or times out — surface the failure and stop instead.
 
@@ -199,19 +198,19 @@ PR creation and updates go through `Skill(autopilot:pr-create)` and `Skill(autop
 
 2. Invoke `Skill(autopilot:pr-create)` with `--autopilot` (append `--release-notes` when the branch's commits include `feat:` or `fix:`). Release notes are added automatically for breaking changes regardless.
 
-Output the PR URL. Set task 7 to `completed`.
+Output the PR URL. Set task 6 to `completed`.
 
 3. **Format check** — after creating or updating, run `gh pr view --json title,body`. If the body does not match [`pr-body-grammar.md`](../shared-rules/references/pr-body-grammar.md), invoke `Skill(autopilot:pr-update)` with `--autopilot` once more and re-check; if it still does not match, report it and continue.
 
 #### Step 3: Monitor PR
 
-Set task 8 ("Monitor PR") to `in_progress`. Invoke `Skill(autopilot:pr-monitor)` in foreground mode (do NOT use the Agent tool with run_in_background) and without `--wait-for-approval`. It polls CI, review, and mergeability status, invokes pr-resolve interactively when feedback needs answering, and returns as soon as its [Readiness Check](../pr-monitor/SKILL.md#readiness-check-shared-procedure) passes for the current head (`READY_FOR_REVIEW`), or earlier on approval or merge; approval and merge are asynchronous follow-ups, not part of this chain's wait.
+Set task 7 ("Monitor PR") to `in_progress`. Invoke `Skill(autopilot:pr-monitor)` in foreground mode (do NOT use the Agent tool with run_in_background) and without `--wait-for-approval`. It polls CI, review, and mergeability status, invokes pr-resolve interactively when feedback needs answering, and returns as soon as its [Readiness Check](../pr-monitor/SKILL.md#readiness-check-shared-procedure) passes for the current head (`READY_FOR_REVIEW`), or earlier on approval or merge; approval and merge are asynchronous follow-ups, not part of this chain's wait.
 
 **Autopilot override for pr-resolve:** when pr-monitor invokes pr-resolve and it presents the review-action gate via AskUserQuestion, auto-select "Address all". Replies post without prompting.
 
 #### Completion
 
-Set task 8 to `completed`. Output the monitor's status verbatim:
+Set task 7 to `completed`. Output the monitor's status verbatim:
 
 ```
 Autopilot complete.
@@ -223,12 +222,11 @@ When the monitor stopped instead — `CHANGES_REQUESTED` or `CONFLICTED` — out
 
 ### Persist the plan to Linear
 
-Runs only when the detected input type is `linear-issue` (the type named by [input-detection.md](../plan/references/input-detection.md)'s detection table); every other input type skips this subsection and keeps its current behavior. It executes once both blocks above are embedded and before any step of [Phase 5](#phase-5-implement-and-proceed) runs, so the source ticket carries the finalized plan before implementation starts. This is chain work between tasks 5 and 6 — the task table stays as it is.
+Runs only when the detected input type is `linear-issue` (the type named by [input-detection.md](../plan/references/input-detection.md)'s detection table); every other input type skips this subsection and keeps its current behavior. It executes once both blocks above are embedded and before any step of [Phase 5](#phase-5-implement-and-proceed) runs, so the source ticket carries the finalized plan before implementation starts. This is chain work between tasks 4 and 5 — the task table stays as it is.
 
-The store is [`linear-plan`](../linear-plan/SKILL.md)'s, executed by reference rather than restated: fill [the emission template](../linear-plan/SKILL.md#the-emission-template) from the finalized plan file under [the stored plan format](../linear-plan/SKILL.md#the-stored-plan-format) and [Linear-safe markdown](../linear-plan/SKILL.md#linear-safe-markdown) rules, then perform [the write](../linear-plan/SKILL.md#the-write)'s read, anchor, preserved-prefix, write, and recovery steps. Resolve `get_issue` and `save_issue` per [`linear-mcp-access.md`](../shared-rules/references/linear-mcp-access.md). Three deltas, and only these:
+The store is [`linear-plan`](../linear-plan/SKILL.md)'s, executed by reference rather than restated: fill [the emission template](../linear-plan/SKILL.md#the-emission-template) from the finalized plan file under [the stored plan format](../linear-plan/SKILL.md#the-stored-plan-format) and [Linear-safe markdown](../linear-plan/SKILL.md#linear-safe-markdown) rules, then perform [the write](../linear-plan/SKILL.md#the-write)'s read, anchor, preserved-prefix, write, and recovery steps. Resolve `get_issue` and `save_issue` per [`linear-mcp-access.md`](../shared-rules/references/linear-mcp-access.md). Two deltas, and only these:
 
 - The header's `Stored by` field reads `/autopilot:run`, so the ticket records which skill wrote the plan.
-- The header's `Score:` field carries this run's panel verdicts — the review is always-on for the `run` family, so it is never the literal `skipped`.
 - The write's title-refresh and board-transition steps do not run: this same session immediately executes the ticket, so the planned-and-ready hand-off signal belongs to the deliberate `linear-plan` path, and [`branch-create`](../branch-create/SKILL.md) moves the ticket to "In Progress" moments later via `--start`.
 
 When the plan is a no-repository-change candidate with no `## Pre-Implementation` section, the stored `### Pre-Implementation` states in one line that no branch is created because the plan requires no repository change.

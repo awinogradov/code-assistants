@@ -6,8 +6,7 @@
  *
  * Two runtimes can read nothing at all, so they keep a literal inlined copy:
  * releaseNotesPrompt.ts is passed to the Anthropic API as a raw system prompt with no
- * tools, and the structured-output agents declare restrictive `tools` lists (expert-review
- * declares `tools: []`). Those copies are still single-sourced — this test asserts each is
+ * tools, and the structured-output agents declare restrictive `tools` lists. Those copies are still single-sourced — this test asserts each is
  * byte-identical to its canonical block.
  *
  * Replaces referenceFormattingSync.test.ts, which guarded only the reference-formatting
@@ -65,13 +64,12 @@ const blockSentinels: Record<string, string> = {
 const retainedCopies: { block: string; file: string; unescapeBackticks?: boolean }[] = [
   // Raw Anthropic API system prompt: no Claude Code SDK, therefore no tools at all.
   { block: "reference-formatting.md", file: releasePrompt, unescapeBackticks: true },
-  // Structured-output agents: each declares its own `tools`, and expert-review declares [].
+  // Structured-output agents: each declares its own restrictive `tools` list.
   ...[
     "analyze-pr-commits.md",
     "analyze-staged-changes.md",
     "digest-repo-standards.md",
     "digest-session-history.md",
-    "expert-review.md",
     "resolve-alert-context.md",
     "resolve-assignees.md",
     "resolve-issue-context.md",

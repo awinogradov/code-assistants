@@ -63,7 +63,7 @@ Both are silent failures if left unstated, so state them to the user when either
 
 ## Task Progress Protocol
 
-Create all 8 tasks with TaskCreate, in order, before any work, exactly as [`run`](../run/SKILL.md#task-progress-protocol) defines them. Set each to `in_progress` at the start of its phase and `completed` at the end. Brief validation happens inside task 2 ("Gather context"), because it is the gate on that task's input rather than a step of its own.
+Create all 7 tasks with TaskCreate, in order, before any work, exactly as [`run`](../run/SKILL.md#task-progress-protocol) defines them. Set each to `in_progress` at the start of its phase and `completed` at the end. Brief validation happens inside task 2 ("Gather context"), because it is the gate on that task's input rather than a step of its own.
 
 ## Task
 
@@ -71,7 +71,7 @@ $ARGUMENTS
 
 ## Phase 0: Resolve input
 
-Create the 8 tasks, then set task 1 to `in_progress`.
+Create the 7 tasks, then set task 1 to `in_progress`.
 
 Detect the input type and id per [input-detection.md](../plan/references/input-detection.md) — the detection table and its tracker gating. Skip that file's create-issue flags section; it is plan-only. Detection is pure string matching and performs **no I/O**.
 
@@ -148,9 +148,9 @@ This skill never enters plan mode — do NOT call `EnterPlanMode` or `ExitPlanMo
 
 The [Common Instructions in `plan/SKILL.md`](../plan/SKILL.md#common-instructions) apply unchanged — documentation lookup scaled to the task, repository standards, the plan file header rule, CLAUDE.md compliance, and ASCII schemas. Read them against the merged context from [Phase 3](#phase-3-merge-the-working-context), not against a fresh crawl of the tree.
 
-## Phase 5: Draft, review, and finalize
+## Phase 5: Draft and finalize
 
-Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft (task 3), review and score (task 4), finalize (task 5) — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md).
+Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft (task 3), finalize (task 4) — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md).
 
 ## Phase 6: Implement and finish the autopilot run
 

@@ -30,18 +30,18 @@ The alternative was a heuristic inside `run`: notice that the session looks prim
 
 ## When to use which
 
-| Skill                    | You have                               | You get                                                        |
-| ------------------------ | -------------------------------------- | -------------------------------------------------------------- |
-| `/autopilot:explore`     | an area, no target                     | a durable brief, then edit-and-verify on your instruction      |
-| `/autopilot:plan`        | a target you want reviewed             | a scored plan file, an approval gate, then implementation      |
-| `/autopilot:run`         | a target you want carried              | the same plan, implemented and driven to a merged PR           |
-| `/autopilot:run-primed`  | a target **and** a validated brief     | the same as `run`, without re-mapping the repository           |
-| `/autopilot:linear-plan` | a Linear ticket to plan against        | a scored plan stored on the ticket, reviewable before any code |
-| `/autopilot:linear-run`  | a Linear ticket carrying a stored plan | the same as `run`, executing the stored plan verbatim          |
+| Skill                    | You have                               | You get                                                   |
+| ------------------------ | -------------------------------------- | --------------------------------------------------------- |
+| `/autopilot:explore`     | an area, no target                     | a durable brief, then edit-and-verify on your instruction |
+| `/autopilot:plan`        | a target you want reviewed             | a plan file, an approval gate, then implementation        |
+| `/autopilot:run`         | a target you want carried              | the same plan, implemented and driven to a merged PR      |
+| `/autopilot:run-primed`  | a target **and** a validated brief     | the same as `run`, without re-mapping the repository      |
+| `/autopilot:linear-plan` | a Linear ticket to plan against        | a plan stored on the ticket, reviewable before any code   |
+| `/autopilot:linear-run`  | a Linear ticket carrying a stored plan | the same as `run`, executing the stored plan verbatim     |
 
 This table is the single home for the comparison; [chapter 16](./16-linear-plan-skill.md) and [chapter 17](./17-linear-run-skill.md) point here rather than keeping copies that would drift.
 
-`run-primed` is `run` with one phase replaced. Everything from the draft onward — pipeline, expert review, branch, commit, PR, monitor — is the same machinery, referenced rather than restated. The two Linear entries replace a different half: `linear-plan` stops after storing its plan, and `linear-run` picks that plan up later instead of drafting one.
+`run-primed` is `run` with one phase replaced. Everything from the draft onward — pipeline, branch, commit, PR, monitor — is the same machinery, referenced rather than restated. The two Linear entries replace a different half: `linear-plan` stops after storing its plan, and `linear-run` picks that plan up later instead of drafting one.
 
 ## At a glance
 
@@ -84,7 +84,7 @@ This table is the single home for the comparison; [chapter 16](./16-linear-plan-
 - ② Four rejections, each naming `/autopilot:run` as the caller's explicit fallback. The skill never invokes it automatically.
 - ③ The brief validated against the checkout's own base.
 - ④ Only what a brief cannot bake in advance: issue or alert details, TODO search, branch diff, git state, and a re-attached snapshot.
-- ⑤ Draft, expert review, scoring, branch, implement, commit, PR, monitor — no plan-approval gate, exactly as `run`.
+- ⑤ Draft, finalize, branch, implement, commit, PR, monitor — no plan-approval gate, exactly as `run`.
 
 ## The validation contract
 

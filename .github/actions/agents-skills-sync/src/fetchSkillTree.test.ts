@@ -31,7 +31,7 @@ const tree: TreeEntry[] = [
   { path: 'claude-plugins/autopilot/skills/run/SKILL.md', type: 'blob' },
   { path: 'claude-plugins/autopilot/skills/plan/references/pipeline.md', type: 'blob' },
   { path: 'claude-plugins/autopilot/skills/run', type: 'tree' },
-  { path: 'claude-plugins/autopilot/agents/expert-review.md', type: 'blob' },
+  { path: 'claude-plugins/autopilot/agents/digest-repo-standards.md', type: 'blob' },
   { path: 'rules/Bun.md', type: 'blob' },
 ];
 

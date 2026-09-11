@@ -2,7 +2,7 @@
 
 > Chapter 16 of the [repository docs](../README.md#repository-docs).
 
-How `/autopilot:linear-plan` turns a plan from a session artifact into something durable on its Linear ticket — expert-reviewed when `--experts-review` is passed, and stored unconditionally.
+How `/autopilot:linear-plan` turns a plan from a session artifact into something durable on its Linear ticket, stored unconditionally.
 
 > Source of truth: `claude-plugins/autopilot/skills/linear-plan/SKILL.md` (the skill), `…/skills/plan/references/pipeline.md` (the shared review pipeline it executes), and `…/skills/linear-create/SKILL.md` (the description this one rewrites).
 
@@ -41,7 +41,7 @@ Three conditions stop the run, and all three are checked **before** the context 
 | The input is not a Linear issue          | a description, GitHub issue, or alert has no ticket either     |
 | No Linear MCP tool resolves              | the write path is unavailable, so the plan could not be stored |
 
-Ordering matters for cost, not correctness. An expert review pass is the most expensive thing autopilot does; discovering afterwards that the plan has nowhere to go wastes all of it. Each message names `/autopilot:plan` as the alternative and the producer never falls through to it automatically. [`linear-run`](./17-linear-run-skill.md) has a different responsibility on the read side: an unusable stored artifact selects its fresh-plan path instead of blocking issue execution.
+Ordering matters for cost, not correctness. The context fan-out and drafting pass are expensive; discovering afterwards that the plan has nowhere to go wastes all of it. Each message names `/autopilot:plan` as the alternative and the producer never falls through to it automatically. [`linear-run`](./17-linear-run-skill.md) has a different responsibility on the read side: an unusable stored artifact selects its fresh-plan path instead of blocking issue execution.
 
 No preflight check runs, and none is needed: this skill creates no branch and no commit, so there is no git state to protect. What the tree looked like is recorded in the stored plan instead.
 
@@ -52,7 +52,7 @@ The plan's own sections, demoted one level under a single anchor. The trailing m
 ```text
 ## Implementation plan
 
-Format: v1 · Score: <panel verdicts> · Base: <origin/main SHA> · Stored by /autopilot:linear-plan
+Format: v1 · Base: <origin/main SHA> · Stored by /autopilot:linear-plan
 
 ### Summary              <- required
 ### Implementation Steps <- required
@@ -68,9 +68,8 @@ All five are written, because a human reading the ticket should see the whole pl
 The four metadata fields each earn their place:
 
 - **`Format: v1`** is what keeps "stored under an older template" separable from "corrupt". Without it, the first template revision would make every previously stored plan indistinguishable from a mangled description, and the reader would tell users to discard valid stored work.
-- **`Score:`** records what the plan actually achieved, so a later reader can weigh it.
 - **`Base:`** records the tree the plan was drafted against. It is information, not a gate — see [why drift does not block](./17-linear-run-skill.md#drift-is-reported-not-enforced).
-- **`Stored by`** names the producer. This chapter's deliberate path writes `/autopilot:linear-plan`; [`/autopilot:run` on a Linear-issue input](./05-plan-run-skills.md#how-run-differs-automated-post-implementation) writes the same format with `/autopilot:run` — same anchored write and preservation, but its `Score:` is never `skipped` (the run family's review is always-on), and it performs no title refresh and no "AI Ready" transition, because the same session immediately executes the ticket. The reader validates none of this field, so both producers' plans are equally executable.
+- **`Stored by`** names the producer. This chapter's deliberate path writes `/autopilot:linear-plan`; [`/autopilot:run` on a Linear-issue input](./05-plan-run-skills.md#how-run-differs-automated-post-implementation) writes the same format with `/autopilot:run` — same anchored write and preservation, but it performs no title refresh and no "AI Ready" transition, because the same session immediately executes the ticket. The reader validates none of this field, so both producers' plans are equally executable.
 
 The annotated list above is the contract; what the store actually writes is a literal **emission template** the skill carries beside it — the exact stored block with `<angle-bracket>` placeholders for the score (or the literal `skipped`), the base SHA, and each section body. Only placeholders are filled; every other byte — anchor, header line, headings, order, blank-line layout — is emitted verbatim, and the `<- required` / `<- caller-owned` annotations never reach a ticket. That removes the failure mode where each store re-derives the markdown from prose and submits a structurally different description that the reader then rejects as unusable. The first-store `+++ Original task +++` cut is a literal emission form too — the same collapsible shape as `linear-create`'s original-prompt preamble, with the prior description inserted byte-identical and treated as opaque rather than rewritten into the canonical forms below.
 
@@ -146,11 +145,11 @@ That normalization is exactly why the store anchors on the `## Implementation pl
 
 ## Storing is unconditional
 
-The plan is stored automatically the moment the shared review pipeline finishes — no plan-mode transition, no separate human approval step, and no score check between finalize and the write. The review score is recorded on the ticket as information for the teammate who reads it, never used as a gate. Like [`plan`](./05-plan-run-skills.md#review-and-score), this skill takes the opt-in `--experts-review` flag: with it the stored ticket carries the panel's assessment; without it the stored header records the literal `Score: skipped`, so the reader can see the plan is unreviewed before deciding to run it.
+The plan is stored automatically the moment the shared pipeline finishes — no plan-mode transition and no separate human approval step between finalize and the write. Plans stored by earlier versions carry a `Score:` field in the header; the reader never parsed it, so they remain executable.
 
 ## How this is guarded
 
-`linear-plan` and `linear-run` are prompt files with no import between them, so a renamed stored section would break the reader with nothing failing in between. `linearPlanContract.test.ts` closes that gap the way [`primedBriefContract.test.ts`](./15-run-primed-skill.md#how-this-is-guarded) does for the explore pair: it extracts the section names and their markers from this skill's own template and asserts the reader consumes exactly the required subset and none of the caller-owned ones. It also pins the format version across both sides, asserts the reader maps every verdict to stored-plan or fresh-plan behavior, asserts the fallback never dispatches the producer or overwrites Linear, and asserts `pipeline.md` states no scoring threshold or revision budget — the review is an enhancement, and a re-introduced gate would silently start losing plans. The [emission template](#the-stored-plan-format) is pinned the same way: it must open with the anchor and placeholder header line, list every contract section in order, leak no `<-` annotation, and carry none of the author forms Linear normalizes away. The title refresh is pinned too — its Steelmanned-Intent source, its link to `linear-create`'s title rules, and both outcome literals reaching the final output block — so a rewording cannot silently drop it again.
+`linear-plan` and `linear-run` are prompt files with no import between them, so a renamed stored section would break the reader with nothing failing in between. `linearPlanContract.test.ts` closes that gap the way [`primedBriefContract.test.ts`](./15-run-primed-skill.md#how-this-is-guarded) does for the explore pair: it extracts the section names and their markers from this skill's own template and asserts the reader consumes exactly the required subset and none of the caller-owned ones. It also pins the format version across both sides, asserts the reader maps every verdict to stored-plan or fresh-plan behavior, and asserts the fallback never dispatches the producer or overwrites Linear. The [emission template](#the-stored-plan-format) is pinned the same way: it must open with the anchor and placeholder header line, list every contract section in order, leak no `<-` annotation, and carry none of the author forms Linear normalizes away. The title refresh is pinned too — its Steelmanned-Intent source, its link to `linear-create`'s title rules, and both outcome literals reaching the final output block — so a rewording cannot silently drop it again.
 
 **What no test can show:** that Linear renders the stored description the way this chapter says. That is settled by a dry run on a real ticket, recorded on the pull request, because no `linear` tracker is configured in this repository and neither skill can execute here. Nothing under `.github/workflows/` runs `bun test` either, so the guard gates locally and in review rather than in CI.
 

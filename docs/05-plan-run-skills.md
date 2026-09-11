@@ -2,7 +2,7 @@
 
 > Chapter 5 of the [repository docs](../README.md#repository-docs).
 
-How `/autopilot:plan` and `/autopilot:run` turn a task — a GitHub issue, a Linear ticket, a code-scanning alert, or a free-form description — into a validated, expert-reviewed implementation plan, and (for `run`) either a verified no-repository-change result or a merged pull request.
+How `/autopilot:plan` and `/autopilot:run` turn a task — a GitHub issue, a Linear ticket, a code-scanning alert, or a free-form description — into a validated implementation plan, and (for `run`) either a verified no-repository-change result or a merged pull request.
 
 The two skills share the same front half. `plan` produces the plan and stops, asking what to do next. `run` is `plan` plus automated terminal selection: verified no repository change, or commit → PR → monitor. Everything below applies to both unless a section calls out a difference.
 
@@ -53,7 +53,7 @@ The two skills share the same front half. `plan` produces the plan and stops, as
 - ② One parallel fan-out acquires every kind of context and returns the Context Map.
 - ③ Steelmanned intent, assumptions, and open questions — the human gate, now asked with the code already understood.
 - ④ Branch and worktree state read from the Context Map; `preflight-check` handles only what the map cannot settle.
-- ⑤ The shared pipeline: draft, review and score, finalize (see [The shared pipeline](#the-shared-pipeline)).
+- ⑤ The shared pipeline: draft, finalize (see [The shared pipeline](#the-shared-pipeline)).
 - ⑥ `run` only: verify a no-repository-change result, or commit → PR → monitor until ready for human review (see [How run differs](#how-run-differs-automated-post-implementation)).
 
 ## One fan-out, then decide
@@ -129,7 +129,7 @@ The fan-out takes an optional `Scope` input — `task` or `broad`. Both skills h
 
 ## Phase 2 — Intent, assumptions, and the human gate
 
-After the Context Map, deliberately. The skill emits a one-line **steelmanned intent** (the request restated in its strongest form — the stable target for expert reviewers, copied verbatim into the plan's `## Summary`), then **Assumptions** and **Open Questions**. Any load-bearing open question is raised via `AskUserQuestion` before drafting.
+After the Context Map, deliberately. The skill emits a one-line **steelmanned intent** (the request restated in its strongest form, copied verbatim into the plan's `## Summary`), then **Assumptions** and **Open Questions**. Any load-bearing open question is raised via `AskUserQuestion` before drafting.
 
 This gate used to fire in Phase 0, before any code had been read. Asking at that point produces uninformed questions and structurally cannot surface the informed ones, so the one human checkpoint in the flow was spent at the moment of minimum information.
 
@@ -157,7 +157,7 @@ Declared once in `plan/SKILL.md` and referenced by `run` rather than restated:
 
 ## Stack deltas
 
-Planning is stack-agnostic except for three values — example libraries, the expert table, and verify-line examples — resolved from `package.json` `agents.rules` via [`references/stack-deltas.md`](../claude-plugins/autopilot/skills/plan/references/stack-deltas.md):
+Planning is stack-agnostic except for two values — example libraries and verify-line examples — resolved from `package.json` `agents.rules` via [`references/stack-deltas.md`](../claude-plugins/autopilot/skills/plan/references/stack-deltas.md):
 
 | `agents.rules` value                     | Delta set      |
 | ---------------------------------------- | -------------- |
@@ -166,7 +166,7 @@ Planning is stack-agnostic except for three values — example libraries, the ex
 
 If the stack cannot be detected, the skill asks via `AskUserQuestion`.
 
-These deltas previously lived in two dedicated skills, `plan-bun` and `plan-nodejs-react`. Each cost a full skill load and round trip to deliver three values, and the routing tables drifted — `run` listed two `agents.rules` values where `plan` listed four, so a `Bun+React+Tailwind` repo running `/autopilot:run` fell through to the "could not detect stack" prompt. A table cannot drift from itself. See [The `agents` field](./02-agents-field.md#stack--planning-deltas-used-by-plan-and-run).
+These deltas previously lived in two dedicated skills, `plan-bun` and `plan-nodejs-react`. Each cost a full skill load and round trip to deliver two values, and the routing tables drifted — `run` listed two `agents.rules` values where `plan` listed four, so a `Bun+React+Tailwind` repo running `/autopilot:run` fell through to the "could not detect stack" prompt. A table cannot drift from itself. See [The `agents` field](./02-agents-field.md#stack--planning-deltas-used-by-plan-and-run).
 
 ## The shared pipeline
 
@@ -174,13 +174,13 @@ Defined once in [`references/pipeline.md`](../claude-plugins/autopilot/skills/pl
 
 ### Draft plan
 
-Assemble a complete draft **before** review and scoring, so both operate on a concrete artifact rather than an imagined one. The draft follows a fixed template: `## Summary` (with steelmanned intent and a `Score:` placeholder), `## Context source`, `## Implementation Steps` (each with an observable `verify:` line patterned on the stack's verify examples), `## Files`, and `## Post-Implementation` — the last of these stating in prose that documentation is updated and the work is committed or opened as a PR.
+Assemble a complete draft before finalizing, so the written plan is a concrete artifact rather than an imagined one. The draft follows a fixed template: `## Summary` (with steelmanned intent), `## Context source`, `## Implementation Steps` (each with an observable `verify:` line patterned on the stack's verify examples), `## Files`, and `## Post-Implementation` — the last of these stating in prose that documentation is updated and the work is committed or opened as a PR.
 
 `## Context source` is the one section quoted rather than composed: it carries the Context Map's `Snapshot` record verbatim, which on the graph tier means the `context-source:`, `graphify-trace:`, and `graphify-shortlist:` lines together. Implementation frequently happens in a session that never ran the query, and a source name alone leaves that session re-collecting a repository someone already mapped ([#597](https://github.com/awinogradov/code-assistants/issues/597)) — the shortlist entries carry the relationship that put them there, so they survive the hand-off as something to read rather than something to re-derive. It also makes a past run auditable, since a plan file is durable and greppable where a transcript is not. A plan with no such section — every plan written before the section existed — is an unrecorded source, read as a selection nobody wrote down, never as a reason to stop.
 
 Two constraints bound what that draft may contain. The first is minimality: the draft proposes the smallest reliable solution that satisfies the steelmanned intent, reusing what the Context Map already shows, and every step must trace to that intent — no unrequested abstraction, no configurability nobody asked for, no error handling for impossible states, no opportunistic refactor of adjacent code. The second is shape: a step is one imperative action naming the file it touches and its `verify:` line, with reasoning left to `## Summary` and no checkboxes, since the plan file is read rather than ticked off.
 
-Both apply at drafting rather than at scoring, even though the rubric already carries a Simplicity dimension. No revision budget reliably strips scope a draft has already committed to — by then the over-built design is the thing being corrected rather than the thing being avoided, and a pass spent arguing scope back down is a pass not spent on correctness. Constraining the draft also gives expert reviewers a tighter artifact to score.
+Both apply at drafting because nothing later strips scope a draft has already committed to: the draft is where scope is decided, and an over-built design would otherwise be the thing being corrected rather than the thing being avoided.
 
 Drafting works five analysis dimensions against the Context Map — **Architecture**, **Patterns**, **Data Flow**, **Types**, and **Edge Cases**. This was previously a separate "Deep Analysis" phase that produced no artifact and needed its own paragraph warning it not to re-crawl the tree; folding it into drafting removes both the phase boundary and the temptation.
 
@@ -192,23 +192,11 @@ Everything written into the plan file describes an outcome. No section carries a
 
 The mechanics sit in the phase that runs them: [Phase 5](#phase-5--embed-branch-creation) for the branch, [Phase 6](#phase-6--post-implementation-handoff) for `plan`'s handoff, and [Phase 4](#how-run-differs-automated-post-implementation) of `run` for the automated chain. Each behaviour is stated once. Before this split the branch and post-implementation mechanics existed twice — in the skill files and in a copy pasted into every plan file — so a renamed flag went stale in whichever copy nobody re-read, and the approval gate was padded with parameter arrays that said nothing about the change. [`planFileOutputPurity.test.ts`](../.github/actions/code-review-action/src/planFileOutputPurity.test.ts) enforces it: it walks the skill markdown, finds every fenced block destined for a plan file, and fails on any of those constructs.
 
-### Review and score
-
-Expert review and scoring are **one step**. Experts are selected from the stack's expert table — always the Pre-mortem Analyst, plus 2–3 more by task scope — and launched as parallel `expert-review` sub-agents.
-
-The step is opt-in for `plan` and [`linear-plan`](./16-linear-plan-skill.md): each runs it only when the user passed `--experts-review` — `plan` because its approval gate puts a human in front of the finished plan either way, `linear-plan` because the teammate reading the stored ticket is that human. Without the flag the plan file records `Score: skipped · expert review disabled (invoked without --experts-review)` — a single literal, so its appearance in `run`, `run-primed`, or `linear-run` output is drift, not a valid state. The `run` family runs the review unconditionally because no human re-reads its plans; a skipped score can reach a stored ticket, where it tells the reader the plan is unreviewed.
-
-Each reviewer receives a **Context Map excerpt** alongside the plan text. A reviewer with no view of the repository infers file contents, and an invented finding costs more than a missing one.
-
-Each returns a schema-validated JSON verdict carrying per-dimension scores on the five-dimension rubric (Alignment, Completeness, Type Safety, Testability, Simplicity; 20 points each), with the overall score derived as their sum. The parent folds the panel's findings into the draft in a single pass and records each surviving reviewer's verdict — derived score and weakest dimension — with no cross-reviewer averaging. The review is an enhancement, never a gate: there is no score threshold, no revision loop, and no caller that blocks or refuses to proceed on the number — [`linear-plan`](./16-linear-plan-skill.md) stores the plan whatever it says.
-
-Scoring used to be a separate phase running a second rubric over what the experts had already scored, with an uncapped auto-iteration loop; a later revision replaced that with a threshold-driven revision budget, and the threshold and budget were then removed entirely once review became an enhancement rather than a gate.
-
 ### Finalize
 
-Apply the aggregated findings and score to the draft, replace the `Score:` placeholder, and write the plan file, with every reference formatted per RFC-0001.
+Write the plan file from the draft, with every reference formatted per RFC-0001. Nothing sits between the two stages: no review pass, no score, no revision loop.
 
-The recorded line names each reviewer's weakest dimension beside their score — `Score: <score> & <score> · weakest: <dimension> (<points>) & <dimension> (<points>) · findings applied`. A score alone says how good a reviewer thought the plan was; the weakest dimension says what to double-check when executing it, and nothing reconstructs that later.
+A review panel of domain experts used to sit here — first as a scoring gate with an auto-iteration loop, then as a threshold-driven revision budget, finally as an enhancement that only recorded a score. It was removed outright ([#662](https://github.com/awinogradov/code-assistants/issues/662)): its parallel reviewer requests dominated the output tokens of ordinary runs while returning findings grounded in files the reviewers had never read, so the draft constraints above now carry the quality the panel was meant to add.
 
 ## Phase 5 — Embed branch creation
 
@@ -235,21 +223,21 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
 ```text
         ┌──────────────────────────────────────────────┐
         │ Parent skill (plan / run)                    │
-        └────┬─────────────────────────────────┬───────┘
-  gather-     │ (one fan-out)        review    │ (parallel panel)
-  context ┌───┴───┬────────┬────────┐      ┌───┼────────┐
-          ▼       ▼        ▼        ▼      ▼   ▼        ▼
-     ┌────────┐┌───────┐┌───────┐┌──────┐┌──────┐┌──────┐
-     │digest- ││branch ││issue  ││ todo ││expert││expert│
-     │repo-   ││digest ││context││ grep ││-rev  ││-rev  │
-     │standard││helper ││helper ││direct││  #1  ││  #2  │
-     └───┬────┘└───┬───┘└───┬───┘└───┬──┘└───┬──┘└───┬──┘
-         │ JSON    │ JSON   │ JSON   │ JSON  │ JSON  │ JSON
-         └─────────┴────┬───┴────────┘       └───┬───┘
-                        ▼                        ▼
-             ┌────────────────────┐   ┌────────────────────┐
-             │ Context Map        │   │ Aggregated score   │
-             └────────────────────┘   └────────────────────┘
+        └────┬─────────────────────────────────────────┘
+  gather-    │ (one fan-out)
+  context ┌──┴────┬────────┬────────┐
+          ▼       ▼        ▼        ▼
+     ┌────────┐┌───────┐┌───────┐┌──────┐
+     │digest- ││branch ││issue  ││ todo │
+     │repo-   ││digest ││context││ grep │
+     │standard││helper ││helper ││direct│
+     └───┬────┘└───┬───┘└───┬───┘└───┬──┘
+         │ JSON    │ JSON   │ JSON   │ JSON
+         └─────────┴────┬───┴────────┘
+                        ▼
+             ┌────────────────────┐
+             │ Context Map        │
+             └────────────────────┘
 ```
 
 **Flow Legend:**
@@ -259,9 +247,6 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
 - [`lib/github/fetch-issue.ts`](../claude-plugins/autopilot/lib/github/fetch-issue.ts) helper for GitHub, [`lib/linear/fetch-issue.mjs`](../claude-plugins/autopilot/lib/linear/fetch-issue.mjs) for Linear (one Bash call, not a sub-agent) → `{ source, issueId, title, status, labels[], assignee|null, url|null, description, comments[], truncated, resolveError|null }`
 - `resolve-alert-context` → `{ source, alertNumber, ruleId, severity, state, file, line, message, htmlUrl, resolveError|null }` (alert input only)
 - TODO search → one parent-side Grep bounded at 20 matches, kept as `path:line — text` lines (no sub-agent). The [`resolve-issue-context`](../claude-plugins/autopilot/agents/resolve-issue-context.md) and [`search-codebase-todos`](../claude-plugins/autopilot/agents/search-codebase-todos.md) agents still exist for the `pr-review` CI path, which runs under the code-review action's Bash allowlist.
-- `expert-review` → `{ expertRole, score, dimensions{alignment,completeness,typeSafety,testability,simplicity}, verdict, findings[3–5], grounding[], revision|null }`
-
-`grounding` names what a reviewer actually consulted, and the pipeline screens on it: a panel member with empty grounding, an unparseable report, or file claims it had no tools to make is **discarded rather than averaged**, every discard is named, and a panel that loses everyone reports the plan as unreviewed instead of emitting a score.
 
 ## How run differs: automated post-implementation
 
@@ -307,8 +292,8 @@ There are two variants of this flow, each replacing a different half of it. [`/a
 | -------------------------------------------------------------------- | ------------------------------------------------------------ |
 | `claude-plugins/autopilot/skills/plan/SKILL.md`                      | Orchestrator: detection, gather, gate, preflight, plan mode  |
 | `claude-plugins/autopilot/skills/plan/references/input-detection.md` | Detection table, tracker gating, create-issue flags          |
-| `claude-plugins/autopilot/skills/plan/references/pipeline.md`        | Draft template, review and scoring, finalize                 |
-| `claude-plugins/autopilot/skills/plan/references/stack-deltas.md`    | Per-stack example libraries, expert tables, verify examples  |
+| `claude-plugins/autopilot/skills/plan/references/pipeline.md`        | Draft template, finalize                                     |
+| `claude-plugins/autopilot/skills/plan/references/stack-deltas.md`    | Per-stack example libraries and verify examples              |
 | `claude-plugins/autopilot/skills/plan/references/branch-blocks.md`   | `## Pre-Implementation` bodies and their mechanics           |
 | `claude-plugins/autopilot/skills/gather-context/SKILL.md`            | The one context fan-out, its `Scope` input, and the map      |
 | `claude-plugins/autopilot/skills/run/SKILL.md`                       | `plan` plus the automated post-implementation chain          |
@@ -318,7 +303,6 @@ There are two variants of this flow, each replacing a different half of it. [`/a
 | `claude-plugins/autopilot/lib/git/branchDigest.ts`                   | Its pure transforms and bounds, fixture-tested               |
 | `claude-plugins/autopilot/lib/github/fetch-issue.ts`                 | GitHub issue helper CLI with opt-in `--assign`               |
 | `claude-plugins/autopilot/lib/github/issueContext.ts`                | Its pure transforms, shape guards, assignee statuses         |
-| `claude-plugins/autopilot/agents/expert-review.md`                   | Domain-expert plan reviewer with per-dimension scores (JSON) |
 | `claude-plugins/autopilot/agents/resolve-issue-context.md`           | GitHub / Linear issue context resolver (JSON; pr-review)     |
 | `claude-plugins/autopilot/agents/resolve-alert-context.md`           | Code-scanning alert context resolver (JSON)                  |
 | `claude-plugins/autopilot/agents/search-codebase-todos.md`           | TODO/issue-reference search (JSON; pr-review)                |

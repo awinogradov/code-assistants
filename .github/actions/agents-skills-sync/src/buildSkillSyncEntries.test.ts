@@ -51,7 +51,7 @@ describe('buildSkillSyncEntries', () => {
   test('drops paths outside the skills layout', () => {
     const entries = buildSkillSyncEntries({
       ...baseArgs,
-      files: ['rules/Bun.md', 'claude-plugins/autopilot/agents/expert-review.md'],
+      files: ['rules/Bun.md', 'claude-plugins/autopilot/agents/digest-repo-standards.md'],
     });
     expect(entries).toEqual([]);
   });

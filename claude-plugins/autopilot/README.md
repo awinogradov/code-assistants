@@ -88,7 +88,6 @@ code-assistants/
         │   ├── analyze-pr-commits.md
         │   ├── analyze-staged-changes.md
         │   ├── digest-repo-standards.md
-        │   ├── expert-review.md
         │   ├── resolve-alert-context.md
         │   ├── resolve-assignees.md
         │   ├── digest-session-history.md
@@ -270,7 +269,7 @@ Create a Linear issue with the same five-section body as `/autopilot:issue-creat
 
 Same as `/autopilot:plan`, but stores the finished plan in its Linear ticket's description so it outlives the session — then stops, without implementing. See [the linear-plan skill](../../docs/16-linear-plan-skill.md) for the stored format.
 
-**Precondition:** a `linear` tracker in `package.json` `agents.trackers`, a Linear issue as the argument, and a reachable Linear MCP server. All three are checked before the expensive planning pass, and each names `/autopilot:plan` as the alternative. Storing is unconditional — expert review runs only when `--experts-review` is passed (as in `/autopilot:plan`), and the stored header records the score, or `Score: skipped` without the flag, as information for the ticket's reader, never as a gate.
+**Precondition:** a `linear` tracker in `package.json` `agents.trackers`, a Linear issue as the argument, and a reachable Linear MCP server. All three are checked before the expensive planning pass, and each names `/autopilot:plan` as the alternative. Storing is unconditional and never gated.
 
 ```bash
 /autopilot:linear-plan ENG-123                                          # From Linear id
@@ -279,7 +278,7 @@ Same as `/autopilot:plan`, but stores the finished plan in its Linear ticket's d
 
 ### `/autopilot:linear-run`
 
-Same as `/autopilot:run`, but first checks the Linear ticket for a durable plan. A valid stored plan is executed verbatim; when no executable stored plan is available, the skill drafts and reviews a fresh plan before continuing autonomously. See [the linear-run skill](../../docs/17-linear-run-skill.md) for the two-mode contract.
+Same as `/autopilot:run`, but first checks the Linear ticket for a durable plan. A valid stored plan is executed verbatim; when no executable stored plan is available, the skill drafts a fresh plan before continuing autonomously. See [the linear-run skill](../../docs/17-linear-run-skill.md) for the two-mode contract.
 
 **Precondition:** only a Linear ticket is required. Missing, unreadable, malformed, or unverifiable stored-plan data selects the fresh-plan path instead of rejecting the issue. The fallback never invokes `/autopilot:linear-plan` or rewrites the ticket description.
 
@@ -393,22 +392,21 @@ The canonical home for instruction blocks several skills need — reference form
 
 ## Agents
 
-### Helper sub-agents (10 agents)
+### Helper sub-agents (9 agents)
 
 Context-isolating workers invoked by other skills to keep the parent conversation small. Each returns a structured summary only. Deterministic work is not delegated: the plan/run branch digest and GitHub issue fetch run as bundled helper CLIs under [`lib/`](./lib) (see [Bundled helpers](#bundled-helpers) below), so `gather-context` spawns an agent only for semantic digests.
 
-| Agent                    | Model   | Used by                  | Purpose                                                                                      |
-| ------------------------ | ------- | ------------------------ | -------------------------------------------------------------------------------------------- |
-| `analyze-pr-commits`     | sonnet  | `pr-create`, `pr-update` | Summarize branch commits, diff, and linked issue for PR context                              |
-| `digest-repo-standards`  | sonnet  | `gather-context`         | Digest the repo's README, docs/, rfc/, and principles/ into a bounded standards summary      |
-| `analyze-staged-changes` | haiku   | `commits-create`         | Categorize staged files and recommend a commit strategy                                      |
-| `digest-session-history` | haiku   | `plan`, `run`, `explore` | Map task files and commits to the Entire sessions and checkpoints that produced them         |
-| `expert-review`          | inherit | `plan`, `plan-*`         | Score an implementation plan as a domain expert                                              |
-| `resolve-alert-context`  | sonnet  | `plan`, `run`            | Fetch GitHub code-scanning alert context via the code-scanning API                           |
-| `resolve-assignees`      | sonnet  | `linear-create`          | Resolve candidate assignees from CODEOWNERS and Linear team members, current user first      |
-| `resolve-issue-context`  | sonnet  | `pr-review`              | Fetch GitHub/Linear issue context; optionally auto-assign current user (idempotent) via `gh` |
-| `scan-and-analyze-todos` | sonnet  | `todo-cleanup`           | Scan codebase for TODOs and check linked GitHub issue statuses                               |
-| `search-codebase-todos`  | haiku   | `pr-review`              | Search the codebase for TODOs and references to a specific issue                             |
+| Agent                    | Model  | Used by                  | Purpose                                                                                      |
+| ------------------------ | ------ | ------------------------ | -------------------------------------------------------------------------------------------- |
+| `analyze-pr-commits`     | sonnet | `pr-create`, `pr-update` | Summarize branch commits, diff, and linked issue for PR context                              |
+| `digest-repo-standards`  | sonnet | `gather-context`         | Digest the repo's README, docs/, rfc/, and principles/ into a bounded standards summary      |
+| `analyze-staged-changes` | haiku  | `commits-create`         | Categorize staged files and recommend a commit strategy                                      |
+| `digest-session-history` | haiku  | `plan`, `run`, `explore` | Map task files and commits to the Entire sessions and checkpoints that produced them         |
+| `resolve-alert-context`  | sonnet | `plan`, `run`            | Fetch GitHub code-scanning alert context via the code-scanning API                           |
+| `resolve-assignees`      | sonnet | `linear-create`          | Resolve candidate assignees from CODEOWNERS and Linear team members, current user first      |
+| `resolve-issue-context`  | sonnet | `pr-review`              | Fetch GitHub/Linear issue context; optionally auto-assign current user (idempotent) via `gh` |
+| `scan-and-analyze-todos` | sonnet | `todo-cleanup`           | Scan codebase for TODOs and check linked GitHub issue statuses                               |
+| `search-codebase-todos`  | haiku  | `pr-review`              | Search the codebase for TODOs and references to a specific issue                             |
 
 ## Internal Skills (not in slash menu)
 
@@ -428,7 +426,7 @@ The fan-out issues every context call in a single message — the repo-standards
 
 An optional `Scope` input selects how that pass reads the snapshot: `task` (the default, used by `plan` and `run`) narrows to what the change touches, `broad` maps the repository breadth-first for `/autopilot:explore`, and `primed` reads only the gaps a validated brief leaves for `/autopilot:run-primed`. The emitted Context Map has the same sections at every scope. `primed` is the one value that also gates off a fan-out agent — the repo-standards digest, whose output the brief already carries.
 
-Planning is stack-agnostic apart from three values (example libraries, expert table, verify examples), which both skills resolve from `plan/references/stack-deltas.md` keyed by `agents.rules`. There are no per-stack planning skills.
+Planning is stack-agnostic apart from two values (example libraries, verify examples), which both skills resolve from `plan/references/stack-deltas.md` keyed by `agents.rules`. There are no per-stack planning skills.
 
 ## Contributing
 

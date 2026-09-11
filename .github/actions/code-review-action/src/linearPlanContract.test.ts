@@ -15,15 +15,9 @@
  * 4. The two skills agree on the stored format version. `Format:` is the only thing that
  *    keeps "written under an older template" apart from "corrupt", and a version the
  *    producer writes but the consumer does not read collapses that distinction.
- * 5. Expert review is an enhancement, never a gate. The pipeline states no scoring
- *    threshold and no revision budget, and `linear-plan` stores unconditionally with
- *    no plan-mode transition — a re-introduced gate would silently start losing plans.
- * 6. Expert review is opt-in for `plan` and `linear-plan` alone. The pipeline names them
- *    as the only callers that may skip the step and records one literal skipped score
- *    line; the `--experts-review` flag lives in those two skills and nowhere else, so
- *    the `run` family cannot quietly grow the skip — and a skipped store must stay
- *    visible, so `linear-plan` pins the `Score: skipped` stored-header variant.
- * 7. `run` stores its finalized plan on the source Linear issue — for `linear-issue`
+ * 5. Storing is unconditional. `linear-plan` writes with no plan-mode transition and no
+ *    approval step — a re-introduced gate would silently start losing plans.
+ * 6. `run` stores its finalized plan on the source Linear issue — for `linear-issue`
  *    inputs only — by reference to `linear-plan`'s store, inside Phase 4 and before
  *    implementation, and a failed write never blocks delivery. The reference link is
  *    the sole guard for preserving the prior ticket description: `run` carries no
@@ -52,13 +46,12 @@ const skillsDir = join(repoRoot, "claude-plugins/autopilot/skills");
 const readSkill = (name: string): Promise<string> =>
   readFile(join(skillsDir, name, "SKILL.md"), "utf8");
 
-const [linearPlan, linearRun, plan, run, runPrimed, pipeline] = await Promise.all([
+const [linearPlan, linearRun, plan, run, runPrimed] = await Promise.all([
   readSkill("linear-plan"),
   readSkill("linear-run"),
   readSkill("plan"),
   readSkill("run"),
   readSkill("run-primed"),
-  readFile(join(skillsDir, "plan/references/pipeline.md"), "utf8"),
 ]);
 
 /** Every verdict `linear-run`'s validation table must name, fallback ones first. */
@@ -172,12 +165,6 @@ describe("linear plan contract", () => {
     expect(linearRun).toContain(`\`${written}\``);
   });
 
-  test("the pipeline states no scoring threshold and no revision budget", () => {
-    expect(pipeline).not.toContain("Scoring target");
-    expect(pipeline).not.toMatch(/at most \w+ passes/);
-    expect(pipeline).toContain("not a gate for any caller");
-  });
-
   test("linear-plan stores unconditionally, with no plan-mode transition", () => {
     expect(linearPlan).toContain("Storing is unconditional");
     expect(linearPlan).toContain("Do not add a separate approval step");
@@ -241,30 +228,10 @@ describe("linear plan contract", () => {
     expect(drift).toContain(needle);
   });
 
-  test("the pipeline gates the review step on plan and linear-plan alone", () => {
-    expect(pipeline).toContain("the only callers that may skip");
-    expect(pipeline).toContain(
-      "Score: skipped · expert review disabled (invoked without --experts-review)",
-    );
-  });
-
-  test.each([
-    ["plan", plan],
-    ["linear-plan", linearPlan],
-  ])("%s's argument-hint carries the --experts-review flag", (_name, source) => {
-    expect(source).toMatch(/argument-hint:.*--experts-review/);
-  });
-
-  test("linear-plan documents the skipped stored-header variant", () => {
-    expect(linearPlan).toContain(
-      "Format: v1 · Score: skipped · Base: <origin/main SHA> · Stored by /autopilot:linear-plan",
-    );
-  });
-
   test("the emission template opens with the anchor and the placeholder header line", () => {
     expect(emissionTemplate).toStartWith("## Implementation plan\n");
     expect(emissionTemplate).toContain(
-      "Format: v1 · Score: <score> · Base: <sha> · Stored by /autopilot:linear-plan",
+      "Format: v1 · Base: <sha> · Stored by /autopilot:linear-plan",
     );
   });
 
@@ -287,24 +254,6 @@ describe("linear plan contract", () => {
     expect(originalTaskWrapper).toStartWith("+++ Original task\n");
     expect(originalTaskWrapper).toContain("<the prior description, byte-identical>");
     expect(originalTaskWrapper.trimEnd()).toEndWith("\n+++");
-  });
-
-  test.each([
-    ["linear-run", linearRun],
-    ["run", run],
-    ["run-primed", runPrimed],
-  ])("%s does not claim the --experts-review flag", (name, source) => {
-    expect(`${name}: ${source.includes("--experts-review")}`).toBe(`${name}: false`);
-  });
-
-  test("the unchanged callers state no threshold of their own", () => {
-    for (const [name, source] of [
-      ["plan", plan],
-      ["run", run],
-      ["run-primed", runPrimed],
-    ] as const) {
-      expect(`${name}: ${source.includes("Scoring target")}`).toBe(`${name}: false`);
-    }
   });
 
   test("ordinary plan and run-primed know nothing of the stored plan", () => {
@@ -351,8 +300,8 @@ describe("linear plan contract", () => {
   test("run reuses linear-plan's store by reference, with no second template", () => {
     expect(runStore).toContain("../linear-plan/SKILL.md#the-write");
     expect(runStore).toContain("../linear-plan/SKILL.md#the-emission-template");
-    // run's delta prose names only the `Stored by` and `Score:` fields, so the
-    // template's other header tokens appearing anywhere in run means a copied template.
+    // run's delta prose names only the `Stored by` field, so the template's other
+    // header tokens appearing anywhere in run means a copied template.
     expect(run).not.toContain("Format: v1");
     expect(run).not.toContain("· Base:");
   });
@@ -361,10 +310,6 @@ describe("linear plan contract", () => {
     expect(runStore).toContain("`Stored by`");
     expect(runStore).toContain("`/autopilot:run`");
     expect(runStore).not.toContain("Stored by /autopilot:linear-plan");
-  });
-
-  test("run's store never records a skipped review", () => {
-    expect(runStore).toContain("never the literal `skipped`");
   });
 
   test("the reader ignores the attribution the two producers differ on", () => {

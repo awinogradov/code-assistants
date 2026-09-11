@@ -8,7 +8,7 @@ How `/autopilot:explore` primes a session with a broad, durable picture of a rep
 
 ## Why a third on-ramp
 
-Autopilot had exactly two entry points, and both start from a target. [`plan`](../claude-plugins/autopilot/skills/plan/SKILL.md) and [`run`](../claude-plugins/autopilot/skills/run/SKILL.md) each take a GitHub issue, a Linear ticket, a code-scanning alert, or a description concrete enough to plan against — then carry the session through draft, expert panel, scoring, a plan file, a branch, and a pull request. See [Plan and run skills](./05-plan-run-skills.md).
+Autopilot had exactly two entry points, and both start from a target. [`plan`](../claude-plugins/autopilot/skills/plan/SKILL.md) and [`run`](../claude-plugins/autopilot/skills/run/SKILL.md) each take a GitHub issue, a Linear ticket, a code-scanning alert, or a description concrete enough to plan against — then carry the session through draft, a plan file, a branch, and a pull request. See [Plan and run skills](./05-plan-run-skills.md).
 
 Work does not always arrive that way. Sometimes it arrives as an _area_ — "the refactoring flow", "the review pipeline" — and the changes that follow are surgical: a few lines in a file you first have to find. Getting autopilot's context quality for that mode meant inventing a target for `plan` and then discarding everything the plan pipeline dragged along.
 
@@ -21,7 +21,7 @@ Two further properties made the map unsuitable for a steer-as-you-go session. It
 | Skill                | You have                   | You get                                                   |
 | -------------------- | -------------------------- | --------------------------------------------------------- |
 | `/autopilot:explore` | an area, no target         | a durable brief, then edit-and-verify on your instruction |
-| `/autopilot:plan`    | a target you want reviewed | a scored plan file, an approval gate, then implementation |
+| `/autopilot:plan`    | a target you want reviewed | a plan file, an approval gate, then implementation        |
 | `/autopilot:run`     | a target you want carried  | the same plan, implemented and driven to a merged PR      |
 
 `explore` is the only one of the three that never branches, never opens a pull request, and never asks for approval — invoking it is not a commitment to change anything.
@@ -87,7 +87,7 @@ Two further properties made the map unsuitable for a steer-as-you-go session. It
 - ③ Nothing but derived files moved upstream — skip both full-prime phases and delta-refresh instead.
 - ④ Runs on both paths and owns every volatile section: branch diff, git state, dirty files, stashes, sibling worktrees, unpushed branches.
 - ⑤ A full prime writes every section; a delta refresh rewrites only the volatile ones.
-- ⑥ No plan file, no expert panel, no scoring, no branch prompt, no PR chain.
+- ⑥ No plan file, no branch prompt, no PR chain.
 
 ## Reuse, not a second fan-out
 
@@ -168,7 +168,7 @@ The diff is remote-to-remote, so locally-uncommitted work never forces a full pr
 
 After writing the brief the skill reports what it did, notes anything in `## Git state` worth knowing before editing — being on `main`, or on a branch whose work already landed upstream — and stops. It **reports** that state rather than prompting on it, because this skill does not branch.
 
-Every instruction after that is handled the same way: locate through the brief, edit, run the verify check `## Test and verify` names, report. No plan file, no expert panel, no scoring, no branch prompt, no PR chain. `EnterPlanMode`, `ExitPlanMode`, and `preflight-check` are never called — they belong to the flows this skill exists to avoid.
+Every instruction after that is handled the same way: locate through the brief, edit, run the verify check `## Test and verify` names, report. No plan file, no branch prompt, no PR chain. `EnterPlanMode`, `ExitPlanMode`, and `preflight-check` are never called — they belong to the flows this skill exists to avoid.
 
 Suppressing that machinery is half the value. A fix that costs one edit should not cost a planning pipeline. Committing or opening a pull request hands off to [`commits-create`](../claude-plugins/autopilot/skills/commits-create/SKILL.md) or [`pr-create`](../claude-plugins/autopilot/skills/pr-create/SKILL.md), which own those conventions.
 
