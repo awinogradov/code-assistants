@@ -534,6 +534,7 @@ claude-plugins/
       7.5.2.md
       8.0.0.md
       9.0.0.md
+      9.0.1.md
     agents/
       analyze-pr-commits.md
       analyze-staged-changes.md
@@ -48635,7 +48636,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "9.0.0",
+  "version": "9.0.1",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -51614,6 +51615,60 @@ Entire-Checkpoint: 2fdf4671df31
 * **autopilot:** add pr watcher that waits outside the model ([cb0c214](https://github.com/awinogradov/code-assistants/commit/cb0c21448f84f6ecf0531fe5a4302651e18981a3))
 * **autopilot:** remove the expert review panel ([b53e55d](https://github.com/awinogradov/code-assistants/commit/b53e55dc99a9b32757b6e5af56a61e6e18a6c48f))
 * **pr-monitor:** wake only on actionable watcher events ([b12493a](https://github.com/awinogradov/code-assistants/commit/b12493ae14731b133d5e5c420433e2181218b38e))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/9.0.1.md">
+## [9.0.1](https://github.com/awinogradov/code-assistants/compare/autopilot@v9.0.0...autopilot@v9.0.1) (2026-09-11)
+
+## Release Notes
+
+Autopilot's planning and execution workflows now reuse fetched context instead of rebuilding it on every invocation, cutting redundant token work across both Autopilot and Linear-backed flows.
+
+## ✨ What's New
+
+- Planning workflows now accept explicit validated exploration briefs and reuse already-fetched Linear tickets, so replanning a ticket no longer re-fetches context from scratch.
+- Exploration can refresh only the affected sections of a plan rather than regenerating the full output, and stored Linear plans carry reusable context evidence forward to subsequent steps.
+- Standards summaries now report overflow explicitly instead of silently dropping applicable constraints, making it visible when context limits caused a rule to be skipped.
+
+<details><summary>Related issues</summary>
+
+- [#671: Reuse planning context across Autopilot and Linear workflows](https://github.com/awinogradov/code-assistants/issues/671)
+- [#669: Reduce unnecessary context work and instruction overhead in Autopilot](https://github.com/awinogradov/code-assistants/issues/669)
+</details>
+
+## 🐛 Bug Fixes
+
+- Autopilot no longer loads optional skill instructions when the relevant skill is not active, eliminating unnecessary instruction overhead on every invocation.
+
+<details><summary>Related issues</summary>
+
+- [#669: Reduce unnecessary context work and instruction overhead in Autopilot](https://github.com/awinogradov/code-assistants/issues/669)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #671 | [#672](https://github.com/awinogradov/code-assistants/pull/672) | @awinogradov |
+| #669 | [#670](https://github.com/awinogradov/code-assistants/pull/670) | @awinogradov |
+
+### Performance
+
+* **autopilot:** bound context and defer skill references ([d71c112](https://github.com/awinogradov/code-assistants/commit/d71c112f34ca19003330228f83d2d54c88817cc3))
+* **autopilot:** reuse planning and linear context ([d1ed0ed](https://github.com/awinogradov/code-assistants/commit/d1ed0edf7cdfc351ff66bf24307687924977b88b))
+
+### Documentation
+
+* **autopilot:** correct linear-plan gate punctuation ([0e7b645](https://github.com/awinogradov/code-assistants/commit/0e7b645bf07e8bac9a996876c150b4f4440f0ecc))
+
+### Refactoring
+
+* **autopilot:** share brief and input instructions ([ed341f8](https://github.com/awinogradov/code-assistants/commit/ed341f835dd7e520ed7361bd594b51c8db364a4a))
+
+### Tests
+
+* **autopilot:** cover invalid issue lookup arguments ([c9e6423](https://github.com/awinogradov/code-assistants/commit/c9e6423bb2e6bc2774c21c4df5b7477d741241ee))
 </file>
 
 <file path="claude-plugins/autopilot/agents/analyze-pr-commits.md">
@@ -67680,6 +67735,57 @@ Before writing any output that mentions a file, standard, section, commit, or is
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [9.0.1](https://github.com/awinogradov/code-assistants/compare/autopilot@v9.0.0...autopilot@v9.0.1) (2026-09-11)
+
+## Release Notes
+
+Autopilot's planning and execution workflows now reuse fetched context instead of rebuilding it on every invocation, cutting redundant token work across both Autopilot and Linear-backed flows.
+
+## ✨ What's New
+
+- Planning workflows now accept explicit validated exploration briefs and reuse already-fetched Linear tickets, so replanning a ticket no longer re-fetches context from scratch.
+- Exploration can refresh only the affected sections of a plan rather than regenerating the full output, and stored Linear plans carry reusable context evidence forward to subsequent steps.
+- Standards summaries now report overflow explicitly instead of silently dropping applicable constraints, making it visible when context limits caused a rule to be skipped.
+
+<details><summary>Related issues</summary>
+
+- [#671: Reuse planning context across Autopilot and Linear workflows](https://github.com/awinogradov/code-assistants/issues/671)
+- [#669: Reduce unnecessary context work and instruction overhead in Autopilot](https://github.com/awinogradov/code-assistants/issues/669)
+</details>
+
+## 🐛 Bug Fixes
+
+- Autopilot no longer loads optional skill instructions when the relevant skill is not active, eliminating unnecessary instruction overhead on every invocation.
+
+<details><summary>Related issues</summary>
+
+- [#669: Reduce unnecessary context work and instruction overhead in Autopilot](https://github.com/awinogradov/code-assistants/issues/669)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #671 | [#672](https://github.com/awinogradov/code-assistants/pull/672) | @awinogradov |
+| #669 | [#670](https://github.com/awinogradov/code-assistants/pull/670) | @awinogradov |
+
+### Performance
+
+* **autopilot:** bound context and defer skill references ([d71c112](https://github.com/awinogradov/code-assistants/commit/d71c112f34ca19003330228f83d2d54c88817cc3))
+* **autopilot:** reuse planning and linear context ([d1ed0ed](https://github.com/awinogradov/code-assistants/commit/d1ed0edf7cdfc351ff66bf24307687924977b88b))
+
+### Documentation
+
+* **autopilot:** correct linear-plan gate punctuation ([0e7b645](https://github.com/awinogradov/code-assistants/commit/0e7b645bf07e8bac9a996876c150b4f4440f0ecc))
+
+### Refactoring
+
+* **autopilot:** share brief and input instructions ([ed341f8](https://github.com/awinogradov/code-assistants/commit/ed341f835dd7e520ed7361bd594b51c8db364a4a))
+
+### Tests
+
+* **autopilot:** cover invalid issue lookup arguments ([c9e6423](https://github.com/awinogradov/code-assistants/commit/c9e6423bb2e6bc2774c21c4df5b7477d741241ee))
 ## [9.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v8.0.0...autopilot@v9.0.0) (2026-09-11)
 
 ## Release Notes
@@ -70647,14 +70753,14 @@ SOFTWARE.
     "test": "bun test lib",
     "clean": "rm -rf node_modules .turbo"
   },
-  "version": "9.0.0"
+  "version": "9.0.1"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v9.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v9.0.1-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -71169,7 +71275,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-9.0.0
+9.0.1
 </file>
 
 <file path="docs/01-workspace-structure.md">
