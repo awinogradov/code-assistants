@@ -531,6 +531,7 @@ claude-plugins/
       7.5.1.md
       7.5.2.md
       8.0.0.md
+      9.0.0.md
     agents/
       analyze-pr-commits.md
       analyze-staged-changes.md
@@ -48368,7 +48369,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "8.0.0",
+  "version": "9.0.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -51290,6 +51291,63 @@ Entire-Checkpoint: ce9f7c416776
 
 * **autopilot:** describe ready-for-review outcome ([2b8f952](https://github.com/awinogradov/code-assistants/commit/2b8f9523b69272913b59ddf67e46f328e6a458d6))
 * **run:** align intro with ready-for-review hand-off ([94a690d](https://github.com/awinogradov/code-assistants/commit/94a690df7dfd29422a0b731a4641553048bd7b9a))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/9.0.0.md">
+## [9.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v8.0.0...autopilot@v9.0.0) (2026-09-11)
+
+## Release Notes
+
+## [9.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v8.0.0...autopilot@v9.0.0) (2026-09-11)
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #664 | [#665](https://github.com/awinogradov/code-assistants/pull/665) | @awinogradov |
+| #662 | [#663](https://github.com/awinogradov/code-assistants/pull/663) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **pr-monitor:** pr-monitor requires a runtime that notifies the session
+when a background process exits; without one it reports the missing
+capability and stops instead of falling back to timed polling. It also
+adds a BLOCKED outcome and writes watcher state under the git common dir.
+
+Claude-Session: https://claude.ai/code/session_01WM15kAVNHQTjxvke1Luypc
+Entire-Checkpoint: 2fdf4671df31
+* **autopilot:** --experts-review is no longer accepted and no flow launches an expert panel.
+
+### Features
+
+* **autopilot:** add pr watcher that waits outside the model ([cb0c214](https://github.com/awinogradov/code-assistants/commit/cb0c21448f84f6ecf0531fe5a4302651e18981a3))
+* **autopilot:** remove the expert review panel ([b53e55d](https://github.com/awinogradov/code-assistants/commit/b53e55dc99a9b32757b6e5af56a61e6e18a6c48f))
+* **pr-monitor:** wake only on actionable watcher events ([b12493a](https://github.com/awinogradov/code-assistants/commit/b12493ae14731b133d5e5c420433e2181218b38e))
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #664 | [#665](https://github.com/awinogradov/code-assistants/pull/665) | @awinogradov |
+| #662 | [#663](https://github.com/awinogradov/code-assistants/pull/663) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **pr-monitor:** pr-monitor requires a runtime that notifies the session
+when a background process exits; without one it reports the missing
+capability and stops instead of falling back to timed polling. It also
+adds a BLOCKED outcome and writes watcher state under the git common dir.
+
+Claude-Session: https://claude.ai/code/session_01WM15kAVNHQTjxvke1Luypc
+Entire-Checkpoint: 2fdf4671df31
+* **autopilot:** --experts-review is no longer accepted and no flow launches an expert panel.
+
+### Features
+
+* **autopilot:** add pr watcher that waits outside the model ([cb0c214](https://github.com/awinogradov/code-assistants/commit/cb0c21448f84f6ecf0531fe5a4302651e18981a3))
+* **autopilot:** remove the expert review panel ([b53e55d](https://github.com/awinogradov/code-assistants/commit/b53e55dc99a9b32757b6e5af56a61e6e18a6c48f))
+* **pr-monitor:** wake only on actionable watcher events ([b12493a](https://github.com/awinogradov/code-assistants/commit/b12493ae14731b133d5e5c420433e2181218b38e))
 </file>
 
 <file path="claude-plugins/autopilot/agents/analyze-pr-commits.md">
@@ -67322,6 +67380,60 @@ Before writing any output that mentions a file, standard, section, commit, or is
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [9.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v8.0.0...autopilot@v9.0.0) (2026-09-11)
+
+## Release Notes
+
+## [9.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v8.0.0...autopilot@v9.0.0) (2026-09-11)
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #664 | [#665](https://github.com/awinogradov/code-assistants/pull/665) | @awinogradov |
+| #662 | [#663](https://github.com/awinogradov/code-assistants/pull/663) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **pr-monitor:** pr-monitor requires a runtime that notifies the session
+when a background process exits; without one it reports the missing
+capability and stops instead of falling back to timed polling. It also
+adds a BLOCKED outcome and writes watcher state under the git common dir.
+
+Claude-Session: https://claude.ai/code/session_01WM15kAVNHQTjxvke1Luypc
+Entire-Checkpoint: 2fdf4671df31
+* **autopilot:** --experts-review is no longer accepted and no flow launches an expert panel.
+
+### Features
+
+* **autopilot:** add pr watcher that waits outside the model ([cb0c214](https://github.com/awinogradov/code-assistants/commit/cb0c21448f84f6ecf0531fe5a4302651e18981a3))
+* **autopilot:** remove the expert review panel ([b53e55d](https://github.com/awinogradov/code-assistants/commit/b53e55dc99a9b32757b6e5af56a61e6e18a6c48f))
+* **pr-monitor:** wake only on actionable watcher events ([b12493a](https://github.com/awinogradov/code-assistants/commit/b12493ae14731b133d5e5c420433e2181218b38e))
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #664 | [#665](https://github.com/awinogradov/code-assistants/pull/665) | @awinogradov |
+| #662 | [#663](https://github.com/awinogradov/code-assistants/pull/663) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **pr-monitor:** pr-monitor requires a runtime that notifies the session
+when a background process exits; without one it reports the missing
+capability and stops instead of falling back to timed polling. It also
+adds a BLOCKED outcome and writes watcher state under the git common dir.
+
+Claude-Session: https://claude.ai/code/session_01WM15kAVNHQTjxvke1Luypc
+Entire-Checkpoint: 2fdf4671df31
+* **autopilot:** --experts-review is no longer accepted and no flow launches an expert panel.
+
+### Features
+
+* **autopilot:** add pr watcher that waits outside the model ([cb0c214](https://github.com/awinogradov/code-assistants/commit/cb0c21448f84f6ecf0531fe5a4302651e18981a3))
+* **autopilot:** remove the expert review panel ([b53e55d](https://github.com/awinogradov/code-assistants/commit/b53e55dc99a9b32757b6e5af56a61e6e18a6c48f))
+* **pr-monitor:** wake only on actionable watcher events ([b12493a](https://github.com/awinogradov/code-assistants/commit/b12493ae14731b133d5e5c420433e2181218b38e))
 ## [8.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v7.5.2...autopilot@v8.0.0) (2026-09-07)
 
 ## Release Notes
@@ -70197,6 +70309,13 @@ SOFTWARE.
 ### Breaking changes
 
 - pr-monitor no longer blocks until a human approves; run,
+
+## From 8.0.0 to 9.0.0
+
+### Breaking changes
+
+- pr-monitor requires a runtime that notifies the session
+- --experts-review is no longer accepted and no flow launches an expert panel.
 </file>
 
 <file path="claude-plugins/autopilot/package.json">
@@ -70228,14 +70347,14 @@ SOFTWARE.
     "test": "bun test lib",
     "clean": "rm -rf node_modules .turbo"
   },
-  "version": "8.0.0"
+  "version": "9.0.0"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v8.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v9.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -70748,7 +70867,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-8.0.0
+9.0.0
 </file>
 
 <file path="docs/01-workspace-structure.md">
