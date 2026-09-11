@@ -91,3 +91,10 @@
 ### Breaking changes
 
 - pr-monitor no longer blocks until a human approves; run,
+
+## From 8.0.0 to 9.0.0
+
+### Breaking changes
+
+- pr-monitor requires a runtime that notifies the session
+- --experts-review is no longer accepted and no flow launches an expert panel.
