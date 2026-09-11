@@ -2,6 +2,45 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [10.0.1](https://github.com/awinogradov/code-assistants/compare/code-review-action@v10.0.0...code-review-action@v10.0.1) (2026-09-11)
+
+## Release Notes
+
+Autopilot context loading is faster and more efficient in `v10.0.1`, with planning workflows now reusing fetched context instead of rebuilding it on every run.
+
+## ✨ What's New
+
+- Autopilot skips unused context work and loads optional skill references only when they are relevant to the current review, reducing overhead on every run.
+- Standards summaries now report overflow explicitly instead of silently omitting applicable constraints, so reviewers see when limits are hit.
+- Planning workflows accept explicit validated exploration briefs and reuse already-fetched Linear tickets, eliminating redundant fetches across Autopilot and Linear workflows.
+- Exploration runs can refresh only affected sections, and stored Linear plans preserve reusable context evidence for subsequent runs.
+
+<details><summary>Related issues</summary>
+
+- [#669: Reduce unnecessary context work and instruction overhead in Autopilot](https://github.com/awinogradov/code-assistants/issues/669)
+- [#671: Reuse planning context across Autopilot and Linear workflows](https://github.com/awinogradov/code-assistants/issues/671)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #671 | [#672](https://github.com/awinogradov/code-assistants/pull/672) | @awinogradov |
+| #669 | [#670](https://github.com/awinogradov/code-assistants/pull/670) | @awinogradov |
+
+### Performance
+
+* **autopilot:** bound context and defer skill references ([d71c112](https://github.com/awinogradov/code-assistants/commit/d71c112f34ca19003330228f83d2d54c88817cc3))
+* **autopilot:** reuse planning and linear context ([d1ed0ed](https://github.com/awinogradov/code-assistants/commit/d1ed0edf7cdfc351ff66bf24307687924977b88b))
+
+### Refactoring
+
+* **autopilot:** share brief and input instructions ([ed341f8](https://github.com/awinogradov/code-assistants/commit/ed341f835dd7e520ed7361bd594b51c8db364a4a))
+
+### Tests
+
+* **review:** accept additional pr metadata fields ([90ac035](https://github.com/awinogradov/code-assistants/commit/90ac035f8b440f40ce208dd9814ac47362777465))
 ## [10.0.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v9.0.0...code-review-action@v10.0.0) (2026-09-11)
 
 ## Release Notes
