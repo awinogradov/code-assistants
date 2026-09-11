@@ -6,9 +6,9 @@ Everything below runs **after** [`gather-context`](../../gather-context/SKILL.md
 
 Resolve the two stack values from [stack-deltas.md](stack-deltas.md) wherever a step says "your stack's delta".
 
-## Draft plan (task 3)
+## Draft plan
 
-Assemble a complete draft before finalizing, so the written plan is a concrete artifact instead of an imagined one.
+Track draft and finalization as the single Write plan outcome. Assemble a complete draft before finalizing, so the written plan is a concrete artifact instead of an imagined one.
 
 Draft the smallest reliable solution that satisfies the steelmanned intent: reuse what the Context Map already shows over adding, and prefer the option with the fewest moving parts that still holds. Every step must trace to that intent — no unrequested abstraction, no configurability nobody asked for, no error handling for states that cannot occur, and no opportunistic refactor of adjacent code. Where a simpler option was rejected because it would not hold, say so in a clause rather than leaving the larger design unexplained. Minimality is a drafting constraint: nothing later strips scope a draft has already committed to, so the draft is where scope is decided.
 
@@ -55,8 +55,8 @@ The template is prose because the plan file is what the reader approves — see 
 
 `## Context source` is required in every plan and is the one section quoted rather than composed. That does not make it an instruction: the record states where this plan's understanding of the repository came from, which is an outcome like any other, and quoting it is what keeps it reusable — a paraphrase drops the relationship on each shortlist entry, which is the part a later holder needs. A plan file with no such section, including every plan written before the section existed, is an **unrecorded source**: read it as a selection nobody wrote down and fall back to the shared block's taxonomy, never as a reason to stop.
 
-## Finalize (task 4)
+## Finalize
 
 Write the plan file from the draft. The draft is the plan: no review pass, no score, and no revision loop sits between the two, so a draft that is complete and verifiable is finished the moment it is written.
 
-Apply the reference-formatting rules (RFC-0001, inlined at the end of the calling skill) to every reference the plan contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
+Apply the reference-formatting rules (RFC-0001, linked by the calling skill) to every reference the plan contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.

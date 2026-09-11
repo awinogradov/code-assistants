@@ -1,7 +1,7 @@
 ---
 name: run
 description: Plan and implement, then either report verified no repository change or deliver a PR; a Linear-issue input also gets the finalized plan stored on its ticket before implementation
-argument-hint: "<task, GitHub/Linear issue (123, #123, ENG-123, or URL), or code-scanning alert (alert#N or URL)>"
+argument-hint: "[--brief <path>] <task, GitHub/Linear issue (123, #123, ENG-123, or URL), or code-scanning alert (alert#N or URL)>"
 allowed-tools:
   - TaskCreate
   - TaskUpdate
@@ -58,21 +58,15 @@ Expected forms (same as `plan`, minus the create-issue flags):
 
 ## Input resolution
 
-Identical to the `plan` skill — see [its Input resolution section](../plan/SKILL.md#input-resolution).
+Resolve arguments through [input-detection.md](../plan/references/input-detection.md), using this caller’s accepted forms and flags. Resolve the repository root once; issue/branch state comes from gathering. Do not load the plan orchestrator for input parsing.
+
+## Explicit brief input
+
+Accept `--brief <path>` and strip it before issue detection. Never infer this flag from conversation history. Before gathering, read [brief-validation.md](../gather-context/references/brief-validation.md); on any non-valid verdict, report it and stop with the option to refresh explore or rerun without `--brief`. On success, pass the brief and **`Scope: primed`** to gather-context, following [brief-reuse.md](../gather-context/references/brief-reuse.md) for current-code and standards gaps. Without the flag, use ordinary task gathering. Stored-plan file seeds also apply when a Linear run receives a brief.
 
 ## Task Progress Protocol
 
-Create all 7 tasks with TaskCreate, in order, before any work. Set each to `in_progress` at the start of its phase and `completed` at the end.
-
-| #   | Subject        | ActiveForm         |
-| --- | -------------- | ------------------ |
-| 1   | Resolve input  | Resolving input    |
-| 2   | Gather context | Gathering context  |
-| 3   | Draft plan     | Drafting plan      |
-| 4   | Finalize plan  | Finalizing plan    |
-| 5   | Commit changes | Committing changes |
-| 6   | Create PR      | Creating PR        |
-| 7   | Monitor PR     | Monitoring PR      |
+Track only these substantive outcomes: **Gather context**, **Write plan**, **Implement and verify**, **Deliver PR**. Create them together where the runtime supports batching, or as one checklist otherwise. Update at outcome boundaries; input parsing, artifact freezing, and draft/finalize are not separate tasks. Identify tasks by subject, never numeric IDs.
 
 ## Task
 
@@ -80,23 +74,17 @@ $ARGUMENTS
 
 ## Phase 0: Resolve input
 
-Create the 7 tasks, then set task 1 to `in_progress`.
+Resolve input before starting Gather context.
 
 Detect the input type and id per [input-detection.md](../plan/references/input-detection.md) — the detection table and its tracker gating. Skip that file's create-issue flags section; it is plan-only. Detection is pure string matching and performs **no I/O**; do not fetch anything here.
 
-Set task 1 to `completed`.
-
 ## Phase 1: Gather context
-
-Set task 2 to `in_progress`. Invoke:
 
 ```
 Skill(autopilot:gather-context)
 ```
 
-Pass the detected input type, issue id, repository, repository root, Linear team (when applicable), and the raw task text as the task summary. The skill runs one parallel fan-out and returns the **Context Map**, which is this command's entire view of the repository.
-
-Set task 2 to `completed`.
+Pass the detected input type, issue id, repository, repository root, Linear team (when applicable), and the raw task text as the task summary. The skill resolves intent, runs dependent research in parallel, and returns the **Context Map**, which is this command's entire view of the repository.
 
 ## Phase 2: Preflight verdict
 
@@ -110,11 +98,11 @@ Because this step ran, every later step in this chain skips its own Phase 0 pref
 
 ## Common Instructions
 
-The [Common Instructions in `plan/SKILL.md`](../plan/SKILL.md#common-instructions) apply here unchanged — documentation lookup scaled to the task, repository standards from the Context Map, the plan file header rule, CLAUDE.md compliance, and ASCII schemas.
+Read [common-instructions.md](../plan/references/common-instructions.md) once before drafting; its rules apply here unchanged — documentation lookup scaled to the task, repository standards from the Context Map, the plan file header rule, CLAUDE.md compliance, and ASCII schemas.
 
 ## Phase 3: Draft and finalize
 
-Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft (task 3), finalize (task 4) — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md).
+Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — one Write plan outcome — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md).
 
 ## Phase 4: Embed branch creation and the autopilot chain
 
@@ -135,7 +123,7 @@ For a repository-delivery plan, **REPLACE** the `## Post-Implementation` section
 ```
 ## Post-Implementation (Autopilot)
 
-Once every step above is done and verified, the rest runs automatically, with no approval prompt:
+Once every step above is done and verification results or user-deferred checks are recorded, the rest runs automatically, with no approval prompt:
 
 1. Update any `README.md`, `docs/*`, and `rfc/*` this change affects. Editing the content of an Accepted RFC also means bumping its `version` frontmatter and adding a Changelog entry.
 2. Commit the change and push the branch.
@@ -148,46 +136,24 @@ For a no-repository-change candidate, replace it with this body instead:
 ```
 ## Post-Implementation (Autopilot)
 
-Once every step above is done and verified, confirm that the repository remains unchanged and report the completed external action or verified result. Do not create a branch, commit, push, or pull request unless implementation discovers that repository files must change.
+Once every step above is done and verification results or user-deferred checks are recorded, confirm that the repository remains unchanged and report the completed external action or verified result. Do not create a branch, commit, push, or pull request unless implementation discovers that repository files must change.
 ```
 
-The steps below are how those bodies are carried out. They are instructions for you, not text for the plan file — the plan file is what the reader sees, so it stays prose (see the **Plan file is output, not instructions** rule in [`plan/SKILL.md`](../plan/SKILL.md#plan-file-is-output-not-instructions)). Execute them in [Phase 5](#phase-5-implement-and-proceed) without pausing, and never present a "What's next?" AskUserQuestion.
+The steps below are how those bodies are carried out. They are instructions for you, not text for the plan file — the plan file is what the reader sees, so it stays prose (see the **Plan file is output, not instructions** rule in [common instructions](../plan/references/common-instructions.md#plan-file-is-output-not-instructions)). Execute them in [Phase 5](#phase-5-implement-and-proceed) without pausing, and never present a "What's next?" AskUserQuestion.
 
 #### No-repository-change exit
 
-Take this exit only when all of the following are true:
-
-1. The finalized plan explicitly requires no repository file changes.
-2. Confirm that every implementation step and its `verify:` line passed. An empty diff alone is never evidence of completion. If any action or verification failed, stop and report the failed verification.
-3. `git status --porcelain` produces no output.
-4. `git diff --quiet origin/main...HEAD` exits successfully.
-5. `git log --oneline origin/main..HEAD` produces no output.
-
-If the plan expected repository changes but the diff is empty, the task is incomplete: report that mismatch and stop. If implementation discovered repository changes or topic commits, do not take this exit; create the deferred branch when needed and continue through Auto-Commit.
-
-When every condition passes, do not invoke `branch-create`, `commits-create`, `git push`, `pr-create`, `pr-update`, or `pr-monitor`. Set tasks 5–7 to `completed` as not applicable, then output:
-
-```
-Autopilot complete.
-Outcome: no_repository_change
-Summary: <what resolved the task>
-Evidence:
-- <verification or external-action receipt>
-```
-
-Otherwise continue with the repository-delivery steps below.
+Only when the finalized plan explicitly requires no repository file changes, read [no-repository-change.md](references/no-repository-change.md) and apply every completion check before reporting that outcome. An empty diff alone never proves completion. Otherwise continue through repository delivery.
 
 #### Step 1: Auto-Commit
 
-Set task 5 ("Commit changes") to `in_progress`. Invoke `Skill(autopilot:commits-create)` with `--autopilot`. The flag suppresses the commit-strategy prompt and the skill's own PR update (this chain creates or updates the PR itself in Step 2), and turns a validation failure into a loud abort instead of a prompt. Follow the skill's full workflow — do NOT run `git commit` directly.
+Invoke `Skill(autopilot:commits-create)` with `--autopilot`; it owns staging, message validation, and commit creation. Begin Deliver PR after implementation and permitted verification are complete.
 
 If the commit fails due to a pre-commit hook, check `git status` for modified files (the hook may have auto-formatted), re-stage with `git add -u`, and retry once. If it still fails, report the error and stop.
 
-After committing, push: `git push -u origin <branch>`. Set task 5 to `completed`.
+After committing, push: `git push -u origin <branch>`.
 
 #### Step 2: Auto-Create PR
-
-Set task 6 ("Create PR") to `in_progress`.
 
 PR creation and updates go through `Skill(autopilot:pr-create)` and `Skill(autopilot:pr-update)`, which own the PR title and body grammar. Never fall back to raw `gh pr create` or `gh pr edit`, even when a skill call fails or times out — surface the failure and stop instead.
 
@@ -198,19 +164,19 @@ PR creation and updates go through `Skill(autopilot:pr-create)` and `Skill(autop
 
 2. Invoke `Skill(autopilot:pr-create)` with `--autopilot` (append `--release-notes` when the branch's commits include `feat:` or `fix:`). Release notes are added automatically for breaking changes regardless.
 
-Output the PR URL. Set task 6 to `completed`.
+Output the PR URL.
 
 3. **Format check** — after creating or updating, run `gh pr view --json title,body`. If the body does not match [`pr-body-grammar.md`](../shared-rules/references/pr-body-grammar.md), invoke `Skill(autopilot:pr-update)` with `--autopilot` once more and re-check; if it still does not match, report it and continue.
 
 #### Step 3: Monitor PR
 
-Set task 7 ("Monitor PR") to `in_progress`. Invoke `Skill(autopilot:pr-monitor)` in foreground mode (do NOT use the Agent tool with run_in_background) and without `--wait-for-approval`. It launches the packaged watcher, which waits inside one process and wakes this session only for one of the [events it defines](../pr-monitor/SKILL.md#the-event-contract) — never for ordinary pending CI. The skill invokes pr-resolve interactively when feedback needs answering, fixes failing checks, and returns `READY_FOR_REVIEW` once checks have settled for the current head with nothing unanswered, or earlier on approval or merge; approval and merge are asynchronous follow-ups, not part of this chain's wait.
+Invoke `Skill(autopilot:pr-monitor)` in foreground mode without `--wait-for-approval`. Let its packaged watcher own waiting and remediation; readiness is the delivery endpoint, not merge.
 
 **Autopilot override for pr-resolve:** when pr-monitor invokes pr-resolve and it presents the review-action gate via AskUserQuestion, auto-select "Address all". Replies post without prompting.
 
 #### Completion
 
-Set task 7 to `completed`. Output the monitor's status verbatim:
+Complete Deliver PR only when the monitor reports readiness, approval, or merge. Report stopped or blocked outcomes as incomplete delivery. Output the monitor status:
 
 ```
 Autopilot complete.
@@ -222,16 +188,7 @@ When the monitor stopped instead — `CHANGES_REQUESTED` or `CONFLICTED` — out
 
 ### Persist the plan to Linear
 
-Runs only when the detected input type is `linear-issue` (the type named by [input-detection.md](../plan/references/input-detection.md)'s detection table); every other input type skips this subsection and keeps its current behavior. It executes once both blocks above are embedded and before any step of [Phase 5](#phase-5-implement-and-proceed) runs, so the source ticket carries the finalized plan before implementation starts. This is chain work between tasks 4 and 5 — the task table stays as it is.
-
-The store is [`linear-plan`](../linear-plan/SKILL.md)'s, executed by reference rather than restated: fill [the emission template](../linear-plan/SKILL.md#the-emission-template) from the finalized plan file under [the stored plan format](../linear-plan/SKILL.md#the-stored-plan-format) and [Linear-safe markdown](../linear-plan/SKILL.md#linear-safe-markdown) rules, then perform [the write](../linear-plan/SKILL.md#the-write)'s read, anchor, preserved-prefix, write, and recovery steps. Resolve `get_issue` and `save_issue` per [`linear-mcp-access.md`](../shared-rules/references/linear-mcp-access.md). Two deltas, and only these:
-
-- The header's `Stored by` field reads `/autopilot:run`, so the ticket records which skill wrote the plan.
-- The write's title-refresh and board-transition steps do not run: this same session immediately executes the ticket, so the planned-and-ready hand-off signal belongs to the deliberate `linear-plan` path, and [`branch-create`](../branch-create/SKILL.md) moves the ticket to "In Progress" moments later via `--start`.
-
-When the plan is a no-repository-change candidate with no `## Pre-Implementation` section, the stored `### Pre-Implementation` states in one line that no branch is created because the plan requires no repository change.
-
-Re-running against the same ticket replaces the stored plan and never stacks a second wrapper — that idempotence is the write's anchor rule, inherited by reference. A failed, refused, or unavailable write — the preserved-prefix abort and an unresolvable Linear MCP included — is reported loudly with the full plan text emitted into the transcript, so the store is recoverable by hand; then the run continues. The store is an audit write and never gates delivery. No `Skill(...)` dispatch is involved: the update happens in place, in this session.
+Only for `linear-issue` input, before implementation, read [plan-storage.md](../linear-plan/references/plan-storage.md). Write the finalized plan with the `Stored by` attribution `/autopilot:run`; omit title refresh and AI Ready transition. Preserve the current ticket prefix using the reference's fresh read. A failed store emits recoverable plan text and the error; the run continues and the store never gates delivery. No store runs for other input types.
 
 ## Phase 5: Implement and proceed
 

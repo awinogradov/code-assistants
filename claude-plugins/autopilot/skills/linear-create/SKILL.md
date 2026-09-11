@@ -64,12 +64,14 @@ This workflow is not complete until [Phase 7](#phase-7-create-issue) calls the L
 
 ## Phase 1: Gather Context
 
+Read [metadata.md](references/metadata.md) now and launch its independent metadata reads alongside code-context work. Do not refetch them in selection phases.
+
 Mirror `issue-create` so the body reflects real code, not hallucinated structure. Unlike `issue-create`, this skill deliberately omits related-issue/PR detection and the duplicate-warning check — Linear search is not wired through the MCP here, so surfacing related work is out of scope.
 
 1. Acquire codebase context once by following the ordered source chain in [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md); this skill passes no `includePatterns`. Record the selected source, and the `outputId` when the repomix tier was selected.
 2. Search for files/symbols related to the hint via the selected source's read contract (`graphify` queries, or `mcp__repomix__grep_repomix_output`), then read the matched sections only.
 3. Collect git context (`git log -20 --oneline`, `git status --short`).
-4. **External documentation (best-effort):** for any library/framework named in the hint, consult context7/Ref/exa/perplexity. On error or empty result, continue — never block creation on MCP availability.
+4. **External documentation (best-effort):** for a library/framework question, start with required Context7 or one authoritative source; use another provider only for a named gap or an explicit request. On error or empty result, continue — never block creation on MCP availability.
 
 ## Phase 2: Generate Title and Body
 
@@ -91,38 +93,17 @@ then a blank line, then the five-section body. This preamble is a permitted meta
 
 Because the hint is reproduced verbatim (unlike the five sections, which paraphrase the input), any secret or PII pasted into it lands unfiltered in the ticket. Do not put credentials, tokens, or personal data in the hint; the [Phase 6](#phase-6-verify-with-user) preview is the checkpoint to catch and remove any that slipped in before the ticket is created.
 
-## Phase 3: Select Status
+## Phase 3: Select metadata
 
-Fetch the team's workflow states and let the user choose (default to the team's initial state — e.g. `Triage` or `Todo`):
-
-```
-Linear MCP list_issue_statuses  with { "team": "<team>" }
-```
-
-Present the states via AskUserQuestion (single-select).
+Use the candidates fetched during Phase 1. Present status, labels, and assignee in one multi-question interaction when supported; otherwise ask only unresolved fields sequentially. Defaults are suggestions, never submitted choices. Preserve user-supplied valid selections without asking again. Include Leave unassigned and mark the returned self candidate as recommended. Never invent a candidate. The final preview still shows every selected field.
 
 ## Phase 4: Select Labels
 
-Fetch the team's labels; pre-select the `label` from `agents.trackers` (when present):
-
-```
-Linear MCP list_issue_labels  with { "team": "<team>" }
-```
-
-Present via AskUserQuestion (multi-select). Only labels returned by the call may be selected — never invent a label.
+Labels are selected in the combined metadata interaction above from the fetched team list.
 
 ## Phase 5: Resolve Assignee
 
-Launch the `resolve-assignees` agent to gather candidates — CODEOWNERS plus the Linear team's members, with the current Linear user resolved and returned first (flagged `self`):
-
-```
-Use the Agent tool with:
-- `subagent_type`: "autopilot:resolve-assignees"
-- `prompt`: "Resolve assignee candidates. Repository: [owner/repo]. Linear team: [team]."
-- `description`: "Resolve assignees"
-```
-
-Present the returned candidates via AskUserQuestion (single-select), preserving the agent's order, with a `Leave unassigned` option last. The `self` candidate (the current user) is already first — render it as the first option, label it `<name> (you)`, and append `(Recommended)` so self-assign is the obvious default. Assignment is best-effort — if the agent returns no candidates, default to unassigned.
+Assignee candidates are resolved once through [metadata.md](references/metadata.md) and selected in Phase 3.
 
 ## Phase 6: Verify with User
 

@@ -2,7 +2,7 @@
 
 Reference for [`plan/SKILL.md`](../SKILL.md) and [`run/SKILL.md`](../../run/SKILL.md). Both skills detect input identically; this file is the single source so the two cannot drift.
 
-Detection is pure string matching — it performs **no I/O**. That is why the issue id is known before anything is fetched, and why [`gather-context`](../../gather-context/SKILL.md) can launch every context call in one fan-out.
+Detection is pure string matching — it performs **no I/O**. The issue id is known before fetching; gather-context then resolves its intent before dependent research. Strip the caller’s `--brief <path>` first; it is not part of the task description.
 
 ## Create-issue flags (`plan` only)
 

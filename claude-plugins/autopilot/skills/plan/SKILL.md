@@ -1,7 +1,7 @@
 ---
 name: plan
 description: Perform deep analysis of the codebase, recent changes, and the requested task. Create a validated implementation plan
-argument-hint: "<task description, GitHub/Linear issue, or GitHub issue URL> [--issue | --linear-issue]"
+argument-hint: "[--brief <path>] <task description, GitHub/Linear issue, or GitHub issue URL> [--issue | --linear-issue]"
 allowed-tools:
   - TaskCreate
   - TaskUpdate
@@ -60,16 +60,13 @@ Additional free-form context may follow any form (e.g., `#42 I think we should s
 - **Current branch / worktree / issue-ID mismatch** — from the Context Map's git state ([Phase 3](#phase-3-preflight-verdict)). No prompts beyond preflight's own.
 - **Repository root** — `git rev-parse --show-toplevel`. No prompt.
 
+## Explicit brief input
+
+Accept `--brief <path>` and strip it before issue detection. Never infer this flag from conversation history. Before gathering, read [brief-validation.md](../gather-context/references/brief-validation.md); on any non-valid verdict, report it and stop with the option to refresh explore or rerun without `--brief`. On success, pass the brief and **`Scope: primed`** to gather-context, following [brief-reuse.md](../gather-context/references/brief-reuse.md) for current-code and standards gaps. Without the flag, use ordinary task gathering. Stored-plan file seeds also apply when a Linear run receives a brief.
+
 ## Task Progress Protocol
 
-Create all 4 tasks with TaskCreate, in order, before any work. Set each to `in_progress` at the start of its phase and `completed` at the end.
-
-| #   | Subject        | ActiveForm        |
-| --- | -------------- | ----------------- |
-| 1   | Resolve input  | Resolving input   |
-| 2   | Gather context | Gathering context |
-| 3   | Draft plan     | Drafting plan     |
-| 4   | Finalize plan  | Finalizing plan   |
+Track only these substantive outcomes: **Gather context**, **Write plan**. Create them together where the runtime supports batching, or as one checklist otherwise. Update at outcome boundaries; input parsing, artifact freezing, and draft/finalize are not separate tasks. Identify tasks by subject, never numeric IDs.
 
 ## Task
 
@@ -77,40 +74,23 @@ $ARGUMENTS
 
 ## Phase 0: Resolve input
 
-Create the 4 tasks, then set task 1 to `in_progress`.
+Resolve input before starting Gather context.
 
 Detect the input type and id per [input-detection.md](references/input-detection.md) — the create-issue flags pre-step first, then the detection table and its tracker gating. Detection is pure string matching and performs **no I/O**; do not fetch anything here.
 
-Set task 1 to `completed`.
-
 ## Phase 1: Gather context
-
-Set task 2 to `in_progress`. Invoke:
 
 ```
 Skill(autopilot:gather-context)
 ```
 
-Pass the detected input type, issue id, repository, repository root, Linear team (when applicable), and the raw task text as the task summary. The skill runs one parallel fan-out and returns the **Context Map** — issue/alert context, related TODOs, relevant files, patterns, key types, test conventions, in-flight changes, session history, applicable standards, resolved stack deltas, git state, and the selected snapshot source.
+Pass the detected input type, issue id, repository, repository root, Linear team (when applicable), and the raw task text as the task summary. The skill resolves intent, runs dependent research in parallel, and returns the **Context Map** — issue/alert context, related TODOs, relevant files, patterns, key types, test conventions, in-flight changes, session history, applicable standards, resolved stack deltas, git state, and the selected snapshot source.
 
 That map is this command's entire view of the repository. Every later phase reasons over it instead of re-reading the tree.
 
-Set task 2 to `completed`.
-
 ## Phase 2: Intent, assumptions, and the human gate
 
-This runs **after** the Context Map, deliberately. Asking before any code is read produces uninformed questions and cannot surface the informed ones.
-
-**Steelmanned Intent** — one sentence, ≤200 characters, restating the request in its strongest form with vague language tightened. Derive it from the resolved issue title and body, the alert rule and message, or the task description. Do not invent scope the user did not request. It lands verbatim in the plan's `## Summary`.
-
-```
-### Steelmanned Intent
-[one-sentence restatement of what success looks like, in the user's strongest framing]
-```
-
-**Assumptions** — up to 5 bullets, each naming an interpretation the user could disagree with (e.g. "treating this as a read-only API, not a webhook"). Write "none" if there are none.
-
-**Open Questions** — material ambiguities that would change the design, each marked load-bearing or not. Raise every load-bearing one via `AskUserQuestion` before drafting. State "none" and proceed if there are none.
+After gathering, apply [intent and clarification](references/common-instructions.md#intent-and-clarification). Resolve load-bearing questions before drafting.
 
 ## Phase 3: Preflight verdict
 
@@ -133,45 +113,19 @@ This gives the harness-provided plan-file path — the single file [the pipeline
 
 ## Common Instructions
 
-### Documentation Lookup Protocol
-
-**Scale the lookup to the task.** A small or well-understood change needs a single targeted lookup, or none. Reserve the full fan-out for tasks touching unfamiliar libraries, APIs, or recent changes.
-
-Identify task-relevant libraries from `package.json`, the issue description, and the Context Map (see your stack's example libraries in [stack-deltas.md](references/stack-deltas.md)). Then, as the task warrants: `mcp__context7__resolve-library-id` → `mcp__context7__query-docs` for structured docs; `mcp__Ref__ref_search_documentation` → `mcp__Ref__ref_read_url` for official references; `mcp__exa__web_search_exa` for real-world patterns and changelogs; `mcp__perplexity__search` / `mcp__perplexity__reason` for factual lookups and trade-offs. Run same-kind calls in parallel. If a source is unavailable, continue with the rest.
-
-### Repository standards
-
-The Context Map's **Applicable standards** section already carries the repo's conventions, the selected `rfc/` standards with status, dropped candidates, and any `principles/` values — read by [`digest-repo-standards`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/digest-repo-standards.md) so their full text never enters this context.
-
-The plan must not violate a clause of an **Accepted** RFC; a **Draft** RFC is advisory — follow it where practical and call out deliberate deviations. `principles/` values shape the approach rather than bind it; when the plan deliberately contradicts one, say so explicitly instead of leaving the conflict silent. The `pr-review` skill enforces these same standards on the resulting diff, so complying here is what stops the review blocking the change later.
-
-The generated plan's `## Post-Implementation` block MUST require updating any `README.md`, `docs/*`, and `rfc/*` the change affects. When it edits the content of an **Accepted** RFC, it must also require bumping that RFC's `version` frontmatter and adding a Changelog entry (mirrors CHECK-RFC-003).
+Read [common-instructions.md](references/common-instructions.md) once before drafting; it owns documentation lookup, standards, plan output, and diagram conditions.
 
 ### Plan File Header
 
-Every plan file MUST begin with a single `# <Title>` line on line 1, followed by a blank line. For issue inputs use the issue title verbatim (no `#<n>` prefix, no truncation); for plain descriptions paraphrase into one sentence, ≤80 characters, sentence case.
-
-When a `## Pre-Implementation` block is emitted it sits between the title and `## Summary`; otherwise `## Summary` follows the title directly.
+Follow [Plan File Header](references/common-instructions.md#plan-file-header).
 
 ### Plan file is output, not instructions
 
-The plan file is what the reader approves, so every section describes an outcome in prose: which branch gets created, what each step changes, what happens once the steps land. It carries no `AskUserQuestion` parameter block, no `Skill(...)` dispatch line, and no HTML-comment directive aimed at the agent.
-
-The tool calls that realize those outcomes belong to the phase that runs them — [Phase 5](#phase-5-embed-branch-creation-and-request-approval) for the branch, [Phase 6](#phase-6-post-implementation-handoff) for the handoff — and to the reference files those phases read. Stating them once there, rather than in both places, is what keeps a renamed flag from going stale in a copy nobody re-reads.
-
-### CLAUDE.md Compliance
-
-Map each planned change to the project rules in CLAUDE.md.
-
-### Visualize with ASCII Schemas
-
-Invoke `Skill(autopilot:ascii-schemas)` when the change touches architecture or module boundaries, data flow, sequence or timing, deployment topology, UI layout, or component interactions — and embed each diagram inline in the section it explains, beside the relevant step, file entry, or data-flow line. Never hand-draw; reuse the skill's output verbatim.
-
-Skip diagrams for pure refactors with no structural change, formatting or dependency bumps, single-function logic edits, and documentation-only changes.
+Follow [the shared output rule](references/common-instructions.md#plan-file-is-output-not-instructions).
 
 ## Phase 4: Draft and finalize
 
-Execute the shared pipeline in [pipeline.md](references/pipeline.md) — draft (task 3), finalize (task 4) — resolving your stack's deltas from [stack-deltas.md](references/stack-deltas.md).
+Execute the shared pipeline in [pipeline.md](references/pipeline.md) — one Write plan outcome — resolving your stack's deltas from [stack-deltas.md](references/stack-deltas.md).
 
 ## Phase 5: Embed branch creation and request approval
 
@@ -191,9 +145,9 @@ This step is `/autopilot:plan` only — see [`run/SKILL.md`](../run/SKILL.md).
 
 ## Phase 6: Post-implementation handoff
 
-After every implementation step and its `verify:` line has passed, ask what to do next. This gate is `/autopilot:plan` only: `run` replaces it with the automated chain in [`run/SKILL.md`](../run/SKILL.md), which is why it lives here in the orchestrator rather than in the shared pipeline `run` also executes.
+After implementation and the permitted verification checks finish, with deferred checks explicitly reported, ask what to do next. This gate is `/autopilot:plan` only: `run` replaces it with the automated chain in [`run/SKILL.md`](../run/SKILL.md), which is why it lives here in the orchestrator rather than in the shared pipeline `run` also executes.
 
-Ask via AskUserQuestion (header "Next"): all changes are implemented and verified — what happens next? Read [`askuserquestion-format.md`](../shared-rules/references/askuserquestion-format.md) and apply it to the dialog you compose. The choices and the action each one triggers are exact; the wording is yours:
+Ask via AskUserQuestion (header "Next"): implementation is complete; state which checks passed, failed, or remain deferred, then ask what happens next. Never describe unrun checks as verified. Read [`askuserquestion-format.md`](../shared-rules/references/askuserquestion-format.md) and apply it to the dialog you compose. The choices and the action each one triggers are exact; the wording is yours:
 
 - **Create commit** — commit the session's changes: invoke `Skill(autopilot:commits-create)`.
 - **Create PR** — open a pull request: invoke `Skill(autopilot:pr-create)`, with `--release-notes` when the session produced user-facing changes (`feat:` or `fix:` commits) and without it otherwise.
