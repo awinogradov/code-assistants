@@ -85,7 +85,7 @@ Then resolve all three gate conditions **before** [Phase 1](#phase-1-gather-cont
 | Input is not a Linear issue              | `linear-plan needs a Linear issue (e.g. ENG-123). Use /autopilot:plan for a task description, GitHub issue, or alert.` |
 | No Linear MCP tool resolves              | the `No Linear MCP available …` message from [`linear-mcp-access.md`](../shared-rules/references/linear-mcp-access.md) |
 
-Stop on the first condition that fires. Do not fall back to `plan` automatically — name it and let the user choose, A missing write destination is not a reason to start an unrequested workflow.
+Stop on the first condition that fires. Do not fall back to `plan` automatically — name it and let the user choose. A missing write destination is not a reason to start an unrequested workflow.
 
 No preflight check runs here, and none is needed: this skill creates no branch and no commit, so there is no git state for one to protect. The tree the plan was drafted against is recorded instead, as the `Base:` field of [the stored template](#the-stored-plan-format).
 
