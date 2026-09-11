@@ -549,8 +549,14 @@ claude-plugins/
         fetch-pr-reviews.ts
         issueContext.test.ts
         issueContext.ts
+        prWatch.test.ts
+        prWatch.ts
+        prWatchLoop.test.ts
+        prWatchLoop.ts
         reviewThreads.test.ts
         reviewThreads.ts
+        watch-pr.ts
+        watchPr.test.ts
       linear/
         fetch-issue.mjs
         fetch-team-members.mjs
@@ -770,6 +776,7 @@ docs/
   17-linear-run-skill.md
   18-agent-skills-export.md
   19-skill-token-budget.md
+  20-pr-watcher.md
 packages/
   actions-core/
     src/
@@ -14656,8 +14663,10 @@ const section = (source: string, heading: string): string =>
   )?.[0] ?? "";
 
 const sweep = sweepDoc;
-const earlyExit = section(monitor, "### 1.1 Early Exit Checks");
-const perCycle = section(monitor, "### 2.2 Check PR State");
+const detectPrMonitor = section(monitor, "## Phase 1: Detect PR");
+const eventContract = section(monitor, "### The Event Contract");
+const sweepSection = section(monitor, "### Conflict Sweep (shared procedure)");
+const handleEvent = section(monitor, "## Phase 3: Handle the Event");
 const backgroundMode = backgroundDoc;
 const detectPr = section(resolve, "### 1.1 Detect PR");
 
@@ -14668,9 +14677,11 @@ const forbiddenCommand = /#### Canonical forbidden-command regex[\s\S]*?```text\
 
 describe("extractions are substantial", () => {
   test.each([
-    ["Conflict Sweep", sweep],
-    ["§1.1 Early Exit Checks", earlyExit],
-    ["§2.2 Check PR State", perCycle],
+    ["Conflict Sweep reference", sweep],
+    ["Phase 1 Detect PR", detectPrMonitor],
+    ["The Event Contract", eventContract],
+    ["Conflict Sweep section", sweepSection],
+    ["Phase 3 Handle the Event", handleEvent],
     ["Background Mode", backgroundMode],
     ["pr-resolve §1.1 Detect PR", detectPr],
     ["forbidden-command regex", forbiddenCommand ?? ""],
@@ -14681,21 +14692,26 @@ describe("extractions are substantial", () => {
 
 describe("both skills ask GitHub for mergeability", () => {
   // Detection is the whole fix: without the field, every branch below is dead
-  // code. The pre-loop read also needs headRepositoryOwner, which is how the
-  // sweep recognises a fork it cannot push to.
-  //
-  // Only the two fenced state reads count. The Input-resolution section names a
-  // third `gh pr view` in prose that fetches the PR number alone, and widening
-  // that one to carry mergeability would say the skill re-reads state where it
-  // does not.
-  test("pr-monitor requests mergeable on both state reads", () => {
+  // code. pr-monitor now delegates the per-cycle reads to the watcher, so its
+  // one remaining fenced read is the pre-launch detection — which still needs
+  // mergeable to abort early, and headRepositoryOwner, which is how the sweep
+  // recognises a fork it cannot push to.
+  test("pr-monitor requests mergeable on its one state read", () => {
     const reads = monitor.match(/```bash\ngh pr view[^\n]*--json[^\n]*/g) ?? [];
-    expect(reads.length).toBe(2);
+    expect(reads.length).toBe(1);
     for (const read of reads) expect(read).toContain("mergeable");
   });
 
-  test("pr-monitor's pre-loop read requests headRepositoryOwner", () => {
-    expect(section(monitor, "## Phase 1: Detect PR")).toContain("headRepositoryOwner");
+  test("pr-monitor's pre-launch read requests headRepositoryOwner", () => {
+    expect(detectPrMonitor).toContain("headRepositoryOwner");
+  });
+
+  // The watcher owns every read after detection, so the conflict evidence the
+  // sweep acts on has to come from it rather than from a re-read in the model.
+  test("the conflict event is the sweep's trigger", () => {
+    expect(sweepSection).toContain("`conflict` event");
+    expect(handleEvent).toContain("**`conflict`**");
+    expect(handleEvent).toContain("Conflict Sweep");
   });
 
   test("pr-resolve requests mergeable", () => {
@@ -14749,26 +14765,24 @@ describe("every conflict path terminates", () => {
     expect(monitor).toContain("not** keyed to the base SHA");
   });
 
-  test("Phase 3 has a conflicted exit", () => {
-    expect(section(monitor, "## Phase 3: Exit")).toContain("Status: CONFLICTED");
+  test("Phase 4 has a conflicted exit", () => {
+    expect(section(monitor, "## Phase 4: Exit")).toContain("Status: CONFLICTED");
   });
 
-  test.each([
-    ["§1.1", earlyExit],
-    ["§2.2", perCycle],
-  ])("%s routes a failed sweep to the Phase 3 exit", (_name, branch) => {
-    expect(branch).toContain("Conflict Sweep");
-    expect(branch).toMatch(/exit to \[Phase 3\]\(#phase-3-exit\) with status "conflicted"/);
+  test("the conflict handler routes a failed sweep to the exit", () => {
+    expect(handleEvent).toContain("Conflict Sweep");
+    expect(handleEvent).toMatch(/exit to \[Phase 4\]\(#phase-4-exit\) with status "conflicted"/);
   });
 
-  // §2.2's APPROVED branch exits "already approved with all checks passing"
-  // without consulting mergeability, so a conflicted-but-approved PR would exit
-  // clean if the conflict branch were ever moved below it.
-  test.each([
-    ["§1.1", earlyExit],
-    ["§2.2", perCycle],
-  ])("%s checks CONFLICTING before reviewDecision", (_name, branch) => {
-    expect(branch.indexOf("CONFLICTING")).toBeLessThan(branch.indexOf("`APPROVED`"));
+  // A conflicted pull request cannot merge however green or approved it looks,
+  // so a conflict must outrank approval wherever the two are ordered. The
+  // ordering now lives in the watcher's event precedence, which the contract
+  // table states.
+  test("the event table orders conflict above approval and readiness", () => {
+    const conflictAt = eventContract.indexOf("`conflict`");
+    expect(conflictAt).toBeGreaterThan(-1);
+    expect(conflictAt).toBeLessThan(eventContract.indexOf("`approved`"));
+    expect(conflictAt).toBeLessThan(eventContract.indexOf("`ready_for_review`"));
   });
 
   test("background mode reports the conflict instead of acting", () => {
@@ -14780,8 +14794,9 @@ describe("every conflict path terminates", () => {
 describe("UNKNOWN is pending, not a conflict", () => {
   // GitHub computes mergeability asynchronously, so UNKNOWN is the normal
   // reading right after a push. Treating it as a conflict would sweep on noise.
-  test("pr-monitor leaves UNKNOWN to the next poll", () => {
+  test("pr-monitor leaves UNKNOWN to the watcher's next cycle", () => {
     expect(sweep).toContain("`UNKNOWN` is a pending state");
+    expect(sweepSection).toContain("`UNKNOWN`, not `CONFLICTING`");
   });
 
   // pr-resolve reads once, with no loop to re-read for it, so without an
@@ -14835,24 +14850,30 @@ describe("the three prose summaries stay in step", () => {
 /**
  * Guards the autonomous-delivery completion contract in pr-monitor and its callers.
  *
- * The rule exists because the monitor's only success exit was approval with green
- * checks, so an autonomous `run` session kept polling every minute after it had done
- * everything an agent can do: human review is an asynchronous handoff, not unfinished
- * work. The monitor now ends with a distinct READY_FOR_REVIEW outcome once the current
- * head's obligations are complete, stops with CHANGES_REQUESTED when a reviewer's
- * verdict on that head stands after every thread was answered, and keeps the old wait
- * only behind `--wait-for-approval`.
+ * Two rules meet here. The first: the monitor's only success exit was once approval with
+ * green checks, so an autonomous `run` session kept waiting after it had done everything
+ * an agent can do — human review is an asynchronous handoff, not unfinished work. The
+ * monitor ends with a distinct READY_FOR_REVIEW outcome, stops with CHANGES_REQUESTED
+ * when a reviewer's verdict on the head stands after every thread was answered, and keeps
+ * the old wait only behind `--wait-for-approval`.
+ *
+ * The second: the waiting itself no longer runs in the model. The skill launches the
+ * packaged watcher, which sleeps in its own process and returns one bounded event, so a
+ * wakeup that decides nothing costs nothing. That is only true while the skill neither
+ * sleeps nor polls nor delegates the wait to an agent that does, and while every
+ * non-terminal event is acknowledged — an unacknowledged relaunch re-delivers the same
+ * evidence and spins. Both are asserted below.
  *
  * Division of responsibility with prConflictContract.test.ts: that file owns the
- * merge-conflict paths and the CONFLICTING-before-APPROVED ordering. This file asserts
- * the readiness path — that it exists, that it is proved per head rather than from the
- * aggregate `reviewDecision`, that both the initial inspection and the polling loop
- * reach it, and that the callers and prose summaries name the new outcome.
+ * merge-conflict paths and the conflict-before-approval ordering. This file asserts the
+ * readiness path — that it exists, that it is proved per head rather than from the
+ * aggregate `reviewDecision`, that the event handler reaches every outcome, and that the
+ * callers and prose summaries name it.
  *
- * What this CANNOT prove: that a run actually took two check readings or exited on the
- * right head. CI sees text in a file, nothing more — the limit every contract test here
- * states. What it can prove is that the prose still says the things a correct run
- * depends on, and that an edit which quietly restores the indefinite wait fails first.
+ * What this CANNOT prove: that a run actually launched the watcher, or that the token
+ * bill fell. CI sees text in a file, nothing more — the limit every contract test here
+ * states. What it can prove is that the prose still says the things a correct run depends
+ * on, and that an edit which quietly restores the in-model polling loop fails first.
  *
  * Vacuous-pass defences: every extracted region must be non-empty and above a minimum
  * length, so a renamed heading cannot extract "" and satisfy a `toContain` against it.
@@ -14891,23 +14912,19 @@ const section = (source: string, heading: string): string =>
     source,
   )?.[0] ?? "";
 
-const readiness = section(monitor, "### Readiness Check (shared procedure)");
-const earlyExit = section(monitor, "### 1.1 Early Exit Checks");
-const reviewers = section(monitor, "### 1.2 Check for Reviewers");
-const perCycle = section(monitor, "### 2.2 Check PR State");
-const actOnFindings = section(monitor, "### 2.5 Act on Findings");
-const exit = section(monitor, "## Phase 3: Exit");
+const launch = section(monitor, "## Phase 2: Launch the Watcher");
+const eventContract = section(monitor, "### The Event Contract");
+const handleEvent = section(monitor, "## Phase 3: Handle the Event");
+const exit = section(monitor, "## Phase 4: Exit");
 const description = /^description: (.+)$/m.exec(monitor)?.[1] ?? "";
 const argumentHint = /^argument-hint: (.+)$/m.exec(monitor)?.[1] ?? "";
 
 describe("extractions are substantial", () => {
   test.each([
-    ["Readiness Check", readiness],
-    ["§1.1 Early Exit Checks", earlyExit],
-    ["§1.2 Check for Reviewers", reviewers],
-    ["§2.2 Check PR State", perCycle],
-    ["§2.5 Act on Findings", actOnFindings],
-    ["Phase 3 Exit", exit],
+    ["Phase 2 Launch the Watcher", launch],
+    ["The Event Contract", eventContract],
+    ["Phase 3 Handle the Event", handleEvent],
+    ["Phase 4 Exit", exit],
     ["frontmatter description", description],
   ])("%s extracts a real region", (_name, extracted) => {
     expect(extracted.length).toBeGreaterThan(minExtractionLength);
@@ -14923,14 +14940,11 @@ describe("the completion policy is a flag, separate from execution mode", () => 
     expect(argumentHint).toContain(waitFlag);
   });
 
-  // The old prompt offered "wait or cancel" to a session that could have finished on
-  // its own. It keeps its purpose only when the caller asked to wait for a human.
-  test("the no-reviewers prompt applies only under the flag", () => {
-    expect(reviewers).toContain(waitFlag);
-  });
-
-  test("the readiness check keeps polling under the flag instead of exiting", () => {
-    expect(readiness).toContain(waitFlag);
+  // The flag is a completion policy, not an execution mode: the skill hands it to
+  // the watcher, which keeps waiting past readiness instead of returning.
+  test("the flag reaches the watcher rather than branching in the model", () => {
+    expect(launch).toContain(waitFlag);
+    expect(eventContract).toContain(waitFlag);
   });
 
   test("the skill never merges", () => {
@@ -14938,54 +14952,76 @@ describe("the completion policy is a flag, separate from execution mode", () => 
   });
 });
 
-describe("readiness is proved per head", () => {
-  // GitHub's aggregate reviewDecision carries approvals and change requests from
-  // superseded commits, so it can neither prove nor block readiness for this head.
-  test("evidence is bound to the head, never the aggregate decision", () => {
-    expect(readiness).toContain("headRefOid");
-    expect(readiness).toContain("commit_id");
-    expect(readiness).toContain("never the aggregate `reviewDecision`");
+describe("the model waits by launching, never by polling", () => {
+  // The defect this replaced was a `sleep 60` loop in the skill body: every tick
+  // re-read the whole conversation to learn that CI was still running.
+  test("the skill body runs no sleep and declares no sleep tool", () => {
+    expect(monitor).not.toMatch(/```bash\nsleep /);
+    expect(monitor).not.toContain("Bash(sleep *)");
   });
 
-  test("feedback state comes from the review-thread helper", () => {
-    expect(readiness).toContain("fetch-pr-reviews.ts");
-    expect(readiness).toContain("authorReplied");
+  test("the watcher is launched in the background and awaited by notification", () => {
+    expect(launch).toContain("lib/github/watch-pr.ts");
+    expect(launch).toContain("run_in_background: true");
+    expect(launch).toContain("completion notification");
   });
 
-  // One reading can pass while the review workflow's check run does not exist yet:
-  // a fast workflow registers and finishes first. Two readings apart close that race.
-  test("checks settle only across two readings", () => {
-    expect(readiness).toContain("two consecutive readings");
-    expect(readiness).toContain("no checks reported");
+  // A fallback to timer-based waiting would restore the cost silently, so the
+  // unsupported case has to fail loudly instead.
+  test("a runtime without completion delivery fails loudly rather than polling", () => {
+    expect(launch).toContain("fail loudly");
+    expect(launch).toMatch(/never|Never/);
   });
 
-  test("the check routes to both terminal exits", () => {
-    expect(readiness).toMatch(/exit to \[Phase 3\]\(#phase-3-exit\) with status "ready-for-review"/);
-    expect(readiness).toMatch(/exit to \[Phase 3\]\(#phase-3-exit\) with status "changes-requested"/);
+  // Without the ack, the watcher re-delivers the same pending event immediately
+  // and the caller spins on evidence it already handled.
+  test("every non-terminal event is acknowledged on relaunch", () => {
+    expect(eventContract).toContain("--ack <event-id>");
+    expect(handleEvent.match(/--ack <event-id>/g) ?? []).toHaveLength(4);
+    expect(handleEvent).toContain("Relaunching without `--ack` is a bug");
   });
 });
 
-describe("both inspection points reach the readiness check", () => {
-  test.each([
-    ["§1.1", earlyExit],
-    ["§2.5", actOnFindings],
-  ])("%s runs the Readiness Check", (_name, branch) => {
-    expect(branch).toContain("Readiness Check");
+describe("readiness is proved per head, by the watcher", () => {
+  // GitHub's aggregate reviewDecision carries approvals and change requests from
+  // superseded commits, so it can neither prove nor block readiness for this head.
+  // The watcher re-reads the head after collecting, which is what makes a stale
+  // green impossible rather than merely unlikely.
+  test("evidence is bound to a verified head", () => {
+    expect(eventContract).toContain("headSha");
+    expect(eventContract).toContain("headVerified");
+    expect(eventContract).toContain("stale green");
   });
 
-  // The per-cycle CHANGES_REQUESTED branch used to re-invoke pr-resolve every minute
-  // on a verdict nothing could change; the readiness check owns that path now.
-  test("§2.2 no longer owns a CHANGES_REQUESTED branch", () => {
-    expect(perCycle).not.toContain("`CHANGES_REQUESTED`");
+  test("the event contract names every outcome the callers branch on", () => {
+    for (const event of [
+      "merged",
+      "closed",
+      "conflict",
+      "checks_failed",
+      "review_action_required",
+      "blocked",
+      "approved",
+      "ready_for_review",
+    ]) {
+      expect(eventContract).toContain(`\`${event}\``);
+    }
   });
 
-  test("Phase 3 has the ready and changes-requested exits", () => {
+  test("the handler routes to both non-ready terminal exits", () => {
+    expect(handleEvent).toMatch(/exit to \[Phase 4\]\(#phase-4-exit\) with status "changes-requested"/);
+    expect(handleEvent).toMatch(/exit to \[Phase 4\]\(#phase-4-exit\) with status "conflicted"/);
+  });
+
+  test("Phase 4 has the ready, changes-requested and blocked exits", () => {
     expect(exit).toContain("Status: READY_FOR_REVIEW");
     expect(exit).toContain("Status: CHANGES_REQUESTED");
+    expect(exit).toContain("Status: BLOCKED");
   });
 
-  test("background mode returns the ready exit", () => {
+  test("background mode returns the ready exit and reports blockers", () => {
     expect(backgroundDoc).toContain("READY_FOR_REVIEW");
+    expect(backgroundDoc).toContain("Status: BLOCKED");
   });
 });
 
@@ -14994,11 +15030,13 @@ describe("the callers and prose summaries stay in step", () => {
     expect(run).toContain("READY_FOR_REVIEW");
     expect(run).toContain("approval and merge are asynchronous follow-ups");
     expect(run).not.toContain("Status: <approved/merged>");
+    expect(run).toContain("packaged watcher");
   });
 
-  test("the docs Monitor bullet names the handoff and keeps the Conflict Sweep", () => {
+  test("the docs Monitor bullet names the handoff, the watcher and the Conflict Sweep", () => {
     expect(docs).toContain("ready for human review");
     expect(docs).toContain("it runs the Conflict Sweep");
+    expect(docs).toContain("packaged watcher");
     expect(docs).not.toContain("Monitor until approved/merged");
   });
 
@@ -52979,6 +53017,1241 @@ export function deriveAssigneeStatus(reads: AssignReads): string {
 }
 </file>
 
+<file path="claude-plugins/autopilot/lib/github/prWatch.test.ts">
+import { describe, expect, test } from "bun:test";
+
+import {
+  applyAck,
+  buildEvent,
+  buildGhWatchReads,
+  classifyChecks,
+  classifySnapshot,
+  decideEvent,
+  deriveApproval,
+  deriveFeedback,
+  deriveMergeability,
+  emptyState,
+  maxFailedChecks,
+  maxFeedbackItems,
+  maxHandledKeys,
+  mergeWatchThreadPages,
+  observeHead,
+  parseState,
+  parseWatchArgs,
+  pruneState,
+  reconcileCheckRuns,
+  recordPending,
+} from "./prWatch.ts";
+import type {
+  Mergeability,
+  RawCheckRun,
+  RawPull,
+  RawReview,
+  RawSnapshot,
+  RawStatusContext,
+  RawThread,
+  RawThreadComment,
+  WatchDecision,
+  WatchOptions,
+  WatchState,
+} from "./prWatch.ts";
+
+const now = Date.parse("2026-09-11T12:00:00Z");
+const minute = 60_000;
+const iso = (offsetMs: number): string => new Date(now + offsetMs).toISOString();
+
+const options: WatchOptions = {
+  owner: "o",
+  repo: "r",
+  pr: 7,
+  waitForApproval: false,
+  ack: null,
+  timeoutSeconds: 100,
+  intervalSeconds: 1,
+  checkGraceSeconds: 600,
+  stateDir: null,
+  expectChecks: [],
+};
+
+const pull = (overrides: Partial<RawPull> = {}): RawPull => ({
+  state: "open",
+  merged: false,
+  mergeable: true,
+  mergeable_state: "clean",
+  html_url: "https://github.com/o/r/pull/7",
+  head: { sha: "aaa111" },
+  base: { ref: "main" },
+  user: { login: "author" },
+  ...overrides,
+});
+
+const run = (overrides: Partial<RawCheckRun> = {}): RawCheckRun => ({
+  id: 1,
+  name: "Test",
+  status: "completed",
+  conclusion: "success",
+  app: { slug: "github-actions" },
+  html_url: "https://ci/1",
+  completed_at: iso(-minute),
+  ...overrides,
+});
+
+const review = (overrides: Partial<RawReview> = {}): RawReview => ({
+  id: 10,
+  state: "COMMENTED",
+  body: "please rename this",
+  commit_id: "aaa111",
+  user: { login: "reviewer", type: "User" },
+  html_url: "https://github.com/o/r/pull/7#pullrequestreview-10",
+  ...overrides,
+});
+
+const comment = (overrides: Partial<RawThreadComment> = {}): RawThreadComment => ({
+  databaseId: 100,
+  url: "https://github.com/o/r/pull/7#discussion_r100",
+  body: "consider a guard here",
+  createdAt: iso(-10 * minute),
+  updatedAt: iso(-10 * minute),
+  author: { login: "reviewer", __typename: "User" },
+  ...overrides,
+});
+
+const thread = (overrides: Partial<RawThread> = {}): RawThread => ({
+  id: "T1",
+  isResolved: false,
+  path: "src/a.ts",
+  line: 5,
+  comments: { nodes: [comment()] },
+  ...overrides,
+});
+
+const snapshot = (overrides: Partial<RawSnapshot> = {}): RawSnapshot => ({
+  pull: pull(),
+  head: "aaa111",
+  headAfter: "aaa111",
+  checkRuns: [run()],
+  statuses: [],
+  reviews: [],
+  threads: [],
+  reviewDecision: null,
+  rules: [],
+  hasWorkflows: true,
+  ...overrides,
+});
+
+const state = (overrides: Partial<WatchState> = {}): WatchState => ({
+  ...emptyState("o/r", 7, now),
+  headSha: "aaa111",
+  headFirstSeenAt: now - 20 * minute,
+  ...overrides,
+});
+
+const decide = (
+  snap: RawSnapshot,
+  carried: WatchState = state(),
+  opts: WatchOptions = options,
+): WatchDecision => decideEvent(classifySnapshot(snap, carried, opts, now), carried, opts);
+
+const emitted = (decision: WatchDecision) => {
+  if (decision.kind !== "emit") throw new Error(`expected emit, got wait: ${decision.blocker}`);
+  return decision;
+};
+
+describe("parseWatchArgs", () => {
+  test("applies defaults and parses every flag", () => {
+    const parsed = parseWatchArgs([
+      "o/r",
+      "7",
+      "--wait-for-approval",
+      "--ack",
+      "checks_failed:aaa:1",
+      "--timeout",
+      "90",
+      "--interval",
+      "5",
+      "--check-grace",
+      "30",
+      "--state-dir",
+      "/tmp/x",
+      "--expect-check",
+      "Test",
+      "--expect-check",
+      "Lint",
+    ]);
+    expect(parsed.error).toBeNull();
+    expect(parsed.options).toMatchObject({
+      owner: "o",
+      repo: "r",
+      pr: 7,
+      waitForApproval: true,
+      ack: "checks_failed:aaa:1",
+      timeoutSeconds: 90,
+      intervalSeconds: 5,
+      checkGraceSeconds: 30,
+      stateDir: "/tmp/x",
+      expectChecks: ["Test", "Lint"],
+    });
+    expect(parseWatchArgs(["o/r", "7"]).options).toMatchObject({
+      waitForApproval: false,
+      ack: null,
+      timeoutSeconds: 6 * 60 * 60,
+      intervalSeconds: 30,
+      checkGraceSeconds: 600,
+    });
+  });
+
+  test.each([
+    [[], "arguments missing"],
+    [["o", "7"], "arguments missing"],
+    [["o/r", "x"], "arguments missing"],
+    [["o/r", "7", "--ack"], "needs a value"],
+    [["o/r", "7", "--timeout", "soon"], "expects seconds"],
+    [["o/r", "7", "--bogus"], "unknown flag"],
+  ])("rejects %j", (argv, message) => {
+    const parsed = parseWatchArgs(argv);
+    expect(parsed.options).toBeNull();
+    expect(parsed.error).toContain(message);
+    expect(parsed.error).toContain("usage:");
+  });
+});
+
+describe("buildGhWatchReads", () => {
+  const reads = buildGhWatchReads({ owner: "o", repo: "r", pr: 7, head: "aaa111", base: "main" });
+
+  test("every read is read-only and none uses gh pr checks", () => {
+    for (const argv of Object.values(reads)) {
+      expect(argv[0]).toBe("api");
+      expect(argv).not.toContain("--method");
+      expect(argv).not.toContain("-X");
+      expect(argv).not.toContain("--input");
+      expect(argv.join(" ")).not.toContain("pr checks");
+    }
+    const bindings = reads.threads.filter((arg) => arg === "-f" || arg === "-F");
+    expect(bindings).toHaveLength(4);
+    expect(reads.threads.at(-1)).toContain("reviewThreads(first: 100, after: $endCursor)");
+    expect(reads.threads.at(-1)).toContain("pageInfo { hasNextPage endCursor }");
+  });
+
+  test("paginates the multi-page reads and targets the head", () => {
+    expect(reads.checkRuns).toContain("--paginate");
+    expect(reads.reviews).toContain("--paginate");
+    expect(reads.threads).toContain("--paginate");
+    expect(reads.checkRuns[1]).toContain("/commits/aaa111/check-runs");
+    expect(reads.statuses[1]).toContain("/commits/aaa111/status");
+    expect(reads.rules[1]).toBe("repos/o/r/rules/branches/main");
+  });
+});
+
+describe("mergeWatchThreadPages", () => {
+  test("merges thread nodes across pages and keeps the review decision", () => {
+    const page = (ids: string[], decision: string) => ({
+      data: {
+        repository: {
+          pullRequest: {
+            reviewDecision: decision,
+            reviewThreads: { nodes: ids.map((id) => thread({ id })) },
+          },
+        },
+      },
+    });
+    const merged = mergeWatchThreadPages([page(["T1", "T2"], "APPROVED"), page(["T3"], "APPROVED")]);
+    expect(merged.threads.map((node) => node.id)).toEqual(["T1", "T2", "T3"]);
+    expect(merged.reviewDecision).toBe("APPROVED");
+    expect(mergeWatchThreadPages([])).toEqual({ threads: [], reviewDecision: null });
+  });
+});
+
+describe("reconcileCheckRuns", () => {
+  test("keeps the newest run per name and app, so a rerun supersedes a cancelled first attempt", () => {
+    const runs = [
+      run({ id: 1, conclusion: "cancelled" }),
+      run({ id: 2, conclusion: "success" }),
+      run({ id: 3, name: "Test", app: { slug: "other-app" }, conclusion: "failure" }),
+    ];
+    const kept = reconcileCheckRuns(runs).map((item) => item.id);
+    expect(kept).toEqual([2, 3]);
+  });
+});
+
+describe("classifyChecks", () => {
+  const classify = (
+    runs: RawCheckRun[],
+    extra: Partial<Parameters<typeof classifyChecks>[0]> = {},
+  ) =>
+    classifyChecks({
+      runs,
+      statuses: [],
+      expected: [],
+      hasWorkflows: true,
+      headFirstSeenAt: now - 20 * minute,
+      now,
+      graceMs: 600_000,
+      ...extra,
+    });
+
+  test("queued and in-progress runs are pending, never settled", () => {
+    const summary = classify([run({ id: 1, status: "in_progress", conclusion: null })]);
+    expect(summary.pendingCount).toBe(1);
+    expect(summary.settled).toBe(false);
+  });
+
+  test.each(["success", "skipped", "neutral"])("%s passes", (conclusion) => {
+    const summary = classify([run({ conclusion })]);
+    expect(summary.passedCount).toBe(1);
+    expect(summary.settled).toBe(true);
+  });
+
+  test.each(["failure", "timed_out", "action_required", "stale"])("%s fails", (conclusion) => {
+    const summary = classify([run({ id: 9, conclusion })]);
+    expect(summary.failed.map((item) => item.runId)).toEqual(["9"]);
+  });
+
+  test("a fresh unsuperseded cancellation is pending, an old one is a failure", () => {
+    const fresh = classify([run({ conclusion: "cancelled", completed_at: iso(-minute) })]);
+    expect(fresh.pendingCount).toBe(1);
+    const old = classify([run({ conclusion: "cancelled", completed_at: iso(-30 * minute) })]);
+    expect(old.failed).toHaveLength(1);
+  });
+
+  test("a cancelled run superseded by a green rerun reads green", () => {
+    const summary = classify([run({ id: 1, conclusion: "cancelled" }), run({ id: 2 })]);
+    expect(summary.passedCount).toBe(1);
+    expect(summary.pendingCount).toBe(0);
+    expect(summary.settled).toBe(true);
+  });
+
+  test("commit statuses classify alongside check runs", () => {
+    const statuses: RawStatusContext[] = [
+      { id: 5, context: "ci/lint", state: "failure", target_url: "https://ci/5" },
+      { id: 6, context: "ci/build", state: "pending" },
+    ];
+    const summary = classify([], { statuses });
+    expect(summary.failed.map((item) => item.name)).toEqual(["ci/lint"]);
+    expect(summary.pendingCount).toBe(1);
+  });
+
+  test("an empty head with no workflows and no policy is settled as check-free evidence", () => {
+    const summary = classify([], { hasWorkflows: false });
+    expect(summary).toMatchObject({ settled: true, note: "no-checks-configured", blockedReason: null });
+  });
+
+  test("an empty head with workflows waits the grace period, then blocks — never green", () => {
+    const early = classify([], { headFirstSeenAt: now - minute });
+    expect(early).toMatchObject({ settled: false, blockedReason: null });
+    const late = classify([]);
+    expect(late).toMatchObject({ settled: false, blockedReason: "no-checks-registered" });
+    const unknown = classify([], { hasWorkflows: null });
+    expect(unknown.settled).toBe(false);
+  });
+
+  test("an expected check that never registers is pending, then a blocker; once registered it counts", () => {
+    const early = classify([run()], { expected: ["Lint"], headFirstSeenAt: now - minute });
+    expect(early).toMatchObject({ missing: ["Lint"], settled: false, blockedReason: null });
+    const late = classify([run()], { expected: ["Lint"] });
+    expect(late.blockedReason).toBe("expected-check-missing");
+    const registered = classify([run(), run({ id: 2, name: "Lint" })], { expected: ["Lint"] });
+    expect(registered).toMatchObject({ missing: [], settled: true });
+  });
+});
+
+describe("deriveMergeability", () => {
+  const cases: [RawPull, Mergeability][] = [
+    [pull({ merged: true, state: "closed" }), "merged"],
+    [pull({ state: "closed" }), "closed"],
+    [pull({ mergeable: false, mergeable_state: "dirty" }), "conflicting"],
+    [pull({ mergeable: null, mergeable_state: "unknown" }), "unknown"],
+    [pull({ mergeable: true, mergeable_state: "blocked" }), "ok"],
+  ];
+
+  test.each(cases)("reads %j", (raw, expected) => {
+    expect(deriveMergeability(raw)).toBe(expected);
+  });
+});
+
+describe("deriveFeedback", () => {
+  const feedback = (reviews: RawReview[], threads: RawThread[], previouslyResolved: string[] = []) =>
+    deriveFeedback({ author: "author", reviews, threads, previouslyResolved });
+
+  test("changes-requested and commented reviews with a body are actionable; approvals, bots and the author are not", () => {
+    const items = feedback(
+      [
+        review({ id: 1, state: "CHANGES_REQUESTED", body: "" }),
+        review({ id: 2, state: "COMMENTED" }),
+        review({ id: 3, state: "COMMENTED", body: "  " }),
+        review({ id: 4, state: "APPROVED", body: "lgtm" }),
+        review({ id: 5, state: "COMMENTED", user: { login: "coderabbitai[bot]", type: "Bot" } }),
+        review({ id: 6, state: "COMMENTED", user: { login: "author", type: "User" } }),
+      ],
+      [],
+    ).items;
+    expect(items.map((item) => item.key)).toEqual(["review:1", "review:2"]);
+    expect(items[0]).toMatchObject({ kind: "review", state: "CHANGES_REQUESTED", commitSha: "aaa111" });
+  });
+
+  test("an unresolved reviewer thread is actionable until the author replies after it", () => {
+    expect(feedback([], [thread()]).items.map((item) => item.key)).toEqual([
+      `thread:T1:${iso(-10 * minute)}`,
+    ]);
+    const answered = thread({
+      comments: {
+        nodes: [comment(), comment({ databaseId: 101, author: { login: "author" }, createdAt: iso(-5 * minute), updatedAt: iso(-5 * minute) })],
+      },
+    });
+    expect(feedback([], [answered]).items).toEqual([]);
+  });
+
+  test("a reviewer edit after the author's reply is a new, edited item with a new key", () => {
+    const edited = thread({
+      comments: {
+        nodes: [
+          comment({ updatedAt: iso(-2 * minute) }),
+          comment({ databaseId: 101, author: { login: "author" }, createdAt: iso(-5 * minute), updatedAt: iso(-5 * minute) }),
+        ],
+      },
+    });
+    const [item] = feedback([], [edited]).items;
+    expect(item).toMatchObject({ key: `thread:T1:${iso(-2 * minute)}`, edited: true, reviewer: "reviewer" });
+  });
+
+  test("resolved threads produce nothing and are reported; a reopened one is actionable even when answered", () => {
+    const resolved = feedback([], [thread({ isResolved: true })]);
+    expect(resolved.items).toEqual([]);
+    expect(resolved.resolvedThreadIds).toEqual(["T1"]);
+    const answered = thread({
+      comments: {
+        nodes: [comment(), comment({ databaseId: 101, author: { login: "author" }, createdAt: iso(-5 * minute), updatedAt: iso(-5 * minute) })],
+      },
+    });
+    const reopened = feedback([], [answered], ["T1"]);
+    expect(reopened.items.map((item) => item.key)).toEqual(["thread:T1:reopened:100"]);
+    expect(reopened.items[0].reopened).toBe(true);
+  });
+
+  test("bot-only and author-only threads never wake, and output order is deterministic", () => {
+    const botThread = thread({
+      id: "T2",
+      comments: { nodes: [comment({ author: { login: "coderabbitai[bot]", __typename: "Bot" } })] },
+    });
+    const authorThread = thread({ id: "T3", comments: { nodes: [comment({ author: { login: "author" } })] } });
+    expect(feedback([], [botThread, authorThread]).items).toEqual([]);
+    const a = feedback([review({ id: 2 })], [thread(), thread({ id: "T0" })]).items.map((item) => item.key);
+    const b = feedback([review({ id: 2 })], [thread({ id: "T0" }), thread()]).items.map((item) => item.key);
+    expect(a).toEqual(b);
+  });
+});
+
+describe("deriveApproval", () => {
+  const approval = (reviews: RawReview[], reviewDecision: string | null = null, requiredApprovals: number | null = null) =>
+    deriveApproval({ author: "author", reviews, reviewDecision, requiredApprovals });
+
+  test("the latest binding review per login wins; a comment never clears an approval, a dismissal does", () => {
+    const stillApproved = approval([review({ id: 1, state: "APPROVED" }), review({ id: 2, state: "COMMENTED" })]);
+    expect(stillApproved).toMatchObject({ approvedBy: ["reviewer"], humanApproval: true });
+    const dismissed = approval([review({ id: 1, state: "APPROVED" }), review({ id: 2, state: "DISMISSED" })]);
+    expect(dismissed).toMatchObject({ approvedBy: [], humanApproval: false });
+  });
+
+  test("bot approvals never substitute for a required human approval", () => {
+    const summary = approval([review({ id: 1, state: "APPROVED", user: { login: "ai-review[bot]", type: "Bot" } })], "APPROVED");
+    expect(summary.humanApproval).toBe(false);
+  });
+
+  test("the repository's review decision and required count both gate approval", () => {
+    expect(approval([review({ id: 1, state: "APPROVED" })], "REVIEW_REQUIRED").humanApproval).toBe(false);
+    expect(approval([review({ id: 1, state: "APPROVED" })], "APPROVED", 2).humanApproval).toBe(false);
+    const two = [review({ id: 1, state: "APPROVED" }), review({ id: 2, state: "APPROVED", user: { login: "second" } })];
+    expect(approval(two, "APPROVED", 2).humanApproval).toBe(true);
+  });
+
+  test("a changes-requested review stays binding on an older commit and is reported with it", () => {
+    const summary = approval([review({ id: 1, state: "CHANGES_REQUESTED", commit_id: "old000" })], "CHANGES_REQUESTED");
+    expect(summary.changesRequestedBy).toEqual([{ login: "reviewer", commitSha: "old000" }]);
+    expect(summary.humanApproval).toBe(false);
+  });
+});
+
+describe("decideEvent precedence", () => {
+  test("merged and closed are terminal before anything else", () => {
+    expect(emitted(decide(snapshot({ pull: pull({ merged: true, state: "closed" }), checkRuns: [run({ conclusion: "failure" })] }))).event).toBe("merged");
+    expect(emitted(decide(snapshot({ pull: pull({ state: "closed" }) }))).event).toBe("closed");
+  });
+
+  test("a head that changed during collection discards the cycle instead of reporting stale green or red", () => {
+    expect(decide(snapshot({ headAfter: "bbb222" }))).toEqual({ kind: "wait", blocker: "head-changed" });
+    expect(decide(snapshot({ headAfter: "bbb222", checkRuns: [run({ conclusion: "failure" })] }))).toEqual({
+      kind: "wait",
+      blocker: "head-changed",
+    });
+  });
+
+  test("a conflict wins over an approval and over failed checks, and an acknowledged conflict waits", () => {
+    const conflicting = snapshot({
+      pull: pull({ mergeable: false, mergeable_state: "dirty" }),
+      checkRuns: [run({ conclusion: "failure" })],
+      reviews: [review({ state: "APPROVED" })],
+      reviewDecision: "APPROVED",
+    });
+    const decision = emitted(decide(conflicting, state(), { ...options, waitForApproval: true }));
+    expect(decision).toMatchObject({ event: "conflict", keys: ["conflict:aaa111"], terminal: false });
+    const acked = state({ handledKeys: ["conflict:aaa111", "check:aaa111:1"] });
+    expect(decide(conflicting, acked)).toEqual({ kind: "wait", blocker: "conflict-acknowledged" });
+  });
+
+  test("failed checks emit once per run id; an acknowledged failure waits and a rerun wakes again", () => {
+    const failing = snapshot({
+      checkRuns: [run({ id: 3, conclusion: "failure" }), run({ id: 4, name: "Lint", status: "in_progress", conclusion: null })],
+    });
+    expect(emitted(decide(failing))).toMatchObject({ event: "checks_failed", keys: ["check:aaa111:3"], terminal: false });
+    const acked = state({ handledKeys: ["check:aaa111:3"] });
+    expect(decide(failing, acked)).toEqual({ kind: "wait", blocker: "checks-failed-acknowledged" });
+    const rerun = snapshot({ checkRuns: [run({ id: 5, conclusion: "failure" })] });
+    expect(emitted(decide(rerun, acked)).keys).toEqual(["check:aaa111:5"]);
+  });
+
+  test("unresolved check discovery becomes a blocker after the grace period", () => {
+    expect(emitted(decide(snapshot({ checkRuns: [] })))).toMatchObject({ event: "blocked", reason: "no-checks-registered" });
+    const expecting = { ...options, expectChecks: ["Lint"] };
+    expect(emitted(decide(snapshot(), state(), expecting))).toMatchObject({ event: "blocked", reason: "expected-check-missing" });
+  });
+
+  test("new feedback wakes with only the unhandled items; acknowledged feedback lets readiness through", () => {
+    const withFeedback = snapshot({ reviews: [review({ id: 2 })], threads: [thread()] });
+    const decision = emitted(decide(withFeedback, state({ handledKeys: ["review:2"] })));
+    expect(decision).toMatchObject({ event: "review_action_required", keys: [`thread:T1:${iso(-10 * minute)}`], terminal: false });
+    expect(decision.feedback.map((item) => item.kind)).toEqual(["thread"]);
+    const acked = state({ handledKeys: ["review:2", `thread:T1:${iso(-10 * minute)}`] });
+    expect(emitted(decide(withFeedback, acked)).event).toBe("ready_for_review");
+  });
+
+  test("feedback is reported while checks are still pending — the model need not wait for green to answer", () => {
+    const pending = snapshot({ checkRuns: [run({ status: "queued", conclusion: null })], reviews: [review({ id: 2 })] });
+    expect(emitted(decide(pending)).event).toBe("review_action_required");
+  });
+
+  test("unknown mergeability, pending checks and missing expected checks wait silently", () => {
+    expect(decide(snapshot({ pull: pull({ mergeable: null, mergeable_state: "unknown" }) }))).toEqual({ kind: "wait", blocker: "mergeability-unknown" });
+    expect(decide(snapshot({ checkRuns: [run({ status: "queued", conclusion: null })] }))).toEqual({ kind: "wait", blocker: "checks-pending: 1" });
+    const early = state({ headFirstSeenAt: now - minute });
+    expect(decide(snapshot(), early, { ...options, expectChecks: ["Lint"] })).toEqual({ kind: "wait", blocker: "checks-missing: Lint" });
+  });
+
+  test("changing only the count of successful jobs never produces an event", () => {
+    const pendingOne = snapshot({ checkRuns: [run({ id: 1 }), run({ id: 2, name: "Lint", status: "in_progress", conclusion: null })] });
+    const pendingMore = snapshot({
+      checkRuns: [run({ id: 1 }), run({ id: 3, name: "Build" }), run({ id: 4, name: "Pack" }), run({ id: 2, name: "Lint", status: "in_progress", conclusion: null })],
+    });
+    expect(decide(pendingOne).kind).toBe("wait");
+    expect(decide(pendingMore).kind).toBe("wait");
+  });
+
+  test("readiness is the default terminal; approval waits for a human under --wait-for-approval", () => {
+    expect(emitted(decide(snapshot())).event).toBe("ready_for_review");
+    const waiting = { ...options, waitForApproval: true };
+    expect(decide(snapshot(), state(), waiting)).toEqual({ kind: "wait", blocker: "awaiting-approval" });
+    const botApproved = snapshot({ reviews: [review({ state: "APPROVED", user: { login: "ai[bot]", type: "Bot" } })], reviewDecision: "APPROVED" });
+    expect(decide(botApproved, state(), waiting)).toEqual({ kind: "wait", blocker: "awaiting-approval" });
+    const humanApproved = snapshot({ reviews: [review({ state: "APPROVED" })], reviewDecision: "APPROVED" });
+    expect(emitted(decide(humanApproved, state(), waiting)).event).toBe("approved");
+  });
+
+  test("a standing changes-requested verdict is reported on readiness rather than blocking it forever", () => {
+    const standing = snapshot({ reviews: [review({ id: 2, state: "CHANGES_REQUESTED", body: "" })], reviewDecision: "CHANGES_REQUESTED" });
+    const classified = classifySnapshot(standing, state({ handledKeys: ["review:2"] }), options, now);
+    expect(decideEvent(classified, state({ handledKeys: ["review:2"] }), options)).toMatchObject({ kind: "emit", event: "ready_for_review" });
+    expect(classified.review.changesRequestedBy).toEqual([{ login: "reviewer", commitSha: "aaa111" }]);
+  });
+});
+
+describe("buildEvent", () => {
+  const build = (decision: WatchDecision, snap: RawSnapshot = snapshot()) =>
+    buildEvent({ decision: emitted(decision), classified: classifySnapshot(snap, state(), options, now), options, stateFile: "/s.json", logFile: "/s.log" });
+
+  test("carries schema version, verified head, links and state references", () => {
+    const event = build(decide(snapshot()));
+    expect(event).toMatchObject({ schemaVersion: 1, event: "ready_for_review", repo: "o/r", pr: 7, headSha: "aaa111", headVerified: true, base: "main", terminal: true, state: { file: "/s.json", log: "/s.log" } });
+    expect(event.url).toBe("https://github.com/o/r/pull/7");
+  });
+
+  test("the event id is stable across identical evidence regardless of key order", () => {
+    const decision = emitted(decide(snapshot({ checkRuns: [run({ id: 3, conclusion: "failure" }), run({ id: 4, name: "Lint", conclusion: "failure" })] })));
+    const a = build({ ...decision, keys: [...decision.keys] });
+    const b = build({ ...decision, keys: [...decision.keys].reverse() });
+    expect(a.eventId).toBe(b.eventId);
+    expect(a.eventId.startsWith("checks_failed:aaa111:")).toBe(true);
+  });
+
+  test("output is bounded: failed checks and feedback are capped and flagged", () => {
+    const runs = Array.from({ length: maxFailedChecks + 30 }, (_, index) => run({ id: index + 1, name: `Job ${index}`, conclusion: "failure" }));
+    const failed = build(decide(snapshot({ checkRuns: runs })), snapshot({ checkRuns: runs }));
+    expect(failed.checks.failed).toHaveLength(maxFailedChecks);
+    expect(failed.checks.truncated).toBe(true);
+    const reviews = Array.from({ length: maxFeedbackItems + 5 }, (_, index) => review({ id: index + 1, body: "x".repeat(2000) }));
+    const withFeedback = snapshot({ reviews });
+    const feedback = build(decide(withFeedback), withFeedback);
+    expect(feedback.feedback).toHaveLength(maxFeedbackItems);
+    expect(feedback.feedbackTruncated).toBe(true);
+    expect(feedback.feedback[0].body).toHaveLength(400);
+    expect(JSON.stringify(feedback).length).toBeLessThan(64_000);
+  });
+});
+
+describe("state", () => {
+  test("parseState starts fresh on malformed, foreign or mis-keyed content", () => {
+    expect(parseState("not json", "o/r", 7, now).handledKeys).toEqual([]);
+    expect(parseState(JSON.stringify({ ...state(), repo: "x/y" }), "o/r", 7, now).headSha).toBeNull();
+    expect(parseState(JSON.stringify({ schemaVersion: 2 }), "o/r", 7, now).pending).toBeNull();
+  });
+
+  test("parseState round-trips a valid file including the pending event", () => {
+    const event = buildEvent({ decision: emitted(decide(snapshot({ checkRuns: [run({ conclusion: "failure" })] }))), classified: null, options, stateFile: null, logFile: null });
+    const pending = recordPending(state(), event, ["check:aaa111:1"]);
+    const restored = parseState(JSON.stringify(pending), "o/r", 7, now);
+    expect(restored.pending?.eventId).toBe(event.eventId);
+    expect(restored.headSha).toBe("aaa111");
+  });
+
+  test("applyAck moves the pending keys to handled only for the matching id", () => {
+    const event = buildEvent({ decision: emitted(decide(snapshot({ checkRuns: [run({ conclusion: "failure" })] }))), classified: null, options, stateFile: null, logFile: null });
+    const pending = recordPending(state(), event, ["check:aaa111:1"]);
+    expect(applyAck(pending, "other").pending).not.toBeNull();
+    expect(applyAck(pending, null).pending).not.toBeNull();
+    const acked = applyAck(pending, event.eventId);
+    expect(acked.pending).toBeNull();
+    expect(acked.handledKeys).toEqual(["check:aaa111:1"]);
+  });
+
+  test("observeHead restarts the grace clock on a new head and pruneState bounds the keys", () => {
+    const same = observeHead(state(), "aaa111", now);
+    expect(same.headFirstSeenAt).toBe(now - 20 * minute);
+    const moved = observeHead(state(), "bbb222", now);
+    expect(moved).toMatchObject({ headSha: "bbb222", headFirstSeenAt: now });
+    const many = Array.from({ length: maxHandledKeys + 50 }, (_, index) => `k${index}`);
+    const pruned = pruneState(state({ handledKeys: [...many, "k0"] }));
+    expect(pruned.handledKeys).toHaveLength(maxHandledKeys);
+    expect(pruned.handledKeys.at(-1)).toBe(`k${maxHandledKeys + 49}`);
+  });
+});
+</file>
+
+<file path="claude-plugins/autopilot/lib/github/prWatchLoop.test.ts">
+import { describe, expect, test } from "bun:test";
+
+import { maxConsecutiveTransientErrors, maxRateLimitedCycles, rateLimitSleepSeconds } from "./prWatch.ts";
+import type { RawCheckRun, RawPull, RawReview, WatchOptions, WatchState } from "./prWatch.ts";
+import { runWatch } from "./prWatchLoop.ts";
+import type { GhReadKind, GhReadResult, WatchDeps, WatchRun } from "./prWatchLoop.ts";
+
+const startedAt = Date.parse("2026-09-11T12:00:00Z");
+const minute = 60_000;
+
+const options: WatchOptions = {
+  owner: "o",
+  repo: "r",
+  pr: 7,
+  waitForApproval: false,
+  ack: null,
+  timeoutSeconds: 6 * 60 * 60,
+  intervalSeconds: 30,
+  checkGraceSeconds: 600,
+  stateDir: null,
+  expectChecks: [],
+};
+
+const pull = (overrides: Partial<RawPull> = {}): RawPull => ({
+  state: "open",
+  merged: false,
+  mergeable: true,
+  mergeable_state: "clean",
+  html_url: "https://github.com/o/r/pull/7",
+  head: { sha: "aaa111" },
+  base: { ref: "main" },
+  user: { login: "author" },
+  ...overrides,
+});
+
+const run = (overrides: Partial<RawCheckRun> = {}): RawCheckRun => ({
+  id: 1,
+  name: "Test",
+  status: "completed",
+  conclusion: "success",
+  app: { slug: "github-actions" },
+  html_url: "https://ci/1",
+  completed_at: new Date(startedAt).toISOString(),
+  ...overrides,
+});
+
+/** One scripted cycle: the documents each read returns, or a read that fails. */
+interface CycleScript {
+  pull?: RawPull;
+  pullAgain?: RawPull;
+  checkRuns?: RawCheckRun[];
+  reviews?: RawReview[];
+  reviewDecision?: string | null;
+  rules?: unknown[];
+  workflows?: unknown[];
+  fail?: { read: "pull" | "checkRuns" | "reviews" | "rules"; kind: Exclude<GhReadKind, "ok"> };
+}
+
+const pending = (): CycleScript => ({ checkRuns: [run({ id: 2, name: "Lint", status: "in_progress", conclusion: null })] });
+const ready = (): CycleScript => ({ checkRuns: [run(), run({ id: 2, name: "Lint" })] });
+const failing = (id = 3): CycleScript => ({ checkRuns: [run({ id, conclusion: "failure" })] });
+
+const ok = (document: unknown): GhReadResult => ({ stdout: JSON.stringify(document), kind: "ok", error: null });
+const failed = (kind: Exclude<GhReadKind, "ok">): GhReadResult => ({ stdout: null, kind, error: `${kind} error` });
+
+/**
+ * A fake `gh` that serves one scripted cycle per pull read. Failures end the
+ * cycle early, the way a real loop stops collecting after a failed read.
+ */
+const fakeGh = (cycles: CycleScript[]) => {
+  let index = -1;
+  let pullReads = 0;
+  const calls: string[][] = [];
+  const readGh = async (args: string[]): Promise<GhReadResult> => {
+    calls.push(args);
+    const target = args[1] ?? "";
+    const isPull = /\/pulls\/\d+$/.test(target);
+    if (isPull && pullReads === 0) index += 1;
+    const script = cycles[index];
+    if (script === undefined) return failed("transient");
+    // Every read but `rules` aborts the cycle when it fails, so the next pull
+    // read starts a fresh one; a failed policy read leaves the cycle running.
+    const read = (name: NonNullable<CycleScript["fail"]>["read"], document: unknown): GhReadResult => {
+      if (script.fail?.read !== name) return ok(document);
+      if (name !== "rules") pullReads = 0;
+      return failed(script.fail.kind);
+    };
+    if (isPull) {
+      pullReads = pullReads === 0 ? 1 : 0;
+      if (pullReads === 1) return read("pull", script.pull ?? pull());
+      return ok(script.pullAgain ?? script.pull ?? pull());
+    }
+    if (target.includes("/check-runs")) return read("checkRuns", { check_runs: script.checkRuns ?? [run()] });
+    if (target.endsWith("/status")) return ok({ statuses: [] });
+    if (target.includes("/reviews")) return read("reviews", script.reviews ?? []);
+    if (target === "graphql") {
+      return ok({ data: { repository: { pullRequest: { reviewDecision: script.reviewDecision ?? null, reviewThreads: { nodes: [] } } } } });
+    }
+    if (target.includes("/rules/branches/")) return read("rules", script.rules ?? []);
+    if (target.includes("/contents/")) return ok(script.workflows ?? [{ name: "ci.yml" }]);
+    throw new Error(`unexpected read ${args.join(" ")}`);
+  };
+  return { readGh, calls };
+};
+
+interface Harness {
+  deps: WatchDeps;
+  sleeps: number[];
+  saved: WatchState[];
+  logs: string[];
+  clock: { now: number };
+  cancel: () => void;
+}
+
+const harness = (cycles: CycleScript[], extra: Partial<WatchDeps> & { initialState?: WatchState | null } = {}): Harness & { calls: string[][] } => {
+  const clock = { now: startedAt };
+  const sleeps: number[] = [];
+  const saved: WatchState[] = [];
+  const logs: string[] = [];
+  let cancelled = false;
+  const gh = fakeGh(cycles);
+  const deps: WatchDeps = {
+    readGh: gh.readGh,
+    sleep: async (ms) => {
+      sleeps.push(ms);
+      clock.now += ms;
+    },
+    now: () => clock.now,
+    loadState: async () => (extra.initialState ? JSON.stringify(extra.initialState) : null),
+    saveState: async (state) => {
+      saved.push(state);
+    },
+    log: (line) => {
+      logs.push(line);
+    },
+    isCancelled: () => cancelled,
+    stateFile: "/state.json",
+    logFile: "/state.log",
+    ...extra,
+  };
+  return { deps, sleeps, saved, logs, clock, calls: gh.calls, cancel: () => (cancelled = true) };
+};
+
+const watch = (cycles: CycleScript[], opts: Partial<WatchOptions> = {}, extra: Parameters<typeof harness>[1] = {}) => {
+  const h = harness(cycles, extra);
+  return { ...h, run: runWatch({ ...options, ...opts }, h.deps) as Promise<WatchRun> };
+};
+
+describe("runWatch waits inside the process", () => {
+  test("pending → pending → ready emits exactly one event after three cycles", async () => {
+    const { run: result, sleeps, saved } = watch([pending(), pending(), ready()]);
+    const outcome = await result;
+    expect(outcome.event.event).toBe("ready_for_review");
+    expect(outcome.cycles).toBe(3);
+    expect(sleeps).toHaveLength(2);
+    expect(saved.at(-1)?.pending).toBeNull();
+  });
+
+  test("pending → failed emits checks_failed once and records it as pending", async () => {
+    const outcome = await watch([pending(), failing()]).run;
+    expect(outcome.event).toMatchObject({ event: "checks_failed", terminal: false });
+    expect(outcome.state.pending?.eventId).toBe(outcome.event.eventId);
+    expect(outcome.state.pending?.keys).toEqual(["check:aaa111:3"]);
+  });
+
+  test("a growing count of successful jobs never wakes the model", async () => {
+    const more = (): CycleScript => ({ checkRuns: [run(), run({ id: 4, name: "Build" }), run({ id: 5, name: "Pack" }), run({ id: 2, name: "Lint", status: "in_progress", conclusion: null })] });
+    const outcome = await watch([pending(), more(), more(), failing(9)]).run;
+    expect(outcome.event.event).toBe("checks_failed");
+    expect(outcome.cycles).toBe(4);
+  });
+
+  test("a wait far longer than the 600 s foreground tool timeout completes inside one call with backoff", async () => {
+    const cycles = [...Array.from({ length: 150 }, pending), ready()];
+    const { run: result, sleeps, clock } = watch(cycles);
+    const outcome = await result;
+    expect(outcome.event.event).toBe("ready_for_review");
+    expect(outcome.cycles).toBe(151);
+    expect(clock.now - startedAt).toBeGreaterThan(600_000);
+    expect(Math.max(...sleeps)).toBe(120_000);
+    expect(sleeps[0]).toBe(30_000);
+  });
+
+  test("a head that changes mid-collection discards the cycle, then the consistent one settles", async () => {
+    const moved = { ...ready(), pullAgain: pull({ head: { sha: "bbb222" } }) };
+    const consistent = { ...ready(), pull: pull({ head: { sha: "bbb222" } }) };
+    const outcome = await watch([moved, consistent]).run;
+    expect(outcome.event).toMatchObject({ event: "ready_for_review", headSha: "bbb222", headVerified: true });
+    expect(outcome.cycles).toBe(2);
+  });
+
+  test("a merged pull request needs a single read", async () => {
+    const outcome = await watch([{ pull: pull({ merged: true, state: "closed" }) }]).run;
+    expect(outcome.event.event).toBe("merged");
+    expect(outcome.requestCount).toBe(1);
+  });
+
+  test("--wait-for-approval keeps waiting past readiness until a human approves", async () => {
+    const approved: CycleScript = { ...ready(), reviews: [{ id: 1, state: "APPROVED", user: { login: "human", type: "User" } }], reviewDecision: "APPROVED" };
+    const outcome = await watch([ready(), ready(), approved], { waitForApproval: true }).run;
+    expect(outcome.event.event).toBe("approved");
+    expect(outcome.cycles).toBe(3);
+  });
+});
+
+describe("runWatch failure handling", () => {
+  test("a transient failure recovers on the next cycle", async () => {
+    const outcome = await watch([{ fail: { read: "checkRuns", kind: "transient" } }, ready()]).run;
+    expect(outcome.event.event).toBe("ready_for_review");
+    expect(outcome.cycles).toBe(2);
+  });
+
+  test("consecutive transient failures exhaust the budget into blocked", async () => {
+    const cycles = Array.from({ length: maxConsecutiveTransientErrors }, (): CycleScript => ({ fail: { read: "pull", kind: "transient" } }));
+    const outcome = await watch(cycles).run;
+    expect(outcome.event).toMatchObject({ event: "blocked", reason: "transient-errors-exhausted" });
+  });
+
+  test("rate limiting backs off long and eventually blocks", async () => {
+    const cycles = Array.from({ length: maxRateLimitedCycles }, (): CycleScript => ({ fail: { read: "reviews", kind: "rate-limited" } }));
+    const { run: result, sleeps } = watch(cycles);
+    const outcome = await result;
+    expect(outcome.event).toMatchObject({ event: "blocked", reason: "rate-limited" });
+    expect(sleeps).toEqual(Array.from({ length: maxRateLimitedCycles - 1 }, () => rateLimitSleepSeconds * 1000));
+  });
+
+  test("auth loss blocks immediately", async () => {
+    const outcome = await watch([{ fail: { read: "pull", kind: "auth" } }, ready()]).run;
+    expect(outcome.event).toMatchObject({ event: "blocked", reason: "auth" });
+    expect(outcome.cycles).toBe(1);
+  });
+
+  test("the waiting deadline blocks with state flushed", async () => {
+    const { run: result, saved } = watch(Array.from({ length: 10 }, pending), { timeoutSeconds: 45 });
+    const outcome = await result;
+    expect(outcome.event).toMatchObject({ event: "blocked", reason: "deadline" });
+    expect(saved.length).toBeGreaterThan(0);
+  });
+
+  test("cancellation ends the wait cleanly with state flushed", async () => {
+    const h = harness([pending(), pending(), ready()]);
+    h.deps.sleep = async (ms) => {
+      h.sleeps.push(ms);
+      h.cancel();
+    };
+    const outcome = await runWatch(options, h.deps);
+    expect(outcome.event).toMatchObject({ event: "blocked", reason: "cancelled" });
+    expect(h.saved.at(-1)).toBeDefined();
+  });
+
+  test("an unreadable required-check policy never yields green and blocks once the budget is spent", async () => {
+    const unreadable = (): CycleScript => ({ ...ready(), fail: { read: "rules", kind: "transient" } });
+    const recovered = await watch([unreadable(), ready()]).run;
+    expect(recovered.event.event).toBe("ready_for_review");
+    expect(recovered.cycles).toBe(2);
+    const exhausted = await watch(Array.from({ length: 5 }, unreadable)).run;
+    expect(exhausted.event).toMatchObject({ event: "blocked", reason: "policy-unreadable" });
+  });
+});
+
+describe("runWatch acknowledgement and restart", () => {
+  test("a restart re-emits the unacknowledged event without touching GitHub", async () => {
+    const first = await watch([failing()]).run;
+    const restarted = watch([ready()], {}, { initialState: first.state });
+    const outcome = await restarted.run;
+    expect(outcome.event.eventId).toBe(first.event.eventId);
+    expect(restarted.calls).toHaveLength(0);
+  });
+
+  test("--ack releases the pending event; the same failure stays silent and a new run wakes again", async () => {
+    const first = await watch([failing()]).run;
+    const acked = watch([failing(), failing(8)], { ack: first.event.eventId }, { initialState: first.state });
+    const outcome = await acked.run;
+    expect(outcome.event.event).toBe("checks_failed");
+    expect(outcome.event.eventId).not.toBe(first.event.eventId);
+    expect(outcome.cycles).toBe(2);
+    expect(outcome.state.handledKeys).toContain("check:aaa111:3");
+  });
+
+  test("an ack for a different id keeps the pending event", async () => {
+    const first = await watch([failing()]).run;
+    const outcome = await watch([ready()], { ack: "nope" }, { initialState: first.state }).run;
+    expect(outcome.event.eventId).toBe(first.event.eventId);
+  });
+});
+</file>
+
+<file path="claude-plugins/autopilot/lib/github/prWatchLoop.ts">
+// The watcher's fetch → verify → classify → decide → sleep loop, written against
+// injected dependencies (gh reads, clock, sleep, state store, log, cancellation)
+// so prWatchLoop.test.ts drives hours of simulated waiting in milliseconds and
+// proves that no output leaves the process until a single actionable or
+// terminal event exists. watch-pr.ts binds the real dependencies.
+//
+// Runs under Node's native type stripping (Node >=24) and Bun without a build
+// step, so it ships as source at ${CLAUDE_PLUGIN_ROOT}/lib/github/.
+//
+// Usage:
+//   import { runWatch } from "./prWatchLoop.ts";
+//   const { event, state } = await runWatch(options, deps);
+
+import {
+  applyAck,
+  buildEvent,
+  buildGhWatchReads,
+  classifySnapshot,
+  decideEvent,
+  emptyState,
+  maxConsecutiveTransientErrors,
+  maxIntervalSeconds,
+  maxPolicyReadFailures,
+  maxRateLimitedCycles,
+  mergeWatchThreadPages,
+  observeHead,
+  parseState,
+  pruneState,
+  rateLimitSleepSeconds,
+  recordPending,
+} from "./prWatch.ts";
+import type {
+  BlockedReason,
+  ClassifiedSnapshot,
+  RawCheckRunsPage,
+  RawCombinedStatus,
+  RawPull,
+  RawReview,
+  RawRule,
+  RawSnapshot,
+  WatchDecision,
+  WatchEvent,
+  WatchOptions,
+  WatchState,
+  WatchThreadPage,
+} from "./prWatch.ts";
+import { parseGhPaginatedJson } from "./reviewThreads.ts";
+
+/** How a `gh` read ended; anything but `ok` and `not-found` is an error class. */
+export type GhReadKind = "ok" | "not-found" | "auth" | "rate-limited" | "transient";
+
+/** One `gh` read as the loop sees it. */
+export interface GhReadResult {
+  stdout: string | null;
+  kind: GhReadKind;
+  error: string | null;
+}
+
+/** The dependencies `runWatch` needs; the CLI binds real ones, tests bind fakes. */
+export interface WatchDeps {
+  readGh: (args: string[]) => Promise<GhReadResult>;
+  sleep: (ms: number) => Promise<void>;
+  now: () => number;
+  loadState: () => Promise<string | null>;
+  saveState: (state: WatchState) => Promise<void>;
+  log: (line: string) => void;
+  isCancelled: () => boolean;
+  stateFile: string | null;
+  logFile: string | null;
+}
+
+/** What one run produced. */
+export interface WatchRun {
+  event: WatchEvent;
+  state: WatchState;
+  cycles: number;
+  requestCount: number;
+}
+
+interface PolicyReads {
+  head: string;
+  rules: RawRule[] | null;
+  hasWorkflows: boolean | null;
+}
+
+type Collected = { snapshot: RawSnapshot; requests: number } | { failure: GhReadKind; detail: string };
+
+interface LoopCounters {
+  transientErrors: number;
+  rateLimitedCycles: number;
+  policyFailures: number;
+  interval: number;
+  fingerprint: string | null;
+  cycles: number;
+  requests: number;
+}
+
+const parsePull = (stdout: string): RawPull | null => {
+  const [document] = parseGhPaginatedJson<RawPull>(stdout);
+  return document && typeof document.state === "string" ? document : null;
+};
+
+const errorPriority: Record<GhReadKind, number> = {
+  auth: 3,
+  "rate-limited": 2,
+  transient: 1,
+  "not-found": 1,
+  ok: 0,
+};
+
+const worstFailure = (reads: GhReadResult[]): GhReadResult | null =>
+  reads
+    .filter((read) => read.kind !== "ok")
+    .sort((a, b) => errorPriority[b.kind] - errorPriority[a.kind])[0] ?? null;
+
+const readPolicy = async (
+  deps: WatchDeps,
+  reads: { rules: string[]; workflows: string[] },
+  head: string,
+): Promise<PolicyReads> => {
+  const [rules, workflows] = await Promise.all([deps.readGh(reads.rules), deps.readGh(reads.workflows)]);
+  const parsedRules =
+    rules.kind === "ok"
+      ? parseGhPaginatedJson<RawRule[]>(rules.stdout ?? "")[0] ?? []
+      : rules.kind === "not-found"
+        ? []
+        : null;
+  const parsedWorkflows =
+    workflows.kind === "ok"
+      ? (parseGhPaginatedJson<unknown[]>(workflows.stdout ?? "")[0] ?? []).length > 0
+      : workflows.kind === "not-found"
+        ? false
+        : null;
+  return { head, rules: parsedRules, hasWorkflows: parsedWorkflows };
+};
+
+/** One cycle's reads: pull, the per-head reads in parallel, then the pull again. */
+async function collect(
+  options: WatchOptions,
+  deps: WatchDeps,
+  policy: PolicyReads | null,
+): Promise<Collected & { policy?: PolicyReads }> {
+  const first = await deps.readGh(buildGhWatchReads({ ...options, head: "", base: "" }).pull);
+  if (first.kind !== "ok") return { failure: first.kind, detail: `pull: ${first.error}` };
+  const pull = parsePull(first.stdout ?? "");
+  if (pull === null) return { failure: "transient", detail: "pull: unrecognized payload shape" };
+  const head = pull.head?.sha ?? "";
+  const base = pull.base?.ref ?? "";
+
+  if (pull.state === "closed") {
+    const snapshot: RawSnapshot = {
+      pull,
+      head,
+      headAfter: head,
+      checkRuns: [],
+      statuses: [],
+      reviews: [],
+      threads: [],
+      reviewDecision: null,
+      rules: [],
+      hasWorkflows: null,
+    };
+    return { snapshot, requests: 1 };
+  }
+
+  const reads = buildGhWatchReads({ ...options, head, base });
+  const [checkRuns, statuses, reviews, threads, nextPolicy] = await Promise.all([
+    deps.readGh(reads.checkRuns),
+    deps.readGh(reads.statuses),
+    deps.readGh(reads.reviews),
+    deps.readGh(reads.threads),
+    policy?.head === head && policy.rules !== null ? Promise.resolve(policy) : readPolicy(deps, reads, head),
+  ]);
+  const failed = worstFailure([checkRuns, statuses, reviews, threads]);
+  if (failed !== null) return { failure: failed.kind === "not-found" ? "transient" : failed.kind, detail: failed.error ?? "" };
+
+  const again = await deps.readGh(reads.pull);
+  if (again.kind !== "ok") return { failure: again.kind, detail: `pull re-read: ${again.error}` };
+  const headAfter = parsePull(again.stdout ?? "")?.head?.sha ?? "";
+
+  const pages = parseGhPaginatedJson<WatchThreadPage>(threads.stdout ?? "");
+  const merged = mergeWatchThreadPages(pages);
+  const snapshot: RawSnapshot = {
+    pull,
+    head,
+    headAfter,
+    checkRuns: parseGhPaginatedJson<RawCheckRunsPage>(checkRuns.stdout ?? "").flatMap(
+      (page) => page.check_runs ?? [],
+    ),
+    statuses: parseGhPaginatedJson<RawCombinedStatus>(statuses.stdout ?? "")[0]?.statuses ?? [],
+    reviews: parseGhPaginatedJson<RawReview[]>(reviews.stdout ?? "").flat(),
+    threads: merged.threads,
+    reviewDecision: merged.reviewDecision,
+    rules: nextPolicy.rules,
+    hasWorkflows: nextPolicy.hasWorkflows,
+  };
+  const requests = 6 + (nextPolicy === policy ? 0 : 2);
+  return { snapshot, requests, policy: nextPolicy };
+}
+
+const fingerprintOf = (classified: ClassifiedSnapshot): string =>
+  JSON.stringify({
+    head: classified.head,
+    mergeability: classified.mergeability,
+    failed: classified.checks.failed.map((item) => item.runId),
+    pending: classified.checks.pendingCount,
+    passed: classified.checks.passedCount,
+    missing: classified.checks.missing,
+    feedback: classified.feedback.map((item) => item.key),
+    review: classified.review,
+  });
+
+const blockedDecision = (reason: BlockedReason): Extract<WatchDecision, { kind: "emit" }> => ({
+  kind: "emit",
+  event: "blocked",
+  reason,
+  keys: [],
+  terminal: true,
+  feedback: [],
+});
+
+/**
+ * Wait inside the process until one event exists. Pending CI, unknown
+ * mergeability and unchanged feedback never leave this function; the model is
+ * woken exactly once, by the return value.
+ */
+export async function runWatch(options: WatchOptions, deps: WatchDeps): Promise<WatchRun> {
+  const repo = `${options.owner}/${options.repo}`;
+  const raw = await deps.loadState();
+  let state = applyAck(
+    raw === null ? emptyState(repo, options.pr, deps.now()) : parseState(raw, repo, options.pr, deps.now()),
+    options.ack,
+  );
+  const counters: LoopCounters = {
+    transientErrors: 0,
+    rateLimitedCycles: 0,
+    policyFailures: 0,
+    interval: options.intervalSeconds,
+    fingerprint: null,
+    cycles: 0,
+    requests: 0,
+  };
+  const finish = (event: WatchEvent, nextState: WatchState): WatchRun => ({
+    event,
+    state: nextState,
+    cycles: counters.cycles,
+    requestCount: counters.requests,
+  });
+  const build = (decision: Extract<WatchDecision, { kind: "emit" }>, classified: ClassifiedSnapshot | null) =>
+    buildEvent({ decision, classified, options, stateFile: deps.stateFile, logFile: deps.logFile });
+
+  if (options.ack !== null) await deps.saveState(state);
+  if (state.pending !== null) {
+    deps.log(`re-emitting unacknowledged event ${state.pending.eventId}`);
+    return finish(state.pending.event, state);
+  }
+
+  const deadline = deps.now() + options.timeoutSeconds * 1000;
+  let policy: PolicyReads | null = null;
+  let lastClassified: ClassifiedSnapshot | null = null;
+
+  const stop = async (reason: BlockedReason): Promise<WatchRun> => {
+    deps.log(`blocked: ${reason}`);
+    await deps.saveState(state);
+    return finish(build(blockedDecision(reason), lastClassified), state);
+  };
+
+  while (true) {
+    if (deps.isCancelled()) return stop("cancelled");
+    if (deps.now() >= deadline) return stop("deadline");
+    counters.cycles += 1;
+
+    const collected = await collect(options, deps, policy);
+    if ("failure" in collected) {
+      deps.log(`cycle ${counters.cycles}: read failed (${collected.failure}) ${collected.detail}`);
+      if (collected.failure === "auth") return stop("auth");
+      if (collected.failure === "rate-limited") {
+        counters.rateLimitedCycles += 1;
+        if (counters.rateLimitedCycles >= maxRateLimitedCycles) return stop("rate-limited");
+        await deps.sleep(rateLimitSleepSeconds * 1000);
+        continue;
+      }
+      counters.transientErrors += 1;
+      if (counters.transientErrors >= maxConsecutiveTransientErrors) return stop("transient-errors-exhausted");
+      await deps.sleep(Math.min(counters.interval * 2, maxIntervalSeconds) * 1000);
+      continue;
+    }
+
+    counters.requests += collected.requests;
+    counters.transientErrors = 0;
+    counters.rateLimitedCycles = 0;
+    policy = collected.policy ?? policy;
+    const { snapshot } = collected;
+    state = observeHead(state, snapshot.head, deps.now());
+
+    if (snapshot.rules === null) {
+      counters.policyFailures += 1;
+      deps.log(`cycle ${counters.cycles}: required-check policy unreadable (${counters.policyFailures})`);
+      if (counters.policyFailures >= maxPolicyReadFailures) return stop("policy-unreadable");
+      await deps.sleep(counters.interval * 1000);
+      continue;
+    }
+    counters.policyFailures = 0;
+
+    const classified = classifySnapshot(snapshot, state, options, deps.now());
+    lastClassified = classified;
+    const decision = decideEvent(classified, state, options);
+    state = pruneState({ ...state, resolvedThreads: classified.resolvedThreadIds });
+
+    if (decision.kind === "emit") {
+      const event = build(decision, classified);
+      if (!decision.terminal) state = recordPending(state, event, decision.keys);
+      await deps.saveState(state);
+      deps.log(`cycle ${counters.cycles}: emit ${event.eventId}`);
+      return finish(event, state);
+    }
+
+    const fingerprint = fingerprintOf(classified);
+    counters.interval =
+      fingerprint === counters.fingerprint
+        ? Math.min(counters.interval * 1.5, maxIntervalSeconds)
+        : options.intervalSeconds;
+    counters.fingerprint = fingerprint;
+    await deps.saveState(state);
+    deps.log(`cycle ${counters.cycles}: wait (${decision.blocker}) next in ${counters.interval}s`);
+    await deps.sleep(counters.interval * 1000);
+  }
+}
+</file>
+
 <file path="claude-plugins/autopilot/lib/github/reviewThreads.test.ts">
 import { describe, expect, test } from "bun:test";
 
@@ -53692,6 +54965,321 @@ export function buildReviewPayload({
 }
 </file>
 
+<file path="claude-plugins/autopilot/lib/github/watch-pr.ts">
+#!/usr/bin/env node
+// Watches a pull request deterministically and prints exactly one bounded JSON
+// event to stdout when there is something to act on (failed checks, new or
+// edited review feedback, a merge conflict), when monitoring completes (ready
+// for review, approved, merged, closed), or when it cannot continue (blocked).
+// Invoked by the pr-monitor skill in place of its former model-driven polling
+// loop: the model launches this process once and stays dormant until it exits.
+//
+// Runs under Node's native type stripping (Node >=24) and Bun — no build step;
+// the file ships as source at ${CLAUDE_PLUGIN_ROOT}/lib/github/.
+//
+// Usage:  node "${CLAUDE_PLUGIN_ROOT}/lib/github/watch-pr.ts" <owner/repo> <pr-number> \
+//           [--wait-for-approval] [--ack <event-id>] [--timeout <s>] [--interval <s>] \
+//           [--check-grace <s>] [--state-dir <dir>] [--expect-check <name>]...
+//
+// Always exits 0 and always prints a single JSON object (schemaVersion 1); the
+// one-line telemetry summary goes to stderr. Per-cycle diagnostics go to a
+// pruned log next to the state file, never to stdout. State is keyed by
+// repository and PR under <git common dir>/autopilot/pr-watch/ (override with
+// --state-dir): a non-terminal event stays pending until the caller relaunches
+// with --ack <event-id>, so a restart re-emits unacknowledged work and never
+// repeats acknowledged work. The watcher performs no writes to GitHub.
+
+import { execFile } from "node:child_process";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { promisify } from "node:util";
+
+import { buildEvent, maxLogLines, parseWatchArgs } from "./prWatch.ts";
+import type { WatchState } from "./prWatch.ts";
+import { runWatch } from "./prWatchLoop.ts";
+import type { GhReadKind, GhReadResult } from "./prWatchLoop.ts";
+
+const execFileAsync = promisify(execFile);
+const ghOptions = { maxBuffer: 32 * 1024 * 1024, timeout: 120_000 };
+const redactedPattern = /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b/g;
+
+const classifyGhError = (stderr: string): GhReadKind => {
+  if (/HTTP 401|not logged in|gh auth login|authentication required/i.test(stderr)) return "auth";
+  if (/rate limit|secondary rate|HTTP 429/i.test(stderr)) return "rate-limited";
+  if (/HTTP 404|Not Found|Branch not protected/i.test(stderr)) return "not-found";
+  return "transient";
+};
+
+async function readGh(args: string[]): Promise<GhReadResult> {
+  try {
+    const { stdout } = await execFileAsync("gh", args, ghOptions);
+    return { stdout: stdout.toString(), kind: "ok", error: null };
+  } catch (error) {
+    const e = error as { stderr?: string; message?: string };
+    const stderr = e.stderr ?? e.message ?? "";
+    const firstLine = stderr.split("\n")[0].slice(0, 200);
+    return { stdout: null, kind: classifyGhError(stderr), error: firstLine || "gh invocation failed" };
+  }
+}
+
+async function defaultStateDir(): Promise<string> {
+  try {
+    const { stdout } = await execFileAsync("git", ["rev-parse", "--git-common-dir"]);
+    return join(resolve(stdout.toString().trim()), "autopilot", "pr-watch");
+  } catch {
+    return join(tmpdir(), "autopilot-pr-watch");
+  }
+}
+
+const pruneLog = async (logFile: string): Promise<void> => {
+  const existing = await readFile(logFile, "utf8").catch(() => "");
+  const lines = existing.split("\n").filter((line) => line.length > 0);
+  if (lines.length <= maxLogLines) return;
+  await writeFile(logFile, `${lines.slice(-maxLogLines).join("\n")}\n`);
+};
+
+interface Cancellation {
+  isCancelled: () => boolean;
+  sleep: (ms: number) => Promise<void>;
+  dispose: () => void;
+}
+
+/** SIGINT/SIGTERM end the current sleep and let the loop flush state and exit cleanly. */
+const installCancellation = (): Cancellation => {
+  let cancelled = false;
+  let wake: (() => void) | null = null;
+  const onSignal = (): void => {
+    cancelled = true;
+    wake?.();
+  };
+  process.on("SIGINT", onSignal);
+  process.on("SIGTERM", onSignal);
+  return {
+    isCancelled: () => cancelled,
+    sleep: (ms) =>
+      new Promise((done) => {
+        const timer = setTimeout(() => {
+          wake = null;
+          done();
+        }, ms);
+        wake = () => {
+          clearTimeout(timer);
+          wake = null;
+          done();
+        };
+      }),
+    dispose: () => {
+      process.off("SIGINT", onSignal);
+      process.off("SIGTERM", onSignal);
+    },
+  };
+};
+
+async function main(): Promise<string> {
+  const startedAt = Date.now();
+  const parsed = parseWatchArgs(process.argv.slice(2));
+  if (parsed.options === null) {
+    const event = buildEvent({
+      decision: { kind: "emit", event: "blocked", reason: parsed.error ?? "usage", keys: [], terminal: true, feedback: [] },
+      classified: null,
+      options: { owner: "", repo: "", pr: 0 },
+      stateFile: null,
+      logFile: null,
+    });
+    process.stderr.write(`watch-pr telemetry: ${JSON.stringify({ durationMs: 0, cycles: 0, requestCount: 0 })}\n`);
+    return JSON.stringify(event);
+  }
+  const options = parsed.options;
+  const stateDir = options.stateDir ?? (await defaultStateDir());
+  await mkdir(stateDir, { recursive: true });
+  const baseName = join(stateDir, `${options.owner}__${options.repo}__${options.pr}`);
+  const stateFile = `${baseName}.json`;
+  const logFile = `${baseName}.log`;
+  await pruneLog(logFile);
+  const cancellation = installCancellation();
+
+  const log = (line: string): void => {
+    const sanitized = line.replace(redactedPattern, "[redacted]");
+    void appendFile(logFile, `${new Date().toISOString()} ${sanitized}\n`).catch(() => undefined);
+  };
+  const saveState = (state: WatchState): Promise<void> =>
+    writeFile(stateFile, `${JSON.stringify({ ...state, updatedAt: Date.now() }, null, 2)}\n`);
+
+  try {
+    const run = await runWatch(options, {
+      readGh,
+      sleep: cancellation.sleep,
+      now: () => Date.now(),
+      loadState: () => readFile(stateFile, "utf8").catch(() => null),
+      saveState,
+      log,
+      isCancelled: cancellation.isCancelled,
+      stateFile,
+      logFile,
+    });
+    await writeFile(`${baseName}.event.json`, `${JSON.stringify(run.event, null, 2)}\n`);
+    const telemetry = {
+      durationMs: Date.now() - startedAt,
+      cycles: run.cycles,
+      requestCount: run.requestCount,
+    };
+    log(`exit ${run.event.event} (${run.event.eventId}) ${JSON.stringify(telemetry)}`);
+    process.stderr.write(`watch-pr telemetry: ${JSON.stringify(telemetry)}\n`);
+    return JSON.stringify(run.event);
+  } finally {
+    cancellation.dispose();
+  }
+}
+
+process.stdout.write(await main());
+</file>
+
+<file path="claude-plugins/autopilot/lib/github/watchPr.test.ts">
+/**
+ * End-to-end test of the watcher CLI: a `gh` shim on PATH serves scripted
+ * responses, so the real process runs its own wait loop and the assertions
+ * are about the contract a caller sees — one process, one JSON object on
+ * stdout, the state and event files on disk, and the `--ack` round trip.
+ */
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+
+import type { WatchEvent } from "./prWatch.ts";
+
+const cliPath = join(import.meta.dirname, "watch-pr.ts");
+
+/** The shim script: picks the response for each gh invocation from `script.json`, advancing a persisted cycle counter. */
+const shimServer = `
+const { readFileSync, writeFileSync } = require("node:fs");
+const dir = process.env.GH_SHIM_DIR;
+const script = JSON.parse(readFileSync(dir + "/script.json", "utf8"));
+const statePath = dir + "/shim-state.json";
+let state = { cycle: -1, pullReads: 0, calls: 0 };
+try { state = JSON.parse(readFileSync(statePath, "utf8")); } catch {}
+const args = process.argv.slice(2);
+const target = args[1] || "";
+const isPull = /\\/pulls\\/\\d+$/.test(target);
+if (isPull && state.pullReads === 0) state.cycle += 1;
+state.calls += 1;
+const cycle = script[state.cycle] || script[script.length - 1];
+const pull = (sha) => ({ state: "open", merged: false, mergeable: true, mergeable_state: "clean", html_url: "https://github.com/o/r/pull/7", head: { sha }, base: { ref: "main" }, user: { login: "author" } });
+let out;
+if (isPull) { state.pullReads = state.pullReads === 0 ? 1 : 0; out = pull(cycle.head || "aaa111"); }
+else if (target.includes("/check-runs")) out = { check_runs: cycle.checkRuns };
+else if (target.endsWith("/status")) out = { statuses: [] };
+else if (target.includes("/reviews")) out = [];
+else if (target === "graphql") out = { data: { repository: { pullRequest: { reviewDecision: null, reviewThreads: { nodes: [] } } } } };
+else if (target.includes("/rules/branches/")) out = [];
+else if (target.includes("/contents/")) out = [{ name: "ci.yml" }];
+else { process.stderr.write("unexpected gh args: " + args.join(" ")); process.exitCode = 1; }
+writeFileSync(statePath, JSON.stringify(state));
+if (out !== undefined) process.stdout.write(JSON.stringify(out));
+`;
+
+const run = (id: number, conclusion: string | null, status = "completed") => ({
+  id,
+  name: "Test",
+  status,
+  conclusion,
+  app: { slug: "github-actions" },
+  html_url: `https://ci/${id}`,
+  completed_at: new Date().toISOString(),
+});
+
+const pendingCycle = { checkRuns: [run(1, null, "in_progress")] };
+const readyCycle = { checkRuns: [run(1, "success")] };
+const failingCycle = { checkRuns: [run(3, "failure")] };
+
+interface CliResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  event: WatchEvent;
+}
+
+describe("watch-pr CLI", () => {
+  let workDir: string;
+  let shimDir: string;
+  let stateDir: string;
+
+  beforeAll(async () => {
+    workDir = await mkdtemp(join(tmpdir(), "watch-pr-"));
+    shimDir = join(workDir, "bin");
+    stateDir = join(workDir, "state");
+    await Bun.write(join(shimDir, "gh-shim.cjs"), shimServer);
+    const shim = `#!/bin/sh\nexec "${process.execPath}" "${join(shimDir, "gh-shim.cjs")}" "$@"\n`;
+    await writeFile(join(shimDir, "gh"), shim);
+    await chmod(join(shimDir, "gh"), 0o755);
+  });
+
+  afterAll(async () => {
+    await rm(workDir, { recursive: true, force: true });
+  });
+
+  const invoke = async (args: string[], script: unknown[] | null): Promise<CliResult> => {
+    if (script !== null) {
+      await writeFile(join(shimDir, "script.json"), JSON.stringify(script));
+      await rm(join(shimDir, "shim-state.json"), { force: true });
+    }
+    const proc = Bun.spawn([process.execPath, cliPath, ...args], {
+      env: { ...process.env, PATH: `${shimDir}:${process.env.PATH ?? ""}`, GH_SHIM_DIR: shimDir },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+    return { stdout, stderr, exitCode, event: JSON.parse(stdout) as WatchEvent };
+  };
+
+  const shimCalls = async (): Promise<number> =>
+    (JSON.parse(await readFile(join(shimDir, "shim-state.json"), "utf8")) as { calls: number }).calls;
+
+  test("missing arguments print one blocked event with the usage line and exit 0", async () => {
+    const result = await invoke([], null);
+    expect(result.exitCode).toBe(0);
+    expect(result.event).toMatchObject({ schemaVersion: 1, event: "blocked" });
+    expect(result.event.reason).toContain("usage:");
+  });
+
+  test("pending → pending → ready runs in one process and prints exactly one JSON object", async () => {
+    const result = await invoke(["o/r", "7", "--interval", "0.01", "--state-dir", stateDir], [pendingCycle, pendingCycle, readyCycle]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.trim().startsWith("{") && result.stdout.trim().endsWith("}")).toBe(true);
+    expect(result.event).toMatchObject({ event: "ready_for_review", headSha: "aaa111", terminal: true });
+    expect(result.stderr.split("\n").filter(Boolean)).toHaveLength(1);
+    expect(result.stderr).toContain('"cycles":3');
+    const stateFile = join(stateDir, "o__r__7.json");
+    expect(result.event.state.file).toBe(stateFile);
+    expect(await Bun.file(stateFile).exists()).toBe(true);
+    expect(await Bun.file(join(stateDir, "o__r__7.event.json")).exists()).toBe(true);
+    expect(await Bun.file(join(stateDir, "o__r__7.log")).exists()).toBe(true);
+  }, 20_000);
+
+  test("checks_failed is re-emitted on restart without new reads and released by --ack", async () => {
+    const first = await invoke(["o/r", "7", "--interval", "0.01", "--state-dir", stateDir], [failingCycle]);
+    expect(first.event).toMatchObject({ event: "checks_failed", terminal: false });
+    const callsAfterFirst = await shimCalls();
+
+    const restarted = await invoke(["o/r", "7", "--interval", "0.01", "--state-dir", stateDir], null);
+    expect(restarted.event.eventId).toBe(first.event.eventId);
+    expect(await shimCalls()).toBe(callsAfterFirst);
+
+    const acked = await invoke(
+      ["o/r", "7", "--interval", "0.01", "--state-dir", stateDir, "--ack", first.event.eventId],
+      [failingCycle, { checkRuns: [run(4, "success")] }],
+    );
+    expect(acked.event.event).toBe("ready_for_review");
+  }, 20_000);
+});
+</file>
+
 <file path="claude-plugins/autopilot/lib/linear/fetch-issue.mjs">
 #!/usr/bin/env node
 // Fetches a Linear issue and prints the resolve-issue-context JSON contract
@@ -53915,6 +55503,7 @@ const requiredPaths = [
   "skills/plan/SKILL.md",
   "agents/digest-repo-standards.md",
   "lib/git/branchDigest.ts",
+  "lib/github/watch-pr.ts",
 ];
 
 /** First path segments allowed in the tarball (npm auto-packs the last two). */
@@ -61421,14 +63010,14 @@ Reference for [`pr-monitor/SKILL.md`](../SKILL.md) — the behaviour that replac
 
 ## Behaviour
 
-When invoked via the Agent tool with `run_in_background: true` (spawned by [Phase 0](../SKILL.md#phase-0-mode-dispatch) of this skill), the skill operates non-interactively:
+When invoked via the Agent tool with `run_in_background: true` (spawned by [Phase 0](../SKILL.md#phase-0-mode-dispatch) of this skill), the skill operates non-interactively. It still launches the packaged watcher exactly as [Phase 2](../SKILL.md#phase-2-launch-the-watcher) describes, with the same flags and the same acknowledgement contract — the watcher performs no writes in either mode, so nothing about the wait changes. What changes is [Phase 3](../SKILL.md#phase-3-handle-the-event): every non-terminal event becomes a report instead of an action.
 
 - **Do NOT invoke** `Skill(autopilot:pr-resolve)` — the user is not available for interaction
 - **Do NOT attempt to fix CI checks** — the user is not available for interaction and fixes may require judgment calls
 - **Do NOT rebase, resolve, or push** — a history rewrite has no one to authorize it here; the [Conflict Sweep](../SKILL.md#conflict-sweep-shared-procedure) returns the summary below instead of acting
 - **Do NOT use** `AskUserQuestion` — no user interaction in background mode
-- The [Readiness Check](../SKILL.md#readiness-check-shared-procedure) still runs, with the review-thread helper as its only feedback source: an unanswered thread or a `CHANGES_REQUESTED` review bound to the head returns the Changes Requested summary below instead of invoking pr-resolve
-- When changes are requested or new actionable review comments are detected, **return immediately** with a structured summary instead of invoking pr-resolve:
+- **Do NOT relaunch the watcher.** A background run reports one event and stops. Because it never acknowledges that event, the next run — foreground or background — re-emits it, so nothing is lost by returning early.
+- On `review_action_required`, return immediately with a structured summary instead of invoking pr-resolve. The event's `feedback[]` is the list to summarize:
 
   ```
   PR Monitor: Changes Requested
@@ -61440,7 +63029,7 @@ When invoked via the Agent tool with `run_in_background: true` (spawned by [Phas
   Run /pr-resolve to address the feedback.
   ```
 
-- When CI checks fail, **return immediately** with a structured summary:
+- On `checks_failed`, return immediately with a structured summary, naming the checks from the event's `checks.failed[]`:
 
   ```
   PR Monitor: CI Checks Failed
@@ -61449,45 +63038,53 @@ When invoked via the Agent tool with `run_in_background: true` (spawned by [Phas
   Failed: [check-name-1], [check-name-2]
   Status: CHECKS_FAILED
   URL: <pr-url>
-
-  Fix the failing checks and push, or run /pr-monitor again.
   ```
 
-- When the pull request conflicts with its base, **return immediately** with a structured summary:
+- On `conflict`, return immediately with a structured summary:
 
   ```
   PR Monitor: Merge Conflict
 
   PR #N conflicts with <base-branch> and cannot merge.
-  Conflicted: [path-1], [path-2]
   Status: CONFLICTING
   URL: <pr-url>
 
   Run /autopilot:pr-monitor in the foreground to rebase the branch onto its base.
   ```
 
-- For ready (`Status: READY_FOR_REVIEW`), approved, merged, and closed, return the same [Phase 3](../SKILL.md#phase-3-exit) exit message as foreground mode
+- On `blocked`, return the event's `reason` verbatim — an operational blocker is never retried here:
+
+  ```
+  PR Monitor: Blocked
+
+  PR #N monitoring cannot continue: <reason>.
+  Status: BLOCKED
+  Watcher state: <state-file>
+  URL: <pr-url>
+  ```
+
+- For ready (`Status: READY_FOR_REVIEW`), approved, merged, and closed, return the same [Phase 4](../SKILL.md#phase-4-exit) exit message as foreground mode
 </file>
 
 <file path="claude-plugins/autopilot/skills/pr-monitor/references/ci-remediation.md">
 # CI remediation
 
-Reference for [`pr-monitor/SKILL.md`](../SKILL.md) — the CI Fix Workflow, reached only when a check reports `bucket === "fail"`. Its callers are [§1.1](../SKILL.md#11-early-exit-checks) and [§2.2a](../SKILL.md#22a-check-ci-status); read it at that point. On a pull request whose checks pass, it stays unread.
+Reference for [`pr-monitor/SKILL.md`](../SKILL.md) — the CI Fix Workflow, reached only when the watcher returns a [`checks_failed` event](../SKILL.md#the-event-contract). Read it at that point. On a pull request whose checks pass, it stays unread. Background mode does not run it at all.
 
 ## CI Fix Workflow
 
-**If any checks have `bucket === "fail"`:**
+The event carries `checks.failed[]` — each entry a `name`, the `runId` that produced the failure, and a `url`. That list is the complete set of failures on the verified head; no separate check read is needed, and a failure whose run id the state already acknowledged never reaches this file.
 
-For each failing check, extract the run-id from the `link` field: parse the URL path segment after `/runs/` and before `/job/` (or end of path). Compare with `fixAttempts[checkName].lastRunId` — if the run-id is different, reset `attempts` to 0 for that check (new run detected).
+Maintain `fixAttempts` across launches in the conversation: a map of `checkName → { attempts, lastRunId }`. Compare the event's `runId` with `fixAttempts[checkName].lastRunId` — a different run id means a new run, so reset `attempts` to 0 for that check.
 
 **If `attempts < 2` for the failing check** (foreground mode only):
 
 1. Output: "CI check '\<name\>' failed. Attempting fix (attempt N/2)..."
-2. Get failure logs (truncate to last 200 lines):
+2. Get failure logs (truncate to last 200 lines). The run id comes from the event entry, so no URL parsing is involved:
    ```bash
    gh run view <run-id> --log-failed 2>&1 | tail -200
    ```
-   If output is empty (cancelled run), output: "No logs available for cancelled run. Waiting for new run..." and skip fix.
+   If output is empty (cancelled run), output: "No logs available for cancelled run. Waiting for a new run..." and relaunch the watcher with `--ack <event-id>` rather than fixing.
 3. Analyze the error output to determine fix type:
    - Lint errors → read files, apply fixes with Edit tool
    - Type errors → read files, fix type issues with Edit tool
@@ -61497,10 +63094,8 @@ For each failing check, extract the run-id from the `link` field: parse the URL 
    git push
    ```
    Read [`git-history-policy.md`](../../shared-rules/references/git-history-policy.md) before this push. A plain fast-forward is all this step is allowed to do: if the push is rejected as non-fast-forward, report it and stop rather than merging the base branch or force-pushing.
-5. Set `cooldownRemaining = 3` (skip CI checks for next 3 poll cycles)
-6. Update `fixAttempts[checkName] = { attempts: N+1, lastRunId: <run-id> }`
-7. Output: "CI fix pushed. Cooling down for 3 poll cycles before re-checking..."
-8. Continue polling loop (go to 2.1)
+5. Update `fixAttempts[checkName] = { attempts: N+1, lastRunId: <run-id> }`
+6. Relaunch the watcher with `--ack <event-id>` per [Phase 2](../SKILL.md#phase-2-launch-the-watcher). The push moved the head, so the watcher measures the new commit's checks from scratch — there is no cooldown to manage and no stale failure to wait out.
 
 **If `attempts >= 2`:**
 
@@ -61513,25 +63108,25 @@ For each failing check, extract the run-id from the `link` field: parse the URL 
      { label: "Cancel", description: "Stop monitoring" }
      ]
    - If "Retry once more": reset attempts to 0, run fix again
-   - If "Skip this check": add check name to a skip list, continue monitoring
+   - If "Skip this check": relaunch with `--ack <event-id>`, which marks that failure handled so the watcher stops reporting it and continues toward its terminal event
    - If "Cancel": stop monitoring
 </file>
 
 <file path="claude-plugins/autopilot/skills/pr-monitor/references/conflict-sweep.md">
 # Conflict sweep
 
-Reference for [`pr-monitor/SKILL.md`](../SKILL.md) — the shared procedure for a pull request whose `mergeable` is `CONFLICTING`. Read it at the moment either caller reports that state: the [§1.1](../SKILL.md#11-early-exit-checks) pre-loop check or the [§2.2](../SKILL.md#22-check-pr-state) per-cycle check. A pull request that never conflicts never reaches it.
+Reference for [`pr-monitor/SKILL.md`](../SKILL.md) — the shared procedure for a pull request whose `mergeable` is `CONFLICTING`. Read it at the moment the watcher returns a [`conflict` event](../SKILL.md#the-event-contract). A pull request that never conflicts never reaches it.
 
 ## Procedure
 
-Run whenever `mergeable` is `CONFLICTING` — from the [§1.1](../SKILL.md#11-early-exit-checks) pre-loop check or the [§2.2](../SKILL.md#22-check-pr-state) per-cycle check. Only the follow-up outputs and continue targets differ, and those stay with each caller.
+Run whenever the watcher returns a `conflict` event, which it emits only for a confirmed conflict on a verified head. Only the follow-up outputs and continue targets differ between callers, and those stay with each caller.
 
-`mergeable` is `UNKNOWN`, not `CONFLICTING`, whenever GitHub has not finished computing mergeability — which is the normal reading for the first cycle or two after any push. `UNKNOWN` is a pending state: leave it to the next poll and do not sweep on it.
+`mergeable` is `UNKNOWN`, not `CONFLICTING`, whenever GitHub has not finished computing mergeability — which is the normal reading for the first cycle or two after any push. `UNKNOWN` is a pending state: the watcher keeps waiting on it and never raises a `conflict` event for it, so this procedure never runs on a pending answer.
 
 Read [`git-history-policy.md`](../../shared-rules/references/git-history-policy.md) before running any command below. Every step of this sweep is the policy's sanctioned synchronization path and nothing else: a conflicting branch is the one condition under which a pull-request branch genuinely needs its base's changes, and it is taken by rebase, never by merging the base in.
 
 1. **Background mode returns instead of acting.** Emit the `Status: CONFLICTING` summary from [background mode](./background-mode.md) and stop. A background run has no user to authorize a history rewrite, so it never fetches, rebases, or pushes.
-2. **Refuse and exit when the sweep is not the agent's to run.** Each of these ends monitoring at [Phase 3](../SKILL.md#phase-3-exit) with status "conflicted", naming the reason — none is retried:
+2. **Refuse and exit when the sweep is not the agent's to run.** Each of these ends monitoring at [Phase 4](../SKILL.md#phase-4-exit) with status "conflicted", naming the reason — none is retried:
    - `git status --porcelain` is non-empty — a rebase would fail or silently strand the changes.
    - A rebase is already in progress (`git rev-parse --git-path rebase-merge` or `rebase-apply` exists) — never start a second one on top.
    - `headRepositoryOwner` differs from the pull request's own repository: a fork branch the agent cannot push to.
@@ -61542,18 +63137,18 @@ Read [`git-history-policy.md`](../../shared-rules/references/git-history-policy.
    git fetch origin <baseRefName>
    git rebase origin/<baseRefName>
    ```
-5. **A rebase that completes cleanly** pushes with the pinned lease, sets `cooldownRemaining = 3`, and returns to the caller:
+5. **A rebase that completes cleanly** pushes with the pinned lease and returns to the caller, which relaunches the watcher with `--ack <event-id>`. The rebase moved the head, so the watcher measures the new commit from scratch and no cooldown bookkeeping is needed:
    ```bash
    git push --force-with-lease=<headRefName>:<preRebaseSha>
    ```
-   Any push failure is terminal: report it and exit to [Phase 3](../SKILL.md#phase-3-exit) with status "conflicted". Never retry it, and never retry it without the lease.
+   Any push failure is terminal: report it and exit to [Phase 4](../SKILL.md#phase-4-exit) with status "conflicted". Never retry it, and never retry it without the lease.
 6. **A rebase that halts aborts immediately** — the working tree is never left mid-rebase:
    ```bash
    git diff --name-only --diff-filter=U   # capture the conflicted paths first
    git rebase --abort
    ```
    Report the conflicted paths and `preRebaseSha`, then hand to step 7.
-7. **Only in foreground mode**, offer the halted rebase to the user via AskUserQuestion — mirroring the CI-unfixable prompt in [§2.2a](../SKILL.md#22a-check-ci-status). Resolving conflicted hunks is a judgement call about intent, so it happens because the user asked for it, never because the sweep decided on its own. That is why step 6 aborts first.
+7. **Only in foreground mode**, offer the halted rebase to the user via AskUserQuestion — mirroring the CI-unfixable prompt in [`ci-remediation.md`](./ci-remediation.md). Resolving conflicted hunks is a judgement call about intent, so it happens because the user asked for it, never because the sweep decided on its own. That is why step 6 aborts first.
    - `question`: "PR #N conflicts with \<baseRefName\> and the rebase could not complete.\n\nConflicted paths: \<paths\>\nBranch head before rebase: \<preRebaseSha\>"
    - `header`: "Conflict"
    - `options`: [
@@ -61562,13 +63157,13 @@ Read [`git-history-policy.md`](../../shared-rules/references/git-history-policy.
      ]
    - `multiSelect`: false
    - If "Resolve conflicts": re-run step 4, resolve each conflicted path, `git add` it, `git rebase --continue` until the rebase finishes, then push per step 5.
-   - If "Stop monitoring": exit to [Phase 3](../SKILL.md#phase-3-exit) with status "conflicted".
+   - If "Stop monitoring": exit to [Phase 4](../SKILL.md#phase-4-exit) with status "conflicted".
 </file>
 
 <file path="claude-plugins/autopilot/skills/pr-monitor/SKILL.md">
 ---
 name: pr-monitor
-description: Monitor a PR for CI check status, review feedback, and merge conflicts until it is ready for human review, approved, or merged. Fixes CI failures, resolves review feedback, and rebases a conflicting branch onto its base; pass --wait-for-approval to keep polling until a human approves. Use when a pull request is open and needs to reach its hand-off.
+description: Monitor a PR for CI check status, review feedback, and merge conflicts until it is ready for human review, approved, or merged. A packaged watcher waits for the pull request and wakes the agent only for an actionable event, so the model stays dormant through ordinary pending CI. Fixes CI failures, resolves review feedback, and rebases a conflicting branch onto its base; pass --wait-for-approval to keep waiting until a human approves. Use when a pull request is open and needs to reach its hand-off.
 argument-hint: "[--background] [--wait-for-approval]"
 allowed-tools:
   - Read
@@ -61581,7 +63176,6 @@ allowed-tools:
   - Bash(gh *)
   - Bash(bun *)
   - Bash(node *)
-  - Bash(sleep *)
   - AskUserQuestion
   - Skill(autopilot:pr-resolve)
   - Skill(autopilot:commits-create)
@@ -61589,7 +63183,9 @@ allowed-tools:
 
 # PR Monitor
 
-Monitor a pull request until the agent's obligations for its current head are complete. Polls review state and CI checks every minute, invokes `pr-resolve` when feedback needs answering, fixes CI failures (lint, type errors, test failures), and ends with a distinct **ready for human review** outcome once checks have settled and no feedback stands against the head. Approval and merge are asynchronous follow-ups, not part of the wait, unless `--wait-for-approval` asks for them. This skill never merges a pull request.
+Monitor a pull request until the agent's obligations for its current head are complete. The waiting itself is done by a packaged watcher, [`watch-pr.ts`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/lib/github/watch-pr.ts), which fetches, classifies and sleeps inside one process and returns exactly one bounded JSON event. This skill launches it, acts on that event — running `pr-resolve` when feedback needs answering, fixing CI failures, rebasing a conflicting branch — acknowledges what it handled, and relaunches. It ends with a distinct **ready for human review** outcome once checks have settled for the head and no feedback stands against it. Approval and merge are asynchronous follow-ups, not part of the wait, unless `--wait-for-approval` asks for them. This skill never merges a pull request.
+
+**The model does not poll.** There is no `sleep`, no periodic snapshot, and no agent watching a process: ordinary pending CI, unknown mergeability, a growing count of passing jobs and already-answered comments all stay inside the watcher, which returns only when something needs a decision. Every wake costs a full re-read of the conversation, so a wake that decides nothing is pure waste — that is the defect this design removes.
 
 ## When to Use
 
@@ -61604,7 +63200,7 @@ Arguments: `$ARGUMENTS`
 Expected flags (all optional):
 
 - `--background` — launch as a background agent (non-interactive mode described below). When omitted and the skill is invoked directly by a user, run foreground mode. When invoked from another skill/agent (e.g., via the Agent tool with `run_in_background: true`), the calling context supplies the background signal — treat that equivalently to `--background`.
-- `--wait-for-approval` — completion policy, independent of the execution mode: keep polling past readiness until the PR is approved with all checks passing, merged, or closed. Without it the [Readiness Check](#readiness-check-shared-procedure) is the terminal test; [`run`](../run/SKILL.md) never passes it.
+- `--wait-for-approval` — completion policy, independent of the execution mode: keep waiting past readiness until the PR is approved with all checks passing, merged, or closed. Without it, `ready_for_review` is the terminal event; [`run`](../run/SKILL.md) never passes it. The flag is passed straight through to the watcher.
 
 ## Input resolution
 
@@ -61612,7 +63208,7 @@ Arguments are optional. Resolve each field:
 
 - **Mode (foreground vs background)** — `$ARGUMENTS` flag → calling context (if invoked via Agent tool with `run_in_background: true`, use background) → default foreground. Do NOT prompt.
 - **Completion policy** — `$ARGUMENTS` flag → default ready-for-review hand-off. Do NOT prompt.
-- **PR number** — detect via `gh pr view --json number,url,headRefName` on the current branch. Abort with a clear message if no PR exists.
+- **PR number** — detect via `gh pr view` on the current branch ([Phase 1](#phase-1-detect-pr)). Abort with a clear message if no PR exists.
 
 ## Phase 0: Mode Dispatch
 
@@ -61621,7 +63217,7 @@ If `$ARGUMENTS` contains `--background` AND the skill was invoked directly (not 
 ```
 Use the Agent tool with:
 - `subagent_type`: "general-purpose"
-- `prompt`: "Invoke Skill(autopilot:pr-monitor). Monitor the PR in background mode — poll for readiness, review approval AND CI check status but do NOT invoke pr-resolve interactively or fix CI checks. Instead, return immediately when changes are requested or checks fail with a structured summary."
+- `prompt`: "Invoke Skill(autopilot:pr-monitor). Monitor the PR in background mode — launch the packaged watcher and report the event it returns, but do NOT invoke pr-resolve interactively, fix CI checks, or rebase. Return the structured summary for whatever event arrives."
 - `description`: "Monitor PR reviews"
 - `run_in_background`: true
 ```
@@ -61632,15 +63228,15 @@ Otherwise (no `--background` flag, or already inside an Agent subprocess), conti
 
 ## Execution Modes
 
-This skill supports two modes:
+This skill supports two modes. Both launch the same watcher with the same flags; they differ only in what happens to the event it returns.
 
 ### Foreground Mode (default)
 
-Interactive — blocks the conversation, invokes `pr-resolve` when feedback needs answering, and automatically fixes CI failures.
+Interactive — blocks the conversation, invokes `pr-resolve` when feedback needs answering, and automatically fixes CI failures, then relaunches the watcher.
 
 ### Background Mode
 
-There is no user to interact with, so the skill reports instead of acting: it never invokes [`pr-resolve`](../pr-resolve/SKILL.md), never attempts a CI fix, never rewrites history, and never calls `AskUserQuestion`. On changes requested, unanswered actionable comments, failing checks, or a conflict it returns immediately with a structured summary; ready, approved, merged, and closed return the same [Phase 3](#phase-3-exit) exit message as foreground mode.
+There is no user to interact with, so the skill reports instead of acting: it never invokes [`pr-resolve`](../pr-resolve/SKILL.md), never attempts a CI fix, never rewrites history, and never calls `AskUserQuestion`. On `checks_failed`, `review_action_required`, `conflict`, or `blocked` it returns immediately with a structured summary; `ready_for_review`, `approved`, `merged`, and `closed` return the same [Phase 4](#phase-4-exit) exit message as foreground mode.
 
 Read [`references/background-mode.md`](./references/background-mode.md) for those summary formats before emitting one.
 
@@ -61654,205 +63250,80 @@ This skill receives the following from conversation history:
 
 ## Phase 1: Detect PR
 
-Auto-detect the PR from the current branch:
+Auto-detect the PR from the current branch — one read, since the watcher owns every read after this:
 
 ```bash
-gh pr view --json number,title,url,state,baseRefName,headRefName,headRefOid,headRepositoryOwner,author,reviewDecision,reviewRequests,statusCheckRollup,mergeable
+gh pr view --json number,title,url,state,baseRefName,headRefName,headRefOid,headRepositoryOwner,author,mergeable
 ```
 
 If no PR found, abort: "No pull request found for the current branch. Create one first with `/autopilot:pr-create`."
 
-Store PR number, owner/repo (extract from url), title, state, and `headRefOid`.
+Store PR number, owner/repo (extract from url), title, `author.login`, and `headRepositoryOwner` — the [Conflict Sweep](#conflict-sweep-shared-procedure) needs the last two to tell a branch it may rewrite from one it may not. `state` and `mergeable` are read here only to abort early on a merged or closed pull request; every later reading of them comes from the watcher, which verifies them against the head it measured.
 
-### Approval Sweep (shared procedure)
+## Phase 2: Launch the Watcher
 
-Run whenever `reviewDecision` is `APPROVED` — from the [§1.1](#11-early-exit-checks) pre-loop check or the [§2.2](#22-check-pr-state) per-cycle check — and from the [Readiness Check](#readiness-check-shared-procedure) when feedback is actionable. Only the follow-up outputs and continue targets differ, and those stay with each caller.
+Launch once per event, never on a timer:
 
-1. Record current HEAD: `git rev-parse HEAD` → store as `headBefore`
-2. Invoke `Skill(autopilot:pr-resolve)` to evaluate unresolved suggestions and nitpicks. The skill will exit early if no actionable comments remain. For each suggestion:
-   - If reasonable and improves the code → fix it
-   - If not applicable or doesn't make sense → reply explaining why
-3. Check if HEAD changed: `git rev-parse HEAD` → compare with `headBefore`
-4. If HEAD changed (pr-resolve pushed new commits — new CI must pass and the approval may be stale), set `cooldownRemaining = 3`; the caller resumes monitoring. If HEAD unchanged, the caller decides whether to exit.
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/lib/github/watch-pr.ts" <OWNER>/<REPO> <PR_NUMBER> [--wait-for-approval] [--ack <event-id>]
+```
+
+`${CLAUDE_PLUGIN_ROOT}` is the plugin root Claude Code provides to plugin components; when it is unset, resolve the script from this skill's base directory instead: `<skill base directory>/../../lib/github/watch-pr.ts`.
+
+**Run it in the background and wait for its completion notification.** Use the Bash tool with `run_in_background: true`, then let the turn end: the harness re-invokes the session when the process exits, and that notification is the wake. Do NOT set a foreground timeout and poll, do NOT run `sleep`, and do NOT delegate the wait to an Agent that checks on the process — each of those reintroduces the model-driven polling this skill exists to remove.
+
+A wait can exceed any foreground tool timeout, so the background launch is the only supported form. If the runtime in use cannot deliver a completion notification for a background process, say so and fail loudly rather than falling back to polling: launch with `--timeout <seconds>` no greater than the foreground limit, report the resulting `blocked` event with reason `deadline` as an operational blocker, and let the caller decide. Never paper over a missing notification by waking on a timer.
+
+The watcher performs **no writes**: no code edits, pushes, merges, CI reruns, review replies, or approval changes. Remediation is this skill's job, and it stays bound by [`git-history-policy.md`](../shared-rules/references/git-history-policy.md) — the [Conflict Sweep](#conflict-sweep-shared-procedure)'s rebase and lease-pinned push are the policy's one sanctioned synchronization path, and the CI fix push is a plain fast-forward or nothing. Neither may merge the base branch into the pull request.
+
+### The Event Contract
+
+The watcher prints one JSON object (`schemaVersion: 1`) carrying `event`, `eventId`, `reason`, `repo`, `pr`, `url`, `headSha`, `headVerified`, `base`, `checks` (`failed[]` with `name`/`runId`/`url`, `pending`, `passed`, `missing`, `note`, `truncated`), `feedback[]` (each with `key`, `kind`, `reviewer`, `path`, `line`, `body`, `url`, `edited`, `reopened`), `feedbackTruncated`, `review` (`decision`, `approvedBy`, `changesRequestedBy`, `humanApproval`), `mergeability`, `terminal`, and `state` (the state and log file paths). Full field semantics are in [the watcher chapter](https://github.com/awinogradov/code-assistants/blob/main/docs/20-pr-watcher.md).
+
+Nine events, in the precedence the watcher applies to one snapshot:
+
+| Event                    | Meaning                                                                          | Terminal |
+| ------------------------ | -------------------------------------------------------------------------------- | -------- |
+| `merged`                 | the pull request merged                                                          | yes      |
+| `closed`                 | the pull request was closed unmerged                                             | yes      |
+| `conflict`               | `mergeable_state` is `dirty` against the base                                    | no       |
+| `checks_failed`          | one or more checks failed on the verified head                                   | no       |
+| `review_action_required` | new or edited reviewer feedback, or a thread reopened                            | no       |
+| `blocked`                | the watcher cannot continue; `reason` says why                                   | yes      |
+| `approved`               | the base branch's required human approvals are satisfied (`--wait-for-approval`) | yes      |
+| `ready_for_review`       | checks settled for the head and no feedback stands unanswered                    | yes      |
+
+Two properties the caller depends on. **Evidence is per head**: `headSha` is re-read after collection and `headVerified` says the snapshot describes one commit, so a push mid-fetch can never produce a stale green or a stale red. **Events deduplicate**: a non-terminal event stays pending in the watcher's state file until this skill relaunches with `--ack <event-id>`, so a restart re-emits work nobody handled and never repeats work somebody did. Acknowledging is therefore how remediation ends, not an optional extra.
 
 ### Conflict Sweep (shared procedure)
 
-Run whenever `mergeable` is `CONFLICTING` — from the [§1.1](#11-early-exit-checks) pre-loop check or the [§2.2](#22-check-pr-state) per-cycle check. The procedure is in [`references/conflict-sweep.md`](./references/conflict-sweep.md); read it at that point. Only the follow-up outputs and continue targets differ between callers, and those stay with each caller.
+Run on a `conflict` event. The procedure is in [`references/conflict-sweep.md`](./references/conflict-sweep.md); read it at that point. Only the follow-up outputs and continue targets differ between callers, and those stay with each caller.
 
-Every command this skill runs is bound by [`git-history-policy.md`](../shared-rules/references/git-history-policy.md) — the sweep's rebase and lease-pinned push are the policy's one sanctioned synchronization path, and the [§2.2a](#22a-check-ci-status) fix push is a plain fast-forward or nothing. Neither the sweep nor a CI fix may merge the base branch into the pull request.
+Count the sweeps: they are capped at **2 per `pr-monitor` invocation**. The cap is run-scoped and deliberately **not** keyed to the base SHA: a per-SHA budget is refunded by every new commit to the base, so on an active repository it would fund unbounded force-pushes and CI reruns forever — this skill's original defect reappearing one layer up. Reaching the cap exits to [Phase 4](#phase-4-exit) with status "conflicted".
 
-`mergeable` is `UNKNOWN`, not `CONFLICTING`, whenever GitHub has not finished computing mergeability — the normal reading for the first cycle or two after any push. `UNKNOWN` is a pending state: leave it to the next poll and do not sweep on it.
+`mergeable` is `UNKNOWN`, not `CONFLICTING`, whenever GitHub has not finished computing mergeability. The watcher classifies that as pending and keeps waiting, so a `conflict` event is always a confirmed conflict and never needs a second opinion before sweeping.
 
-### Readiness Check (shared procedure)
+## Phase 3: Handle the Event
 
-The default terminal test, run from the [§1.1](#11-early-exit-checks) tail and from [§2.5](#25-act-on-findings) every cycle. It proves the agent's obligations for the **current head** are complete, or names the blocker so the caller keeps polling. Evidence is per head: `headRefOid` from the state read, each review's `commit_id` from the [§2.3](#23-check-for-new-reviews) read, and thread state from the review-thread helper (`fetch-pr-reviews.ts`, invoked per [`github-review-fetch.md`](../shared-rules/references/github-review-fetch.md)). The proof is never the aggregate `reviewDecision`, which carries verdicts from superseded commits.
+Handle exactly the event that arrived, then either exit or relaunch. Background mode replaces every action below with the matching summary from [`references/background-mode.md`](./references/background-mode.md) and stops.
 
-1. **Fresh** — `cooldownRemaining` is 0 and `mergeable` is not `UNKNOWN`; otherwise not ready.
-2. **Feedback answered** — actionable feedback is a `CHANGES_REQUESTED` review whose `commit_id` equals `headRefOid`, a thread the helper lists with `authorReplied` false, or one whose newest reply in the [§2.4](#24-check-for-new-comments) list is not the PR author's; a non-null `fetchError` is not ready, never "no feedback". On anything actionable, foreground runs [Approval Sweep](#approval-sweep-shared-procedure) steps 1–4 (a push sets the cooldown and the caller keeps polling); when nothing was pushed and a `CHANGES_REQUESTED` review is still bound to the head, the reviewer's decision stands until they re-read: exit to [Phase 3](#phase-3-exit) with status "changes-requested", never loop on it. Background returns its Changes Requested summary instead.
-3. **Checks settled** — two consecutive readings of `gh pr checks` at least 60 seconds apart list the same check names, every one `pass` or `skipping`; [§1.1](#11-early-exit-checks) has no earlier reading, so it takes one, sleeps 60 seconds, and takes another. A "no checks reported" error is an empty reading; when `.github/workflows/` exists, five consecutive empty readings settle as empty and the exit says so. This is also the automated-review proof: a review workflow registers a check on the head, so a review in flight is a pending check and a completed one has posted the verdict step 2 read.
-4. **Ready** — exit to [Phase 3](#phase-3-exit) with status "ready-for-review". Under `--wait-for-approval`, output "PR #N is ready for human review. Waiting for approval as requested." once and keep polling.
+**`merged` / `closed` / `approved` / `ready_for_review`** — exit to [Phase 4](#phase-4-exit) with that status. Nothing is acknowledged: a terminal event ends the monitor.
 
-### 1.1 Early Exit Checks
+**`blocked`** — exit to [Phase 4](#phase-4-exit) with status "blocked", naming `reason`. `auth` means credentials are gone, `rate-limited` and `transient-errors-exhausted` mean GitHub kept refusing reads, `policy-unreadable` means the base branch's required-check policy could not be read, `no-checks-registered` and `expected-check-missing` mean a head that should carry checks never got them, `deadline` and `cancelled` mean the wait ended without a verdict. None is retried automatically — an operational blocker is reported to a human.
 
-**If `state` is `MERGED`:**
+**`conflict`** — output "PR #N conflicts with \<base\>. Running the conflict sweep…", increment the sweep count, then run the [Conflict Sweep](#conflict-sweep-shared-procedure). If it pushed a rebased branch, relaunch the watcher with `--ack <event-id>`; the new head is measured fresh. If it refused, aborted, or its push failed, exit to [Phase 4](#phase-4-exit) with status "conflicted".
 
-- Exit: "PR #N has already been merged."
+**`checks_failed`** — run the CI Fix Workflow in [`references/ci-remediation.md`](./references/ci-remediation.md); read it now. It owns the per-check attempt accounting (keyed by each failed check's `runId` from the event), the log analysis and fix push, and the AskUserQuestion escalation once a check has failed two fix attempts. A check whose failure is about a stale or superseded event rather than about the code is reported to the user, never refreshed by changing the branch. After a fix push, relaunch with `--ack <event-id>`.
 
-**If `state` is `CLOSED`:**
+**`review_action_required`** — the event's `feedback[]` is the complete list of what is new; the watcher detected it deterministically from ids, versions and thread state, and judging what it means is this skill's job. Record `git rev-parse HEAD`, invoke `Skill(autopilot:pr-resolve)` to evaluate the suggestions — fix what improves the code, reply explaining why where it does not — then compare HEAD.
 
-- Exit: "PR #N has been closed."
+- If HEAD changed, relaunch with `--ack <event-id>`: new CI must pass and any approval may be stale.
+- If HEAD did not change and every item was answered without code changes, relaunch with `--ack <event-id>` as well; the answers stand and the watcher moves on to readiness.
+- If a `CHANGES_REQUESTED` review is still bound to the head after that pass, the reviewer's decision stands until they re-read: exit to [Phase 4](#phase-4-exit) with status "changes-requested" rather than looping on a verdict nothing can change.
 
-**If `mergeable` is `CONFLICTING`:**
+Relaunching without `--ack` is a bug: the same evidence returns immediately and the loop spins.
 
-This branch is checked before the `reviewDecision` branches below, and the ordering is load-bearing: the `APPROVED` branch exits with "already approved with all checks passing" without consulting mergeability, so a conflicted-but-approved pull request would otherwise exit clean while it cannot merge.
-
-1. Output: "PR #N conflicts with \<baseRefName\>. Running the conflict sweep..."
-2. Increment `conflictSweeps`, then run the [Conflict Sweep](#conflict-sweep-shared-procedure)
-3. If the sweep pushed a rebased branch: output "Conflict resolved by rebase. Starting monitoring..." and continue to Phase 1.2
-4. If the sweep refused, aborted, or its push failed: exit to [Phase 3](#phase-3-exit) with status "conflicted"
-
-**If `reviewDecision` is `APPROVED`:**
-
-1. Run the [Approval Sweep](#approval-sweep-shared-procedure)
-2. If HEAD changed:
-   - Output: "PR #N was approved but pr-resolve pushed fixes. Resuming monitoring for new CI and approval..."
-   - Continue to Phase 1.2
-3. If HEAD unchanged AND all checks in `statusCheckRollup` have `state === "SUCCESS"`:
-   - Exit: "PR #N is already approved with all checks passing. No monitoring needed."
-4. If HEAD unchanged AND checks are not all passing:
-   - Output: "PR #N is approved but has failing CI checks. Attempting to fix..."
-   - Run the **CI Fix Workflow** in [`references/ci-remediation.md`](./references/ci-remediation.md)
-   - After fix, output: "CI fixes pushed. Starting monitoring..."
-   - Continue to Phase 1.2
-
-**If checks are failing** (any check in `statusCheckRollup` with `state` that is not `SUCCESS` and not `PENDING` and not `EXPECTED`):
-
-1. Output: "PR #N has failing CI checks. Attempting to fix..."
-2. Run the **CI Fix Workflow** in [`references/ci-remediation.md`](./references/ci-remediation.md)
-3. After fix, output: "CI fixes pushed. Starting monitoring..."
-4. Continue to Phase 1.2
-
-**Otherwise** (including `reviewDecision` of `CHANGES_REQUESTED`, whose feedback the check's step 2 answers): run the [Readiness Check](#readiness-check-shared-procedure). A ready or changes-requested result exits; otherwise output the blocker and continue to Phase 1.2
-
-### 1.2 Check for Reviewers
-
-Only under `--wait-for-approval` — without it the monitor completes on its own and the ready exit names the missing reviewer. If `reviewRequests` is empty, ask via AskUserQuestion (header "No reviewers"): no reviewers are assigned to PR #N, so the monitor will wait but nobody can approve — **Continue waiting** (poll until reviewers are assigned and approve) or **Cancel** (stop monitoring). Read [`askuserquestion-format.md`](../shared-rules/references/askuserquestion-format.md) before composing it.
-
-### 1.3 Start Monitoring
-
-Output: "Monitoring PR #N: \<title\>\nPolling every 1 minute. Watching for readiness, review feedback and CI check status..."
-
----
-
-## Phase 2: Polling Loop
-
-Enter a loop that repeats until the [Readiness Check](#readiness-check-shared-procedure) exits, or the PR is approved with all checks passing, merged, closed, or conflicted.
-
-Maintain the following state across iterations:
-
-- `cooldownRemaining`: number of poll cycles to skip CI checks after a fix push (starts at 0; a push sets it to 3 so fresh CI runs have time to replace the stale failures of the superseded commit before checks are read again)
-- `fixAttempts`: map of `checkName → { attempts: number, lastRunId: string }` tracking CI fix attempts
-- `lastCheckNames` and `emptyCheckReadings`: the previous cycle's `gh pr checks` names and the count of consecutive empty readings, for the Readiness Check's settled test
-- `conflictSweeps`: count of [Conflict Sweep](#conflict-sweep-shared-procedure) runs, capped at **2 per `pr-monitor` invocation**. The caller increments it before invoking the sweep, following the Approval Sweep precedent that caller-side bookkeeping stays with the caller. The cap is run-scoped and deliberately **not** keyed to the base SHA: a per-SHA budget is refunded by every new commit to the base, so on an active repository it would fund unbounded force-pushes and CI reruns forever — this skill's original defect reappearing one layer up. Reaching the cap exits to [Phase 3](#phase-3-exit) with status "conflicted".
-
-### 2.1 Sleep
-
-Wait for the poll interval (60 seconds = 1 minute):
-
-```bash
-sleep 60
-```
-
-### 2.2 Check PR State
-
-```bash
-gh pr view <PR_NUMBER> --json state,reviewDecision,statusCheckRollup,mergeable,headRefOid
-```
-
-**If `state` is `MERGED`:**
-
-- Exit to [Phase 3](#phase-3-exit) with status "merged"
-
-**If `state` is `CLOSED`:**
-
-- Exit to [Phase 3](#phase-3-exit) with status "closed"
-
-**If `mergeable` is `CONFLICTING`:**
-
-Checked before the `reviewDecision` branch for the same load-bearing reason as [§1.1](#11-early-exit-checks). Every outcome below names its destination explicitly — a conflicting pull request must never fall through to [§2.3](#23-check-for-new-reviews), which would resume the silent polling this branch exists to end.
-
-1. If `conflictSweeps` has reached 2, output "PR #N still conflicts with \<baseRefName\> after 2 sweeps." and exit to [Phase 3](#phase-3-exit) with status "conflicted"
-2. Output: "PR #N conflicts with \<baseRefName\>. Running the conflict sweep..."
-3. Increment `conflictSweeps`, then run the [Conflict Sweep](#conflict-sweep-shared-procedure)
-4. If the sweep pushed a rebased branch: output "Conflict resolved by rebase. Resuming monitoring..." and continue the polling loop (go to 2.1)
-5. If the sweep refused, aborted, or its push failed: exit to [Phase 3](#phase-3-exit) with status "conflicted"
-
-**If `reviewDecision` is `APPROVED` AND all checks in `statusCheckRollup` have `state === "SUCCESS"`:**
-
-1. Run the [Approval Sweep](#approval-sweep-shared-procedure)
-2. If HEAD changed:
-   - Output: "pr-resolve pushed fixes. Resuming monitoring for new CI and approval..."
-   - Continue polling loop (go to 2.1)
-3. If HEAD unchanged:
-   - Exit to [Phase 3](#phase-3-exit) with status "approved"
-
-Changes requested are not a branch here: the [Readiness Check](#readiness-check-shared-procedure) at [§2.5](#25-act-on-findings) answers them once per cycle, against the head they were made on.
-
-### 2.2a Check CI Status
-
-If `cooldownRemaining > 0`, decrement it by 1 and skip this phase entirely (output: "Post-push cooldown: N cycles remaining. Skipping CI check.").
-
-```bash
-gh pr checks <PR_NUMBER> --json name,state,bucket,link,workflow
-```
-
-Parse the JSON output. For each check:
-
-- `bucket === "pass"` → OK
-- `bucket === "pending"` → still running, skip
-- `bucket === "skipping"` → ignore
-- `bucket === "cancel"` → treat as pending (likely cancelled by a new push)
-- `bucket === "fail"` → CI failure detected
-
-A check that reads a stale or superseded event — one whose failure is about the event and not about the code — is reported to the user, never refreshed by changing the branch. Do not merge or rebase base-branch changes into the PR to provoke a fresh `synchronize` event: the task did not require those changes, and the resulting diff misrepresents the pull request. This is the failure mode the git history policy exists to prevent.
-
-**If any checks have `bucket === "fail"`:** run the CI Fix Workflow in [`references/ci-remediation.md`](./references/ci-remediation.md) — read it now. It owns the per-check attempt accounting, the log analysis and fix push, the post-push cooldown, and the AskUserQuestion escalation once a check has failed two fix attempts. Background mode does not run it at all.
-
-**If all checks have `bucket === "pass"`:**
-
-1. Output: "PR #N: All CI checks passing."
-
-Approval is handled once per cycle by [§2.2](#22-check-pr-state), which runs before this phase: when it sees `APPROVED` with all checks passing it evaluates suggestions and exits. If approval landed here while CI was still pending in §2.2, the next poll's §2.2 catches it — this phase needs no duplicate approval handler.
-
-### 2.3 Check for New Reviews
-
-```bash
-gh api repos/<OWNER>/<REPO>/pulls/<PR_NUMBER>/reviews
-```
-
-Analyze the reviews array. Track the timestamp of each poll iteration to identify new activity:
-
-- Find reviews with `state: "CHANGES_REQUESTED"` submitted since the last check
-- Find reviews with `state: "COMMENTED"` submitted since the last check
-
-### 2.4 Check for New Comments
-
-```bash
-gh api repos/<OWNER>/<REPO>/pulls/<PR_NUMBER>/comments
-```
-
-Check for comments with `created_at` timestamps newer than the last poll iteration, and keep the list: the Readiness Check reads each thread's newest reply from it.
-
-### 2.5 Act on Findings
-
-Run the [Readiness Check](#readiness-check-shared-procedure): the [§2.3](#23-check-for-new-reviews) and [§2.4](#24-check-for-new-comments) findings are its step 2 input, and this cycle's `gh pr checks` reading is compared with `lastCheckNames` for step 3. A ready or changes-requested result exits to [Phase 3](#phase-3-exit). Otherwise:
-
-1. Output: "PR #N: not ready — \<blocker\>. Next check in 1 minute."
-2. Continue polling loop (go to 2.1)
-
----
-
-## Phase 3: Exit
+## Phase 4: Exit
 
 Output completion message based on exit status:
 
@@ -61919,22 +63390,35 @@ Status: CONFLICTED
 URL: <pr-url>
 ```
 
+**Blocked:**
+
+```
+PR Monitor Stopped
+
+PR #N monitoring cannot continue: <reason>.
+Status: BLOCKED
+Watcher state: <state-file>
+URL: <pr-url>
+```
+
 ---
 
 ## Edge Cases
 
 Cases the phases do not already cover:
 
+- **The watcher cannot be launched** (missing runtime, unresolved plugin root) → report the failure and stop; never substitute a hand-written polling loop
+- **No completion notification for background processes** → report it and stop, per [Phase 2](#phase-2-launch-the-watcher); a timer-based wait is not an acceptable substitute
 - **pr-resolve fails** → report error, ask user via AskUserQuestion: "Resolve review encountered an error. How would you like to proceed?" with options: Retry / Continue monitoring / Cancel
 - **CI fix attempt fails** → report error, ask user in foreground / return summary in background
 - **Fix causes a different failure** → counts as a new attempt for that check
-- **Verdict on the head survives pr-resolve** → exit "changes-requested"; the same verdict must never re-trigger pr-resolve on the next cycle
+- **Verdict on the head survives pr-resolve** → exit "changes-requested"; the same verdict must never re-trigger pr-resolve on the next launch
 - **Rebase halts on conflicting content** → abort it, report the conflicted paths, and offer resolution in foreground only; never leave the tree mid-rebase
-- **Push after a sweep fails for any reason** → report and exit to [Phase 3](#phase-3-exit) with status "conflicted"; never retry, and never retry without the lease
+- **Push after a sweep fails for any reason** → report and exit to [Phase 4](#phase-4-exit) with status "conflicted"; never retry, and never retry without the lease
 - **Conflicting PR on a fork, or one the agent does not own** → report and exit "conflicted"; the branch is not the agent's to rewrite
 - **Conflict sweep cap reached** → report and exit "conflicted" rather than sweeping again
-- **GitHub API rate limit (403/429)** → increase sleep interval to 120 seconds (2 minutes), warn user: "GitHub API rate limit detected. Increasing poll interval to 2 minutes."
-- **Network error** → retry API call once after 30 seconds; if still failing, warn user and ask whether to continue
+- **Rate limiting or a network outage** → the watcher backs off inside the process and returns `blocked` only once its budget is spent; report that, do not retry in a loop
+- **A stale watcher state file** → the event's `state.file` names it; deleting it restarts acknowledgement from scratch and re-reports outstanding work, which is safe but noisy
 
 ## Reference formatting
 
@@ -64408,7 +65892,7 @@ Output the PR URL. Set task 6 to `completed`.
 
 #### Step 3: Monitor PR
 
-Set task 7 ("Monitor PR") to `in_progress`. Invoke `Skill(autopilot:pr-monitor)` in foreground mode (do NOT use the Agent tool with run_in_background) and without `--wait-for-approval`. It polls CI, review, and mergeability status, invokes pr-resolve interactively when feedback needs answering, and returns as soon as its [Readiness Check](../pr-monitor/SKILL.md#readiness-check-shared-procedure) passes for the current head (`READY_FOR_REVIEW`), or earlier on approval or merge; approval and merge are asynchronous follow-ups, not part of this chain's wait.
+Set task 7 ("Monitor PR") to `in_progress`. Invoke `Skill(autopilot:pr-monitor)` in foreground mode (do NOT use the Agent tool with run_in_background) and without `--wait-for-approval`. It launches the packaged watcher, which waits inside one process and wakes this session only for one of the [events it defines](../pr-monitor/SKILL.md#the-event-contract) — never for ordinary pending CI. The skill invokes pr-resolve interactively when feedback needs answering, fixes failing checks, and returns `READY_FOR_REVIEW` once checks have settled for the current head with nothing unanswered, or earlier on approval or merge; approval and merge are asynchronous follow-ups, not part of this chain's wait.
 
 **Autopilot override for pr-resolve:** when pr-monitor invokes pr-resolve and it presents the review-action gate via AskUserQuestion, auto-select "Address all". Replies post without prompting.
 
@@ -68417,6 +69901,7 @@ SOFTWARE.
 
 ### Breaking changes
 
+- `/autopilot:pr-monitor` no longer polls from inside the model. It launches the bundled watcher `lib/github/watch-pr.ts`, which waits in its own process and returns one bounded JSON event, and the skill acts on that event and relaunches with `--ack <event-id>`. The skill's `allowed-tools` drops `Bash(sleep *)`. Behaviour that callers depend on is unchanged — the default `READY_FOR_REVIEW` hand-off, `--wait-for-approval`, the Conflict Sweep and its run-scoped cap of 2, foreground remediation versus background reporting — but two things are new: a `BLOCKED` exit for operational failures (auth loss, exhausted retries, an unreadable required-check policy, a head that never registers checks, a deadline or cancellation), and watcher state under `<git common dir>/autopilot/pr-watch/`. A runtime that cannot notify the session when a background process exits is no longer supported for monitoring: the skill reports that and stops rather than falling back to a timer.
 - The domain-expert review panel is removed from every skill and flow: the `expert-review` agent, the shared pipeline's review-and-score step, the per-stack expert tables, and the `--experts-review` flag are gone, and no opt-in path re-enables them. `/autopilot:plan` and `/autopilot:linear-plan` no longer accept `--experts-review`; pass the issue alone. The planning pipeline is now draft → finalize, so plan files carry no `Score:` line and stored Linear plans carry no `Score:` field in their `Format: v1` header (now `Format: v1 · Base: <sha> · Stored by …`). Plans stored by earlier versions keep their `Score:` field and remain valid: `/autopilot:linear-run` never parsed it. Task tables shrink by one (`plan` 4, `run` and `run-primed` 7, `linear-plan` 5).
 
 ## From 7.5.1 to 8.0.0
@@ -68870,7 +70355,7 @@ Address PR review comments. Fetches review feedback, categorizes by severity, ma
 
 ### `/autopilot:pr-monitor`
 
-Monitor a PR for CI check status and review feedback until it is ready for human review: checks settled for the current head, no unanswered feedback, no conflict. Resolves review feedback and fixes CI failures along the way, then ends with `Status: READY_FOR_REVIEW` — human approval and merge are asynchronous follow-ups, handled by running the monitor again or `/autopilot:pr-resolve` when feedback arrives. Pass `--wait-for-approval` to keep the previous behaviour of blocking until a human approves with all checks passing. Detects a conflicting branch and rebases it onto its base the sanctioned way, reporting and stopping when the rebase cannot complete cleanly.
+Monitor a PR for CI check status and review feedback until it is ready for human review: checks settled for the current head, no unanswered feedback, no conflict. The waiting runs in a packaged watcher that returns one bounded event, so the model stays dormant through pending CI instead of polling every minute (see the [PR watcher doc](../../docs/20-pr-watcher.md)). Resolves review feedback and fixes CI failures along the way, then ends with `Status: READY_FOR_REVIEW` — human approval and merge are asynchronous follow-ups, handled by running the monitor again or `/autopilot:pr-resolve` when feedback arrives. Pass `--wait-for-approval` to keep the previous behaviour of blocking until a human approves with all checks passing. Detects a conflicting branch and rebases it onto its base the sanctioned way, reporting and stopping when the rebase cannot complete cleanly.
 
 ```bash
 /autopilot:pr-monitor
@@ -70112,7 +71597,7 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
 - **No repository change** — available only when the finalized plan explicitly says no repository files must change, every step and `verify:` line passed, and the worktree, diff, and topic-commit checks are empty. An empty diff alone is never evidence of completion. This path emits `Outcome: no_repository_change` and performs no branch, commit, push, PR, or monitoring action.
 - **Auto-Commit** — `Skill(autopilot:commits-create)` with `--autopilot`, then `git push`.
 - **Auto-Create PR** — `Skill(autopilot:pr-create)` with `--autopilot`, then a format check on the result.
-- **Monitor** — `Skill(autopilot:pr-monitor)` polls CI, review, and mergeability status; on actionable feedback it runs `pr-resolve` (auto "Address all"); it returns `READY_FOR_REVIEW` once the current head's checks have settled and no feedback stands unanswered — the run ends there, and human approval and merge are asynchronous follow-ups; on a conflicting branch it runs the Conflict Sweep and exits reporting the conflict if the rebase cannot complete.
+- **Monitor** — `Skill(autopilot:pr-monitor)` launches the [packaged watcher](./20-pr-watcher.md), which waits inside one process and wakes the session only for an actionable or terminal event, so pending CI costs no model requests; on actionable feedback it runs `pr-resolve` (auto "Address all"); it returns `READY_FOR_REVIEW` once the current head's checks have settled and no feedback stands unanswered — the run ends there, and human approval and merge are asynchronous follow-ups; on a conflicting branch it runs the Conflict Sweep and exits reporting the conflict if the rebase cannot complete.
 - Direct `gh pr create` / `git commit` are forbidden in autopilot mode — everything routes through the sub-skills so format stays correct.
 
 There are two variants of this flow, each replacing a different half of it. [`/autopilot:run-primed`](./15-run-primed-skill.md) keeps every phase above and replaces only the context gather, reading a SHA-validated [explore brief](./14-explore-skill.md) instead of re-mapping the repository. [`/autopilot:linear-run`](./17-linear-run-skill.md) keeps terminal selection and replaces the draft-and-review half, executing a plan that [`/autopilot:linear-plan`](./16-linear-plan-skill.md) stored on a Linear issue earlier — possibly in another session, for another person to read first. Both variants inherit the same no-change checks and repository-delivery chain instead of copying them. The paths differ in who reads the plan before it runs: `run` on a Linear input stores the plan and executes it in the same breath, while `linear-plan` → `linear-run` puts a teammate between store and execution — pick the pair when the plan should be read on the ticket first.
@@ -70134,6 +71619,9 @@ There are two variants of this flow, each replacing a different half of it. [`/a
 | `claude-plugins/autopilot/lib/git/branchDigest.ts`                   | Its pure transforms and bounds, fixture-tested               |
 | `claude-plugins/autopilot/lib/github/fetch-issue.ts`                 | GitHub issue helper CLI with opt-in `--assign`               |
 | `claude-plugins/autopilot/lib/github/issueContext.ts`                | Its pure transforms, shape guards, assignee statuses         |
+| `claude-plugins/autopilot/lib/github/watch-pr.ts`                    | PR watcher CLI: gh reads, durable state, signals             |
+| `claude-plugins/autopilot/lib/github/prWatchLoop.ts`                 | Its fetch/classify/compare/sleep loop, injectable deps       |
+| `claude-plugins/autopilot/lib/github/prWatch.ts`                     | Its pure classification, decision, and state transforms      |
 | `claude-plugins/autopilot/agents/resolve-issue-context.md`           | GitHub / Linear issue context resolver (JSON; pr-review)     |
 | `claude-plugins/autopilot/agents/resolve-alert-context.md`           | Code-scanning alert context resolver (JSON)                  |
 | `claude-plugins/autopilot/agents/search-codebase-todos.md`           | TODO/issue-reference search (JSON; pr-review)                |
@@ -71966,6 +73454,122 @@ Applying all of the above to the five skills that re-load on the PR-review cycle
 | **Total**         | 86,385 B | 69,456 B | −20%   |
 
 Bodies alone understate it, because the invocation-count fix is the larger half. Counting each injection in one `/autopilot:run` with two review cycles, the skill-body bytes entering the conversation fall from roughly 208 KB to roughly 120 KB — about −42%. Interactive sessions gain less, since they read the extracted dialogs back.
+</file>
+
+<file path="docs/20-pr-watcher.md">
+# The PR watcher
+
+> Chapter 20 of the [repository docs](../README.md#repository-docs).
+
+Why PR monitoring no longer runs in the model, what the packaged watcher returns, and the acknowledgement contract that keeps a restart from losing or repeating work.
+
+> Source of truth: [`lib/github/watch-pr.ts`](../claude-plugins/autopilot/lib/github/watch-pr.ts) (the CLI), [`prWatchLoop.ts`](../claude-plugins/autopilot/lib/github/prWatchLoop.ts) (the loop), [`prWatch.ts`](../claude-plugins/autopilot/lib/github/prWatch.ts) (the pure transforms), and [`pr-monitor/SKILL.md`](../claude-plugins/autopilot/skills/pr-monitor/SKILL.md) (the adapter).
+
+## The problem: waking to decide nothing
+
+The monitor used to poll from inside the model: sleep a minute, read the pull request, read the checks, decide nothing, sleep again. Every one of those wakeups re-read the whole conversation as input. A downstream audit of a single autopilot session measured seven isolated no-actionable-event wakeups accounting for 2,974 output tokens and 2,572,963 cache-read tokens — all of it spent to learn that CI was still running.
+
+The cost is structural, not a tuning problem. A model that waits is charged for its context on every tick, so the fix is to move the waiting somewhere that has no context to re-read. A 30-second interval inside a process costs nothing; a 30-second interval across turns costs a conversation.
+
+```
+before                                   after
+┌───────────────────────────────┐        ┌───────────────────────────────┐
+│ model: sleep 60               │        │ model: launch watcher         │
+│ model: gh pr view   ← charged │        │   … waits inside one process  │
+│ model: gh pr checks ← charged │        │       fetch → classify →      │
+│ model: decide nothing         │        │       compare → sleep         │
+│ … ×N, each re-reading context │        │ model: one JSON event ← wake  │
+└───────────────────────────────┘        └───────────────────────────────┘
+  N wakeups, N × context                   1 wakeup, 1 × context
+```
+
+## What the watcher does
+
+One invocation is one wait. The loop repeats — read, verify, classify, decide, back off — and returns the moment a decision exists:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/lib/github/watch-pr.ts" <owner/repo> <pr> \
+  [--wait-for-approval] [--ack <event-id>] [--timeout <s>] [--interval <s>] \
+  [--check-grace <s>] [--state-dir <dir>] [--expect-check <name>]...
+```
+
+It always exits 0 and always prints one JSON object, mirroring the other bundled helpers ([`fetch-issue.ts`](../claude-plugins/autopilot/lib/github/fetch-issue.ts), [`fetch-pr-reviews.ts`](../claude-plugins/autopilot/lib/github/fetch-pr-reviews.ts), [`digest-branch.ts`](../claude-plugins/autopilot/lib/git/digest-branch.ts)): a failure is a value in the payload, never a non-zero exit the caller has to interpret. Telemetry goes to stderr as one line; per-cycle diagnostics go to a pruned log beside the state file, never to stdout.
+
+Every read is a read-only `gh api` call — `pulls/{n}`, `commits/{sha}/check-runs`, `commits/{sha}/status`, `pulls/{n}/reviews`, a paginated GraphQL `reviewThreads` query, `rules/branches/{base}`, and `contents/.github/workflows`. `gh pr checks --json` is deliberately not used: the audited CLI rejected that flag, and the REST endpoints carry strictly more information anyway. The watcher **never writes**: no pushes, merges, reruns, replies, or approval changes. Remediation stays in the skill, where the git history policy and the human are.
+
+## The events
+
+Nine events, in the precedence one snapshot resolves through. The first that applies is the one returned:
+
+| Event                    | Meaning                                                              | Terminal |
+| ------------------------ | -------------------------------------------------------------------- | -------- |
+| `merged`                 | the pull request merged                                              | yes      |
+| `closed`                 | closed without merging                                               | yes      |
+| `conflict`               | `mergeable_state` is `dirty` against the base                        | no       |
+| `checks_failed`          | one or more checks failed on the verified head                       | no       |
+| `blocked`                | cannot continue; `reason` says why                                   | yes      |
+| `review_action_required` | new or edited reviewer feedback, or a reopened thread                | no       |
+| `approved`               | required human approvals satisfied (under `--wait-for-approval`)     | yes      |
+| `ready_for_review`       | checks settled for the head, nothing unanswered (the default finish) | yes      |
+
+`conflict` sits above `checks_failed` and both sit above approval for the same reason the old skill checked `CONFLICTING` before `APPROVED`: a conflicted pull request cannot merge however green or approved it looks, so exiting clean on it would hide the only thing that matters.
+
+The payload is bounded — at most 20 failed checks, at most 20 feedback items with 400-character excerpts, `truncated` flags when a cap dropped something — so a busy pull request cannot flood the conversation it wakes.
+
+## What counts as settled
+
+The classification rules exist because every one of them is a way a naive reading gets it wrong:
+
+- **Reruns supersede.** `check-runs` returns every attempt, so a cancelled or failed first run sits beside its green rerun. Runs reconcile to the newest per `(name, app)`; without that, a rerun repository reports permanent failure.
+- **Cancelled is not failed, at first.** A cancelled run usually means a new push superseded it. It reads as pending until the check grace elapses (10 minutes by default), then as a failure — so a genuinely abandoned run does not hang the wait forever.
+- **`skipped` and `neutral` pass; `failure`, `timed_out`, `action_required` and `stale` fail.** Queued and in-progress runs are pending, and so is `mergeable: null` / `mergeable_state: "unknown"`, which is the normal reading for a minute or two after any push.
+- **Green is never inferred from an empty answer.** A head with no checks is settled only with explicit evidence that the repository has none — no `.github/workflows` on the base and no required-check policy. Otherwise it waits the grace period and then returns `blocked` with `no-checks-registered`, because "no checks reported" and "no checks configured" are different facts and only one of them is green.
+- **Expected checks can be named.** `--expect-check <name>` adds a check the head must register, on top of whatever the base branch's ruleset requires. A ruleset read that fails is unknown, not empty: after five consecutive failures the watcher returns `blocked` with `policy-unreadable` rather than passing on a policy it could not read.
+- **The head is verified twice.** Per-head reads are issued against the SHA from the opening read and the pull request is read again afterwards; if the head moved in between, the whole snapshot is discarded. This is what makes a stale green impossible — a push landing mid-collection can otherwise mix an old commit's checks with a new commit's identity.
+- **Approval is human and counted.** Only the latest binding review per non-bot login counts, GraphQL `reviewDecision` must agree, and the base ruleset's `required_approving_review_count` sets the bar. A bot approval never satisfies a required human approval. A `CHANGES_REQUESTED` review stays binding — and is reported with the commit it was made on — until that same reviewer reviews again.
+
+## Feedback detection
+
+Waking on the wrong comment is as expensive as waking on nothing. Feedback is therefore derived from identity and versions rather than from timestamps of the poll:
+
+- A review wakes when it is `CHANGES_REQUESTED`, or `COMMENTED` with a body, from a human other than the pull request author.
+- A thread wakes when it is unresolved and its newest human activity is newer than the author's latest reply — `updatedAt`, so an **edited** comment counts as new — or when a thread previously seen resolved is unresolved again.
+- Bots, the author's own replies, resolved threads, and linkback noise never wake anything.
+
+Each item carries a deterministic key (`review:<id>`, `thread:<id>:<updatedAt>`, `thread:<id>:reopened:<commentId>`). Identical snapshots produce identical keys, which is what makes deduplication possible at all.
+
+## State and acknowledgement
+
+State lives at `<git common dir>/autopilot/pr-watch/<owner>__<repo>__<pr>.json` (override with `--state-dir`), beside a `.log` and a `.event.json` mirror of the last event. It holds the head and when it was first seen, the handled keys, the resolved threads, and the pending event.
+
+The contract is two-step on purpose:
+
+1. A non-terminal event is **delivered** and stored as pending. A restart before it is handled re-emits the same event, with the same `eventId`, without touching GitHub.
+2. The caller relaunches with `--ack <event-id>` once it has acted. Only then do the event's keys become handled, and only handled evidence stops waking anyone.
+
+Distinguishing delivered from handled is what makes a crash mid-remediation safe: nothing is lost, and nothing is reported twice. The handled-key list is pruned to 200 entries, so a long-lived pull request cannot grow the file without bound. Relaunching without `--ack` is a bug — the same evidence returns immediately and the loop spins.
+
+## Failure, backoff, and cancellation
+
+Waiting forever is its own failure mode, so every non-answer is budgeted. The interval starts at 30 seconds and backs off to 120 when consecutive snapshots are identical, resetting the moment anything changes. Rate limiting sleeps 300 seconds and blocks after six such cycles; consecutive transient errors block after eight; auth loss blocks immediately, because no amount of waiting fixes a missing credential. A recoverable network failure is never a failed check. `--timeout` (six hours by default) bounds the whole wait, and `SIGINT`/`SIGTERM` end the current sleep, flush state, and return `blocked` with `cancelled`.
+
+## How the skill uses it
+
+[`pr-monitor`](../claude-plugins/autopilot/skills/pr-monitor/SKILL.md) is now an adapter: detect the pull request once, launch the watcher with the Bash tool in the background, and let the turn end. The harness re-invokes the session when the process exits, and that notification is the wake — a foreground launch would be capped by the tool timeout, and polling the process from the model would restore the exact cost this removes. If a runtime cannot deliver a completion notification, the skill says so and fails loudly instead of falling back to a timer.
+
+Then it acts on the one event: the Conflict Sweep on `conflict`, the CI fix workflow on `checks_failed`, `pr-resolve` on `review_action_required` — each followed by a relaunch carrying `--ack`. Background mode reports the event and stops without acknowledging, so the next run picks the work up where it was left.
+
+## Tests
+
+The three test files map to the three layers, and the split is what keeps the assertions honest:
+
+| File                                                                                | Proves                                                                                                                               |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| [`prWatch.test.ts`](../claude-plugins/autopilot/lib/github/prWatch.test.ts)         | classification and decision: reruns, cancellations, empty and missing checks, pagination, mergeability, feedback keys, bounds, state |
+| [`prWatchLoop.test.ts`](../claude-plugins/autopilot/lib/github/prWatchLoop.test.ts) | the wait itself, on a fake clock: one event per run, hours of simulated waiting, backoff, error budgets, cancellation, restart       |
+| [`watchPr.test.ts`](../claude-plugins/autopilot/lib/github/watchPr.test.ts)         | the real process against a `gh` shim: one stdout object, the state files, the `--ack` round trip                                     |
+
+The loop test is the one that speaks to the issue directly: a pending → pending → ready run advances a fake clock past an hour and asserts a single returned event and zero intermediate output. What CI cannot prove is the token bill; what it can prove is that the process returns once, which is the mechanism the bill depends on.
 </file>
 
 <file path="packages/actions-core/src/anthropicAuth.test.ts">
@@ -76897,6 +78501,7 @@ The `docs/` guides are numbered chapters in reading order — start at chapter 1
 | 17  | [The `linear-run` skill](./docs/17-linear-run-skill.md)                           | executing a stored Linear plan verbatim: validate the format, or refuse and name the fix             |
 | 18  | [Portable single-source skills](./docs/18-agent-skills-export.md)                 | one authored skills layout for Claude, Codex, Kimi, and other CLIs, and the verbatim sync (RFC-0002) |
 | 19  | [Skill token budget](./docs/19-skill-token-budget.md)                             | why a skill body is charged per turn, the two rules for splitting one, and the byte-budget guard     |
+| 20  | [The PR watcher](./docs/20-pr-watcher.md)                                         | the packaged watcher that waits for a pull request so the model wakes only for an actionable event   |
 
 **Standards.**
 
