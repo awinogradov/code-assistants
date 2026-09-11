@@ -51,7 +51,7 @@ Nothing else is accepted. A task description, a GitHub issue, and a code-scannin
 
 ## Input resolution
 
-Resolve arguments through [input-detection.md](../plan/references/input-detection.md), using this caller’s accepted forms and flags. Resolve the repository root once; issue/branch state comes from gathering. Do not load the plan orchestrator for input parsing.
+Follow the shared [input resolution](../plan/references/input-detection.md#shared-input-resolution) for this caller.
 
 ## Completion Requirement
 
@@ -61,7 +61,7 @@ This workflow is not complete until [Phase 4](#phase-4-store-the-plan-on-the-iss
 
 ## Explicit brief input
 
-Accept `--brief <path>` and strip it before issue detection. Never infer this flag from conversation history. Before gathering, read [brief-validation.md](../gather-context/references/brief-validation.md); on any non-valid verdict, report it and stop with the option to refresh explore or rerun without `--brief`. On success, pass the brief and **`Scope: primed`** to gather-context, following [brief-reuse.md](../gather-context/references/brief-reuse.md) for current-code and standards gaps. Without the flag, use ordinary task gathering. Stored-plan file seeds also apply when a Linear run receives a brief.
+For `--brief <path>`, follow the shared [explicit brief procedure](../gather-context/references/brief-validation.md#optional-brief-flag) before issue detection and gathering.
 
 ## Task Progress Protocol
 

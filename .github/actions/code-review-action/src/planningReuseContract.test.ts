@@ -37,7 +37,8 @@ describe("planning context reuse", () => {
       const source = await read(`${skill}/SKILL.md`);
       expect(source).toContain("--brief <path>");
       expect(source).toContain("../gather-context/references/brief-validation.md");
-      expect(source).toContain("on any non-valid verdict, report it and stop");
+      expect(source).toContain("brief-validation.md#optional-brief-flag");
+      expect(validation).toContain("on any non-valid verdict, report it and stop");
     },
   );
 

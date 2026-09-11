@@ -53,7 +53,7 @@ Identical to [`run`](../run/SKILL.md#input) — a task description, a GitHub or 
 
 ## Input resolution
 
-Resolve arguments through [input-detection.md](../plan/references/input-detection.md), using this caller’s accepted forms and flags. Resolve the repository root once; issue/branch state comes from gathering. Do not load the plan orchestrator for input parsing.
+Follow the shared [input resolution](../plan/references/input-detection.md#shared-input-resolution) for this caller.
 
 ## Preconditions
 

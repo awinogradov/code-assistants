@@ -125,11 +125,15 @@ describe("primed brief contract", () => {
     expect(gatherContext).toContain("none — not requested");
   });
 
-  test("ordinary run supports explicit validated brief reuse", () => {
+  test("ordinary run supports explicit validated brief reuse", async () => {
+    const validation = await readFile(
+      join(skillsDir, "gather-context/references/brief-validation.md"),
+      "utf8",
+    );
     expect(run).toContain("Skill(autopilot:gather-context)");
     expect(run).toContain("--brief <path>");
     expect(run).toContain("../gather-context/references/brief-validation.md");
-    expect(run).toContain("Scope: primed");
-    expect(run).toContain("Without the flag, use ordinary task gathering");
+    expect(validation).toContain("Scope: primed");
+    expect(validation).toContain("Without the flag, use ordinary task gathering");
   });
 });

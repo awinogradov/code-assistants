@@ -4,6 +4,10 @@ Reference for [`plan/SKILL.md`](../SKILL.md) and [`run/SKILL.md`](../../run/SKIL
 
 Detection is pure string matching — it performs **no I/O**. The issue id is known before fetching; gather-context then resolves its intent before dependent research. Strip the caller’s `--brief <path>` first; it is not part of the task description.
 
+## Shared input resolution
+
+Resolve arguments using the caller’s accepted forms and flags and the detection table below. Resolve the repository root once; issue/branch state comes from gathering. Do not load the plan orchestrator for input parsing.
+
 ## Create-issue flags (`plan` only)
 
 Run this pre-step **before** the detection table. It lets a free-form description file a tracked issue first, then plan against it — so the branch becomes `issue-<N>-slug` and the PR can `Closes` the issue, instead of the untracked plain-description path. When neither flag is present, skip this section entirely.
