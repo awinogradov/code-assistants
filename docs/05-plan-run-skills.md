@@ -28,4 +28,6 @@ Plan tracks Gather context and Write plan. Run additionally tracks Implement and
 
 Run installs the preflight history gate once, creates the branch, implements, commits, opens or updates the PR, and monitors until ready for human review. Approval and merge are separate follow-ups. A no-repository-change plan reads its conditional completion procedure; an empty diff alone is not success. User-prohibited verification remains deferred and is reported rather than executed or claimed passed. When such a check is necessary to prove a no-change result, report `Outcome: verification_deferred` and leave completion open.
 
+Monitoring uses the [packaged watcher](./20-pr-watcher.md), which wakes the session only for actionable or terminal events. On a conflicting branch it runs the Conflict Sweep and reports the conflict if the rebase cannot complete.
+
 For a Linear issue, run reads the shared [plan storage procedure](../claude-plugins/autopilot/skills/linear-plan/references/plan-storage.md) before implementation. It stores without title refresh or AI Ready transition; a failed write is reported with recoverable plan text and never gates delivery.
