@@ -1,0 +1,239 @@
+/autopilot:run #662
+refresh on main before start
+
+---
+
+<task-notification>
+<task-id>aea1e27336f55b6ee</task-id>
+<tool-use-id>toolu_016kaoSgWKkPzmMrmijBYjrw</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-calcite-sidewinder/1342cd1e-bdd3-4d58-b3a9-c162c80d9a59/tasks/aea1e27336f55b6ee.output</output-file>
+<status>completed</status>
+<summary>Agent "Digest session history" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>```json
+{
+  "available": true,
+  "sessions": [],
+  "dropped": 0,
+  "digestError": "not authenticated — run entire login"
+}
+```</result>
+<usage><subagent_tokens>14295</subagent_tokens><tool_uses>3</tool_uses><duration_ms>15074</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>ab041cdfccdb7e88a</task-id>
+<tool-use-id>toolu_01Fpmctm9AyhbnmaFooCMrvz</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-calcite-sidewinder/1342cd1e-bdd3-4d58-b3a9-c162c80d9a59/tasks/ab041cdfccdb7e88a.output</output-file>
+<status>completed</status>
+<summary>Agent "Digest repo standards" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>```json
+{
+  "conventions": [
+    {
+      "source": "CLAUDE.md",
+      "rule": "Every changed line must trace to the request — no opportunistic refactors of adjacent code or unrelated formatting"
+    },
+    {
+      "source": "CLAUDE.md",
+      "rule": "No unused exports — delete immediately; no commented-out code — delete it (recover from version control if needed); when deleting unused code, only remove orphans your changes created and mention pre-existing dead code instead of deleting it"
+    },
+    {
+      "source": "CLAUDE.md",
+      "rule": "docs/ is organized as numbered chapters in reading order (`NN-topic.md`) matching the README Documentation table order — a removed/renumbered chapter must keep both in sync"
+    },
+    {
+      "source": "docs/05-plan-run-skills.md",
+      "rule": "Review-and-score is currently one shared-pipeline step: expert selection (Pre-mortem Analyst + 2–3 more from the stack's expert table), parallel `expert-review` sub-agent fan-out, per-dimension JSON verdicts, and score aggregation, defined once in `skills/plan/references/pipeline.md` and executed by `plan`, `run`, `run-primed`, `linear-plan`, `linear-run`. It is opt-in (`--experts-review`) for `plan`/`linear-plan` only; `run`/`run-primed`/`linear-run` always run it. Removing it means updating every one of those call sites, the `expert-review` agent file, and this chapter together — a partial removal leaves the doc and an implementation disagreeing about which skills still score."
+    },
+    {
+      "source": "docs/05-plan-run-skills.md",
+      "rule": "Plan File Header: every plan file begins with a single `# &lt;Title&gt;` line and a fixed section order; `## Summary` currently carries a `Score:` placeholder. \"The plan file is output, not instructions\" — no section may carry an `AskUserQuestion` block, `Skill(...)` dispatch line, or HTML-comment directive; `planFileOutputPurity.test.ts` enforces this by walking skill markdown for fenced blocks destined for a plan file."
+    },
+    {
+      "source": "docs/13-shared-rules-skill.md",
+      "rule": "Shared instruction blocks live once under `shared-rules/references/`; `sharedBlockSync.test.ts` pins canonical files and holds each retained inlined copy byte-identical, and `sharedRulesInvocation.test.ts` discovers skill directives by `readdir` and fails if a directive points at a removed block. `expert-review` is one of the two runtimes (`tools: []`) that keep an inlined copy rather than a `Read` directive — deleting the agent removes an entry from that guard's retained-copy matrix, not just a file."
+    },
+    {
+      "source": "docs/16-linear-plan-skill.md",
+      "rule": "`linearPlanContract.test.ts` pins the stored-plan template's `Score: &lt;panel verdicts&gt;` field, asserts `pipeline.md` states no scoring threshold or revision budget (review is an enhancement, never a gate), and pins the literal `Score: skipped` fallback text — the stored-plan emission template and this test must change together, not the prose alone."
+    },
+    {
+      "source": "docs/17-linear-run-skill.md",
+      "rule": "`linear-run`'s validation contract does not read the Score field for admission — only `Format:`, required `###` sections, and per-step `verify:` lines gate stored-plan execution — so removing the Score field must not touch the five-verdict validation table, only the emission/reporting side."
+    },
+    {
+      "source": "docs/18-agent-skills-export.md",
+      "rule": "Skills are single-sourced under `claude-plugins/autopilot/skills/`; `agents-skills-sync` mirrors that layout byte-verbatim into consumer `.agents/skills/` directories (RFC-0002 SKILLS-003) — there is no separate generated copy to hand-edit, so removing `--experts-review` and expert-panel references from the authored skills is what the sync action must propagate, not a distribution artifact requiring its own edit."
+    }
+  ],
+  "standards": [
+    {
+      "id": "RFC-0001",
+      "title": "Reference formatting &amp; readability",
+      "status": "Accepted",
+      "path": "rfc/0001-reference-formatting.md",
+      "defaulted": false,
+      "why": "Every kept cross-reference in the edited SKILL.md/docs/agents files (including removed links to the deleted expert-review agent) must remain a real, resolvable, correctly formatted link per the linkResolution guard"
+    },
+    {
+      "id": "RFC-0002",
+      "title": "Portable single-source skills layout",
+      "status": "Accepted",
+      "path": "rfc/0002-portable-skills-layout.md",
+      "defaulted": false,
+      "why": "Task explicitly touches agents-skills-sync outputs; SKILLS-003's verbatim sync contract governs how the authored skills/agents removal must appear identically in synced consumer copies"
+    }
+  ],
+  "dropped": [],
+  "principles": [],
+  "digestError": null
+}
+```</result>
+<usage><subagent_tokens>61507</subagent_tokens><tool_uses>15</tool_uses><duration_ms>76667</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a3034f2a00b4bd4d4</task-id>
+<tool-use-id>toolu_01FXS1gcK6LwbDgYPcArCLCS</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-calcite-sidewinder/1342cd1e-bdd3-4d58-b3a9-c162c80d9a59/tasks/a3034f2a00b4bd4d4.output</output-file>
+<status>completed</status>
+<summary>Agent "Analyze staged changes" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>```json
+{
+  "totalFiles": 30,
+  "linesAdded": 218,
+  "linesRemoved": 611,
+  "categories": {
+    "ci": [
+      ".github/actions/agents-skills-sync/src/buildSkillSyncEntries.test.ts",
+      ".github/actions/agents-skills-sync/src/fetchSkillTree.test.ts",
+      ".github/actions/code-review-action/src/expertPanelRemoval.test.ts",
+      ".github/actions/code-review-action/src/expertReviewContract.test.ts",
+      ".github/actions/code-review-action/src/linearPlanContract.test.ts",
+      ".github/actions/code-review-action/src/sharedBlockSync.test.ts"
+    ],
+    "docs": [
+      "README.md",
+      "claude-plugins/autopilot/MIGRATING.md",
+      "claude-plugins/autopilot/README.md",
+      "claude-plugins/autopilot/agents/expert-review.md",
+      "claude-plugins/autopilot/skills/explore/SKILL.md",
+      "claude-plugins/autopilot/skills/linear-plan/SKILL.md",
+      "claude-plugins/autopilot/skills/linear-run/SKILL.md",
+      "claude-plugins/autopilot/skills/plan/SKILL.md",
+      "claude-plugins/autopilot/skills/plan/references/input-detection.md",
+      "claude-plugins/autopilot/skills/plan/references/pipeline.md",
+      "claude-plugins/autopilot/skills/plan/references/stack-deltas.md",
+      "claude-plugins/autopilot/skills/pr-review/references/checks-pr-hygiene.md",
+      "claude-plugins/autopilot/skills/run-primed/SKILL.md",
+      "claude-plugins/autopilot/skills/run/SKILL.md",
+      "claude-plugins/autopilot/skills/shared-rules/MAINTAINING.md",
+      "claude-plugins/autopilot/skills/shared-rules/references/pr-body-grammar.md",
+      "docs/02-agents-field.md",
+      "docs/05-plan-run-skills.md",
+      "docs/13-shared-rules-skill.md",
+      "docs/14-explore-skill.md",
+      "docs/15-run-primed-skill.md",
+      "docs/16-linear-plan-skill.md",
+      "docs/17-linear-run-skill.md"
+    ],
+    "test": [
+      "claude-plugins/autopilot/lib/packContract.test.ts"
+    ]
+  },
+  "categoryCount": 3,
+  "singleCommitRecommended": false,
+  "reason": "multiple categories, large changeset",
+  "recentCommits": "508b763 chore(repomix): refresh pack from #661 [ci skip]\n751588b chore: release autopilot 8.0.0\nea04b7d chore(repomix): refresh pack from #660 [ci skip]\nbafbd15 chore: release code-review-action 9.0.0\n096f3b6 chore(repomix): refresh pack from #657 [ci skip]"
+}
+```</result>
+<usage><subagent_tokens>18625</subagent_tokens><tool_uses>3</tool_uses><duration_ms>43539</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a600e312fcd2a3ff0</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-calcite-sidewinder/1342cd1e-bdd3-4d58-b3a9-c162c80d9a59/tasks/a600e312fcd2a3ff0.output</output-file>
+<status>completed</status>
+<summary>Agent "Analyze PR commits" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>```json
+{
+  "branch": "issue-662-remove-expert-panels",
+  "base": "main",
+  "issue": "662",
+  "commitCount": 1,
+  "issueContext": {
+    "title": "Remove expert panels from every Autopilot skill and flow",
+    "url": "https://github.com/awinogradov/code-assistants/issues/662",
+    "description": "A downstream trace audit of Autopilot 7.5.2 with Claude Code 2.1.258 found six distinct expert requests consuming 64,000 output tokens each (384,000 total), ending with max_tokens and zero tool calls. Completely remove the internal domain-expert review/panel subsystem from Autopilot and every skill and flow that invokes or exposes it — this is permanent removal, not a prompt fix, cheaper model, or opt-in switch.",
+    "status": "OPEN"
+  },
+  "significance": {
+    "breaking": true,
+    "breakingSubject": "feat(autopilot)!: remove the expert review panel",
+    "meaningful": true,
+    "commitTypes": ["feat"]
+  },
+  "commitLog": "fd6d9e5 feat(autopilot)!: remove the expert review panel",
+  "diffSummary": " .../src/buildSkillSyncEntries.test.ts              |   2 +-\n .../agents-skills-sync/src/fetchSkillTree.test.ts  |   2 +-\n .../src/expertPanelRemoval.test.ts                 |  51 ++++++\n .../src/expertReviewContract.test.ts               | 171 ---------------------\n .../src/linearPlanContract.test.ts                 |  69 +--------\n .../code-review-action/src/sharedBlockSync.test.ts |   6 +-\n README.md                                          |   2 +-\n claude-plugins/autopilot/MIGRATING.md              |   6 +\n claude-plugins/autopilot/README.md                 |  32 ++--\n claude-plugins/autopilot/agents/expert-review.md   | 102 ------------\n claude-plugins/autopilot/lib/packContract.test.ts  |   2 +-\n claude-plugins/autopilot/skills/explore/SKILL.md   |   4 +-\n .../autopilot/skills/linear-plan/SKILL.md          |  43 +++---\n .../autopilot/skills/linear-run/SKILL.md           |  10 +-\n claude-plugins/autopilot/skills/plan/SKILL.md      |  33 ++--\n .../skills/plan/references/input-detection.md      |   6 -\n .../autopilot/skills/plan/references/pipeline.md   |  74 +--------\n .../skills/plan/references/stack-deltas.md         |  29 +---\n .../pr-review/references/checks-pr-hygiene.md      |   2 +-\n .../autopilot/skills/run-primed/SKILL.md           |   8 +-\n claude-plugins/autopilot/skills/run/SKILL.md       |  48 +++---\n .../autopilot/skills/shared-rules/MAINTAINING.md   |   2 +-\n .../shared-rules/references/pr-body-grammar.md     |   2 +-\n docs/02-agents-field.md                            |   6 +-\n docs/05-plan-run-skills.md                         |  68 ++++----\n docs/13-shared-rules-skill.md                      |   2 +-\n docs/14-explore-skill.md                           |   8 +-\n docs/15-run-primed-skill.md                        |  20 +--\n docs/16-linear-plan-skill.md                       |  13 +-\n docs/17-linear-run-skill.md                        |   6 +-\n 30 files changed, 218 insertions(+), 611 deletions(-)"
+}
+```</result>
+<usage><subagent_tokens>22716</subagent_tokens><tool_uses>4</tool_uses><duration_ms>19232</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bw7ex5zp4</task-id>
+<summary>Monitor event: "PR #663 checks, reviews, comments"</summary>
+<event>check CodeQL: skipping
+check GitGuardian Security Checks: pass
+check Test: pass
+check Validate PR: pass
+check Validate: pass</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bw7ex5zp4</task-id>
+<summary>Monitor event: "PR #663 checks, reviews, comments"</summary>
+<event>pr state=OPEN review=REVIEW_REQUIRED mergeable=MERGEABLE</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bw7ex5zp4</task-id>
+<summary>Monitor event: "PR #663 checks, reviews, comments"</summary>
+<event>check Analyze (actions): pass
+check Analyze (javascript-typescript): pass
+check Auto label: pass
+check CodeQL: pass</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>
+
+---
+
+.github/actions/code-review-action/src/expertPanelRemoval.test.ts — useless. Why to test non existing?
+
+---
+
+<task-notification>
+<task-id>bw7ex5zp4</task-id>
+<summary>Monitor event: "PR #663 checks, reviews, comments"</summary>
+<event>check ai-review: fail</event>
+If this event is something the user would act on now, send a PushNotification. Routine or benign output doesn't need one.
+</task-notification>

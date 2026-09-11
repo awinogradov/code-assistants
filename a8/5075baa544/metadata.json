@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "a85075baa544",
+  "strategy": "manual-commit",
+  "branch": "issue-662-remove-expert-panels",
+  "checkpoints_count": 3,
+  "files_touched": [
+    ".github/actions/code-review-action/src/expertPanelRemoval.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/a8/5075baa544/0/metadata.json",
+      "transcript": "/a8/5075baa544/0/full.jsonl",
+      "compact_transcript": "/a8/5075baa544/0/transcript.jsonl",
+      "content_hash": "/a8/5075baa544/0/content_hash.txt",
+      "prompt": "/a8/5075baa544/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1090,
+    "cache_creation_tokens": 295175,
+    "cache_read_tokens": 11251271,
+    "output_tokens": 60339,
+    "api_call_count": 48
+  }
+}
