@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "52c62e5d2242",
+  "strategy": "manual-commit",
+  "branch": "issue-664-pr-watcher",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "README.md",
+    "docs/20-pr-watcher.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/52/c62e5d2242/0/metadata.json",
+      "transcript": "/52/c62e5d2242/0/full.jsonl",
+      "compact_transcript": "/52/c62e5d2242/0/transcript.jsonl",
+      "content_hash": "/52/c62e5d2242/0/content_hash.txt",
+      "prompt": "/52/c62e5d2242/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 492,
+    "cache_creation_tokens": 574792,
+    "cache_read_tokens": 12590277,
+    "output_tokens": 142893,
+    "api_call_count": 52
+  }
+}
