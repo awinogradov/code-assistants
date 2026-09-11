@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "ccbbe73090c5",
+  "strategy": "manual-commit",
+  "branch": "issue-664-pr-watcher",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "claude-plugins/autopilot/lib/github/prWatch.test.ts",
+    "claude-plugins/autopilot/lib/github/prWatch.ts",
+    "claude-plugins/autopilot/lib/github/prWatchLoop.test.ts",
+    "claude-plugins/autopilot/lib/github/prWatchLoop.ts",
+    "claude-plugins/autopilot/lib/github/watch-pr.ts",
+    "claude-plugins/autopilot/lib/github/watchPr.test.ts",
+    "claude-plugins/autopilot/lib/packContract.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/cc/bbe73090c5/0/metadata.json",
+      "transcript": "/cc/bbe73090c5/0/full.jsonl",
+      "compact_transcript": "/cc/bbe73090c5/0/transcript.jsonl",
+      "content_hash": "/cc/bbe73090c5/0/content_hash.txt",
+      "prompt": "/cc/bbe73090c5/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 490,
+    "cache_creation_tokens": 570451,
+    "cache_read_tokens": 12237974,
+    "output_tokens": 142461,
+    "api_call_count": 51
+  }
+}
