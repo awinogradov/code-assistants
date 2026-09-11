@@ -27,6 +27,7 @@ const requiredPaths = [
   "skills/plan/SKILL.md",
   "agents/digest-repo-standards.md",
   "lib/git/branchDigest.ts",
+  "lib/github/watch-pr.ts",
 ];
 
 /** First path segments allowed in the tarball (npm auto-packs the last two). */
