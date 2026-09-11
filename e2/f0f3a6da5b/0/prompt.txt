@@ -1,0 +1,285 @@
+/autopilot:run #664
+refresh on main first
+
+---
+
+<task-notification>
+<task-id>af12003ac06ba0221</task-id>
+<tool-use-id>toolu_01Hn1S4ToZUpb4ToaR2LyJQQ</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-rimrock-tarantula/5a093673-819e-4e0c-9831-8524cffd04a6/tasks/af12003ac06ba0221.output</output-file>
+<status>completed</status>
+<summary>Agent "Digest session history" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>```json
+{
+  "available": true,
+  "sessions": [],
+  "dropped": 0,
+  "digestError": "not authenticated — run entire login"
+}
+```</result>
+<usage><subagent_tokens>14725</subagent_tokens><tool_uses>2</tool_uses><duration_ms>20869</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a171dbf1d673b8fbf</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-rimrock-tarantula/5a093673-819e-4e0c-9831-8524cffd04a6/tasks/a171dbf1d673b8fbf.output</output-file>
+<status>completed</status>
+<summary>Agent "Digest repo standards" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>```json
+{
+  "conventions": [
+    { "source": "CLAUDE.md", "rule": "File organization: a single module is one file (e.g. example.ts); multiple modules live in a directory with no index.ts barrel" },
+    { "source": "CLAUDE.md", "rule": "Named exports only — no default exports; import from actual files, never barrel files; import order builtin → external → internal → parent → sibling" },
+    { "source": "CLAUDE.md", "rule": "No generic file names (index.ts, init.ts) — use descriptive names; camelCase for utilities/variables/functions, PascalCase for components/types/interfaces, camelCase for constants (not SCREAMING_SNAKE_CASE)" },
+    { "source": "CLAUDE.md", "rule": "Functional/declarative patterns, avoid classes; use async/await not callbacks; ES6 imports not CommonJS; use fs/promises, not sync file ops" },
+    { "source": "CLAUDE.md", "rule": "Extend Error class for custom errors with context properties; always throw/reject Error objects, never primitives; no empty catch blocks — rethrow or handle with context" },
+    { "source": "CLAUDE.md", "rule": "Graceful shutdown with signal handlers; subscribe to 'error' events on EventEmitters/streams; await promises before returning for complete stack traces — all directly relevant to a long-running/backgrounded watcher process" },
+    { "source": "CLAUDE.md", "rule": "Test files use *.test.ts suffix, colocated with source per §3.1 file organization; every exported interface/type needs JSDoc, modules need top-level JSDoc with usage examples" },
+    { "source": "CLAUDE.md", "rule": "No raw git commit/branch/gh pr create/gh issue create — route through Skill(autopilot:commits-create/branch-create/pr-create/issue-create); plan only via Skill(autopilot:plan); TODO/FIXME comments require a linked issue URL on the following line" },
+    { "source": "docs/01-workspace-structure.md", "rule": "Turbo's `test` task inputs already include `lib/**` alongside `src/**/*.ts` — a new claude-plugins/autopilot/lib package is expected to be test-input-tracked without turbo.json changes; tool config files (*.config.ts) are the only exception to \"all source under src/\"" },
+    { "source": "docs/01-workspace-structure.md", "rule": "Any member directory may add docs/, AGENTS.md, CLAUDE.md when it has enough surface area; none are required for a small addition" },
+    { "source": "docs/05-plan-run-skills.md", "rule": "Existing lib/ helper pattern to mirror: a Bash-invoked CLI entry (e.g. lib/git/digest-branch.ts) paired with a pure-transforms file (e.g. lib/git/branchDigest.ts) that is fixture-tested; the CLI returns one bounded JSON object with a `*Error|null` field recording failure rather than throwing past the caller" },
+    { "source": "docs/05-plan-run-skills.md", "rule": "`run`'s Monitor phase description: pr-monitor polls CI/review/mergeability, dispatches pr-resolve on actionable feedback, returns READY_FOR_REVIEW once checks settle with no unanswered feedback, and runs a Conflict Sweep + reports conflict when a rebase cannot complete — any replacement contract must preserve these semantics and the run-primed/linear-run docs call this phase 'unchanged' from run, i.e. inherited by reference, not restated per caller" },
+    { "source": "docs/15-run-primed-skill.md / docs/17-linear-run-skill.md", "rule": "Cross-skill producer/consumer behavior is guarded by dedicated contract tests (primedBriefContract.test.ts, linearPlanContract.test.ts) run in CI regardless of path filters — a changed pr-monitor JSON contract consumed by run/run-primed/linear-run/pr-create should get an equivalent guard, not just doc updates" },
+    { "source": "docs/19-skill-token-budget.md", "rule": "Every skill directory has a byte budget enforced by skillBodyBudget.test.ts; content only reached in rare situations (e.g. pr-monitor's existing background-mode.md, conflict-sweep.md) belongs in references/ with a body-side trigger heading kept in SKILL.md — reducing pr-monitor's polling logic to a lib call should shrink the body and may need a budget bump recorded in the same commit" }
+  ],
+  "standards": [
+    {
+      "id": "RFC-0002",
+      "title": "Portable single-source skills layout",
+      "status": "Accepted",
+      "path": "rfc/0002-portable-skills-layout.md",
+      "defaulted": false,
+      "why": "The plan edits SKILL.md and adds claude-plugins/autopilot/lib code that skills must reference — dash-only naming (SKILLS-001), frontmatter-as-superset (SKILLS-002), and extraction-safe absolute links for anything the watcher references outside the skills layout (SKILLS-004) all bind directly"
+    },
+    {
+      "id": "RFC-0001",
+      "title": "Reference formatting &amp; readability",
+      "status": "Accepted",
+      "path": "rfc/0001-reference-formatting.md",
+      "defaulted": false,
+      "why": "SKILL.md, docs, and RFC updates the plan produces must link files, RFCs, and sections per this standard's resolvable-link and readability rules"
+    }
+  ],
+  "dropped": [],
+  "principles": [],
+  "digestError": null
+}
+```</result>
+<usage><subagent_tokens>69968</subagent_tokens><tool_uses>17</tool_uses><duration_ms>89872</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a9d996186af0b484e</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-rimrock-tarantula/5a093673-819e-4e0c-9831-8524cffd04a6/tasks/a9d996186af0b484e.output</output-file>
+<status>completed</status>
+<summary>Agent "Expert review: Pre-mortem" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>I'll read the plan file.
+
+
+Read
+{
+  "file_path": "/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-rimrock-tarantula/5a093673-819e-4e0c-9831-8524cffd04a6/scratchpad/plan-664.md"
+}</result>
+<usage><subagent_tokens>11222</subagent_tokens><tool_uses>0</tool_uses><duration_ms>4547</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>ae46095a0706caab2</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-rimrock-tarantula/5a093673-819e-4e0c-9831-8524cffd04a6/tasks/ae46095a0706caab2.output</output-file>
+<status>completed</status>
+<summary>Agent "Expert review: Bun engineer" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>
+&lt;invoke name="Read"&gt;
+&lt;parameter name="file_path"&gt;/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-rimrock-tarantula/5a093673-819e-4e0c-9831-8524cffd04a6/scratchpad/plan-664.md&lt;/parameter&gt;
+&lt;/invoke&gt;
+&lt;invoke name="Read"&gt;
+&lt;parameter name="file_path"&gt;/Users/tony_vi/.warp/worktrees/code-assistants/rimrock-tarantula/claude-plugins/autopilot/lib/github/fetch-pr-reviews.ts&lt;/parameter&gt;
+&lt;/invoke&gt;
+&lt;invoke name="Read"&gt;
+&lt;parameter name="file_path"&gt;/Users/tony_vi/.warp/worktrees/code-assistants/rimrock-tarantula/claude-plugins/autopilot/lib/github/reviewThreads.ts&lt;/parameter&gt;
+&lt;/invoke&gt;
+&lt;invoke name="Read"&gt;
+&lt;parameter name="file_path"&gt;/Users/tony_vi/.warp/worktrees/code-assistants/rimrock-tarantula/claude-plugins/autopilot/lib/git/digest-branch.ts&lt;/parameter&gt;
+&lt;/invoke&gt;
+&lt;invoke name="Read"&gt;
+&lt;parameter name="file_path"&gt;/Users/tony_vi/.warp/worktrees/code-assistants/rimrock-tarantula/claude-plugins/autopilot/lib/packContract.test.ts&lt;/parameter&gt;
+&lt;/invoke&gt;
+&lt;invoke name="Read"&gt;
+&lt;parameter name="file_path"&gt;/Users/tony_vi/.warp/worktrees/code-assistants/rimrock-tarantula/claude-plugins/autopilot/tsconfig.json&lt;/parameter&gt;
+&lt;/invoke&gt;
+&lt;invoke name="Bash"&gt;
+&lt;parameter name="command"&gt;ls /Users/tony_vi/.warp/worktrees/code-assistants/rimrock-tarantula/claude-plugins/autopilot/skills/pr-monitor /Users/tony_vi/.warp/worktrees/code-assistants/rimrock-tarantula/claude-plugins/autopilot/skills/pr-monitor/references; ls /Users/tony_vi/.warp/worktrees/code-assistants/rimrock-tarantula/claude-plugins/autopilot/lib/github /Users/tony_vi/.warp/worktrees/code-assistants/rimrock-tarantula/claude-plugins/autopilot/lib/git /Users/tony_vi/.warp/worktrees/code-assistants/rimrock-tarantula/claude-plugins/autopilot/lib&lt;/parameter&gt;
+&lt;/invoke&gt;</result>
+<usage><subagent_tokens>11363</subagent_tokens><tool_uses>0</tool_uses><duration_ms>10768</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>ab090b3866d385f62</task-id>
+<tool-use-id>toolu_0125bLczLCWLKuDL4NDg156g</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-rimrock-tarantula/5a093673-819e-4e0c-9831-8524cffd04a6/tasks/ab090b3866d385f62.output</output-file>
+<status>completed</status>
+<summary>Agent "Expert review: DevOps" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>I'll read the plan file first.
+
+
+&lt;invoke name="Read"&gt;
+&lt;parameter name="file_path"&gt;/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-rimrock-tarantula/5a093673-819e-4e0c-9831-8524cffd04a6/scratchpad/plan-664.md&lt;/parameter&gt;
+&lt;/invoke&gt;
+&lt;invoke name="Read"&gt;
+&lt;parameter name="file_path"&gt;/Users/tony_vi/.warp/worktrees/code-assistants/rimrock-tarantula/claude-plugins/autopilot/skills/pr-monitor/SKILL.md&lt;/parameter&gt;
+&lt;/invoke&gt;
+&lt;invoke name="Read"&gt;
+&lt;parameter name="file_path"&gt;/Users/tony_vi/.warp/worktrees/code-assistants/rimrock-tarantula/claude-plugins/autopilot/lib/github/fetch-pr-reviews.ts&lt;/parameter&gt;
+&lt;/invoke&gt;
+&lt;invoke name="Read"&gt;
+&lt;parameter name="file_path"&gt;/Users/tony_vi/.warp/worktrees/code-assistants/rimrock-tarantula/claude-plugins/autopilot/lib/github/reviewThreads.ts&lt;/parameter&gt;
+&lt;/invoke&gt;
+&lt;invoke name="Read"&gt;
+&lt;parameter name="file_path"&gt;/Users/tony_vi/.warp/worktrees/code-assistants/rimrock-tarantula/claude-plugins/autopilot/skills/pr-monitor/references/conflict-sweep.md&lt;/parameter&gt;
+&lt;/invoke&gt;
+&lt;invoke name="Read"&gt;
+&lt;parameter name="file_path"&gt;/Users/tony_vi/.warp/worktrees/code-assistants/rimrock-tarantula/claude-plugins/autopilot/skills/pr-monitor/references/ci-remediation.md&lt;/parameter&gt;
+&lt;/invoke&gt;</result>
+<usage><subagent_tokens>11208</subagent_tokens><tool_uses>0</tool_uses><duration_ms>9305</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>ab104a2cebc4df39c</task-id>
+<tool-use-id>toolu_01XkuuJ1rcdf2XRBbXenCaWw</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-rimrock-tarantula/5a093673-819e-4e0c-9831-8524cffd04a6/tasks/ab104a2cebc4df39c.output</output-file>
+<status>completed</status>
+<summary>Agent "Expert review: Bun engineer (retry)" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>I'll read the plan file first.
+
+
+&lt;invoke name="Read"&gt;
+&lt;parameter name="file_path"&gt;/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-rimrock-tarantula/5a093673-819e-4e0c-9831-8524cffd04a6/scratchpad/plan-664.md&lt;/parameter&gt;
+&lt;/invoke&gt;
+
+
+
+&lt;invoke name="Read"&gt;
+&lt;parameter name="file_path"&gt;/Users/tony_vi/.warp/worktrees/code-assistants/rimrock-tarantula/lib/github/fetch-pr-reviews.ts&lt;/parameter&gt;
+&lt;/invoke&gt;
+
+
+
+&lt;invoke name="Read"&gt;
+&lt;parameter name="file_path"&gt;/Users/tony_vi/.warp/worktrees/code-assistants/rimrock-tarantula/lib/github/reviewThreads.ts&lt;/parameter&gt;
+&lt;/invoke&gt;
+
+
+
+&lt;invoke name="Read"&gt;
+&lt;parameter name="file_path"&gt;/Users/tony_vi/.warp/worktrees/code-assistants/rimrock-tarantula/lib/git/digest-branch.ts&lt;/parameter&gt;
+&lt;/invoke&gt;
+
+
+
+&lt;invoke name="Read"&gt;
+&lt;parameter name="file_path"&gt;/Users/tony_vi/.warp/worktrees/code-assistants/rimrock-tarantula/tsconfig.json&lt;/parameter&gt;
+&lt;/invoke&gt;</result>
+<usage><subagent_tokens>10912</subagent_tokens><tool_uses>0</tool_uses><duration_ms>7048</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a2971e88894544738</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-rimrock-tarantula/5a093673-819e-4e0c-9831-8524cffd04a6/tasks/a2971e88894544738.output</output-file>
+<status>completed</status>
+<summary>Agent "Expert review: Pre-mortem (retry)" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>&lt;invoke name="Read"&gt;
+&lt;parameter name="file_path"&gt;/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-rimrock-tarantula/5a093673-819e-4e0c-9831-8524cffd04a6/scratchpad/plan-664.md&lt;/parameter&gt;
+&lt;/invoke&gt;</result>
+<usage><subagent_tokens>67574</subagent_tokens><tool_uses>0</tool_uses><duration_ms>507529</duration_ms></usage>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>a1d2276d90b01a682</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-rimrock-tarantula/5a093673-819e-4e0c-9831-8524cffd04a6/tasks/a1d2276d90b01a682.output</output-file>
+<status>completed</status>
+<summary>Agent "Expert review: DevOps (retry)" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>{"expertRole":"Principal DevOps Engineer","score":50,"dimensions":{"alignment":10,"completeness":10,"typeSafety":10,"testability":10,"simplicity":10},"verdict":"needs-revision","findings":["UNVERIFIABLE: the plan text at /private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-rimrock-tarantula/5a093673-819e-4e0c-9831-8524cffd04a6/scratchpad/plan-664.md and the referenced repo files (claude-plugins/autopilot/skills/pr-monitor/SKILL.md, skills/pr-monitor/references/conflict-sweep.md, ci-remediation.md, lib/github/fetch-pr-reviews.ts, lib/github/reviewThreads.ts) were not delivered to this reviewer and this agent declares no file-reading tools, so no plan step could be checked. Every score below is a neutral placeholder, not a judgement of the drafted plan; the parent should re-invoke with the plan text and relevant file excerpts inlined in the prompt.","Check-run dedup requirement (from the prompt's verified shapes): commits/{sha}/check-runs returns duplicate (name, app) entries when a suite is rerun or cancelled (e.g. 'Validate PR' cancelled then success). A readiness definition that treats any non-success conclusion as failing, or that keys only on name, will report a false CI failure. The plan must collapse to the latest run per (name, app.id) by started_at/completed_at (or check_suite id) before evaluating conclusion; whether it does is unverifiable here.","Required-check discovery on this repo yields no policy: rules/branches/main has no required_status_checks rule and branches/main/protection/required_status_checks returns 404 'Branch not protected'. A watcher that gates readiness on 'all required checks green' will therefore have an empty required set and pass trivially, while gating on 'all check-runs green' will block on optional/cancelled runs. The plan must state which fallback applies when no required-check policy exists (and treat the 404 as 'no protection', not as an error), and must derive approval from reviewDecision (APPROVED vs REVIEW_REQUIRED, with null meaning no review rule) plus pull_request.required_approving_review_count:1 from the ruleset. Unverifiable against the plan.","Mergeability and polling semantics: REST mergeable is null / mergeable_state 'unknown' while GitHub computes and 'dirty' on conflict; GraphQL mergeable is UNKNOWN/MERGEABLE/CONFLICTING. The plan must treat UNKNOWN/null as 'retry after backoff' rather than as not-conflicting, keep the existing CONFLICTING-before-APPROVED ordering from the current Readiness Check, and combine commits/{sha}/status (state 'pending' when there are no statuses) with check-runs rather than reading only one source. Given the 600 s foreground Bash cap, a single long-lived poll loop will be killed; the plan needs run_in_background or bounded iterations with re-invocation, and gh api only (no gh pr checks --json). Also unverifiable here.","Rate limits and read-only scope: each poll tick issuing pulls/{n} + check-runs + status + rules + GraphQL is 4-5 requests; at aggressive intervals across many PRs this approaches the 5000/h REST budget and separate GraphQL point budget. The plan should specify a poll interval floor, honour x-ratelimit-remaining / retry-after, and prefer the single GraphQL query (reviewDecision, mergeable, mergeStateStatus, commits.statusCheckRollup) already paginated in reviewThreads.ts-style code to cut request count. Out-of-scope writes inside the watcher must remain excluded. Unverifiable against the plan."],"grounding":["Context Map excerpt: verified GitHub REST/GraphQL shapes for this repo (pulls, check-runs, status, rules/branches/main, branch protection 404, reviewDecision/mergeable/mergeStateStatus)","Context Map excerpt: operational constraints (gh api only, 600 s Bash foreground cap, run_in_background, no writes in watcher)","Context Map excerpt: file references only (plan file and repo file paths named in the prompt; contents not delivered and not read)"],"revision":{"changed":"Re-run this review with the full plan text and the relevant excerpts of claude-plugins/autopilot/skills/pr-monitor/SKILL.md (Readiness Check), skills/pr-monitor/references/conflict-sweep.md, ci-remediation.md, and lib/github/reviewThreads.ts inlined in the prompt, since this agent has no file-reading tools. Independently of that, make the plan explicitly define: (1) latest-run-per-(name, app) dedup of check-runs; (2) the fallback readiness rule when no required_status_checks policy exists and 404 'Branch not protected' handling; (3) mergeable UNKNOWN/null as retry-with-backoff, CONFLICTING checked before approval; (4) a bounded/background poll loop within the 600 s cap with a stated interval floor and rate-limit header handling; (5) approval derived from reviewDecision plus required_approving_review_count from the ruleset."}}</result>
+<usage><subagent_tokens>68782</subagent_tokens><tool_uses>0</tool_uses><duration_ms>538122</duration_ms></usage>
+</task-notification>
+
+---
+
+continue
+
+---
+
+<task-notification>
+<task-id>a43f88bded2a40cc5</task-id>
+<tool-use-id>toolu_01FiPfT7A8tixcfo7NkHzz5X</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-tony-vi--warp-worktrees-code-assistants-rimrock-tarantula/5a093673-819e-4e0c-9831-8524cffd04a6/tasks/a43f88bded2a40cc5.output</output-file>
+<status>completed</status>
+<summary>Agent "Analyze staged changes" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>```json
+{
+  "totalFiles": 19,
+  "linesAdded": 2859,
+  "linesRemoved": 311,
+  "categories": {
+    "docs": [
+      "README.md",
+      "claude-plugins/autopilot/MIGRATING.md",
+      "claude-plugins/autopilot/README.md",
+      "claude-plugins/autopilot/skills/pr-monitor/SKILL.md",
+      "claude-plugins/autopilot/skills/pr-monitor/references/background-mode.md",
+      "claude-plugins/autopilot/skills/pr-monitor/references/ci-remediation.md",
+      "claude-plugins/autopilot/skills/pr-monitor/references/conflict-sweep.md",
+      "claude-plugins/autopilot/skills/run/SKILL.md",
+      "docs/05-plan-run-skills.md",
+      "docs/20-pr-watcher.md"
+    ],
+    "test": [
+      ".github/actions/code-review-action/src/prConflictContract.test.ts",
+      ".github/actions/code-review-action/src/prDeliveryContract.test.ts",
+      "claude-plugins/autopilot/lib/github/prWatch.test.ts",
+      "claude-plugins/autopilot/lib/github/prWatchLoop.test.ts",
+      "claude-plugins/autopilot/lib/github/watchPr.test.ts",
+      "claude-plugins/autopilot/lib/packContract.test.ts"
+    ],
+    "impl": [
+      "claude-plugins/autopilot/lib/github/prWatch.ts",
+      "claude-plugins/autopilot/lib/github/prWatchLoop.ts",
+      "claude-plugins/autopilot/lib/github/watch-pr.ts"
+    ]
+  },
+  "categoryCount": 3,
+  "singleCommitRecommended": false,
+  "reason": "multiple categories, large changeset",
+  "recentCommits": "7e39937 chore(repomix): refresh pack from #663 [ci skip]\n9e04602 test(code-review-action): drop the expert panel removal sweep\nb53e55d feat(autopilot)!: remove the expert review panel\n508b763 chore(repomix): refresh pack from #661 [ci skip]\n751588b chore: release autopilot 8.0.0"
+}
+```</result>
+<usage><subagent_tokens>17048</subagent_tokens><tool_uses>3</tool_uses><duration_ms>32173</duration_ms></usage>
+</task-notification>

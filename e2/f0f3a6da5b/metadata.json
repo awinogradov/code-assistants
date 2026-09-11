@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_version": "branch-v1",
+  "checkpoint_id": "e2f0f3a6da5b",
+  "strategy": "manual-commit",
+  "branch": "issue-664-pr-watcher",
+  "checkpoints_count": 1,
+  "files_touched": [
+    ".github/actions/code-review-action/src/prConflictContract.test.ts",
+    ".github/actions/code-review-action/src/prDeliveryContract.test.ts",
+    "claude-plugins/autopilot/MIGRATING.md",
+    "claude-plugins/autopilot/README.md",
+    "claude-plugins/autopilot/skills/pr-monitor/SKILL.md",
+    "claude-plugins/autopilot/skills/pr-monitor/references/background-mode.md",
+    "claude-plugins/autopilot/skills/pr-monitor/references/ci-remediation.md",
+    "claude-plugins/autopilot/skills/pr-monitor/references/conflict-sweep.md",
+    "claude-plugins/autopilot/skills/run/SKILL.md",
+    "docs/05-plan-run-skills.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/e2/f0f3a6da5b/0/metadata.json",
+      "transcript": "/e2/f0f3a6da5b/0/full.jsonl",
+      "compact_transcript": "/e2/f0f3a6da5b/0/transcript.jsonl",
+      "content_hash": "/e2/f0f3a6da5b/0/content_hash.txt",
+      "prompt": "/e2/f0f3a6da5b/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 494,
+    "cache_creation_tokens": 575626,
+    "cache_read_tokens": 12946921,
+    "output_tokens": 143577,
+    "api_call_count": 53
+  }
+}
