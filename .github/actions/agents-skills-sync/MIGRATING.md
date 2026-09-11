@@ -14,3 +14,9 @@ No workflow changes are required — inputs and outputs are unchanged.
 ### Breaking changes
 
 - _Document migration steps here._
+
+## From 1.0.0 to 2.0.0
+
+### Breaking changes
+
+- --experts-review is no longer accepted and no flow launches an expert panel.
