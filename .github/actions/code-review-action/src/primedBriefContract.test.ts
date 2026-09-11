@@ -125,9 +125,11 @@ describe("primed brief contract", () => {
     expect(gatherContext).toContain("none — not requested");
   });
 
-  test("ordinary run is unchanged — it still gathers context and knows no brief", () => {
+  test("ordinary run supports explicit validated brief reuse", () => {
     expect(run).toContain("Skill(autopilot:gather-context)");
-    expect(run).not.toContain("brief.md");
-    expect(run).not.toContain("Scope: primed");
+    expect(run).toContain("--brief <path>");
+    expect(run).toContain("../gather-context/references/brief-validation.md");
+    expect(run).toContain("Scope: primed");
+    expect(run).toContain("Without the flag, use ordinary task gathering");
   });
 });

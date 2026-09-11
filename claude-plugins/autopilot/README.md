@@ -208,7 +208,7 @@ Update an existing PR's title and description based on current branch commits.
 
 ### `/autopilot:plan`
 
-Perform deep analysis and create a validated implementation plan. Detects tech stack automatically. Uses the [codebase context snapshot](#codebase-context-snapshot). See [how the plan and run skills work](../../docs/05-plan-run-skills.md) for the full phase-by-phase flow.
+Perform deep analysis and create a validated implementation plan. Detects tech stack automatically. Uses the [codebase context snapshot](#codebase-context-snapshot). Accepts `--brief <path>` for explicit validated context reuse. See [how the plan and run skills work](../../docs/05-plan-run-skills.md) for the flow.
 
 ```bash
 /autopilot:plan #42                                                      # From GitHub issue
@@ -231,6 +231,8 @@ Plan and implement without a plan-approval pause, then select one of two termina
 /autopilot:run #42 I think we should start with the auth module         # Issue + additional context
 ```
 
+Plan, run, linear-plan, and linear-run accept `--brief <path>`; invalid explicit briefs stop rather than silently gathering broadly. Stored Linear plans retain durable evidence in format v2, and readers still accept v1.
+
 ### `/autopilot:run-primed`
 
 Same as `/autopilot:run`, but reads the repository from a validated `.claude/context/brief.md` instead of re-running the codebase fan-out. See [the run-primed skill](../../docs/15-run-primed-skill.md) for the full contract.
@@ -244,7 +246,7 @@ Same as `/autopilot:run`, but reads the repository from a validated `.claude/con
 
 ### `/autopilot:explore`
 
-Map the repository broadly, write a durable context brief to `.claude/context/brief.md`, then take surgical fixes one at a time. Uses the [codebase context snapshot](#codebase-context-snapshot). See [the explore skill](../../docs/14-explore-skill.md) for the full flow.
+Map the repository broadly, write a durable context brief and source-dependency sidecar, then take surgical fixes one at a time. Refresh affected sections when dependencies change; structural or unknown changes trigger a full prime. Uses the [codebase context snapshot](#codebase-context-snapshot). See [the explore skill](../../docs/14-explore-skill.md) for the full flow.
 
 Reach for it when you have an _area_ rather than a target and the changes that follow are small and located. Unlike `/autopilot:plan` and `/autopilot:run` it never branches, never opens a PR, and never asks for approval — invoking it commits you to nothing.
 

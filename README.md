@@ -28,7 +28,7 @@ The `docs/` guides are numbered chapters in reading order — start at chapter 1
 | 2   | [`agents` field spec](./docs/02-agents-field.md)                                  | how skills detect a repository's tech stack from `package.json`                                      |
 | 3   | [Review run-summary footer](./docs/03-code-review-run-summary.md)                 | how `code-review-action` surfaces per-run metrics in a footer, plus the rare rotating review tip     |
 | 4   | [Inline suggestions and AI-agent prompts](./docs/04-code-review-suggestions.md)   | one-click GitHub suggestion blocks and a "Prompt for AI agents" block on each inline finding         |
-| 5   | [Plan and run skills](./docs/05-plan-run-skills.md)                               | how the `plan` and `run` skills go from task to reviewed plan to merged PR, with ASCII diagrams      |
+| 5   | [Plan and run skills](./docs/05-plan-run-skills.md)                               | how the `plan` and `run` skills resolve intent, reuse evidence, and deliver a plan or review-ready PR      |
 | 6   | [`release` field spec](./docs/06-release-field.md)                                | how `release-action` picks the right artifacts for npm packages, GitHub Actions, and plugins         |
 | 7   | [Release auto-merge flow](./docs/07-release-automerge.md)                         | the event-driven action that merges approved, all-green release PRs and propagates downstream        |
 | 8   | [Upstream sync](./docs/08-upstream-sync.md)                                       | the one-action `upstream-sync` aggregator and the thin `upstream.yml` consumers run, per-kind        |
@@ -40,7 +40,7 @@ The `docs/` guides are numbered chapters in reading order — start at chapter 1
 | 14  | [The `explore` skill](./docs/14-explore-skill.md)                                 | the third on-ramp: prime a durable context brief, then take surgical fixes one at a time             |
 | 15  | [The `run-primed` skill](./docs/15-run-primed-skill.md)                           | the strict run path for a primed session: validate the brief against the checkout, or stop loudly    |
 | 16  | [The `linear-plan` skill](./docs/16-linear-plan-skill.md)                         | storing a plan on a Linear ticket so it outlives the session that drafted it                         |
-| 17  | [The `linear-run` skill](./docs/17-linear-run-skill.md)                           | executing a stored Linear plan verbatim: validate the format, or refuse and name the fix             |
+| 17  | [The `linear-run` skill](./docs/17-linear-run-skill.md)                           | executing a stored Linear plan verbatim: reuse a valid stored plan or draft a run-local plan             |
 | 18  | [Portable single-source skills](./docs/18-agent-skills-export.md)                 | one authored skills layout for Claude, Codex, Kimi, and other CLIs, and the verbatim sync (RFC-0002) |
 | 19  | [Skill token budget](./docs/19-skill-token-budget.md)                             | why a skill body is charged per turn, the two rules for splitting one, and the byte-budget guard     |
 | 20  | [The PR watcher](./docs/20-pr-watcher.md)                                         | the packaged watcher that waits for a pull request so the model wakes only for an actionable event   |

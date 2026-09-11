@@ -53,7 +53,7 @@ Identical to [`run`](../run/SKILL.md#input) — a task description, a GitHub or 
 
 ## Input resolution
 
-Identical to the `plan` skill — see [its Input resolution section](../plan/SKILL.md#input-resolution).
+Resolve arguments through [input-detection.md](../plan/references/input-detection.md), using this caller’s accepted forms and flags. Resolve the repository root once; issue/branch state comes from gathering. Do not load the plan orchestrator for input parsing.
 
 ## Preconditions
 
@@ -65,7 +65,7 @@ Both are silent failures if left unstated, so state them to the user when either
 
 ## Task Progress Protocol
 
-Create all 7 tasks with TaskCreate, in order, before any work, exactly as [`run`](../run/SKILL.md#task-progress-protocol) defines them. Set each to `in_progress` at the start of its phase and `completed` at the end. Brief validation happens inside task 2 ("Gather context"), because it is the gate on that task's input rather than a step of its own.
+Track only these substantive outcomes: **Gather context**, **Write plan**, **Implement and verify**, **Deliver PR**. Create them together where the runtime supports batching, or as one checklist otherwise. Update at outcome boundaries; input parsing, artifact freezing, and draft/finalize are not separate tasks. Identify tasks by subject, never numeric IDs.
 
 ## Task
 
@@ -73,35 +73,15 @@ $ARGUMENTS
 
 ## Phase 0: Resolve input
 
-Create the 7 tasks, then set task 1 to `in_progress`.
+Resolve input before starting Gather context.
 
 Detect the input type and id per [input-detection.md](../plan/references/input-detection.md) — the detection table and its tracker gating. Skip that file's create-issue flags section; it is plan-only. Detection is pure string matching and performs **no I/O**.
 
-Set task 1 to `completed`.
-
 ## Phase 1: Validate the brief
-
-Set task 2 to `in_progress`. This phase is the entire reason this skill exists as a separate door, so it runs before anything is fetched and it stops the run rather than degrading.
 
 Resolve the repository root with `git rev-parse --show-toplevel`; the brief lives at `<root>/.claude/context/brief.md`, one per worktree.
 
-Then resolve exactly one verdict. The rows are the resolution order: evaluate them top-to-bottom and stop at the first test that fires.
-
-| Verdict               | Test                                                                                                                                                                                                 |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **missing**           | Read `<root>/.claude/context/brief.md` with the **`Read` tool** — the brief does not exist at that path                                                                                              |
-| **malformed**         | from that same read: no `Base:` line, or any of the nine fixed `##` sections listed in [Phase 3](#phase-3-merge-the-working-context) absent — name the specific omission in the message              |
-| **revision-mismatch** | `git cat-file -e "<base>^{commit}"` exits non-zero (the recorded revision does not resolve here), or `git merge-base --is-ancestor "<base>" HEAD` exits non-zero (this checkout does not contain it) |
-| **stale**             | `git rev-parse origin/main` prints something other than `<base>` — the recorded base resolves and is contained in `HEAD`, but is not the checkout's `origin/main`                                    |
-| **valid**             | anything that survives all four rows above — the recorded base equals `git rev-parse origin/main` **and** is an ancestor-or-equal of `HEAD`                                                          |
-
-**The missing and malformed rows are file checks, and they must precede every `git` command.** Reach `git cat-file` with an empty base — a brief with no `Base:` line — and it exits non-zero, reporting `revision-mismatch` for what is actually a `malformed` brief. The section-presence check has no git equivalent at all: a brief whose base matches `origin/main` but whose `## Key types` is missing would otherwise pass as `valid`, which is precisely the case this gate exists to catch.
-
-Parse both values with the `Read` tool rather than shelling out to `sed`, `grep`, or `head`, and compare the stale-row SHA against `<base>` yourself rather than with `test`. `git` and `gh` are the only commands on this skill's tool allowlist, so a text-extraction or comparison pipeline is blocked before it runs — and the gate would then fail for the wrong reason, reporting a broken skill instead of a bad brief.
-
-**Compare against `origin/main`, never `HEAD`.** [`explore`](../explore/SKILL.md#phase-4-write-the-brief) writes `Base: <origin/main SHA>` and its own [classification](../explore/SKILL.md#phase-0-classify-the-run) re-reads it against `origin/main`. Validating against `HEAD` would reject every brief written in a session whose branch had moved ahead — which is the ordinary explore session, since producing commits is the point of one — leaving the producer and the consumer in open disagreement about what "current" means. The ancestor test is the other half: it confirms the working tree actually contains the recorded revision. `git merge-base --is-ancestor` is also what keeps "an older revision of this history" distinguishable from "a different history entirely", which is why `stale` and `revision-mismatch` are separate verdicts rather than one.
-
-**Do not `git fetch`.** The checkout's `origin/main` ref is the base the orchestrator produced; re-fetching would let an unrelated upstream merge fail a correctly primed run. Requiring the recorded base to equal `origin/main` also makes the later branch-from-an-up-to-date-`main` step a no-op in the happy path, so the tree the plan is drafted against is the tree it is implemented against.
+Read [brief-validation.md](../gather-context/references/brief-validation.md) and resolve its **missing**, **malformed**, **revision-mismatch**, **stale**, or **valid** verdict.
 
 On any verdict other than **valid**, stop with the matching message and do not fall back:
 
@@ -120,11 +100,9 @@ Invoke:
 Skill(autopilot:gather-context)
 ```
 
-Pass the detected input type, issue id, repository, repository root, Linear team (when applicable), the raw task text as the task summary, and **`Scope: primed`**.
+Pass the detected input type, issue id, repository, repository root, Linear team (when applicable), the raw task text as the task summary, the validated brief, and **`Scope: primed`**.
 
-That scope resolves only what a brief cannot bake in advance: issue or alert details, the TODO search, the branch diff, git state, and a re-attached codebase snapshot. It gates off [`digest-repo-standards`](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/digest-repo-standards.md), whose output the brief already carries from the same revision. See [the Scope input](../gather-context/SKILL.md#input).
-
-Set task 2 to `completed`.
+That scope resolves only what a brief cannot bake in advance: issue or alert details, the TODO search, the branch diff, git state, and a re-attached codebase snapshot. It reuses unchanged standards only when [brief-reuse.md](../gather-context/references/brief-reuse.md) establishes coverage; otherwise a narrowed standards digest fills the task’s missing constraints. See [the Scope input](../gather-context/SKILL.md#input).
 
 ## Phase 3: Merge the working context
 
@@ -138,7 +116,7 @@ The brief supplies the repository half, the Context Map the volatile half. The s
 
 The brief's three volatile sections are ignored because they were computed in the explore session, in a different checkout — the Context Map's equivalents describe _this_ one. `## Snapshot` is stable yet also unused: the repomix `outputId` it records is session-scoped and dead in a forked session, so the map's freshly selected source is the one to read.
 
-Carry the brief's `## Conventions and standards` into the plan's applicable-standards record. That section doubles as the audit log of what the plan was drafted against, so it must never read `none` on this path merely because the digest agent was skipped.
+Merge the brief’s verified `## Conventions and standards` with current Applicable standards from the Context Map; current rules and retrieved missing clauses supersede stale claims. Carry the result into the plan’s applicable-standards record. That section doubles as the audit log of what the plan was drafted against, so it must never read `none` on this path merely because the digest agent was skipped.
 
 ## Phase 4: Preflight verdict
 
@@ -148,11 +126,11 @@ This skill never enters plan mode — do NOT call `EnterPlanMode` or `ExitPlanMo
 
 ## Common Instructions
 
-The [Common Instructions in `plan/SKILL.md`](../plan/SKILL.md#common-instructions) apply unchanged — documentation lookup scaled to the task, repository standards, the plan file header rule, CLAUDE.md compliance, and ASCII schemas. Read them against the merged context from [Phase 3](#phase-3-merge-the-working-context), not against a fresh crawl of the tree.
+Read [common-instructions.md](../plan/references/common-instructions.md) once before drafting; its rules apply unchanged — documentation lookup scaled to the task, repository standards, the plan file header rule, CLAUDE.md compliance, and ASCII schemas. Read them against the merged context from [Phase 3](#phase-3-merge-the-working-context), not against a fresh crawl of the tree.
 
 ## Phase 5: Draft and finalize
 
-Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft (task 3), finalize (task 4) — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md).
+Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — one Write plan outcome — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md).
 
 ## Phase 6: Implement and finish the autopilot run
 

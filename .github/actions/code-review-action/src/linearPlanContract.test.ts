@@ -68,8 +68,13 @@ function storedSections(source: string, kind: "required" | "caller-owned"): stri
   return [...rows].filter((row) => row[2] === kind).map((row) => row[1].trim());
 }
 
-const requiredSections = storedSections(linearPlan, "required");
-const callerOwnedSections = storedSections(linearPlan, "caller-owned");
+const storage = await readFile(join(skillsDir, "linear-plan/references/plan-storage.md"), "utf8");
+const execution = await readFile(
+  join(skillsDir, "linear-run/references/stored-plan-execution.md"),
+  "utf8",
+);
+const requiredSections = storedSections(storage, "required");
+const callerOwnedSections = storedSections(storage, "caller-owned");
 
 /**
  * The fenced emission template in `linear-plan` — the literal block the store writes,
@@ -77,15 +82,14 @@ const callerOwnedSections = storedSections(linearPlan, "caller-owned");
  * it keeps the emitted bytes (anchor, header line, section order) from drifting away
  * from the contract, and keeps contract annotations from leaking into a live ticket.
  */
-const emissionTemplate =
-  linearPlan.match(/### The emission template.*?```text\n(.*?)```/s)?.[1] ?? "";
+const emissionTemplate = storage.match(/### The emission template.*?```text\n(.*?)```/s)?.[1] ?? "";
 
 /**
  * The literal first-store wrapper — the `+++ Original task +++` collapsible the prior
  * description moves into. Pinned so the cut around preserved user text stays a fixed
  * emission form, mirroring the `+++ Original prompt +++` preamble in `linear-create`.
  */
-const originalTaskWrapper = linearPlan.match(/```text\n(\+\+\+ Original task\n.*?)```/s)?.[1] ?? "";
+const originalTaskWrapper = storage.match(/```text\n(\+\+\+ Original task\n.*?)```/s)?.[1] ?? "";
 
 /** The `Source | Section` table rows in `linear-run`, keyed by the source cell. */
 function sectionTableRow(source: string, key: string): string {
@@ -97,6 +101,13 @@ function sectionTableRow(source: string, key: string): string {
 }
 
 describe("linear plan contract", () => {
+  test("v2 preserves evidence while the reader retains v1 compatibility", () => {
+    expect(storage).toContain("Context evidence");
+    expect(storage).toContain("Omit session-scoped `outputId`");
+    expect(linearRun).toContain("For `v1`, require Summary, Implementation Steps, and Files");
+    expect(linearRun).toContain("For `v2`, also require Context evidence");
+  });
+
   test("the stored-plan template still exposes a required/caller-owned split", () => {
     expect(requiredSections.length).toBeGreaterThan(1);
     expect(callerOwnedSections.length).toBeGreaterThan(0);
@@ -145,22 +156,21 @@ describe("linear plan contract", () => {
     expect(linearRun).toContain("[pipeline.md](../plan/references/pipeline.md)");
     // Pipeline phases map to this skill's tasks by subject, not by index —
     // index-based references broke whenever either side inserted a phase.
-    expect(linearRun).toContain("Establish-plan task");
-    expect(linearRun).toContain("Validate-plan task");
-    expect(linearRun).toContain("Finalize-plan task");
+    expect(linearRun).toContain("Establish execution plan outcome");
+    expect(linearRun).toContain("do not create additional progress tasks");
   });
 
   test.each(requiredSections)("linear-run consumes `### %s` from the stored plan", (name) => {
-    expect(sectionTableRow(linearRun, "Stored plan")).toContain(`\`### ${name}\``);
+    expect(sectionTableRow(execution, "Stored plan")).toContain(`\`### ${name}\``);
   });
 
   test.each(callerOwnedSections)("`### %s` is stored but explicitly not consumed", (name) => {
-    expect(sectionTableRow(linearRun, "Stored plan, **unused**")).toContain(`\`### ${name}\``);
-    expect(sectionTableRow(linearRun, "Stored plan")).not.toContain(`\`### ${name}\``);
+    expect(sectionTableRow(execution, "Stored plan, **unused**")).toContain(`\`### ${name}\``);
+    expect(sectionTableRow(execution, "Stored plan")).not.toContain(`\`### ${name}\``);
   });
 
   test("both skills agree on the stored format version", () => {
-    const written = linearPlan.match(/Format:\s*(v\d+)/)?.[1];
+    const written = storage.match(/Format:\s*(v\d+)/)?.[1];
     expect(written).toBeTruthy();
     expect(linearRun).toContain(`\`${written}\``);
   });
@@ -179,15 +189,13 @@ describe("linear plan contract", () => {
    * twice — once in the write step and once in the final output block.
    */
   test("the store refreshes the title from the plan and reports the outcome", () => {
-    const writeSection = linearPlan.split("### The write")[1] ?? "";
+    const writeSection = storage.split("### The write")[1] ?? "";
     expect(writeSection).toContain("**Derive the title.**");
     expect(writeSection).toContain("Steelmanned Intent");
-    expect(writeSection).toContain("../linear-create/SKILL.md#phase-2-generate-title-and-body");
+    expect(writeSection).toContain("../../linear-create/SKILL.md#phase-2-generate-title-and-body");
     expect(writeSection).toContain("needs no confirmation");
-    expect(linearPlan.match(/✓ Title updated: <new title>/g)?.length ?? 0).toBeGreaterThanOrEqual(
-      2,
-    );
-    expect(linearPlan.match(/`title unchanged`/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(storage.match(/✓ Title updated: <new title>/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(storage.match(/`title unchanged`/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
   });
 
   test("linear-run treats the stored plan as a durable artifact, not proof of approval", () => {
@@ -231,7 +239,7 @@ describe("linear plan contract", () => {
   test("the emission template opens with the anchor and the placeholder header line", () => {
     expect(emissionTemplate).toStartWith("## Implementation plan\n");
     expect(emissionTemplate).toContain(
-      "Format: v1 · Base: <sha> · Stored by /autopilot:linear-plan",
+      "Format: v2 · Base: <sha> · Stored by /autopilot:linear-plan",
     );
   });
 
@@ -298,11 +306,12 @@ describe("linear plan contract", () => {
   });
 
   test("run reuses linear-plan's store by reference, with no second template", () => {
-    expect(runStore).toContain("../linear-plan/SKILL.md#the-write");
-    expect(runStore).toContain("../linear-plan/SKILL.md#the-emission-template");
+    expect(runStore).toContain("../linear-plan/references/plan-storage.md");
+    expect(storage).toContain("**Read the current description and title**");
+    expect(storage).toContain("byte-identical");
     // run's delta prose names only the `Stored by` field, so the template's other
     // header tokens appearing anywhere in run means a copied template.
-    expect(run).not.toContain("Format: v1");
+    expect(run).not.toContain("Format: v2");
     expect(run).not.toContain("· Base:");
   });
 
