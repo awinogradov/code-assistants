@@ -28,9 +28,7 @@ allowed-tools:
   - Skill(autopilot:pr-create)
 ---
 
-Prime the session with a broad picture of this repository, write it to disk so it survives compaction, then hand control back and take fixes one at a time.
-
-This is the third on-ramp into a repository, and it exists because the other two do not fit a common shape of work. [`plan`](../plan/SKILL.md) and [`run`](../run/SKILL.md) both require a target and then carry the session through draft, a plan file, a branch, and a pull request. Arriving with an _area_ rather than a task — and following it with a few surgical edits — means inventing a target for `plan` and discarding everything it drags along. `explore` is the same context quality with none of that machinery.
+Map the repository, persist the context brief, then stop for the user’s next instruction. Subsequent surgical fixes use the brief without a plan, branch, or PR chain.
 
 ## When to Use
 
@@ -75,9 +73,7 @@ Skill(autopilot:gather-context)
 
 Pass input type `plain-description`, **`Scope: broad`**, the repository and repository root, and a task summary of `broad architecture map`. There is no issue id.
 
-Two consequences of that input are worth knowing rather than rediscovering. `Scope: broad` is what makes the codebase pass read the snapshot breadth-first instead of hunting for what a change touches. And `plain-description` gates off the issue and TODO resolvers, so no sub-agent runs whose output this brief would discard.
-
-Do not re-implement the fan-out here. It has one owner; a hand-mirrored copy would rot the first time an agent is added to one side and not the other.
+`Scope: broad` selects repository-wide context and skips history and the branch digest, which this brief does not consume. `plain-description` skips issue and TODO resolution. Use gather-context’s fan-out; do not duplicate it.
 
 ## Phase 2: Diagrams (full prime only)
 
@@ -107,7 +103,7 @@ git cherry origin/main HEAD                                 # every line "-" ⇒
 git rev-list --count HEAD..origin/main                      # baseAhead
 ```
 
-**This phase owns the volatile sections outright — do not source them from the Context Map.** [Phase 1](#phase-1-acquire-context-full-prime-only) also reports in-flight changes and git state, but it does not run on a delta refresh, so anything sourced from it cannot honor the "rewritten on every invocation" contract. A brief primed once and refreshed thereafter would keep showing the branch as it stood at the first prime — and since an explore session's whole purpose is producing commits, that is the common case, not an edge case. On a full prime these commands simply recompute what the map already said; the duplicate cost is a few `git` calls, and it buys a volatile half that is genuinely volatile on both paths.
+**This phase owns the volatile sections outright.** Run it on both full primes and delta refreshes. Broad acquisition skips the branch digest, so this is the sole volatile refresh. Never source these sections from the Context Map or the previous brief.
 
 Read `isStaleMerged` from `git cherry` rather than from a commit count: a branch whose commits already landed upstream under rebase-rewritten SHAs still shows a non-empty `git log origin/main..HEAD`, and testing only for emptiness reads a finished branch as active work.
 
@@ -154,7 +150,7 @@ Every **stable** section is written from the Context Map, and the transformation
 | Related TODOs        | dropped — never populated for this skill's input |
 | Issue / alert        | dropped — always `none` for this skill's input   |
 
-The last four rows are the load-bearing ones. In-flight changes and git state are the map's only volatile output, and the map exists solely on a full prime, so reading them from it would make two "volatile" sections silently freeze after the first prime — [Phase 3](#phase-3-recompute-the-volatile-sections) recomputes both instead. Related TODOs and Issue / alert are never populated at all, because this skill passes `plain-description` and both of those resolvers are gated on issue inputs.
+The map supplies stable sections only. Broad acquisition omits unused history and Git digests; Phase 3 supplies fresh volatile sections.
 
 `## Data flow` carries the [Phase 2](#phase-2-diagrams-full-prime-only) diagram and has no Context Map source. `## Test and verify` must name the **exact commands** to run, because every later fix is verified with one of them.
 

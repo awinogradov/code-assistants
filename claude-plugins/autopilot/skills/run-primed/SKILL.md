@@ -43,6 +43,8 @@ Run a tracked issue end to end in a session an [`explore`](../explore/SKILL.md) 
 
 Everything after [Phase 3](#phase-3-merge-the-working-context) is `run`, unchanged and referenced rather than restated. Like `run`, invoking this skill authorizes the whole flow: there is no plan-approval gate.
 
+A brief whose conventions report standards overflow or an incomplete digest does not establish all applicable rules. Retrieve the omitted constraints through a task-scoped standards lookup before deciding affected work; never treat the brief’s revision check as proof of completeness.
+
 ## Input
 
 Arguments: `$ARGUMENTS`

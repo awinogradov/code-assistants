@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 // Fetches a GitHub issue deterministically and prints the provider-agnostic
-// issue contract to stdout. Invoked by the gather-context skill in place of the
-// resolve-issue-context delegated agent's GitHub path (the agent itself remains
-// for the pr-review CI path); Linear inputs use lib/linear/fetch-issue.mjs.
+// issue contract to stdout. Gathering and review skills invoke it directly;
+// Linear inputs use lib/linear/fetch-issue.mjs.
 //
 // Runs under Node's native type stripping (Node >=24) and Bun — no build step;
 // the file ships as source at ${CLAUDE_PLUGIN_ROOT}/lib/github/.
 //
-// Usage:  node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-issue.ts" <owner/repo> <issue-number> [--assign]
+// Review callers pass --read-only; combining it with --assign fails before any I/O.
+// Usage:  node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-issue.ts" <owner/repo> <issue-number> [--assign | --read-only]
 //
 // Always exits 0 and always prints a single JSON object: on any failure it
 // prints the degraded shape with a non-null `resolveError`, so the caller can
@@ -64,7 +64,11 @@ const assigneesOf = (stdout: string | null): string[] | null => {
   }
 };
 
-async function selfAssign(repo: string, issueNumber: number, context: IssueContext): Promise<string> {
+async function selfAssign(
+  repo: string,
+  issueNumber: number,
+  context: IssueContext,
+): Promise<string> {
   const login = (await ghRead(["api", "user", "--jq", ".login"])).stdout?.trim() ?? null;
   const preconditions = {
     login,
@@ -128,10 +132,11 @@ async function selfAssign(repo: string, issueNumber: number, context: IssueConte
 
 async function main(): Promise<HelperOutput> {
   const startedAt = Date.now();
-  const args = process.argv.slice(2).filter((arg) => arg !== "--assign");
+  const readOnly = process.argv.includes("--read-only");
+  const args = process.argv.slice(2).filter((arg) => arg !== "--assign" && arg !== "--read-only");
   const assign = process.argv.includes("--assign");
   const [repo, numberArg] = args;
-  const issueNumber = Number.parseInt(numberArg ?? "", 10);
+  const issueNumber = Number(numberArg);
 
   const finish = (context: IssueContext, degradedReads: string[]): HelperOutput => ({
     ...context,
@@ -143,11 +148,21 @@ async function main(): Promise<HelperOutput> {
     },
   });
 
-  if (!repo || !repo.includes("/") || Number.isNaN(issueNumber)) {
+  if (readOnly && assign) {
+    return finish(degradedIssueContext(null, "--read-only forbids --assign"), []);
+  }
+
+  if (
+    args.length !== 2 ||
+    !repo ||
+    !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo) ||
+    !/^[1-9][0-9]*$/.test(numberArg ?? "") ||
+    !Number.isSafeInteger(issueNumber)
+  ) {
     return finish(
       degradedIssueContext(
         Number.isNaN(issueNumber) ? null : issueNumber,
-        "usage: fetch-issue.ts <owner/repo> <issue-number> [--assign] — arguments missing or invalid",
+        "usage: fetch-issue.ts <owner/repo> <issue-number> [--assign | --read-only] — arguments missing or invalid",
       ),
       [],
     );

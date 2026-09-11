@@ -77,9 +77,7 @@ Otherwise invoke `Skill(autopilot:preflight-check)` with `mode: branch` from thi
 
 **Skip this phase entirely for special prefix flag branches (--hotfix, --trivial, --maintenance, --proposal, --security).**
 
-**If `provider` is `linear`:** fetch the ticket via the Linear MCP `get_issue` tool with `{ "id": "<LINEAR-ID>" }` and read its `title` (for the slug) and `state.name`; if no Linear MCP tool resolves (see the access note below), stop with its `No Linear MCP available …` message instead of continuing without ticket data. Skip the GitHub `gh` steps below and do NOT self-assign — Linear assignment is deferred to a later phase; emit `unassigned — Linear assignment deferred`. Then continue to [Phase 3](#phase-3-generate-branch-slug). The steps below apply to **GitHub** issues only.
-
-**Linear MCP access:** Read [`linear-mcp-access.md`](../shared-rules/references/linear-mcp-access.md) and apply its tool-resolution rule, using the bare tool names `get_issue`, `list_issue_statuses`, `save_issue`.
+**If `provider` is `linear`:** read [linear-branch.md](./references/linear-branch.md#fetch-the-ticket) and follow its fetch path instead of the GitHub steps below.
 
 1. **Determine the repository** and bind it to `REPO` so every `gh` call in this phase targets the same repo (important in worktrees and multi-remote checkouts):
 
@@ -141,16 +139,6 @@ Otherwise invoke `Skill(autopilot:preflight-check)` with `mode: branch` from thi
    - 3-5 words maximum
    - Capture the essence of what's being done
 
-**Examples:**
-
-| Issue Title                                                           | Generated Slug       |
-| --------------------------------------------------------------------- | -------------------- |
-| "Add JWT token refresh endpoint for authentication service"           | `jwt-refresh`        |
-| "Fix race condition in audio streaming when multiple clients connect" | `audio-race-fix`     |
-| "Implement user preference settings page with dark mode toggle"       | `user-preferences`   |
-| "Refactor database connection pooling for better performance"         | `db-pool-refactor`   |
-| "Provide agent prompt to generate branch name"                        | `branch-name-prompt` |
-
 **Construct full branch name:**
 
 - **GitHub:** `issue-<number>-<slug>`
@@ -194,23 +182,7 @@ Otherwise invoke `Skill(autopilot:preflight-check)` with `mode: branch` from thi
 
 **Autopilot bypass:** If `autopilotMode` is true (from [Phase 1](#phase-1-input-validation)), skip this entire phase and proceed directly to [Phase 6](#phase-6-execute) with the resolved branch name. Do NOT call AskUserQuestion.
 
-Only special-prefix branches (`--hotfix`, `--trivial`, `--maintenance`, `--proposal`, `--security`) reach this phase: their prefix and slug come from a free-form description rather than from an issue, so there is a real choice to confirm. Present branch details and confirm using **AskUserQuestion tool**.
-
-**Preview substitution rules (MANDATORY):** The `<prefix>`, `<PREFIX>`, and `<slug>` tokens in the template below are PLACEHOLDERS. Before invoking AskUserQuestion, substitute each with the concrete value you resolved in earlier phases (e.g., `<prefix>` → `hotfix`, `<PREFIX>` → `HOTFIX`, `<slug>` → `memory-leak-editor`). NEVER pass the literal `<prefix>-<slug>\n\nType: <PREFIX>...` string — every option's `preview` must contain the fully resolved branch preview string. No shorthand (`"..."`, `"<same>"`, empty string) is permitted; always write out the full resolved preview for every option.
-
-**One dialog template.** Tool parameters:
-
-- `question`: "Review the branch name and choose an action."
-- `header`: "Create branch"
-- `options`: [
-  { label: "Create branch", description: "Create and push to origin with tracking", preview: "<preview>" },
-  { label: "Edit slug", description: "Modify the branch name slug", preview: "<preview>" }
-  ]
-- `multiSelect`: false
-
-Both options carry the same `<preview>` content since the user is choosing an action, not content; the shared preview enables a side-by-side layout in the UI. Substitute `<preview>` with `<prefix>-<slug>\n\nType: <PREFIX>\nFrom: origin/main` — e.g. `hotfix-memory-leak-editor\n\nType: HOTFIX\nFrom: origin/main`.
-
-Only proceed to [Phase 6](#phase-6-execute) after user selects "Create branch". If "Edit slug" selected, ask for new slug and regenerate branch name.
+For a special-prefix branch without `--autopilot`, read [special-prefix-dialog.md](./references/special-prefix-dialog.md), obtain the branch-name decision, then continue to Phase 6 only after confirmation.
 
 ## Phase 6: Execute
 
@@ -229,7 +201,7 @@ Only proceed to [Phase 6](#phase-6-execute) after user selects "Create branch". 
    git push -u origin <branch-name>
    ```
 
-3. **If `provider` is `linear` AND `--start` was passed:** move the ticket to "In Progress" — best-effort, never blocks the branch. Resolve the target state id with the Linear MCP `list_issue_statuses` tool for the ticket's team, then call the Linear MCP `save_issue` tool with `{ "id": "<LINEAR-ID>", "state": "<In Progress state>" }` — tool resolution per the [Phase 2](#phase-2-fetch-github-issue) Linear MCP access note. On success, emit `✓ Ticket <LINEAR-ID> moved to In Progress`; when no Linear MCP tool resolves under any prefix, emit `issue not started — no Linear MCP available (check /mcp or connect one)`; on any other failure, emit `issue not started — <reason>`. Always continue — but the emitted line MUST reach the step 4 output block, never only intermediate text.
+3. **If `provider` is `linear` AND `--start` was passed:** follow [Start the ticket](./references/linear-branch.md#start-the-ticket), then include its outcome in the result below. Skip this reference for every other branch.
 
 4. **Output result:**
 
@@ -247,58 +219,7 @@ Only proceed to [Phase 6](#phase-6-execute) after user selects "Create branch". 
 
 ## Examples
 
-An issue branch is created without a dialog; a special-prefix branch confirms via the one [Phase 5](#phase-5-confirm-special-prefix-branch-name) template. Two worked cases below; Linear follows the issue case and the other special prefixes follow the hotfix case.
-
-### GitHub issue (auto-generated slug)
-
-```
-/autopilot:branch-create 123
-
-Fetching GitHub issue #123...
-Title: "Add JWT token refresh endpoint for authentication service"
-```
-
-No confirmation dialog — the name is derived from the issue, so [Phase 5](#phase-5-confirm-special-prefix-branch-name) is skipped and the branch is created directly.
-
-```
-✓ Branch created: issue-123-jwt-refresh
-✓ Pushed to origin with tracking
-```
-
-### Special prefix (--hotfix)
-
-```
-/autopilot:branch-create --hotfix "memory leak in editor"
-```
-
-AskUserQuestion with the [Phase 5](#phase-5-confirm-special-prefix-branch-name) template, both options' `<preview>` resolved to `hotfix-memory-leak-editor\n\nType: HOTFIX\nFrom: origin/main`.
-
-User selects "Create branch".
-
-```
-✓ Branch created: hotfix-memory-leak-editor
-✓ Pushed to origin with tracking
-```
-
-### Branch already exists
-
-```
-/autopilot:branch-create 123
-
-Branch issue-123-jwt-refresh already exists locally.
-```
-
-AskUserQuestion with:
-
-- `question`: "Branch issue-123-jwt-refresh already exists. How would you like to proceed?"
-- `header`: "Conflict"
-- `options`: Checkout existing / Create with suffix / Different description
-
-User selects "Checkout existing".
-
-```
-✓ Switched to branch: issue-123-jwt-refresh
-```
+Read [examples.md](./references/examples.md) only when slug selection or a branch outcome is unclear.
 
 ## Reference formatting
 

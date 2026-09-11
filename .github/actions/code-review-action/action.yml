@@ -589,12 +589,13 @@ runs:
           ${{ inputs.review_prompt }} REPO: ${{ github.repository }} PR_NUMBER: ${{ steps.ctx.outputs.pr_number }} REVIEWER: ${{ inputs.reviewer }} PR_AUTHOR: ${{ steps.pr.outputs.author }} RULES_DOC_URL: ${{ inputs.rules_doc_url }} CONTEXT_BUNDLE: ${{ steps.bundle.outputs.path }}
         CLAUDE_RUN_MODE: review
         CLAUDE_MODEL: ${{ inputs.model }}
-        # The single Bash(node …) rule permits ONLY the bundled read-only review-thread helper at the
+        # These Bash(node …) rules permit ONLY bundled read-only review/issue helpers at the
         # literal ${CLAUDE_PLUGIN_ROOT} path (set below from the trusted plugin-install output), so it can
         # never match the reviewed PR's own checkout of that file — no absolute-path wildcard, no -e/--require
         # flag injection. The helper intentionally performs the read-only reviewThreads GraphQL query that the
-        # direct Bash(gh api graphql:*) disallow blocks — a reviewed exception, not an accident.
-        CLAUDE_ALLOWED_TOOLS: 'Bash(gh:*),Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.ts":*),mcp__repomix__*,mcp__context7__*,mcp__Ref__*,mcp__exa__*,mcp__perplexity__*,Read,Glob,Grep'
+        # direct Bash(gh api graphql:*) disallow blocks. The issue helper requires --read-only,
+        # which rejects --assign before I/O; no general node permission is granted.
+        CLAUDE_ALLOWED_TOOLS: 'Bash(gh:*),Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.ts":*),Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-issue.ts" --read-only:*),Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/linear/fetch-issue.mjs" --review:*),mcp__repomix__*,mcp__context7__*,mcp__Ref__*,mcp__exa__*,mcp__perplexity__*,Read,Glob,Grep'
         CLAUDE_DISALLOWED_TOOLS: "Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh issue comment:*),Bash(gh api * -X *:*),Bash(gh api * --method *:*),Bash(gh api * -f *:*),Bash(gh api * -F *:*),Bash(gh api * --field *:*),Bash(gh api * --raw-field *:*),Bash(gh api * --input *:*),Bash(gh api graphql:*)"
         CLAUDE_JSON_SCHEMA: '{"type":"object","properties":{"verdict":{"type":"string","enum":["approve","requestChanges","comment"]},"reviewComment":{"type":"string"},"inlineComments":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"},"body":{"type":"string"},"startLine":{"type":"integer"},"suggestion":{"type":"string"}},"required":["path","line","body"]}}},"required":["verdict","reviewComment"]}'
         CLAUDE_PLUGIN_DIR: ${{ steps.plugin.outputs.dir }}

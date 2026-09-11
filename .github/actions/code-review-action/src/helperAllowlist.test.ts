@@ -2,7 +2,7 @@
  * Pins the review-thread helper's Bash allow rule in action.yml. The helper
  * (claude-plugins/autopilot/lib/github/fetch-pr-reviews.ts) tunnels a read-only
  * `gh api graphql` reviewThreads query past the Bash-layer graphql disallow — a
- * deliberate exception that stays safe only while the single allow rule pins the
+ * deliberate exception that stays safe only while each allow rule pins its
  * script to the literal `${CLAUDE_PLUGIN_ROOT}` path (the trusted installed
  * plugin, set from steps.plugin.outputs.dir). An absolute-path wildcard such as
  * `node /*…/fetch-pr-reviews.ts` would also match the reviewed PR's own untrusted
@@ -21,9 +21,13 @@ const allowedToolsLines = actionYml
   .split("\n")
   .filter((line) => line.includes("CLAUDE_ALLOWED_TOOLS:"));
 
-/** The one safe rule — the script is pinned to the literal ${CLAUDE_PLUGIN_ROOT} path. */
-const pinnedHelperRule =
-  'Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.ts":*)';
+/** Trusted helper paths; issue lookup is available only in the review step. */
+const pinnedHelperRule = 'Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-pr-reviews.ts":*)';
+
+const githubIssueRule =
+  'Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-issue.ts" --read-only:*)';
+const linearIssueRule = 'Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/linear/fetch-issue.mjs" --review:*)';
+const pinnedRules = new Set([pinnedHelperRule, githubIssueRule, linearIssueRule]);
 
 describe("review-thread helper allowlist", () => {
   test("both Claude steps declare an allowlist", () => {
@@ -55,11 +59,19 @@ describe("review-thread helper allowlist", () => {
           line.includes("CLAUDE_ALLOWED_TOOLS:") || line.includes("CLAUDE_DISALLOWED_TOOLS:"),
       );
     const nodeRules = toolsLines.flatMap((line) => line.match(/Bash\(node[^)]*\)/g) ?? []);
-    // The ONLY permitted node rule is the ${CLAUDE_PLUGIN_ROOT}-anchored one. An
+    // Every permitted node rule is pinned to a trusted installed helper. An
     // absolute-path (`node /…`) or wildcard (`node /*…`) rule would also match the
     // reviewed PR's own checkout of the helper file — CHECK-SEC-003.
     for (const rule of nodeRules) {
-      expect(rule).toBe(pinnedHelperRule);
+      expect(pinnedRules.has(rule)).toBe(true);
     }
+  });
+
+  test("only review grants issue helpers, with GitHub read-only mode required", () => {
+    const [review, reaction] = allowedToolsLines;
+    expect(review).toContain(githubIssueRule);
+    expect(review).toContain(linearIssueRule);
+    expect(reaction).not.toContain(githubIssueRule);
+    expect(reaction).not.toContain(linearIssueRule);
   });
 });

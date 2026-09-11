@@ -35,7 +35,16 @@ const sharedReferences = join(skillsDir, "shared-rules/references");
 // generation phase. Reword it only alongside this test.
 const applyInstruction = "reference-formatting rules in [`reference-formatting.md`]";
 
-const skills = ["pr-create", "pr-update", "plan", "gather-context", "run", "issue-create", "linear-create", "pr-review"];
+const skills = [
+  "pr-create",
+  "pr-update",
+  "plan",
+  "gather-context",
+  "run",
+  "issue-create",
+  "linear-create",
+  "pr-review",
+];
 
 describe("output reference-formatting wiring", () => {
   test.each(skills)("%s instructs the body generator to apply RFC-0001", async (skill) => {
@@ -67,13 +76,19 @@ describe("linear issue linking (issue #387)", () => {
     expect(content).toContain("shared-rules/references/pr-body-grammar.md");
   });
 
-  test.each(prBodySkills)("%s instructs a bare-reference self-check on the drafted body", async (skill) => {
-    const content = await readFile(join(skillsDir, skill, "SKILL.md"), "utf8");
-    expect(content).toContain("self-check the drafted body");
-  });
+  test.each(prBodySkills)(
+    "%s instructs a bare-reference self-check on the drafted body",
+    async (skill) => {
+      const content = await readFile(join(skillsDir, skill, "SKILL.md"), "utf8");
+      expect(content).toContain("self-check the drafted body");
+    },
+  );
 
   test("pr-review cites the linked ticket as a link built from the issue url", async () => {
-    const content = await readFile(join(skillsDir, "pr-review", "SKILL.md"), "utf8");
+    const content = await readFile(
+      join(skillsDir, "pr-review", "references/findings-format.md"),
+      "utf8",
+    );
     expect(content).toContain("cite it as a markdown link built from");
   });
 
@@ -94,6 +109,17 @@ describe("linear issue linking (issue #387)", () => {
 // repo via refs/pull/N/head.
 describe("review body file links", () => {
   const reviewSkill = join(skillsDir, "pr-review", "SKILL.md");
+  const findingsFormat = join(skillsDir, "pr-review", "references/findings-format.md");
+
+  test("loads findings formatting only when findings remain", async () => {
+    const content = await readFile(reviewSkill, "utf8");
+    expect(content).toContain(
+      "Only when findings remain, read [findings-format.md](./references/findings-format.md)",
+    );
+    expect(content).toContain(
+      "Do not load either reference for a skipped review or an empty approval",
+    );
+  });
 
   test("defines the PR blob base from the reviewed head commit", async () => {
     const content = await readFile(reviewSkill, "utf8");
@@ -102,14 +128,14 @@ describe("review body file links", () => {
   });
 
   test("templates demonstrate the linked finding-location and anchor forms", async () => {
-    const content = await readFile(reviewSkill, "utf8");
+    const content = await readFile(findingsFormat, "utf8");
     expect(content).toContain("[src/path/to/file.ts:NN](<pr-blob-url>/src/path/to/file.ts#LNN)");
     expect(content).toContain("?plain=1#L");
     expect(content).toContain("#<heading-anchor>");
   });
 
   test("scopes linking to resolvable targets with a pre-emit self-check", async () => {
-    const content = await readFile(reviewSkill, "utf8");
+    const content = await readFile(findingsFormat, "utf8");
     expect(content).toContain("NEVER linked by guess");
     expect(content).toContain("bare 7–40-char hex token");
   });
@@ -118,7 +144,7 @@ describe("review body file links", () => {
   // backticked forms (inline-comment own anchor, the NOT `processor.ts:66` contrast)
   // must not trip them.
   test("the backticked finding-location templates do not resurface", async () => {
-    const content = await readFile(reviewSkill, "utf8");
+    const content = await readFile(findingsFormat, "utf8");
     expect(content).not.toContain("- `src/path/to/file.ts:NN` -");
     expect(content).not.toContain("`src/webhooks/payment.ts:45`");
     expect(content).not.toContain("`src/webhooks/payment.ts:62`");
@@ -130,7 +156,7 @@ describe("review body file links", () => {
   // no example modeled an in-prose mention. These pin the broadened self-check plus a worked
   // example that links a no-line mention while sparing a glob code specimen.
   test("links no-line prose/summary mentions while sparing code-specimen paths", async () => {
-    const content = await readFile(reviewSkill, "utf8");
+    const content = await readFile(findingsFormat, "utf8");
     // self-check broadened: covers no-line mentions and the summary sentence
     expect(content).toContain("with OR without a line number");
     expect(content).toContain("including the summary sentence");
