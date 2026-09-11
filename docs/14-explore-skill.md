@@ -93,7 +93,7 @@ Two further properties made the map unsuitable for a steer-as-you-go session. It
 
 `explore` invokes `gather-context` rather than re-implementing it. These are prompt files with no import mechanism, so a "mirrored" roster is a hand-copy — and it would rot the first time a sub-agent is added to one side and not the other, with no guard relating the two skills.
 
-The only change on that shared path is one optional input:
+The shared path uses `Scope` to select reads and acquisition:
 
 | `Scope`          | Codebase pass                                                            |
 | ---------------- | ------------------------------------------------------------------------ |
@@ -101,11 +101,9 @@ The only change on that shared path is one optional input:
 | `broad`          | principal modules and boundaries, entry points, the conventions in force |
 | `primed`         | only the task-specific gaps a validated brief does not already cover     |
 
-The Context Map's section shape is identical at every scope. `plan` and `run` omit `Scope` and get `task`, so each addition is additive and default-preserving — the blast radius is confined to callers that pass a non-default value. `primed` was added later for [`run-primed`](./15-run-primed-skill.md) and goes one step further than `broad`: it also gates off the standards digest, making `Scope` a fan-out selector rather than only a read strategy.
+The Context Map keeps the same sections at every scope. `task` remains the default; `primed` skips standards already supplied by a validated brief. `broad` skips the branch digest and session history, including the Entire availability check, because explore recomputes volatile state and does not consume history. It reads only changed-path pointers to account for files newer than the snapshot.
 
-`explore` also passes input type `plain-description`, which gates off `resolve-issue-context` and `search-codebase-todos`. No sub-agent runs whose output the brief would discard.
-
-Local workspace state deliberately stays in `explore` rather than joining the Context Map: it is four bounded `git` calls, not a digest, and `plan`/`run` did not ask for it.
+`plain-description` also skips issue and TODO lookup. Broad maps explicitly mark Git state and In-flight changes as caller-owned, and Session history as not requested. Explore's volatile phase still runs once on both full primes and delta refreshes, independently of the map.
 
 ## The brief
 

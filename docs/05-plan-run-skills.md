@@ -125,7 +125,7 @@ The snapshot follows the shared ordered source chain: a committed graphify knowl
 
 A resolver returning `unresolved` with a non-null `resolveError` is fatal: the skill surfaces the error and stops rather than proceeding against a misfetched target. A _digest_ failure is not fatal — it is recorded and planning continues, because a plan without a standards digest is degraded, not wrong.
 
-The fan-out takes an optional `Scope` input — `task` or `broad`. Both skills here omit it and get `task`, the change-scoped pass described above; `broad` reads the snapshot breadth-first instead and is used only by [the `explore` skill](./14-explore-skill.md), a third on-ramp for work that starts from an area rather than a target. The emitted Context Map has the same sections either way.
+The fan-out takes an optional `Scope`: `task` (default), `broad`, or `primed`. Plan and run use task-specific acquisition. [Explore](./14-explore-skill.md) uses broad architecture reads but skips unused history and the branch digest; [run-primed](./15-run-primed-skill.md) reuses validated standards. The Context Map retains its section shape at every scope. Standards discovery inventories the documentation index and file names, then reads relevant conventions instead of following every index link.
 
 ## Phase 2 — Intent, assumptions, and the human gate
 

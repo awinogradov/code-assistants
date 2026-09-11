@@ -1,10 +1,10 @@
 /**
  * Guards the review-round contract (issue #622) across its three holders: the
  * substantive-anchor predicate (`buildReviewContext.ts`), the pr-review skill
- * prose that owns round policy (SKILL.md §1.3 plus the §1.0 routing bullet and
+ * prose that owns round policy (SKILL.md §1.2 plus the §1.0 routing bullet and
  * the Graphify boundary), and the publication binding (`submitReview.ts`
  * `commit_id`). The predicate is pinned twice on purpose — behaviorally via
- * `isSubstantiveReview` and textually via the §1.3 prose — because the two
+ * `isSubstantiveReview` and textually via the §1.2 prose — because the two
  * encodings live in different files and either drifting alone silently splits
  * anchor selection between the builder and the skill, which is the exact
  * failure the issue exists to remove.
@@ -33,7 +33,7 @@ const submitPath = join(actionDir, "src", "submitReview.ts");
 const minDocLength = 1000;
 
 /**
- * The substantive-anchor taxonomy: [state, body, substantive]. §1.3 prose and
+ * The substantive-anchor taxonomy: [state, body, substantive]. §1.2 prose and
  * the builder predicate must agree on every row.
  */
 const anchorTaxonomy: Array<[string, string | null, boolean]> = [
@@ -47,7 +47,7 @@ const anchorTaxonomy: Array<[string, string | null, boolean]> = [
   ["DISMISSED", "old blocker text", false],
 ];
 
-/** The four state-machine arms §1.3 must name, one guarded phrase each. */
+/** The four state-machine arms §1.2 must name, one guarded phrase each. */
 const stateMachineArms = [
   "No substantive prior review",
   "Review skipped: no commits since the reviewed head",
@@ -89,7 +89,7 @@ describe("substantive-anchor predicate", () => {
 });
 
 describe("round state machine", () => {
-  test.each(stateMachineArms)("§1.3 names the arm: %s", (arm) => {
+  test.each(stateMachineArms)("§1.2 names the arm: %s", (arm) => {
     expect(skill).toContain(arm);
   });
 
@@ -105,6 +105,25 @@ describe("round state machine", () => {
     expect(skill).toContain("round-surface:");
     expect(skill).toContain("round-surface-fallback:");
     expect(skill).toContain("never review a silently truncated patch");
+  });
+});
+
+describe("review acquisition order", () => {
+  test("round selection precedes supporting context", () => {
+    const round = skill.indexOf("### 1.2 Review Round Handling");
+    const context = skill.indexOf("### 1.3 Load Supporting Context");
+    expect(round).toBeGreaterThan(0);
+    expect(context).toBeGreaterThan(round);
+    const metadata = skill.slice(skill.indexOf("### 1.1 PR Context"), round);
+    expect(metadata).not.toContain("gh pr diff");
+    expect(skill).toContain("An identical-head skip returns immediately without diff");
+  });
+
+  test("issue lookup is direct and read-only", () => {
+    expect(skill).toContain('fetch-issue.ts" --read-only');
+    expect(skill).toContain("lib/linear/fetch-issue.mjs");
+    expect(skill).not.toContain("subagent_type");
+    expect(skill).toContain("head_limit: 20");
   });
 });
 

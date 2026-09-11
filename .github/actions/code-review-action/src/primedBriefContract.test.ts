@@ -85,9 +85,7 @@ describe("primed brief contract", () => {
   });
 
   test.each(rejectingVerdicts)("the %s verdict carries an actionable message", (verdict) => {
-    const message = runPrimed
-      .split("\n")
-      .find((line) => line.startsWith(`- ${verdict} —`));
+    const message = runPrimed.split("\n").find((line) => line.startsWith(`- ${verdict} —`));
     expect(`${verdict}: ${message ?? "<no message line>"}`).toContain("/autopilot:run");
   });
 
@@ -117,6 +115,14 @@ describe("primed brief contract", () => {
     for (const value of ["`task`", "`broad`", "`primed`"]) {
       expect(`Scope bullet: ${scope ?? "<absent>"}`).toContain(value);
     }
+  });
+
+  test("broad acquisition omits unused history and the branch digest", () => {
+    expect(gatherContext).toContain(
+      "**Broad scope:** skip the Entire settings read, history agent, and branch-digest helper",
+    );
+    expect(gatherContext).toContain("none — caller-owned volatile refresh");
+    expect(gatherContext).toContain("none — not requested");
   });
 
   test("ordinary run is unchanged — it still gathers context and knows no brief", () => {

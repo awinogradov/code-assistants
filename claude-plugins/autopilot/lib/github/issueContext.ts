@@ -1,7 +1,6 @@
 // Pure transforms for GitHub issue retrieval: guard the parsed `gh issue view`
 // payload and reduce it to the provider-agnostic issue contract the
-// gather-context skill consumes in place of the resolve-issue-context delegated
-// agent (the agent itself remains for the pr-review CI path). No I/O lives here —
+// gathering and review skills consume without a delegated agent. No I/O lives here —
 // the CLI in fetch-issue.ts is a thin shell around these functions, so the
 // fixture tests in issueContext.test.ts exercise the exact production paths.
 //

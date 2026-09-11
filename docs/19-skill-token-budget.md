@@ -56,3 +56,17 @@ Applying all of the above to the five skills that re-load on the PR-review cycle
 | **Total**         | 86,385 B | 69,456 B | −20%   |
 
 Bodies alone understate it, because the invocation-count fix is the larger half. Counting each injection in one `/autopilot:run` with two review cycles, the skill-body bytes entering the conversation fall from roughly 208 KB to roughly 120 KB — about −42%. Interactive sessions gain less, since they read the extracted dialogs back.
+
+## Acquire only consumed context
+
+[Gather-context](../claude-plugins/autopilot/skills/gather-context/SKILL.md) uses scope to omit work its caller does not consume. Broad exploration skips the history agent and branch digest; explore refreshes volatile state once. Standards discovery selects relevant documents from the index and inventory, preserving explicit repository-required reads.
+
+[PR review](../claude-plugins/autopilot/skills/pr-review/SKILL.md) classifies the round before loading its patch and supporting context. Identical heads stop there; incremental rounds avoid reading the full-diff artifact unless they fall back. Direct issue helpers replace mechanical delegation, retain explicit errors/truncation, and cannot assign an issue in review mode.
+
+Keep operational instructions in the skill: conditions, actions, evidence fields, limits, and failure behavior. Maintenance rationale belongs in docs; the [snapshot history](./09-repomix-pack.md#the-exclusive-source-read-contract) explains why the shared source contract exists. Removing repeated rationale does not remove its safeguards. File-size reductions show instruction savings only; runtime token and latency savings require observing representative sessions.
+
+## Conditional references and bounded digests
+
+[Branch creation](../claude-plugins/autopilot/skills/branch-create/SKILL.md) loads Linear operations only for Linear tickets, confirmation details only for interactive special-prefix branches, and examples only when the branch choice is unclear. [Review findings formatting](../claude-plugins/autopilot/skills/pr-review/references/findings-format.md) loads only for a review with findings. Round handling owns the same-head exit; the main review skill owns the remaining verdict decisions. Findings have one detailed explanation, with a short summary entry when the detail appears inline.
+
+The [standards digest](../claude-plugins/autopilot/agents/digest-repo-standards.md) caps conventions at 12 entries of 40 words, selected standards at 3, dropped candidates at 10, and principles at 6 entries of 30 words. These are output limits, not permission to disregard constraints: preserve conditions and exceptions, report omitted entries in `overflow`, and mark the digest incomplete. Gather-context carries that status into its Context Map; primed runs retrieve missing applicable clauses before deciding affected work. Narrow follow-ups pass already captured rules to avoid returning the same clauses again.

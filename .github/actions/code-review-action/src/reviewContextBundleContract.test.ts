@@ -49,7 +49,7 @@ describe("review-context-bundle contract", () => {
     expect(skill).toContain(`\`version\` field equals \`${bundleVersion}\``);
   });
 
-  test("the bundle substitutes data acquisition only, with both paths sharing §1.3", () => {
+  test("the bundle substitutes data acquisition only, with both paths sharing §1.2", () => {
     expect(skill).toContain("substitutes for data acquisition only");
     expect(skill).toContain("This decision procedure is the same on both data paths");
   });
@@ -69,9 +69,9 @@ describe("review-context-bundle contract", () => {
 
   test("the legacy discovery sections survive as the fallback path", () => {
     expect(skill).toContain("### 1.1 PR Context");
-    expect(skill).toContain("### 1.2 Load Context via Sub-Agents");
+    expect(skill).toContain("### 1.3 Load Supporting Context");
     expect(skill).toContain(
-      "run [§1.1](#11-pr-context)–[§1.2](#12-load-context-via-sub-agents) unchanged",
+      "then classify the round before acquiring its surface or supporting context",
     );
   });
 
