@@ -2,6 +2,57 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [9.0.1](https://github.com/awinogradov/code-assistants/compare/autopilot@v9.0.0...autopilot@v9.0.1) (2026-09-11)
+
+## Release Notes
+
+Autopilot's planning and execution workflows now reuse fetched context instead of rebuilding it on every invocation, cutting redundant token work across both Autopilot and Linear-backed flows.
+
+## ✨ What's New
+
+- Planning workflows now accept explicit validated exploration briefs and reuse already-fetched Linear tickets, so replanning a ticket no longer re-fetches context from scratch.
+- Exploration can refresh only the affected sections of a plan rather than regenerating the full output, and stored Linear plans carry reusable context evidence forward to subsequent steps.
+- Standards summaries now report overflow explicitly instead of silently dropping applicable constraints, making it visible when context limits caused a rule to be skipped.
+
+<details><summary>Related issues</summary>
+
+- [#671: Reuse planning context across Autopilot and Linear workflows](https://github.com/awinogradov/code-assistants/issues/671)
+- [#669: Reduce unnecessary context work and instruction overhead in Autopilot](https://github.com/awinogradov/code-assistants/issues/669)
+</details>
+
+## 🐛 Bug Fixes
+
+- Autopilot no longer loads optional skill instructions when the relevant skill is not active, eliminating unnecessary instruction overhead on every invocation.
+
+<details><summary>Related issues</summary>
+
+- [#669: Reduce unnecessary context work and instruction overhead in Autopilot](https://github.com/awinogradov/code-assistants/issues/669)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #671 | [#672](https://github.com/awinogradov/code-assistants/pull/672) | @awinogradov |
+| #669 | [#670](https://github.com/awinogradov/code-assistants/pull/670) | @awinogradov |
+
+### Performance
+
+* **autopilot:** bound context and defer skill references ([d71c112](https://github.com/awinogradov/code-assistants/commit/d71c112f34ca19003330228f83d2d54c88817cc3))
+* **autopilot:** reuse planning and linear context ([d1ed0ed](https://github.com/awinogradov/code-assistants/commit/d1ed0edf7cdfc351ff66bf24307687924977b88b))
+
+### Documentation
+
+* **autopilot:** correct linear-plan gate punctuation ([0e7b645](https://github.com/awinogradov/code-assistants/commit/0e7b645bf07e8bac9a996876c150b4f4440f0ecc))
+
+### Refactoring
+
+* **autopilot:** share brief and input instructions ([ed341f8](https://github.com/awinogradov/code-assistants/commit/ed341f835dd7e520ed7361bd594b51c8db364a4a))
+
+### Tests
+
+* **autopilot:** cover invalid issue lookup arguments ([c9e6423](https://github.com/awinogradov/code-assistants/commit/c9e6423bb2e6bc2774c21c4df5b7477d741241ee))
 ## [9.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v8.0.0...autopilot@v9.0.0) (2026-09-11)
 
 ## Release Notes
