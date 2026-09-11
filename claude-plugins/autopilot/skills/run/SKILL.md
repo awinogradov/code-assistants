@@ -204,7 +204,7 @@ Output the PR URL. Set task 6 to `completed`.
 
 #### Step 3: Monitor PR
 
-Set task 7 ("Monitor PR") to `in_progress`. Invoke `Skill(autopilot:pr-monitor)` in foreground mode (do NOT use the Agent tool with run_in_background) and without `--wait-for-approval`. It polls CI, review, and mergeability status, invokes pr-resolve interactively when feedback needs answering, and returns as soon as its [Readiness Check](../pr-monitor/SKILL.md#readiness-check-shared-procedure) passes for the current head (`READY_FOR_REVIEW`), or earlier on approval or merge; approval and merge are asynchronous follow-ups, not part of this chain's wait.
+Set task 7 ("Monitor PR") to `in_progress`. Invoke `Skill(autopilot:pr-monitor)` in foreground mode (do NOT use the Agent tool with run_in_background) and without `--wait-for-approval`. It launches the packaged watcher, which waits inside one process and wakes this session only for one of the [events it defines](../pr-monitor/SKILL.md#the-event-contract) — never for ordinary pending CI. The skill invokes pr-resolve interactively when feedback needs answering, fixes failing checks, and returns `READY_FOR_REVIEW` once checks have settled for the current head with nothing unanswered, or earlier on approval or merge; approval and merge are asynchronous follow-ups, not part of this chain's wait.
 
 **Autopilot override for pr-resolve:** when pr-monitor invokes pr-resolve and it presents the review-action gate via AskUserQuestion, auto-select "Address all". Replies post without prompting.
 

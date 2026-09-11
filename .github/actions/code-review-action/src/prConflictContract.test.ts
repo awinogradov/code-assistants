@@ -69,8 +69,10 @@ const section = (source: string, heading: string): string =>
   )?.[0] ?? "";
 
 const sweep = sweepDoc;
-const earlyExit = section(monitor, "### 1.1 Early Exit Checks");
-const perCycle = section(monitor, "### 2.2 Check PR State");
+const detectPrMonitor = section(monitor, "## Phase 1: Detect PR");
+const eventContract = section(monitor, "### The Event Contract");
+const sweepSection = section(monitor, "### Conflict Sweep (shared procedure)");
+const handleEvent = section(monitor, "## Phase 3: Handle the Event");
 const backgroundMode = backgroundDoc;
 const detectPr = section(resolve, "### 1.1 Detect PR");
 
@@ -81,9 +83,11 @@ const forbiddenCommand = /#### Canonical forbidden-command regex[\s\S]*?```text\
 
 describe("extractions are substantial", () => {
   test.each([
-    ["Conflict Sweep", sweep],
-    ["§1.1 Early Exit Checks", earlyExit],
-    ["§2.2 Check PR State", perCycle],
+    ["Conflict Sweep reference", sweep],
+    ["Phase 1 Detect PR", detectPrMonitor],
+    ["The Event Contract", eventContract],
+    ["Conflict Sweep section", sweepSection],
+    ["Phase 3 Handle the Event", handleEvent],
     ["Background Mode", backgroundMode],
     ["pr-resolve §1.1 Detect PR", detectPr],
     ["forbidden-command regex", forbiddenCommand ?? ""],
@@ -94,21 +98,26 @@ describe("extractions are substantial", () => {
 
 describe("both skills ask GitHub for mergeability", () => {
   // Detection is the whole fix: without the field, every branch below is dead
-  // code. The pre-loop read also needs headRepositoryOwner, which is how the
-  // sweep recognises a fork it cannot push to.
-  //
-  // Only the two fenced state reads count. The Input-resolution section names a
-  // third `gh pr view` in prose that fetches the PR number alone, and widening
-  // that one to carry mergeability would say the skill re-reads state where it
-  // does not.
-  test("pr-monitor requests mergeable on both state reads", () => {
+  // code. pr-monitor now delegates the per-cycle reads to the watcher, so its
+  // one remaining fenced read is the pre-launch detection — which still needs
+  // mergeable to abort early, and headRepositoryOwner, which is how the sweep
+  // recognises a fork it cannot push to.
+  test("pr-monitor requests mergeable on its one state read", () => {
     const reads = monitor.match(/```bash\ngh pr view[^\n]*--json[^\n]*/g) ?? [];
-    expect(reads.length).toBe(2);
+    expect(reads.length).toBe(1);
     for (const read of reads) expect(read).toContain("mergeable");
   });
 
-  test("pr-monitor's pre-loop read requests headRepositoryOwner", () => {
-    expect(section(monitor, "## Phase 1: Detect PR")).toContain("headRepositoryOwner");
+  test("pr-monitor's pre-launch read requests headRepositoryOwner", () => {
+    expect(detectPrMonitor).toContain("headRepositoryOwner");
+  });
+
+  // The watcher owns every read after detection, so the conflict evidence the
+  // sweep acts on has to come from it rather than from a re-read in the model.
+  test("the conflict event is the sweep's trigger", () => {
+    expect(sweepSection).toContain("`conflict` event");
+    expect(handleEvent).toContain("**`conflict`**");
+    expect(handleEvent).toContain("Conflict Sweep");
   });
 
   test("pr-resolve requests mergeable", () => {
@@ -162,26 +171,24 @@ describe("every conflict path terminates", () => {
     expect(monitor).toContain("not** keyed to the base SHA");
   });
 
-  test("Phase 3 has a conflicted exit", () => {
-    expect(section(monitor, "## Phase 3: Exit")).toContain("Status: CONFLICTED");
+  test("Phase 4 has a conflicted exit", () => {
+    expect(section(monitor, "## Phase 4: Exit")).toContain("Status: CONFLICTED");
   });
 
-  test.each([
-    ["§1.1", earlyExit],
-    ["§2.2", perCycle],
-  ])("%s routes a failed sweep to the Phase 3 exit", (_name, branch) => {
-    expect(branch).toContain("Conflict Sweep");
-    expect(branch).toMatch(/exit to \[Phase 3\]\(#phase-3-exit\) with status "conflicted"/);
+  test("the conflict handler routes a failed sweep to the exit", () => {
+    expect(handleEvent).toContain("Conflict Sweep");
+    expect(handleEvent).toMatch(/exit to \[Phase 4\]\(#phase-4-exit\) with status "conflicted"/);
   });
 
-  // §2.2's APPROVED branch exits "already approved with all checks passing"
-  // without consulting mergeability, so a conflicted-but-approved PR would exit
-  // clean if the conflict branch were ever moved below it.
-  test.each([
-    ["§1.1", earlyExit],
-    ["§2.2", perCycle],
-  ])("%s checks CONFLICTING before reviewDecision", (_name, branch) => {
-    expect(branch.indexOf("CONFLICTING")).toBeLessThan(branch.indexOf("`APPROVED`"));
+  // A conflicted pull request cannot merge however green or approved it looks,
+  // so a conflict must outrank approval wherever the two are ordered. The
+  // ordering now lives in the watcher's event precedence, which the contract
+  // table states.
+  test("the event table orders conflict above approval and readiness", () => {
+    const conflictAt = eventContract.indexOf("`conflict`");
+    expect(conflictAt).toBeGreaterThan(-1);
+    expect(conflictAt).toBeLessThan(eventContract.indexOf("`approved`"));
+    expect(conflictAt).toBeLessThan(eventContract.indexOf("`ready_for_review`"));
   });
 
   test("background mode reports the conflict instead of acting", () => {
@@ -193,8 +200,9 @@ describe("every conflict path terminates", () => {
 describe("UNKNOWN is pending, not a conflict", () => {
   // GitHub computes mergeability asynchronously, so UNKNOWN is the normal
   // reading right after a push. Treating it as a conflict would sweep on noise.
-  test("pr-monitor leaves UNKNOWN to the next poll", () => {
+  test("pr-monitor leaves UNKNOWN to the watcher's next cycle", () => {
     expect(sweep).toContain("`UNKNOWN` is a pending state");
+    expect(sweepSection).toContain("`UNKNOWN`, not `CONFLICTING`");
   });
 
   // pr-resolve reads once, with no loop to re-read for it, so without an
