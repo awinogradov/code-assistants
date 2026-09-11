@@ -1,6 +1,6 @@
 # agents-skills-sync
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v2.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 Composite GitHub Action that syncs the autopilot skills — the portable single-source layout under [claude-plugins/autopilot/skills/](../../../claude-plugins/autopilot/README.md) ([RFC-0002](../../../rfc/0002-portable-skills-layout.md)) — from an upstream repository into the current repository's `.agents/skills/` directory, the vendor-neutral location Codex, Kimi, and other SKILL.md-compatible CLIs read.
