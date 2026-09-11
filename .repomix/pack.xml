@@ -183,7 +183,6 @@ The content is organized as follows:
         classifyReaction.test.ts
         classifyReaction.ts
         contextSourceContract.test.ts
-        expertReviewContract.test.ts
         gitHistoryPolicy.test.ts
         graphifyEvidence.test.ts
         graphifyEvidence.ts
@@ -535,7 +534,6 @@ claude-plugins/
       analyze-staged-changes.md
       digest-repo-standards.md
       digest-session-history.md
-      expert-review.md
       resolve-alert-context.md
       resolve-assignees.md
       resolve-issue-context.md
@@ -3057,7 +3055,7 @@ describe('buildSkillSyncEntries', () => {
   test('drops paths outside the skills layout', () => {
     const entries = buildSkillSyncEntries({
       ...baseArgs,
-      files: ['rules/Bun.md', 'claude-plugins/autopilot/agents/expert-review.md'],
+      files: ['rules/Bun.md', 'claude-plugins/autopilot/agents/digest-repo-standards.md'],
     });
     expect(entries).toEqual([]);
   });
@@ -3153,7 +3151,7 @@ const tree: TreeEntry[] = [
   { path: 'claude-plugins/autopilot/skills/run/SKILL.md', type: 'blob' },
   { path: 'claude-plugins/autopilot/skills/plan/references/pipeline.md', type: 'blob' },
   { path: 'claude-plugins/autopilot/skills/run', type: 'tree' },
-  { path: 'claude-plugins/autopilot/agents/expert-review.md', type: 'blob' },
+  { path: 'claude-plugins/autopilot/agents/digest-repo-standards.md', type: 'blob' },
   { path: 'rules/Bun.md', type: 'blob' },
 ];
 
@@ -11001,180 +10999,6 @@ describe("linear-run enforces the selection", () => {
 });
 </file>
 
-<file path=".github/actions/code-review-action/src/expertReviewContract.test.ts">
-/**
- * Guards the contract between the `expert-review` agent, which returns a scored plan
- * review, and `pipeline.md`, which records a panel of them as per-reviewer verdicts.
- *
- * The reason this guard exists: the agent repeatedly returned confident reviews built on
- * file contents it had never read, reporting no tool use, and its own prose prohibition
- * against doing so did not stop it. The fix is not a stronger instruction — it is a
- * declared `grounding` field the parent can screen, and a parent that discards rather
- * than averages a review that fails the screen. Both halves have to stay in place for
- * either to be worth anything, and they live in two prompt files with no import between
- * them, so nothing but a test relates them.
- *
- * Three properties are load-bearing:
- *
- * 1. The field list the agent emits matches the one the pipeline says it receives. The
- *    field names are parsed from the agent's own output table rather than hardcoded, so
- *    renaming one fails here instead of silently dropping from the screen.
- * 2. The pipeline states the discard rule and every condition that triggers it. A
- *    condition quietly deleted turns the screen back into an average-everything step.
- * 3. The pipeline refuses to present a shrunken panel as a consensus. Two of five
- *    reviewers failing is the observed case, and reporting the survivor's score as a
- *    panel aggregate is how that becomes invisible.
- *
- * What this CANNOT prove: that the screen runs, or that a reviewer declares its grounding
- * honestly — a fabricated `grounding` entry is still possible and is exactly why the
- * pipeline also screens for the no-tool-use contradiction rather than trusting the field
- * alone. CI sees text in a file, nothing more.
- */
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-
-import { describe, expect, test } from "bun:test";
-
-const actionDir = join(import.meta.dirname, "..");
-const repoRoot = join(actionDir, "..", "..", "..");
-const autopilotDir = join(repoRoot, "claude-plugins/autopilot");
-
-const [agent, pipeline, chapter] = await Promise.all([
-  readFile(join(autopilotDir, "agents/expert-review.md"), "utf8"),
-  readFile(join(autopilotDir, "skills/plan/references/pipeline.md"), "utf8"),
-  readFile(join(repoRoot, "docs/05-plan-run-skills.md"), "utf8"),
-]);
-
-/**
- * The `| \`field\` |` rows of the agent's Phase 4 output table, sliced to that section so
- * the five-dimension rubric table above it does not leak in.
- */
-function outputFields(source: string): string[] {
-  const section = source.split("## Phase 4: Output")[1]?.split("Example (illustrative")[0] ?? "";
-  return [...section.matchAll(/^\|\s*`(\w+)`/gm)].map((row) => row[1]);
-}
-
-/** The backticked names on the pipeline's "Each returns JSON (…)" line. */
-function pipelineFields(source: string): string[] {
-  const line = source.split("\n").find((l) => l.startsWith("Each returns JSON ("));
-  return [...(line ?? "").matchAll(/`(\w+)`/g)].map((m) => m[1]);
-}
-
-/**
- * Top-level keys of the `expert-review` payload sketch in chapter 5's sub-agent contract
- * list — a third copy of the same contract, and the one that already drifted once.
- * Nested keys inside `dimensions{…}` are stripped so only the outer shape is compared.
- */
-function chapterFields(source: string): string[] {
-  const line = source.split("\n").find((l) => l.startsWith("- `expert-review` →"));
-  const body = (line ?? "").replace(/(\w)\{[^{}]*\}/g, "$1");
-  return [...body.matchAll(/[{,]\s*(\w+)/g)].map((m) => m[1]);
-}
-
-const declared = outputFields(agent);
-
-describe("expert review contract", () => {
-  test("the agent's output table is parseable and non-trivial", () => {
-    expect(declared.length).toBeGreaterThan(4);
-    expect(declared).toContain("findings");
-  });
-
-  test("the agent declares a grounding field", () => {
-    expect(declared).toContain("grounding");
-  });
-
-  test("grounding is required, not optional", () => {
-    const row = agent.split("\n").find((l) => /^\|\s*`grounding`/.test(l)) ?? "";
-    expect(`grounding row: ${row}`).toContain("Never empty");
-  });
-
-  test("the example payload carries grounding, so the shape is copyable", () => {
-    const example = agent.split("```json")[1]?.split("```")[0] ?? "";
-    expect(example).toContain('"grounding"');
-  });
-
-  test("the pipeline receives exactly the fields the agent emits", () => {
-    expect(pipelineFields(pipeline).sort()).toEqual([...declared].sort());
-  });
-
-  test("chapter 5 documents exactly the fields the agent emits", () => {
-    expect(chapterFields(chapter).sort()).toEqual([...declared].sort());
-  });
-
-  test("chapter 5 records that an ungrounded review is discarded, not averaged", () => {
-    expect(chapter).toContain("discarded rather than averaged");
-  });
-
-  test.each([
-    ["empty grounding", "`grounding` is absent or empty"],
-    ["unparseable report", "not parseable as the JSON contract"],
-    ["no-tool-use contradiction", "reported no tool use"],
-  ])("the pipeline names the %s discard condition", (_label, needle) => {
-    expect(pipeline).toContain(needle);
-  });
-
-  test("the pipeline discards rather than averages", () => {
-    const [, screen = ""] = pipeline.split("Discard an ungrounded review");
-    expect(screen).toContain("Name every discard");
-    expect(screen).toContain("never silently shrink the panel");
-  });
-
-  test("a shrunken panel is not reported as a consensus", () => {
-    expect(pipeline).toContain("single surviving reviewer is a single opinion");
-    expect(pipeline).toContain("report that the plan is unreviewed");
-  });
-
-  /**
-   * The recorded score line names each reviewer's weakest dimension because the scores
-   * alone say how good the panel thought the plan was, not what to double-check when
-   * executing it — and nothing reconstructs that later.
-   */
-  test("the recorded score line carries the weakest dimension", () => {
-    expect(pipeline).toContain("weakest:");
-    expect(pipeline).toContain("weakest dimension");
-  });
-
-  /**
-   * The dimension rubric is the sole scoring interface: `score` is the sum of the five
-   * dimensions, not a second independently judged number. Without this pin the agent
-   * once carried both a 0-100 prose-band rubric and the dimensions, with the relation
-   * unstated — a score of 92 over dimensions summing to 88 was schema-valid.
-   */
-  test("score is derived from the dimensions, not independently judged", () => {
-    const row = agent.split("\n").find((l) => /^\|\s*`score`/.test(l)) ?? "";
-    expect(`score row: ${row}`).toContain("sum of the five `dimensions`");
-  });
-
-  test("the prose score bands stay deleted — the dimension rubric carries the meaning", () => {
-    expect(agent).not.toContain("95-100");
-  });
-
-  test("the retired revision.rescore field stays retired", () => {
-    expect(agent).not.toContain("rescore");
-    expect(pipeline).not.toContain("rescore");
-  });
-
-  test("the pipeline records per-reviewer verdicts rather than averaging them", () => {
-    expect(pipeline).toContain("no cross-reviewer averaging");
-  });
-
-  test("the review step gates nothing", () => {
-    expect(pipeline).toContain("never a gate");
-    expect(pipeline).not.toContain("Scoring target");
-    expect(pipeline).not.toMatch(/at most \w+ passes/);
-  });
-
-  test("chapter 5 documents the same recorded score line", () => {
-    expect(chapter).toContain("weakest dimension");
-  });
-
-  test("the agent still forbids asserting unread file contents", () => {
-    expect(agent).toContain("an inferred file listing is a fabrication");
-    expect(agent).toContain("Do not list a file you did not open");
-  });
-});
-</file>
-
 <file path=".github/actions/code-review-action/src/gitHistoryPolicy.test.ts">
 /**
  * Guards the git history policy across every encoding it has: the canonical
@@ -13167,15 +12991,9 @@ describe("review-thread helper allowlist", () => {
  * 4. The two skills agree on the stored format version. `Format:` is the only thing that
  *    keeps "written under an older template" apart from "corrupt", and a version the
  *    producer writes but the consumer does not read collapses that distinction.
- * 5. Expert review is an enhancement, never a gate. The pipeline states no scoring
- *    threshold and no revision budget, and `linear-plan` stores unconditionally with
- *    no plan-mode transition — a re-introduced gate would silently start losing plans.
- * 6. Expert review is opt-in for `plan` and `linear-plan` alone. The pipeline names them
- *    as the only callers that may skip the step and records one literal skipped score
- *    line; the `--experts-review` flag lives in those two skills and nowhere else, so
- *    the `run` family cannot quietly grow the skip — and a skipped store must stay
- *    visible, so `linear-plan` pins the `Score: skipped` stored-header variant.
- * 7. `run` stores its finalized plan on the source Linear issue — for `linear-issue`
+ * 5. Storing is unconditional. `linear-plan` writes with no plan-mode transition and no
+ *    approval step — a re-introduced gate would silently start losing plans.
+ * 6. `run` stores its finalized plan on the source Linear issue — for `linear-issue`
  *    inputs only — by reference to `linear-plan`'s store, inside Phase 4 and before
  *    implementation, and a failed write never blocks delivery. The reference link is
  *    the sole guard for preserving the prior ticket description: `run` carries no
@@ -13204,13 +13022,12 @@ const skillsDir = join(repoRoot, "claude-plugins/autopilot/skills");
 const readSkill = (name: string): Promise<string> =>
   readFile(join(skillsDir, name, "SKILL.md"), "utf8");
 
-const [linearPlan, linearRun, plan, run, runPrimed, pipeline] = await Promise.all([
+const [linearPlan, linearRun, plan, run, runPrimed] = await Promise.all([
   readSkill("linear-plan"),
   readSkill("linear-run"),
   readSkill("plan"),
   readSkill("run"),
   readSkill("run-primed"),
-  readFile(join(skillsDir, "plan/references/pipeline.md"), "utf8"),
 ]);
 
 /** Every verdict `linear-run`'s validation table must name, fallback ones first. */
@@ -13324,12 +13141,6 @@ describe("linear plan contract", () => {
     expect(linearRun).toContain(`\`${written}\``);
   });
 
-  test("the pipeline states no scoring threshold and no revision budget", () => {
-    expect(pipeline).not.toContain("Scoring target");
-    expect(pipeline).not.toMatch(/at most \w+ passes/);
-    expect(pipeline).toContain("not a gate for any caller");
-  });
-
   test("linear-plan stores unconditionally, with no plan-mode transition", () => {
     expect(linearPlan).toContain("Storing is unconditional");
     expect(linearPlan).toContain("Do not add a separate approval step");
@@ -13393,30 +13204,10 @@ describe("linear plan contract", () => {
     expect(drift).toContain(needle);
   });
 
-  test("the pipeline gates the review step on plan and linear-plan alone", () => {
-    expect(pipeline).toContain("the only callers that may skip");
-    expect(pipeline).toContain(
-      "Score: skipped · expert review disabled (invoked without --experts-review)",
-    );
-  });
-
-  test.each([
-    ["plan", plan],
-    ["linear-plan", linearPlan],
-  ])("%s's argument-hint carries the --experts-review flag", (_name, source) => {
-    expect(source).toMatch(/argument-hint:.*--experts-review/);
-  });
-
-  test("linear-plan documents the skipped stored-header variant", () => {
-    expect(linearPlan).toContain(
-      "Format: v1 · Score: skipped · Base: <origin/main SHA> · Stored by /autopilot:linear-plan",
-    );
-  });
-
   test("the emission template opens with the anchor and the placeholder header line", () => {
     expect(emissionTemplate).toStartWith("## Implementation plan\n");
     expect(emissionTemplate).toContain(
-      "Format: v1 · Score: <score> · Base: <sha> · Stored by /autopilot:linear-plan",
+      "Format: v1 · Base: <sha> · Stored by /autopilot:linear-plan",
     );
   });
 
@@ -13439,24 +13230,6 @@ describe("linear plan contract", () => {
     expect(originalTaskWrapper).toStartWith("+++ Original task\n");
     expect(originalTaskWrapper).toContain("<the prior description, byte-identical>");
     expect(originalTaskWrapper.trimEnd()).toEndWith("\n+++");
-  });
-
-  test.each([
-    ["linear-run", linearRun],
-    ["run", run],
-    ["run-primed", runPrimed],
-  ])("%s does not claim the --experts-review flag", (name, source) => {
-    expect(`${name}: ${source.includes("--experts-review")}`).toBe(`${name}: false`);
-  });
-
-  test("the unchanged callers state no threshold of their own", () => {
-    for (const [name, source] of [
-      ["plan", plan],
-      ["run", run],
-      ["run-primed", runPrimed],
-    ] as const) {
-      expect(`${name}: ${source.includes("Scoring target")}`).toBe(`${name}: false`);
-    }
   });
 
   test("ordinary plan and run-primed know nothing of the stored plan", () => {
@@ -13503,8 +13276,8 @@ describe("linear plan contract", () => {
   test("run reuses linear-plan's store by reference, with no second template", () => {
     expect(runStore).toContain("../linear-plan/SKILL.md#the-write");
     expect(runStore).toContain("../linear-plan/SKILL.md#the-emission-template");
-    // run's delta prose names only the `Stored by` and `Score:` fields, so the
-    // template's other header tokens appearing anywhere in run means a copied template.
+    // run's delta prose names only the `Stored by` field, so the template's other
+    // header tokens appearing anywhere in run means a copied template.
     expect(run).not.toContain("Format: v1");
     expect(run).not.toContain("· Base:");
   });
@@ -13513,10 +13286,6 @@ describe("linear plan contract", () => {
     expect(runStore).toContain("`Stored by`");
     expect(runStore).toContain("`/autopilot:run`");
     expect(runStore).not.toContain("Stored by /autopilot:linear-plan");
-  });
-
-  test("run's store never records a skipped review", () => {
-    expect(runStore).toContain("never the literal `skipped`");
   });
 
   test("the reader ignores the attribution the two producers differ on", () => {
@@ -19493,8 +19262,7 @@ export function stripLegacyUsageHint(body: string): string {
  *
  * Two runtimes can read nothing at all, so they keep a literal inlined copy:
  * releaseNotesPrompt.ts is passed to the Anthropic API as a raw system prompt with no
- * tools, and the structured-output agents declare restrictive `tools` lists (expert-review
- * declares `tools: []`). Those copies are still single-sourced — this test asserts each is
+ * tools, and the structured-output agents declare restrictive `tools` lists. Those copies are still single-sourced — this test asserts each is
  * byte-identical to its canonical block.
  *
  * Replaces referenceFormattingSync.test.ts, which guarded only the reference-formatting
@@ -19552,13 +19320,12 @@ const blockSentinels: Record<string, string> = {
 const retainedCopies: { block: string; file: string; unescapeBackticks?: boolean }[] = [
   // Raw Anthropic API system prompt: no Claude Code SDK, therefore no tools at all.
   { block: "reference-formatting.md", file: releasePrompt, unescapeBackticks: true },
-  // Structured-output agents: each declares its own `tools`, and expert-review declares [].
+  // Structured-output agents: each declares its own restrictive `tools` list.
   ...[
     "analyze-pr-commits.md",
     "analyze-staged-changes.md",
     "digest-repo-standards.md",
     "digest-session-history.md",
-    "expert-review.md",
     "resolve-alert-context.md",
     "resolve-assignees.md",
     "resolve-issue-context.md",
@@ -51679,111 +51446,6 @@ Example:
 ```
 </file>
 
-<file path="claude-plugins/autopilot/agents/expert-review.md">
----
-name: expert-review
-description: Review an implementation plan as a domain expert. Use when plan skills need isolated expert scoring to prevent context flooding.
-tools: []
-model: inherit
----
-
-You are a domain expert reviewing an implementation plan. Your role, focus areas, and the plan text are provided in the prompt.
-
-## Input
-
-The invoking skill provides in the prompt:
-
-- **Expert role** (e.g., "Principal Bun/NodeJS Engineer")
-- **Focus areas** (e.g., "Performance, async, error handling, memory")
-- **Context Map excerpt** — the relevant files, patterns, key types, test conventions, and applicable standards the caller gathered
-- **Full plan text** to review
-
-## Phase 1: Review
-
-Analyze the plan from your expert perspective:
-
-1. Check each implementation step against your focus areas
-2. Identify gaps, risks, or improvements within your domain
-3. Verify the plan follows best practices for your area of expertise
-4. Check for missing edge cases or error handling relevant to your domain
-
-Ground every finding in the Context Map excerpt, the plan text, or something you actually read. Never assert what a file contains, what a function is named, or how a module behaves unless your prompt states it or you verified it — an inferred file listing is a fabrication, however plausible. A finding that turns out to be invented costs the caller more than a finding you omit: when the excerpt does not settle a question, report the plan as unverifiable on that point instead of guessing.
-
-## Phase 2: Score
-
-Score each of the five rubric dimensions from 0 to 20. This rubric is the sole scoring interface: your `score` is the sum of the five dimension values — computed, never judged separately — so there is no second rubric anywhere, and a dimension you score carelessly is not corrected later.
-
-| Dimension      | Criteria                                                                                                                            |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `alignment`    | Follows CLAUDE.md, project patterns, naming conventions, and complies with Accepted RFCs / `docs/` conventions                      |
-| `completeness` | All requirements addressed, no missing steps                                                                                        |
-| `typeSafety`   | Proper types, Zod schemas, no unsafe `as` assertions                                                                                |
-| `testability`  | Clear test strategy, edge cases identified                                                                                          |
-| `simplicity`   | Minimal code, reuses existing functions, no over-engineering, every change traces to steelmanned intent, no opportunistic refactors |
-
-Your derived score is recorded as information for the plan's readers, not a gate the plan has to clear — score each dimension plainly instead of nudging any number toward a target.
-
-Score every dimension, including those outside your specialty — the caller records your verdict beside the other reviewers', so a domain expert's view of an adjacent dimension is signal, not noise. Where your role gives you no basis to judge, score to the plan's stated evidence rather than assuming the worst.
-
-## Phase 3: Recommend Changes
-
-Score the plan AS WRITTEN — never raise your score for changes the parent has not applied. When you see concrete changes that would raise your score:
-
-1. Identify the specific gaps that lowered your score
-2. Determine the concrete changes that would address them
-3. Record them in the `revision` object as ADVISORY input for the parent (`changed` = what to change)
-
-Do this at most once — do not loop. The parent owns the plan and applies your `findings` itself, so your `score` and `verdict` must describe the drafted plan, not a hypothetical revision.
-
-## Phase 4: Output
-
-<!-- agent-json:start -->
-
-Output ONLY a single JSON object matching the schema below — no preamble, no surrounding code fence, no commentary. The parent parses it directly, so any extra text breaks consumption.
-
-<!-- agent-json:end -->
-
-| Field        | Type                               | Constraint                                                                                                                                     |
-| ------------ | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `expertRole` | string                             | Your expert role, verbatim from the prompt                                                                                                     |
-| `score`      | integer                            | Derived, not judged: the sum of the five `dimensions` values (0–100), for the plan AS WRITTEN (see [Phase 3](#phase-3-recommend-changes))      |
-| `dimensions` | object                             | `{ "alignment": int, "completeness": int, "typeSafety": int, "testability": int, "simplicity": int }`, each 0–20; all five keys always present |
-| `verdict`    | `"approved"` \| `"needs-revision"` | `"approved"` when you would ship the plan as written, `"needs-revision"` when your findings warrant changes                                    |
-| `findings`   | string[]                           | 3–5 entries, strongest first; stack minor objections together rather than listing each                                                         |
-| `grounding`  | string[]                           | What you actually consulted, one entry each — see [Phase 4a](#phase-4a-declare-your-grounding). Never empty                                    |
-| `revision`   | object \| null                     | `null` when no [Phase 3](#phase-3-recommend-changes) changes were needed; otherwise advisory `{ "changed": string }`                           |
-
-Example (illustrative — emit the raw object, not this fenced form):
-
-```json
-{
-  "expertRole": "Principal Bun/NodeJS Engineer",
-  "score": 92,
-  "dimensions": {
-    "alignment": 19,
-    "completeness": 18,
-    "typeSafety": 19,
-    "testability": 17,
-    "simplicity": 19
-  },
-  "verdict": "approved",
-  "findings": ["Finding 1", "Finding 2", "Finding 3"],
-  "grounding": ["plan text", "Context Map excerpt: relevant files, test conventions"],
-  "revision": null
-}
-```
-
-Do not output intermediate reasoning, analysis steps, or commentary — only the JSON object.
-
-## Phase 4a: Declare your grounding
-
-`grounding` names the evidence behind your findings, so the parent can tell a review built on something from one built on nothing. List one entry per source you actually used — `plan text`, `Context Map excerpt: <which sections>`, or the path of a file you genuinely read. It is never empty: at minimum you were given the plan.
-
-**Do not list a file you did not open.** You declare `tools: []`, so unless your prompt hands you a file's contents you have no way to read one — and naming it anyway is the fabrication this field exists to expose. When a question turns on a file you were not given, the honest entry is the excerpt you did have, and the finding says the plan is unverifiable on that point.
-
-The parent [discards a review whose grounding does not support its findings](../skills/plan/references/pipeline.md#review-and-score-task-4) rather than averaging it into the score, so an invented source costs the whole review rather than passing unnoticed.
-</file>
-
 <file path="claude-plugins/autopilot/agents/resolve-alert-context.md">
 ---
 name: resolve-alert-context
@@ -54251,7 +53913,7 @@ const requiredPaths = [
   ".claude-plugin/plugin.json",
   ".claude-plugin/marketplace.json",
   "skills/plan/SKILL.md",
-  "agents/expert-review.md",
+  "agents/digest-repo-standards.md",
   "lib/git/branchDigest.ts",
 ];
 
@@ -56154,7 +55816,7 @@ allowed-tools:
 
 Prime the session with a broad picture of this repository, write it to disk so it survives compaction, then hand control back and take fixes one at a time.
 
-This is the third on-ramp into a repository, and it exists because the other two do not fit a common shape of work. [`plan`](../plan/SKILL.md) and [`run`](../run/SKILL.md) both require a target and then carry the session through draft, expert panel, scoring, a plan file, a branch, and a pull request. Arriving with an _area_ rather than a task — and following it with a few surgical edits — means inventing a target for `plan` and discarding everything it drags along. `explore` is the same context quality with none of that machinery.
+This is the third on-ramp into a repository, and it exists because the other two do not fit a common shape of work. [`plan`](../plan/SKILL.md) and [`run`](../run/SKILL.md) both require a target and then carry the session through draft, a plan file, a branch, and a pull request. Arriving with an _area_ rather than a task — and following it with a few surgical edits — means inventing a target for `plan` and discarding everything it drags along. `explore` is the same context quality with none of that machinery.
 
 ## When to Use
 
@@ -56294,7 +55956,7 @@ Then state the contract for the rest of the session and stop. Do not start work;
 
 Once the brief is written, every instruction that follows is handled the same way: locate it through the brief, edit, run the verify check named in `## Test and verify`, and report the result.
 
-**No plan file, no expert panel, no scoring, no branch prompt, no PR chain.** Never call `EnterPlanMode` or `ExitPlanMode`, and never invoke `preflight-check` — those belong to the flows this skill exists to avoid. Suppressing them is half the value here; a fix that costs one edit should not cost a planning pipeline.
+**No plan file, no branch prompt, no PR chain.** Never call `EnterPlanMode` or `ExitPlanMode`, and never invoke `preflight-check` — those belong to the flows this skill exists to avoid. Suppressing them is half the value here; a fix that costs one edit should not cost a planning pipeline.
 
 When the user asks to commit or open a pull request, hand off — invoke `Skill(autopilot:commits-create)` or `Skill(autopilot:pr-create)`, which own those conventions. Do not improvise either with raw `git` or `gh`.
 
@@ -57079,8 +56741,8 @@ When you generate the issue body, apply the reference-formatting rules in [`refe
 <file path="claude-plugins/autopilot/skills/linear-plan/SKILL.md">
 ---
 name: linear-plan
-description: Plan a Linear issue exactly as the plan skill does, expert-reviewed when --experts-review is passed, then store the finished plan in that issue's description — refreshing a rough ticket title along the way — so it outlives the session. Storing is unconditional — the recorded score or skip is information on the ticket, never used as a gate.
-argument-hint: "<Linear issue (ENG-123 or a Linear issue URL)> [--experts-review]"
+description: Plan a Linear issue exactly as the plan skill does, then store the finished plan in that issue's description — refreshing a rough ticket title along the way — so it outlives the session. Storing is unconditional and never gated.
+argument-hint: "<Linear issue (ENG-123 or a Linear issue URL)>"
 allowed-tools:
   - TaskCreate
   - TaskUpdate
@@ -57112,9 +56774,9 @@ allowed-tools:
 
 Plan a Linear issue exactly as [`plan`](../plan/SKILL.md) does, then store the finished plan in that issue's description so it survives the session that produced it.
 
-**Difference from [`/autopilot:plan`](../plan/SKILL.md):** `plan` leaves its plan in the harness plan-mode file, which dies with the session. This skill adds one thing — a durable write to the ticket — and takes one thing away: it does **not** implement. It stops after storing, and [`linear-run`](../linear-run/SKILL.md) is what executes the stored plan later, possibly in a different session or by a different person. That separation is the point: a plan a teammate can read and correct in Linear before any code exists is worth more than one that only ever existed in a transcript. Storing the plan is automatic once the pipeline finishes — no plan-mode transition, no approval gate, and no score gate; invoking this skill is the authorization to store, the same way invoking [`run`](../run/SKILL.md) authorizes its whole chain.
+**Difference from [`/autopilot:plan`](../plan/SKILL.md):** `plan` leaves its plan in the harness plan-mode file, which dies with the session. This skill adds one thing — a durable write to the ticket — and takes one thing away: it does **not** implement. It stops after storing, and [`linear-run`](../linear-run/SKILL.md) is what executes the stored plan later, possibly in a different session or by a different person. That separation is the point: a plan a teammate can read and correct in Linear before any code exists is worth more than one that only ever existed in a transcript. Storing the plan is automatic once the pipeline finishes — no plan-mode transition and no approval gate; invoking this skill is the authorization to store, the same way invoking [`run`](../run/SKILL.md) authorizes its whole chain.
 
-Everything from input resolution through the draft-and-review pipeline is `plan`, referenced rather than restated. Only [Phase 0's gate](#phase-0-resolve-input-and-gate) and [Phase 4's store](#phase-4-store-the-plan-on-the-issue) are new.
+Everything from input resolution through the draft-and-finalize pipeline is `plan`, referenced rather than restated. Only [Phase 0's gate](#phase-0-resolve-input-and-gate) and [Phase 4's store](#phase-4-store-the-plan-on-the-issue) are new.
 
 ## Input
 
@@ -57123,7 +56785,6 @@ Arguments: `$ARGUMENTS`
 Expected form:
 
 - `<Linear issue>` — a Linear identifier such as `ENG-123`, or a Linear issue URL.
-- `<Linear issue> --experts-review` — run the expert review-and-score step; without this flag that step is skipped and the skip is recorded in the stored `Score:` field.
 
 Additional free-form context may follow (e.g. `ENG-123 start with the adapter`).
 
@@ -57135,22 +56796,21 @@ Identical to the `plan` skill — see [its Input resolution section](../plan/SKI
 
 ## Completion Requirement
 
-This workflow is not complete until [Phase 4](#phase-4-store-the-plan-on-the-issue) either writes the plan to the issue or reports why the write failed. Producing a scored plan is not completion — an unstored plan is the problem this skill exists to solve.
+This workflow is not complete until [Phase 4](#phase-4-store-the-plan-on-the-issue) either writes the plan to the issue or reports why the write failed. Producing a plan is not completion — an unstored plan is the problem this skill exists to solve.
 
 **Linear MCP access:** Read [`linear-mcp-access.md`](../shared-rules/references/linear-mcp-access.md) and apply its tool-resolution rule, using the bare tool names `get_issue`, `list_issue_statuses`, and `save_issue`.
 
 ## Task Progress Protocol
 
-Create all 6 tasks with TaskCreate, in order, before any work. Set each to `in_progress` at the start of its phase and `completed` at the end.
+Create all 5 tasks with TaskCreate, in order, before any work. Set each to `in_progress` at the start of its phase and `completed` at the end.
 
 | #   | Subject             | ActiveForm            |
 | --- | ------------------- | --------------------- |
 | 1   | Resolve input       | Resolving input       |
 | 2   | Gather context      | Gathering context     |
 | 3   | Draft plan          | Drafting plan         |
-| 4   | Review and score    | Reviewing and scoring |
-| 5   | Finalize plan       | Finalizing plan       |
-| 6   | Store plan on issue | Storing plan on issue |
+| 4   | Finalize plan       | Finalizing plan       |
+| 5   | Store plan on issue | Storing plan on issue |
 
 ## Task
 
@@ -57158,11 +56818,11 @@ $ARGUMENTS
 
 ## Phase 0: Resolve input and gate
 
-Create the 6 tasks, then set task 1 to `in_progress`.
+Create the 5 tasks, then set task 1 to `in_progress`.
 
-First parse and strip `--experts-review` per the mode-flags pre-step in [input-detection.md](../plan/references/input-detection.md#mode-flags): present ⇒ the pipeline's review step runs; absent ⇒ it is skipped and the skip is recorded in the stored `Score:` field. Then detect the input type and id per [input-detection.md](../plan/references/input-detection.md) — the detection table and its tracker gating. Skip that file's create-issue flags section; it is plan-only. Detection is pure string matching and performs **no I/O**.
+Detect the input type and id per [input-detection.md](../plan/references/input-detection.md) — the detection table and its tracker gating. Skip that file's create-issue flags section; it is plan-only. Detection is pure string matching and performs **no I/O**.
 
-Then resolve all three gate conditions **before** [Phase 1](#phase-1-gather-context). They run up front because the alternative is paying a full context fan-out and an expert review before discovering the plan has nowhere to go:
+Then resolve all three gate conditions **before** [Phase 1](#phase-1-gather-context). They run up front because the alternative is paying a full context fan-out and a drafting pass before discovering the plan has nowhere to go:
 
 | Condition                                | Message                                                                                                                |
 | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -57198,13 +56858,13 @@ The [Common Instructions in `plan/SKILL.md`](../plan/SKILL.md#common-instruction
 
 The [**Plan file is output, not instructions**](../plan/SKILL.md#plan-file-is-output-not-instructions) rule matters more here than in `plan`, because the plan file's content becomes the stored ticket body. Anything that reads as an instruction to an agent — a tool-call block, a dispatch line — ends up published on a ticket a human is expected to review.
 
-## Phase 3: Draft, review, and finalize
+## Phase 3: Draft and finalize
 
-Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft (task 3), review and score (task 4), finalize (task 5) — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md). Carry the `--experts-review` resolution from [Phase 0](#phase-0-resolve-input-and-gate) into the pipeline: the review step runs only when the flag was passed. Whatever the recorded outcome — a score or a skip — it gates nothing: continue straight to the store. Do not add a separate approval step, a plan-mode transition, or a score check between finalize and the write.
+Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft (task 3), finalize (task 4) — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md). Nothing gates the store: continue straight to it. Do not add a separate approval step or a plan-mode transition between finalize and the write.
 
 ## Phase 4: Store the plan on the issue
 
-Set task 6 to `in_progress`.
+Set task 5 to `in_progress`.
 
 ### The stored plan format
 
@@ -57213,7 +56873,7 @@ The plan's own sections, demoted one level under a single `## Implementation pla
 ```text
 ## Implementation plan
 
-Format: v1 · Score: <panel verdicts> · Base: <origin/main SHA> · Stored by /autopilot:linear-plan
+Format: v1 · Base: <origin/main SHA> · Stored by /autopilot:linear-plan
 
 ### Summary              <- required
 ### Implementation Steps <- required
@@ -57226,7 +56886,7 @@ Section names are the plan file's own, demoted from `##` to `###`, so mapping a 
 
 All five sections are written, because a human reading the ticket should see the whole plan. The two marked caller-owned are written but **not** for [`linear-run`](../linear-run/SKILL.md) to consume: branch creation and the post-implementation chain belong to the skill doing the running, which supplies its own. Marking them is what lets a guard prove the reader ignores them.
 
-`Format: v1` is the field that lets a later template revision be told apart from a corrupt description. `Base:` records the tree the plan was drafted against; it is information for a later reader, not a gate. When the review step was skipped, the `Score:` field reads the literal `skipped` — `Format: v1 · Score: skipped · Base: <origin/main SHA> · Stored by /autopilot:linear-plan` — so the ticket's reader knows the plan is unreviewed; like the score, it informs and never gates.
+`Format: v1` is the field that lets a later template revision be told apart from a corrupt description. `Base:` records the tree the plan was drafted against; it is information for a later reader, not a gate. Plans stored by earlier versions carry an additional `Score:` field between `Format:` and `Base:`; the reader never parsed it, so those plans stay valid.
 
 ### The emission template
 
@@ -57235,7 +56895,7 @@ The marker list above is the machine-readable contract between this skill and it
 ```text
 ## Implementation plan
 
-Format: v1 · Score: <score> · Base: <sha> · Stored by /autopilot:linear-plan
+Format: v1 · Base: <sha> · Stored by /autopilot:linear-plan
 
 ### Summary
 
@@ -57260,7 +56920,6 @@ Format: v1 · Score: <score> · Base: <sha> · Stored by /autopilot:linear-plan
 
 Fill rules:
 
-- `<score>` — the per-reviewer verdicts segment from the review step's recorded `Score:` line (e.g. `87 & 92 · weakest: testability (15) & simplicity (18) · findings applied`), or the literal `skipped` when the review was skipped, matching the two header variants above.
 - `<sha>` — the full SHA exactly as `git rev-parse origin/main` printed it; never abbreviate or reconstruct it.
 - Each section placeholder — that section's body from the finalized plan file, demoted headings included, adjusted only as far as the Linear-safe markdown rules below require.
 
@@ -57314,17 +56973,17 @@ Because the anchor is matched rather than the wrapper, re-storing on the same is
 
 7. **Move the issue to "AI Ready"** — best-effort, never blocks the store, and runs only after step 5's write succeeded: a failed or refused write performs no transition. The transition is the board's hand-off signal that the ticket is planned and execution-ready. Resolve the target state id with the Linear MCP `list_issue_statuses` tool for the issue's team, then call the Linear MCP `save_issue` tool with `{ "id": "<LINEAR-ID>", "state": "<AI Ready state>" }` — tool resolution per the [Completion Requirement](#completion-requirement) Linear MCP access note. On success, emit `✓ Ticket <LINEAR-ID> moved to AI Ready`; when the team has no "AI Ready" state or the state write fails, emit `issue not moved — <reason>`. Always continue — but the emitted line MUST reach the output block below, never only intermediate text.
 
-Set task 6 to `completed` and output:
+Set task 5 to `completed` and output:
 
 ```
 ✓ Plan stored on <LINEAR-ID> — <url>
-  Score: <panel verdicts> · Base: <sha>
+  Base: <sha>
 
 Next step:
 - Run /autopilot:linear-run <LINEAR-ID> to execute it
 ```
 
-When the review step was skipped, the `Score:` segment reads `skipped` here exactly as in the stored header. Add the step 4 outcome line after the `Score:` line — `✓ Title updated: <new title>` or `title unchanged` — and the step 7 outcome line after it — `✓ Ticket <LINEAR-ID> moved to AI Ready` on success, or the `issue not moved — <reason>` line on failure — so a skipped refresh or transition is visible in the final output, not just mid-run.
+Add the step 4 outcome line after the `Base:` line — `✓ Title updated: <new title>` or `title unchanged` — and the step 7 outcome line after it — `✓ Ticket <LINEAR-ID> moved to AI Ready` on success, or the `issue not moved — <reason>` line on failure — so a skipped refresh or transition is visible in the final output, not just mid-run.
 
 ## Reference formatting
 
@@ -57334,7 +56993,7 @@ Before writing any output that mentions a file, standard, section, commit, or is
 <file path="claude-plugins/autopilot/skills/linear-run/SKILL.md">
 ---
 name: linear-run
-description: Run any Linear issue end to end. Executes a valid stored plan verbatim when one exists; otherwise drafts, reviews, and implements a fresh plan without a human approval gate.
+description: Run any Linear issue end to end. Executes a valid stored plan verbatim when one exists; otherwise drafts and implements a fresh plan without a human approval gate.
 argument-hint: "<Linear issue (ENG-123 or a Linear issue URL)>"
 allowed-tools:
   - TaskCreate
@@ -57373,7 +57032,7 @@ allowed-tools:
   - Skill(autopilot:pr-create)
 ---
 
-Run any Linear issue end to end. Prefer the durable plan [`linear-plan`](../linear-plan/SKILL.md) stored in its description when that artifact validates; otherwise draft, review, and implement a fresh plan from the issue context.
+Run any Linear issue end to end. Prefer the durable plan [`linear-plan`](../linear-plan/SKILL.md) stored in its description when that artifact validates; otherwise draft and implement a fresh plan from the issue context.
 
 **Difference from [`/autopilot:run`](../run/SKILL.md):** `run` always drafts a plan. This skill first inspects the Linear issue for a checkable durable artifact. A valid stored plan is executed verbatim; missing or unusable stored-plan data selects the same autonomous planning pipeline as `run`. The choice is deterministic from the issue description, never inferred from conversation history or from a claim that another agent ran.
 
@@ -57530,15 +57189,15 @@ Set task 4 to `in_progress`. Merge the stored plan with the Context Map using th
 
 The two unused sections are read past deliberately. They describe a branch and a post-implementation chain, and this skill supplies both from `run` — the branch because it must be created in _this_ checkout, and the chain because `run` owns it. Consuming a stored copy would mean executing a branch step written for a tree that no longer exists. Set task 4 to `completed`.
 
-Set task 5 to `in_progress`. Confirm the `valid` verdict and drift report from Phase 1. Do not run an expert review of your own: the stored artifact records its producer's review outcome — a score or an explicit skip — and this skill executes the plan, it does not re-assess it. Set task 5 to `completed`.
+Set task 5 to `in_progress`. Confirm the `valid` verdict and drift report from Phase 1. Do not re-assess the stored artifact: this skill executes the plan, it does not review it. Set task 5 to `completed`.
 
 Set task 6 to `in_progress`. Freeze the required stored sections as the execution plan without rewriting them or writing a harness replacement. Set task 6 to `completed`.
 
 ### Fresh-plan mode
 
-Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft, review and score, finalize — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md). Use the Common Instructions and plan-file header rule from [`run`](../run/SKILL.md#common-instructions).
+Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft, finalize — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md). Use the Common Instructions and plan-file header rule from [`run`](../run/SKILL.md#common-instructions).
 
-The pipeline's phases track this skill's plan tasks by subject: its Draft-plan phase is the Establish-plan task, its Review-and-score phase the Validate-plan task, and its Finalize phase the Finalize-plan task.
+The pipeline's phases track this skill's plan tasks by subject: its Draft-plan phase is the Establish-plan task and its Finalize phase the Finalize-plan task; the Validate-plan task completes as not applicable, because there is no stored artifact to validate.
 
 The resulting harness plan is the execution plan for this run only. Do not store it on the Linear issue.
 
@@ -60849,12 +60508,6 @@ Reference for [`plan/SKILL.md`](../SKILL.md) and [`run/SKILL.md`](../../run/SKIL
 
 Detection is pure string matching — it performs **no I/O**. That is why the issue id is known before anything is fetched, and why [`gather-context`](../../gather-context/SKILL.md) can launch every context call in one fan-out.
 
-## Mode flags
-
-Parse and strip `--experts-review` from the arguments before anything else, including the create-issue pre-step below. Its presence enables the expert review step for this invocation; when it is absent, [the pipeline](pipeline.md#review-and-score-task-4) skips that step. The flag is a mode toggle, not input: once stripped it never reaches the detection table, and it files nothing.
-
-`plan` and [`linear-plan`](../../linear-plan/SKILL.md) are the only skills that parse this flag. The `run` family — `run`, `run-primed`, and `linear-run` — never does: its review is always-on by design; see the conditionality rule in [pipeline.md](pipeline.md#review-and-score-task-4).
-
 ## Create-issue flags (`plan` only)
 
 Run this pre-step **before** the detection table. It lets a free-form description file a tracked issue first, then plan against it — so the branch becomes `issue-<N>-slug` and the PR can `Closes` the issue, instead of the untracked plain-description path. When neither flag is present, skip this section entirely.
@@ -60916,19 +60569,19 @@ There is no TODO search and no assignee for alert inputs.
 </file>
 
 <file path="claude-plugins/autopilot/skills/plan/references/pipeline.md">
-# Planning pipeline: draft, review, finalize
+# Planning pipeline: draft and finalize
 
 Reference for [`plan/SKILL.md`](../SKILL.md) and [`run/SKILL.md`](../../run/SKILL.md). Defined once here so the two callers cannot drift.
 
 Everything below runs **after** [`gather-context`](../../gather-context/SKILL.md) has returned the Context Map. That map is the codebase read: reason over it rather than re-reading the tree. Reach for an extra lookup only when the map is genuinely missing something the work turns on — on the graph tier that lookup starts from the map's shortlist, which already names where to look and why, and widens to another `graphify` query only when the shortlist does not cover it; on the repomix tier it is `mcp__repomix__grep_repomix_output` against the recorded `outputId`; and a live Grep/Read carries its `context-fallback: <reason> <path>` note per the [shared block's taxonomy](../../shared-rules/references/repomix-snapshot.md) for working-tree code the snapshot cannot show. Fold the result back into the map.
 
-Resolve the three stack values from [stack-deltas.md](stack-deltas.md) wherever a step says "your stack's delta".
+Resolve the two stack values from [stack-deltas.md](stack-deltas.md) wherever a step says "your stack's delta".
 
 ## Draft plan (task 3)
 
-Assemble a complete draft before review and scoring, so both operate on a concrete artifact instead of an imagined one. Leave `Score:` as a placeholder — the review step fills it.
+Assemble a complete draft before finalizing, so the written plan is a concrete artifact instead of an imagined one.
 
-Draft the smallest reliable solution that satisfies the steelmanned intent: reuse what the Context Map already shows over adding, and prefer the option with the fewest moving parts that still holds. Every step must trace to that intent — no unrequested abstraction, no configurability nobody asked for, no error handling for states that cannot occur, and no opportunistic refactor of adjacent code. Where a simpler option was rejected because it would not hold, say so in a clause rather than leaving the larger design unexplained. Minimality is a drafting constraint, not only a scoring one: review revises the draft it is handed, and no revision budget reliably strips scope a draft has already committed to — a pass spent arguing scope back down is a pass not spent on correctness.
+Draft the smallest reliable solution that satisfies the steelmanned intent: reuse what the Context Map already shows over adding, and prefer the option with the fewest moving parts that still holds. Every step must trace to that intent — no unrequested abstraction, no configurability nobody asked for, no error handling for states that cannot occur, and no opportunistic refactor of adjacent code. Where a simpler option was rejected because it would not hold, say so in a clause rather than leaving the larger design unexplained. Minimality is a drafting constraint: nothing later strips scope a draft has already committed to, so the draft is where scope is decided.
 
 Work these dimensions against the Context Map as you draft. They are analysis, not a second crawl:
 
@@ -60948,7 +60601,6 @@ The template begins with `# <Title>` — see the **Plan File Header** rule in th
 ## Summary
 [1-2 sentences: what and why]
 Steelmanned intent: [verbatim from the Steelmanned Intent block]
-Score: [filled by the review step — leave as a placeholder in the draft]
 
 ## Context source
 
@@ -60974,70 +60626,9 @@ The template is prose because the plan file is what the reader approves — see 
 
 `## Context source` is required in every plan and is the one section quoted rather than composed. That does not make it an instruction: the record states where this plan's understanding of the repository came from, which is an outcome like any other, and quoting it is what keeps it reusable — a paraphrase drops the relationship on each shortlist entry, which is the part a later holder needs. A plan file with no such section, including every plan written before the section existed, is an **unrecorded source**: read it as a selection nobody wrote down and fall back to the shared block's taxonomy, never as a reason to stop.
 
-## Review and score (task 4)
+## Finalize (task 4)
 
-Expert review and scoring are **one step**. Reviewers already return per-dimension scores, so a second self-graded rubric adds a loop without adding information.
-
-**Expert review is an enhancement, never a gate.** It improves the plan and records the panel's assessment for the plan's readers; no caller blocks, loops, or refuses to proceed on the score.
-
-**`plan` and `linear-plan` are the only callers that may skip this step.** Each runs the review only when the user passed `--experts-review` (stripped by the mode-flags pre-step in [input-detection.md](input-detection.md#mode-flags)) — `plan` because its approval gate puts a human in front of the finished plan either way, and `linear-plan` because the teammate reading the stored ticket is that human, and the recorded skip tells them the plan is unreviewed. The `run` family — `run`, `run-primed`, and `linear-run`'s fresh-plan path — runs the step unconditionally, because no human re-reads its plans, so for those callers the skip path is unreachable. When the review step was skipped: mark the Review-and-score task `completed` noting the skip, and finalize with the skipped `Score:` line from [Finalize](#finalize-task-5).
-
-Select experts from your stack's expert table — always the Pre-mortem Analyst, then 2-3 more by task scope. Launch them **in parallel** (single message, multiple Agent tool calls):
-
-```
-Use the Agent tool with:
-- `subagent_type`: "autopilot:expert-review"
-- `prompt`: "You are a [Expert Role]. Review this implementation plan.
-  Focus areas: [from your stack's expert table].
-  Limit your report to the 3–5 strongest findings — depth over breadth.
-
-  [Context Map excerpt: relevant files, patterns, key types, test conventions, applicable standards]
-
-  [full plan text from the draft]"
-- `description`: "Expert review: [Role]"
-```
-
-Pass the Context Map excerpt, not just the plan text. A reviewer with no view of the repository infers file contents, and an invented finding is worse than a missing one.
-
-Each returns JSON (`expertRole`, `score`, `dimensions`, `verdict`, `findings`, `grounding`, `revision`).
-
-**Discard an ungrounded review before aggregating.** A reviewer that asserts what a file contains without having read it produces findings that are confident and wrong, which costs more than a finding it never made — so screen each panel member first and drop, rather than average, any that fails:
-
-- Its `grounding` is absent or empty.
-- Its report is not parseable as the JSON contract at all.
-- It reported no tool use, yet its findings quote file contents, identifiers, or line numbers that neither the plan nor the Context Map excerpt contains. That combination is a contradiction: with no tools it could only have been given text, so anything beyond that text was invented.
-
-Name every discard in the run — `Discarded <role>: <reason>` — and never silently shrink the panel. A single surviving reviewer is a single opinion, so say so instead of presenting its score as a panel aggregate; when nothing survives, report that the plan is unreviewed rather than emitting a score. Re-launching a discarded role once is reasonable; doing it repeatedly is not, because the same prompt tends to fail the same way.
-
-Record what survives:
-
-1. **Per-reviewer verdicts.** Each reviewer's `score` is derived — the sum of its five `dimensions` values (0–20 each; the rubric lives in [the agent](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/expert-review.md) and nowhere else). When a reported `score` disagrees with its own dimensions, recompute the sum and use that. Record one verdict per surviving reviewer, in launch order: the derived score and that reviewer's weakest dimension with its points. There is no cross-reviewer averaging — verdicts side by side tell the reader more than one blended number.
-
-2. **Apply the findings — once.** Fold the panel's findings into the draft in a single pass: no re-running the panel, no iterating on the verdicts, no threshold to clear. Ask via `AskUserQuestion` only when a finding hinges on a material ambiguity the Context Map cannot settle.
-
-3. **Record honestly.** Record each reviewer's actual derived score and weakest dimension in the plan; never inflate a number. The scores inform the reader — the human at `plan`'s approval gate, or the teammate reading the ticket `linear-plan` stores — it is not a gate for any caller, and every caller proceeds on whatever the numbers say.
-
-Do not include raw expert JSON in the plan output.
-
-## Finalize (task 5)
-
-Apply the panel's findings to the draft, then write the plan file, replacing the `Score:` placeholder with a line that records the per-reviewer verdicts:
-
-```text
-Score: <score> & <score> · weakest: <dimension> (<points>) & <dimension> (<points>) · findings applied
-```
-
-One `<score>` entry per surviving reviewer, in launch order, joined by `&`; `weakest:` names each reviewer's weakest dimension with its points, in the same order — e.g. `Score: 87 & 92 · weakest: testability (15) & simplicity (18) · findings applied`. The trailing `findings applied` is literal: it records that the panel's findings were folded into the draft, which the scores alone cannot show. A single surviving reviewer yields a single entry, which reads as the single opinion it is.
-
-When the review step was skipped, there are no findings to apply; replace the placeholder with the skipped variant instead:
-
-```text
-Score: skipped · expert review disabled (invoked without --experts-review)
-```
-
-The line is deliberately a single literal: only `plan` and `linear-plan` can skip, so this exact line appearing in `run`, `run-primed`, or `linear-run` output is evidence of drift, not a valid state.
-
-Naming each reviewer's weakest dimension costs half a line and tells a later reader where the plan is soft — the scores alone say how good the panel thought the plan was, not what to double-check when executing it.
+Write the plan file from the draft. The draft is the plan: no review pass, no score, and no revision loop sits between the two, so a draft that is complete and verifiable is finished the moment it is written.
 
 Apply the reference-formatting rules (RFC-0001, inlined at the end of the calling skill) to every reference the plan contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
 </file>
@@ -61047,9 +60638,9 @@ Apply the reference-formatting rules (RFC-0001, inlined at the end of the callin
 
 Reference for [`plan/SKILL.md`](../SKILL.md) and [`run/SKILL.md`](../../run/SKILL.md).
 
-Planning is stack-agnostic except for three values. Resolve them once from `package.json` `agents.rules`, then use them wherever the [pipeline](pipeline.md) says "your stack's delta".
+Planning is stack-agnostic except for two values. Resolve them once from `package.json` `agents.rules`, then use them wherever the [pipeline](pipeline.md) says "your stack's delta".
 
-These deltas previously lived in two dedicated skills (`plan-bun`, `plan-nodejs-react`), which cost a full skill load and round trip to deliver three values — and drifted, because each caller kept its own routing table. A table cannot drift from itself.
+These deltas previously lived in two dedicated skills (`plan-bun`, `plan-nodejs-react`), which cost a full skill load and round trip to deliver two values — and drifted, because each caller kept its own routing table. A table cannot drift from itself.
 
 ## Routing
 
@@ -61073,16 +60664,6 @@ When `package.json` is missing, has no `agents` field, or carries an unrecognize
 
 **Example libraries** (documentation lookup): `zod`, `hono`, `@effect/schema`
 
-**Expert table** — always include the Pre-mortem Analyst, then 2-3 more by task scope:
-
-| Expert                            | When to Include                        | Focus Areas                                                                                                        |
-| --------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| **Pre-mortem Analyst**            | Always (default reviewer)              | Imagine the plan failed 6 months from now — return ranked failure narratives, early warning signs, and mitigations |
-| **Principal Bun/NodeJS Engineer** | Server-side logic, APIs                | Performance, async, error handling, memory                                                                         |
-| **Principal DevOps Engineer**     | GitHub API, GitHub Actions workflows   | Env vars, secrets, scaling, monitoring, CI/CD                                                                      |
-| **Principal SRE**                 | Production systems, Kubernetes, Docker | Scalability, metrics, stability, performance                                                                       |
-| **Boring Tech Writer**            | User-facing changes                    | README clarity, usage instructions, JSDoc, comments                                                                |
-
 **Verify examples** for the draft template's Implementation Steps:
 
 1. [Action] in `path/to/file.ts`
@@ -61093,21 +60674,6 @@ When `package.json` is missing, has no `agents` field, or carries an unrecognize
 ## NodeJS+React
 
 **Example libraries** (documentation lookup): `react`, `next`, `@tanstack/react-query`
-
-**Expert table** — always include the Pre-mortem Analyst, then 2-3 more by task scope:
-
-| Expert                         | When to Include           | Focus Areas                                                                                                        |
-| ------------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| **Pre-mortem Analyst**         | Always (default reviewer) | Imagine the plan failed 6 months from now — return ranked failure narratives, early warning signs, and mitigations |
-| **Principal Node.js Engineer** | Server-side logic, APIs   | Performance, async, error handling, memory                                                                         |
-| **DBA**                        | Database changes          | Query efficiency, indexes, transactions, migrations                                                                |
-| **Principal DevOps Engineer**  | Infra, env, deployment    | Env vars, scaling, monitoring, CI/CD                                                                               |
-| **Senior Frontend Engineer**   | UI changes                | React patterns, state, UX, accessibility                                                                           |
-| **Senior QA Engineer**         | Any code change           | Test coverage, edge cases, regression risk                                                                         |
-| **CISO**                       | Auth, data, APIs, infra   | Security architecture, OWASP, compliance, reliability                                                              |
-| **Principal Designer**         | UI/UX changes             | Fast, beautiful, simple, minimal; design patterns                                                                  |
-| **Principal SRE**              | Production systems        | Scalability, metrics, stability, performance                                                                       |
-| **Boring Tech Writer**         | User-facing changes       | README clarity, usage instructions, JSDoc, comments                                                                |
 
 **Verify examples** for the draft template's Implementation Steps:
 
@@ -61120,8 +60686,8 @@ When `package.json` is missing, has no `agents` field, or carries an unrecognize
 <file path="claude-plugins/autopilot/skills/plan/SKILL.md">
 ---
 name: plan
-description: Perform deep analysis of the codebase, recent changes, and the requested task. Create a validated implementation plan, expert-reviewed when --experts-review is passed
-argument-hint: "<task description, GitHub/Linear issue, or GitHub issue URL> [--issue | --linear-issue] [--experts-review]"
+description: Perform deep analysis of the codebase, recent changes, and the requested task. Create a validated implementation plan
+argument-hint: "<task description, GitHub/Linear issue, or GitHub issue URL> [--issue | --linear-issue]"
 allowed-tools:
   - TaskCreate
   - TaskUpdate
@@ -61157,7 +60723,7 @@ allowed-tools:
   - Skill(autopilot:pr-create)
 ---
 
-Perform deep analysis of the codebase, recent changes, and the requested task. Create a validated implementation plan, expert-reviewed when `--experts-review` is passed.
+Perform deep analysis of the codebase, recent changes, and the requested task. Create a validated implementation plan.
 
 ## Input
 
@@ -61170,7 +60736,6 @@ Expected forms:
 - `<GitHub-issue-URL>` — full URL (e.g., `https://github.com/org/repo/issues/789`)
 - `<task description> --issue` — file a GitHub issue from the description first, then plan against it
 - `<task description> --linear-issue` — file a Linear issue first — requires a `linear` tracker (see [Linear tracker](../../../../docs/11-linear-tracker.md))
-- `<any form above> --experts-review` — run the expert review-and-score step; without this flag that step is skipped
 
 Additional free-form context may follow any form (e.g., `#42 I think we should start with the auth module`).
 
@@ -61178,21 +60743,19 @@ Additional free-form context may follow any form (e.g., `#42 I think we should s
 
 - **Task description / issue identifier** — parsed from `$ARGUMENTS`. If empty, prompt once via `AskUserQuestion`: "What should we plan?" with a free-form slot. Do not abort silently.
 - **`--issue` / `--linear-issue`** — handled by the create-issue pre-step in [input-detection.md](references/input-detection.md) before detection. Neither flag ⇒ today's behavior.
-- **`--experts-review`** — parsed and stripped first by the mode-flags pre-step in [input-detection.md](references/input-detection.md#mode-flags). Present ⇒ the pipeline's review step runs; absent ⇒ it is skipped and the skip is recorded in the plan's `Score:` line.
 - **Current branch / worktree / issue-ID mismatch** — from the Context Map's git state ([Phase 3](#phase-3-preflight-verdict)). No prompts beyond preflight's own.
 - **Repository root** — `git rev-parse --show-toplevel`. No prompt.
 
 ## Task Progress Protocol
 
-Create all 5 tasks with TaskCreate, in order, before any work. Set each to `in_progress` at the start of its phase and `completed` at the end.
+Create all 4 tasks with TaskCreate, in order, before any work. Set each to `in_progress` at the start of its phase and `completed` at the end.
 
-| #   | Subject          | ActiveForm            |
-| --- | ---------------- | --------------------- |
-| 1   | Resolve input    | Resolving input       |
-| 2   | Gather context   | Gathering context     |
-| 3   | Draft plan       | Drafting plan         |
-| 4   | Review and score | Reviewing and scoring |
-| 5   | Finalize plan    | Finalizing plan       |
+| #   | Subject        | ActiveForm        |
+| --- | -------------- | ----------------- |
+| 1   | Resolve input  | Resolving input   |
+| 2   | Gather context | Gathering context |
+| 3   | Draft plan     | Drafting plan     |
+| 4   | Finalize plan  | Finalizing plan   |
 
 ## Task
 
@@ -61200,7 +60763,7 @@ $ARGUMENTS
 
 ## Phase 0: Resolve input
 
-Create the 5 tasks, then set task 1 to `in_progress`.
+Create the 4 tasks, then set task 1 to `in_progress`.
 
 Detect the input type and id per [input-detection.md](references/input-detection.md) — the create-issue flags pre-step first, then the detection table and its tracker gating. Detection is pure string matching and performs **no I/O**; do not fetch anything here.
 
@@ -61292,9 +60855,9 @@ Invoke `Skill(autopilot:ascii-schemas)` when the change touches architecture or 
 
 Skip diagrams for pure refactors with no structural change, formatting or dependency bumps, single-function logic edits, and documentation-only changes.
 
-## Phase 4: Draft, review, and finalize
+## Phase 4: Draft and finalize
 
-Execute the shared pipeline in [pipeline.md](references/pipeline.md) — draft (task 3), review and score (task 4), finalize (task 5) — resolving your stack's deltas from [stack-deltas.md](references/stack-deltas.md). Carry the `--experts-review` resolution from [Phase 0](#phase-0-resolve-input) into the pipeline: the review step runs only when the flag was passed.
+Execute the shared pipeline in [pipeline.md](references/pipeline.md) — draft (task 3), finalize (task 4) — resolving your stack's deltas from [stack-deltas.md](references/stack-deltas.md).
 
 ## Phase 5: Embed branch creation and request approval
 
@@ -61325,8 +60888,8 @@ Ask via AskUserQuestion (header "Next"): all changes are implemented and verifie
 ## Additional Resources
 
 - [`references/input-detection.md`](references/input-detection.md) — create-issue flags, detection table, tracker gating, alert divergence
-- [`references/pipeline.md`](references/pipeline.md) — draft template, expert review and scoring, finalize
-- [`references/stack-deltas.md`](references/stack-deltas.md) — per-stack example libraries, expert tables, verify examples
+- [`references/pipeline.md`](references/pipeline.md) — draft template, finalize
+- [`references/stack-deltas.md`](references/stack-deltas.md) — per-stack example libraries and verify examples
 - [`references/branch-blocks.md`](references/branch-blocks.md) — the `## Pre-Implementation` bodies and the mechanics that execute them
 
 When you write the plan file, apply the reference-formatting rules in [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (RFC-0001, read it first) to every reference it contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.
@@ -63092,7 +62655,7 @@ Files modified that have nothing to do with the PR's purpose — whitespace, imp
 
 **CHECK-PR-007: Description states why in one sentence and stays short** — Severity: suggestion
 
-The opening paragraph states what changes and why in 1-2 sentences; each bullet is one implementation decision and its reason in at most 20 words. A description that only lists changed files, or that narrates process (plans, expert panels, scores, review rounds), is a finding.
+The opening paragraph states what changes and why in 1-2 sentences; each bullet is one implementation decision and its reason in at most 20 words. A description that only lists changed files, or that narrates process (plans, scores, review rounds), is a finding.
 
 **CHECK-PR-008: Breaking changes called out** — Severity: blocker
 
@@ -64703,18 +64266,17 @@ Identical to the `plan` skill — see [its Input resolution section](../plan/SKI
 
 ## Task Progress Protocol
 
-Create all 8 tasks with TaskCreate, in order, before any work. Set each to `in_progress` at the start of its phase and `completed` at the end.
+Create all 7 tasks with TaskCreate, in order, before any work. Set each to `in_progress` at the start of its phase and `completed` at the end.
 
-| #   | Subject          | ActiveForm            |
-| --- | ---------------- | --------------------- |
-| 1   | Resolve input    | Resolving input       |
-| 2   | Gather context   | Gathering context     |
-| 3   | Draft plan       | Drafting plan         |
-| 4   | Review and score | Reviewing and scoring |
-| 5   | Finalize plan    | Finalizing plan       |
-| 6   | Commit changes   | Committing changes    |
-| 7   | Create PR        | Creating PR           |
-| 8   | Monitor PR       | Monitoring PR         |
+| #   | Subject        | ActiveForm         |
+| --- | -------------- | ------------------ |
+| 1   | Resolve input  | Resolving input    |
+| 2   | Gather context | Gathering context  |
+| 3   | Draft plan     | Drafting plan      |
+| 4   | Finalize plan  | Finalizing plan    |
+| 5   | Commit changes | Committing changes |
+| 6   | Create PR      | Creating PR        |
+| 7   | Monitor PR     | Monitoring PR      |
 
 ## Task
 
@@ -64722,7 +64284,7 @@ $ARGUMENTS
 
 ## Phase 0: Resolve input
 
-Create the 8 tasks, then set task 1 to `in_progress`.
+Create the 7 tasks, then set task 1 to `in_progress`.
 
 Detect the input type and id per [input-detection.md](../plan/references/input-detection.md) — the detection table and its tracker gating. Skip that file's create-issue flags section; it is plan-only. Detection is pure string matching and performs **no I/O**; do not fetch anything here.
 
@@ -64754,9 +64316,9 @@ Because this step ran, every later step in this chain skips its own Phase 0 pref
 
 The [Common Instructions in `plan/SKILL.md`](../plan/SKILL.md#common-instructions) apply here unchanged — documentation lookup scaled to the task, repository standards from the Context Map, the plan file header rule, CLAUDE.md compliance, and ASCII schemas.
 
-## Phase 3: Draft, review, and finalize
+## Phase 3: Draft and finalize
 
-Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft (task 3), review and score (task 4), finalize (task 5) — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md).
+Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft (task 3), finalize (task 4) — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md).
 
 ## Phase 4: Embed branch creation and the autopilot chain
 
@@ -64807,7 +64369,7 @@ Take this exit only when all of the following are true:
 
 If the plan expected repository changes but the diff is empty, the task is incomplete: report that mismatch and stop. If implementation discovered repository changes or topic commits, do not take this exit; create the deferred branch when needed and continue through Auto-Commit.
 
-When every condition passes, do not invoke `branch-create`, `commits-create`, `git push`, `pr-create`, `pr-update`, or `pr-monitor`. Set tasks 6–8 to `completed` as not applicable, then output:
+When every condition passes, do not invoke `branch-create`, `commits-create`, `git push`, `pr-create`, `pr-update`, or `pr-monitor`. Set tasks 5–7 to `completed` as not applicable, then output:
 
 ```
 Autopilot complete.
@@ -64821,15 +64383,15 @@ Otherwise continue with the repository-delivery steps below.
 
 #### Step 1: Auto-Commit
 
-Set task 6 ("Commit changes") to `in_progress`. Invoke `Skill(autopilot:commits-create)` with `--autopilot`. The flag suppresses the commit-strategy prompt and the skill's own PR update (this chain creates or updates the PR itself in Step 2), and turns a validation failure into a loud abort instead of a prompt. Follow the skill's full workflow — do NOT run `git commit` directly.
+Set task 5 ("Commit changes") to `in_progress`. Invoke `Skill(autopilot:commits-create)` with `--autopilot`. The flag suppresses the commit-strategy prompt and the skill's own PR update (this chain creates or updates the PR itself in Step 2), and turns a validation failure into a loud abort instead of a prompt. Follow the skill's full workflow — do NOT run `git commit` directly.
 
 If the commit fails due to a pre-commit hook, check `git status` for modified files (the hook may have auto-formatted), re-stage with `git add -u`, and retry once. If it still fails, report the error and stop.
 
-After committing, push: `git push -u origin <branch>`. Set task 6 to `completed`.
+After committing, push: `git push -u origin <branch>`. Set task 5 to `completed`.
 
 #### Step 2: Auto-Create PR
 
-Set task 7 ("Create PR") to `in_progress`.
+Set task 6 ("Create PR") to `in_progress`.
 
 PR creation and updates go through `Skill(autopilot:pr-create)` and `Skill(autopilot:pr-update)`, which own the PR title and body grammar. Never fall back to raw `gh pr create` or `gh pr edit`, even when a skill call fails or times out — surface the failure and stop instead.
 
@@ -64840,19 +64402,19 @@ PR creation and updates go through `Skill(autopilot:pr-create)` and `Skill(autop
 
 2. Invoke `Skill(autopilot:pr-create)` with `--autopilot` (append `--release-notes` when the branch's commits include `feat:` or `fix:`). Release notes are added automatically for breaking changes regardless.
 
-Output the PR URL. Set task 7 to `completed`.
+Output the PR URL. Set task 6 to `completed`.
 
 3. **Format check** — after creating or updating, run `gh pr view --json title,body`. If the body does not match [`pr-body-grammar.md`](../shared-rules/references/pr-body-grammar.md), invoke `Skill(autopilot:pr-update)` with `--autopilot` once more and re-check; if it still does not match, report it and continue.
 
 #### Step 3: Monitor PR
 
-Set task 8 ("Monitor PR") to `in_progress`. Invoke `Skill(autopilot:pr-monitor)` in foreground mode (do NOT use the Agent tool with run_in_background) and without `--wait-for-approval`. It polls CI, review, and mergeability status, invokes pr-resolve interactively when feedback needs answering, and returns as soon as its [Readiness Check](../pr-monitor/SKILL.md#readiness-check-shared-procedure) passes for the current head (`READY_FOR_REVIEW`), or earlier on approval or merge; approval and merge are asynchronous follow-ups, not part of this chain's wait.
+Set task 7 ("Monitor PR") to `in_progress`. Invoke `Skill(autopilot:pr-monitor)` in foreground mode (do NOT use the Agent tool with run_in_background) and without `--wait-for-approval`. It polls CI, review, and mergeability status, invokes pr-resolve interactively when feedback needs answering, and returns as soon as its [Readiness Check](../pr-monitor/SKILL.md#readiness-check-shared-procedure) passes for the current head (`READY_FOR_REVIEW`), or earlier on approval or merge; approval and merge are asynchronous follow-ups, not part of this chain's wait.
 
 **Autopilot override for pr-resolve:** when pr-monitor invokes pr-resolve and it presents the review-action gate via AskUserQuestion, auto-select "Address all". Replies post without prompting.
 
 #### Completion
 
-Set task 8 to `completed`. Output the monitor's status verbatim:
+Set task 7 to `completed`. Output the monitor's status verbatim:
 
 ```
 Autopilot complete.
@@ -64864,12 +64426,11 @@ When the monitor stopped instead — `CHANGES_REQUESTED` or `CONFLICTED` — out
 
 ### Persist the plan to Linear
 
-Runs only when the detected input type is `linear-issue` (the type named by [input-detection.md](../plan/references/input-detection.md)'s detection table); every other input type skips this subsection and keeps its current behavior. It executes once both blocks above are embedded and before any step of [Phase 5](#phase-5-implement-and-proceed) runs, so the source ticket carries the finalized plan before implementation starts. This is chain work between tasks 5 and 6 — the task table stays as it is.
+Runs only when the detected input type is `linear-issue` (the type named by [input-detection.md](../plan/references/input-detection.md)'s detection table); every other input type skips this subsection and keeps its current behavior. It executes once both blocks above are embedded and before any step of [Phase 5](#phase-5-implement-and-proceed) runs, so the source ticket carries the finalized plan before implementation starts. This is chain work between tasks 4 and 5 — the task table stays as it is.
 
-The store is [`linear-plan`](../linear-plan/SKILL.md)'s, executed by reference rather than restated: fill [the emission template](../linear-plan/SKILL.md#the-emission-template) from the finalized plan file under [the stored plan format](../linear-plan/SKILL.md#the-stored-plan-format) and [Linear-safe markdown](../linear-plan/SKILL.md#linear-safe-markdown) rules, then perform [the write](../linear-plan/SKILL.md#the-write)'s read, anchor, preserved-prefix, write, and recovery steps. Resolve `get_issue` and `save_issue` per [`linear-mcp-access.md`](../shared-rules/references/linear-mcp-access.md). Three deltas, and only these:
+The store is [`linear-plan`](../linear-plan/SKILL.md)'s, executed by reference rather than restated: fill [the emission template](../linear-plan/SKILL.md#the-emission-template) from the finalized plan file under [the stored plan format](../linear-plan/SKILL.md#the-stored-plan-format) and [Linear-safe markdown](../linear-plan/SKILL.md#linear-safe-markdown) rules, then perform [the write](../linear-plan/SKILL.md#the-write)'s read, anchor, preserved-prefix, write, and recovery steps. Resolve `get_issue` and `save_issue` per [`linear-mcp-access.md`](../shared-rules/references/linear-mcp-access.md). Two deltas, and only these:
 
 - The header's `Stored by` field reads `/autopilot:run`, so the ticket records which skill wrote the plan.
-- The header's `Score:` field carries this run's panel verdicts — the review is always-on for the `run` family, so it is never the literal `skipped`.
 - The write's title-refresh and board-transition steps do not run: this same session immediately executes the ticket, so the planned-and-ready hand-off signal belongs to the deliberate `linear-plan` path, and [`branch-create`](../branch-create/SKILL.md) moves the ticket to "In Progress" moments later via `--start`.
 
 When the plan is a no-repository-change candidate with no `## Pre-Implementation` section, the stored `### Pre-Implementation` states in one line that no branch is created because the plan requires no repository change.
@@ -64958,7 +64519,7 @@ Both are silent failures if left unstated, so state them to the user when either
 
 ## Task Progress Protocol
 
-Create all 8 tasks with TaskCreate, in order, before any work, exactly as [`run`](../run/SKILL.md#task-progress-protocol) defines them. Set each to `in_progress` at the start of its phase and `completed` at the end. Brief validation happens inside task 2 ("Gather context"), because it is the gate on that task's input rather than a step of its own.
+Create all 7 tasks with TaskCreate, in order, before any work, exactly as [`run`](../run/SKILL.md#task-progress-protocol) defines them. Set each to `in_progress` at the start of its phase and `completed` at the end. Brief validation happens inside task 2 ("Gather context"), because it is the gate on that task's input rather than a step of its own.
 
 ## Task
 
@@ -64966,7 +64527,7 @@ $ARGUMENTS
 
 ## Phase 0: Resolve input
 
-Create the 8 tasks, then set task 1 to `in_progress`.
+Create the 7 tasks, then set task 1 to `in_progress`.
 
 Detect the input type and id per [input-detection.md](../plan/references/input-detection.md) — the detection table and its tracker gating. Skip that file's create-issue flags section; it is plan-only. Detection is pure string matching and performs **no I/O**.
 
@@ -65043,9 +64604,9 @@ This skill never enters plan mode — do NOT call `EnterPlanMode` or `ExitPlanMo
 
 The [Common Instructions in `plan/SKILL.md`](../plan/SKILL.md#common-instructions) apply unchanged — documentation lookup scaled to the task, repository standards, the plan file header rule, CLAUDE.md compliance, and ASCII schemas. Read them against the merged context from [Phase 3](#phase-3-merge-the-working-context), not against a fresh crawl of the tree.
 
-## Phase 5: Draft, review, and finalize
+## Phase 5: Draft and finalize
 
-Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft (task 3), review and score (task 4), finalize (task 5) — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md).
+Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft (task 3), finalize (task 4) — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md).
 
 ## Phase 6: Implement and finish the autopilot run
 
@@ -65287,7 +64848,7 @@ Each section is separated by `---`. The `**Issues:**` section is ALWAYS last. Pl
 
 - Opening paragraph: what changes and why, 1-2 sentences
 - Then one bullet per implementation decision the diff does not explain by itself — the decision and its reason, at most 20 words, at most 7 bullets
-- Nothing about process: no plan, expert panel, score, review round, or "scoped out" narration; a deliberate exclusion is one bullet starting `Out of scope:`
+- Nothing about process: no plan, score, review round, or "scoped out" narration; a deliberate exclusion is one bullet starting `Out of scope:`
 
 Target density for Section 1, from a real PR:
 
@@ -65790,7 +65351,7 @@ Skills used to carry these blocks inline, one copy per skill. That is why the As
 Two runtimes can read nothing, so they keep a literal copy. Both are guarded byte-identical against the canonical file by the `sharedBlockSync` test, so they are still single-sourced — only the delivery differs.
 
 - [releaseNotesPrompt.ts](../../../../.github/actions/release-action/src/releaseNotesPrompt.ts) carries the reference-formatting block. It is passed to the Anthropic API as a raw system prompt, not through the Claude Code SDK, so it has no tools at all.
-- The seven structured-output agents carry the agent JSON block. Agents declare their own tools and [expert-review](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/agents/expert-review.md) declares `tools: []`.
+- The structured-output agents carry the agent JSON block. Each declares its own restrictive `tools` list.
 
 Do not "fix" either by adding a read directive — neither can execute one.
 
@@ -68852,6 +68413,12 @@ SOFTWARE.
 <file path="claude-plugins/autopilot/MIGRATING.md">
 # MIGRATING
 
+## From 8.0.0 to 9.0.0
+
+### Breaking changes
+
+- The domain-expert review panel is removed from every skill and flow: the `expert-review` agent, the shared pipeline's review-and-score step, the per-stack expert tables, and the `--experts-review` flag are gone, and no opt-in path re-enables them. `/autopilot:plan` and `/autopilot:linear-plan` no longer accept `--experts-review`; pass the issue alone. The planning pipeline is now draft → finalize, so plan files carry no `Score:` line and stored Linear plans carry no `Score:` field in their `Format: v1` header (now `Format: v1 · Base: <sha> · Stored by …`). Plans stored by earlier versions keep their `Score:` field and remain valid: `/autopilot:linear-run` never parsed it. Task tables shrink by one (`plan` 4, `run` and `run-primed` 7, `linear-plan` 5).
+
 ## From 7.5.1 to 8.0.0
 
 ### Breaking changes
@@ -69062,7 +68629,6 @@ code-assistants/
         │   ├── analyze-pr-commits.md
         │   ├── analyze-staged-changes.md
         │   ├── digest-repo-standards.md
-        │   ├── expert-review.md
         │   ├── resolve-alert-context.md
         │   ├── resolve-assignees.md
         │   ├── digest-session-history.md
@@ -69244,7 +68810,7 @@ Create a Linear issue with the same five-section body as `/autopilot:issue-creat
 
 Same as `/autopilot:plan`, but stores the finished plan in its Linear ticket's description so it outlives the session — then stops, without implementing. See [the linear-plan skill](../../docs/16-linear-plan-skill.md) for the stored format.
 
-**Precondition:** a `linear` tracker in `package.json` `agents.trackers`, a Linear issue as the argument, and a reachable Linear MCP server. All three are checked before the expensive planning pass, and each names `/autopilot:plan` as the alternative. Storing is unconditional — expert review runs only when `--experts-review` is passed (as in `/autopilot:plan`), and the stored header records the score, or `Score: skipped` without the flag, as information for the ticket's reader, never as a gate.
+**Precondition:** a `linear` tracker in `package.json` `agents.trackers`, a Linear issue as the argument, and a reachable Linear MCP server. All three are checked before the expensive planning pass, and each names `/autopilot:plan` as the alternative. Storing is unconditional and never gated.
 
 ```bash
 /autopilot:linear-plan ENG-123                                          # From Linear id
@@ -69253,7 +68819,7 @@ Same as `/autopilot:plan`, but stores the finished plan in its Linear ticket's d
 
 ### `/autopilot:linear-run`
 
-Same as `/autopilot:run`, but first checks the Linear ticket for a durable plan. A valid stored plan is executed verbatim; when no executable stored plan is available, the skill drafts and reviews a fresh plan before continuing autonomously. See [the linear-run skill](../../docs/17-linear-run-skill.md) for the two-mode contract.
+Same as `/autopilot:run`, but first checks the Linear ticket for a durable plan. A valid stored plan is executed verbatim; when no executable stored plan is available, the skill drafts a fresh plan before continuing autonomously. See [the linear-run skill](../../docs/17-linear-run-skill.md) for the two-mode contract.
 
 **Precondition:** only a Linear ticket is required. Missing, unreadable, malformed, or unverifiable stored-plan data selects the fresh-plan path instead of rejecting the issue. The fallback never invokes `/autopilot:linear-plan` or rewrites the ticket description.
 
@@ -69367,22 +68933,21 @@ The canonical home for instruction blocks several skills need — reference form
 
 ## Agents
 
-### Helper sub-agents (10 agents)
+### Helper sub-agents (9 agents)
 
 Context-isolating workers invoked by other skills to keep the parent conversation small. Each returns a structured summary only. Deterministic work is not delegated: the plan/run branch digest and GitHub issue fetch run as bundled helper CLIs under [`lib/`](./lib) (see [Bundled helpers](#bundled-helpers) below), so `gather-context` spawns an agent only for semantic digests.
 
-| Agent                    | Model   | Used by                  | Purpose                                                                                      |
-| ------------------------ | ------- | ------------------------ | -------------------------------------------------------------------------------------------- |
-| `analyze-pr-commits`     | sonnet  | `pr-create`, `pr-update` | Summarize branch commits, diff, and linked issue for PR context                              |
-| `digest-repo-standards`  | sonnet  | `gather-context`         | Digest the repo's README, docs/, rfc/, and principles/ into a bounded standards summary      |
-| `analyze-staged-changes` | haiku   | `commits-create`         | Categorize staged files and recommend a commit strategy                                      |
-| `digest-session-history` | haiku   | `plan`, `run`, `explore` | Map task files and commits to the Entire sessions and checkpoints that produced them         |
-| `expert-review`          | inherit | `plan`, `plan-*`         | Score an implementation plan as a domain expert                                              |
-| `resolve-alert-context`  | sonnet  | `plan`, `run`            | Fetch GitHub code-scanning alert context via the code-scanning API                           |
-| `resolve-assignees`      | sonnet  | `linear-create`          | Resolve candidate assignees from CODEOWNERS and Linear team members, current user first      |
-| `resolve-issue-context`  | sonnet  | `pr-review`              | Fetch GitHub/Linear issue context; optionally auto-assign current user (idempotent) via `gh` |
-| `scan-and-analyze-todos` | sonnet  | `todo-cleanup`           | Scan codebase for TODOs and check linked GitHub issue statuses                               |
-| `search-codebase-todos`  | haiku   | `pr-review`              | Search the codebase for TODOs and references to a specific issue                             |
+| Agent                    | Model  | Used by                  | Purpose                                                                                      |
+| ------------------------ | ------ | ------------------------ | -------------------------------------------------------------------------------------------- |
+| `analyze-pr-commits`     | sonnet | `pr-create`, `pr-update` | Summarize branch commits, diff, and linked issue for PR context                              |
+| `digest-repo-standards`  | sonnet | `gather-context`         | Digest the repo's README, docs/, rfc/, and principles/ into a bounded standards summary      |
+| `analyze-staged-changes` | haiku  | `commits-create`         | Categorize staged files and recommend a commit strategy                                      |
+| `digest-session-history` | haiku  | `plan`, `run`, `explore` | Map task files and commits to the Entire sessions and checkpoints that produced them         |
+| `resolve-alert-context`  | sonnet | `plan`, `run`            | Fetch GitHub code-scanning alert context via the code-scanning API                           |
+| `resolve-assignees`      | sonnet | `linear-create`          | Resolve candidate assignees from CODEOWNERS and Linear team members, current user first      |
+| `resolve-issue-context`  | sonnet | `pr-review`              | Fetch GitHub/Linear issue context; optionally auto-assign current user (idempotent) via `gh` |
+| `scan-and-analyze-todos` | sonnet | `todo-cleanup`           | Scan codebase for TODOs and check linked GitHub issue statuses                               |
+| `search-codebase-todos`  | haiku  | `pr-review`              | Search the codebase for TODOs and references to a specific issue                             |
 
 ## Internal Skills (not in slash menu)
 
@@ -69402,7 +68967,7 @@ The fan-out issues every context call in a single message — the repo-standards
 
 An optional `Scope` input selects how that pass reads the snapshot: `task` (the default, used by `plan` and `run`) narrows to what the change touches, `broad` maps the repository breadth-first for `/autopilot:explore`, and `primed` reads only the gaps a validated brief leaves for `/autopilot:run-primed`. The emitted Context Map has the same sections at every scope. `primed` is the one value that also gates off a fan-out agent — the repo-standards digest, whose output the brief already carries.
 
-Planning is stack-agnostic apart from three values (example libraries, expert table, verify examples), which both skills resolve from `plan/references/stack-deltas.md` keyed by `agents.rules`. There are no per-stack planning skills.
+Planning is stack-agnostic apart from two values (example libraries, verify examples), which both skills resolve from `plan/references/stack-deltas.md` keyed by `agents.rules`. There are no per-stack planning skills.
 
 ## Contributing
 
@@ -69839,7 +69404,7 @@ The matrix below lists every skill that reads `agents`, the key(s) it reads, and
 
 ### Stack → planning deltas (used by `/plan` and `/run`)
 
-Planning is stack-agnostic except for three values — example libraries for documentation lookup, the expert-panel roster, and verify-line examples. Both skills resolve them from one delta table; there is no per-stack planning skill to delegate to.
+Planning is stack-agnostic except for two values — example libraries for documentation lookup and verify-line examples. Both skills resolve them from one delta table; there is no per-stack planning skill to delegate to.
 
 | `rules` value           | Delta set      |
 | ----------------------- | -------------- |
@@ -69929,10 +69494,10 @@ To add a new stack:
 1. Add a rule file under `rules/<Name>.md`.
 2. Add the value to the `rules` table in this document.
 3. Update the stack-mapping tables inside the consumer skills:
-   - `claude-plugins/autopilot/skills/plan/references/stack-deltas.md` (routing table plus the three deltas; serves both `/plan` and `/run`)
+   - `claude-plugins/autopilot/skills/plan/references/stack-deltas.md` (routing table plus the two deltas; serves both `/plan` and `/run`)
    - `claude-plugins/autopilot/skills/pr-review/SKILL.md`
    - `claude-plugins/autopilot/skills/todo-cleanup/SKILL.md`
-4. Add the stack's three planning deltas — example libraries, expert table, verify examples — as a new section in `stack-deltas.md`. A stack does not get its own planning skill: the pipeline is stack-agnostic, and the deltas are the only real differences.
+4. Add the stack's two planning deltas — example libraries and verify examples — as a new section in `stack-deltas.md`. A stack does not get its own planning skill: the pipeline is stack-agnostic, and the deltas are the only real differences.
 
 To add a new language: extend the language-to-pattern table in `claude-plugins/autopilot/skills/todo-cleanup/SKILL.md` and mirror the change here.
 </file>
@@ -70268,7 +69833,7 @@ The prose is never lost; only the one-click apply degrades when the anchor canno
 
 > Chapter 5 of the [repository docs](../README.md#repository-docs).
 
-How `/autopilot:plan` and `/autopilot:run` turn a task — a GitHub issue, a Linear ticket, a code-scanning alert, or a free-form description — into a validated, expert-reviewed implementation plan, and (for `run`) either a verified no-repository-change result or a merged pull request.
+How `/autopilot:plan` and `/autopilot:run` turn a task — a GitHub issue, a Linear ticket, a code-scanning alert, or a free-form description — into a validated implementation plan, and (for `run`) either a verified no-repository-change result or a merged pull request.
 
 The two skills share the same front half. `plan` produces the plan and stops, asking what to do next. `run` is `plan` plus automated terminal selection: verified no repository change, or commit → PR → monitor. Everything below applies to both unless a section calls out a difference.
 
@@ -70319,7 +69884,7 @@ The two skills share the same front half. `plan` produces the plan and stops, as
 - ② One parallel fan-out acquires every kind of context and returns the Context Map.
 - ③ Steelmanned intent, assumptions, and open questions — the human gate, now asked with the code already understood.
 - ④ Branch and worktree state read from the Context Map; `preflight-check` handles only what the map cannot settle.
-- ⑤ The shared pipeline: draft, review and score, finalize (see [The shared pipeline](#the-shared-pipeline)).
+- ⑤ The shared pipeline: draft, finalize (see [The shared pipeline](#the-shared-pipeline)).
 - ⑥ `run` only: verify a no-repository-change result, or commit → PR → monitor until ready for human review (see [How run differs](#how-run-differs-automated-post-implementation)).
 
 ## One fan-out, then decide
@@ -70395,7 +69960,7 @@ The fan-out takes an optional `Scope` input — `task` or `broad`. Both skills h
 
 ## Phase 2 — Intent, assumptions, and the human gate
 
-After the Context Map, deliberately. The skill emits a one-line **steelmanned intent** (the request restated in its strongest form — the stable target for expert reviewers, copied verbatim into the plan's `## Summary`), then **Assumptions** and **Open Questions**. Any load-bearing open question is raised via `AskUserQuestion` before drafting.
+After the Context Map, deliberately. The skill emits a one-line **steelmanned intent** (the request restated in its strongest form, copied verbatim into the plan's `## Summary`), then **Assumptions** and **Open Questions**. Any load-bearing open question is raised via `AskUserQuestion` before drafting.
 
 This gate used to fire in Phase 0, before any code had been read. Asking at that point produces uninformed questions and structurally cannot surface the informed ones, so the one human checkpoint in the flow was spent at the moment of minimum information.
 
@@ -70423,7 +69988,7 @@ Declared once in `plan/SKILL.md` and referenced by `run` rather than restated:
 
 ## Stack deltas
 
-Planning is stack-agnostic except for three values — example libraries, the expert table, and verify-line examples — resolved from `package.json` `agents.rules` via [`references/stack-deltas.md`](../claude-plugins/autopilot/skills/plan/references/stack-deltas.md):
+Planning is stack-agnostic except for two values — example libraries and verify-line examples — resolved from `package.json` `agents.rules` via [`references/stack-deltas.md`](../claude-plugins/autopilot/skills/plan/references/stack-deltas.md):
 
 | `agents.rules` value                     | Delta set      |
 | ---------------------------------------- | -------------- |
@@ -70432,7 +69997,7 @@ Planning is stack-agnostic except for three values — example libraries, the ex
 
 If the stack cannot be detected, the skill asks via `AskUserQuestion`.
 
-These deltas previously lived in two dedicated skills, `plan-bun` and `plan-nodejs-react`. Each cost a full skill load and round trip to deliver three values, and the routing tables drifted — `run` listed two `agents.rules` values where `plan` listed four, so a `Bun+React+Tailwind` repo running `/autopilot:run` fell through to the "could not detect stack" prompt. A table cannot drift from itself. See [The `agents` field](./02-agents-field.md#stack--planning-deltas-used-by-plan-and-run).
+These deltas previously lived in two dedicated skills, `plan-bun` and `plan-nodejs-react`. Each cost a full skill load and round trip to deliver two values, and the routing tables drifted — `run` listed two `agents.rules` values where `plan` listed four, so a `Bun+React+Tailwind` repo running `/autopilot:run` fell through to the "could not detect stack" prompt. A table cannot drift from itself. See [The `agents` field](./02-agents-field.md#stack--planning-deltas-used-by-plan-and-run).
 
 ## The shared pipeline
 
@@ -70440,13 +70005,13 @@ Defined once in [`references/pipeline.md`](../claude-plugins/autopilot/skills/pl
 
 ### Draft plan
 
-Assemble a complete draft **before** review and scoring, so both operate on a concrete artifact rather than an imagined one. The draft follows a fixed template: `## Summary` (with steelmanned intent and a `Score:` placeholder), `## Context source`, `## Implementation Steps` (each with an observable `verify:` line patterned on the stack's verify examples), `## Files`, and `## Post-Implementation` — the last of these stating in prose that documentation is updated and the work is committed or opened as a PR.
+Assemble a complete draft before finalizing, so the written plan is a concrete artifact rather than an imagined one. The draft follows a fixed template: `## Summary` (with steelmanned intent), `## Context source`, `## Implementation Steps` (each with an observable `verify:` line patterned on the stack's verify examples), `## Files`, and `## Post-Implementation` — the last of these stating in prose that documentation is updated and the work is committed or opened as a PR.
 
 `## Context source` is the one section quoted rather than composed: it carries the Context Map's `Snapshot` record verbatim, which on the graph tier means the `context-source:`, `graphify-trace:`, and `graphify-shortlist:` lines together. Implementation frequently happens in a session that never ran the query, and a source name alone leaves that session re-collecting a repository someone already mapped ([#597](https://github.com/awinogradov/code-assistants/issues/597)) — the shortlist entries carry the relationship that put them there, so they survive the hand-off as something to read rather than something to re-derive. It also makes a past run auditable, since a plan file is durable and greppable where a transcript is not. A plan with no such section — every plan written before the section existed — is an unrecorded source, read as a selection nobody wrote down, never as a reason to stop.
 
 Two constraints bound what that draft may contain. The first is minimality: the draft proposes the smallest reliable solution that satisfies the steelmanned intent, reusing what the Context Map already shows, and every step must trace to that intent — no unrequested abstraction, no configurability nobody asked for, no error handling for impossible states, no opportunistic refactor of adjacent code. The second is shape: a step is one imperative action naming the file it touches and its `verify:` line, with reasoning left to `## Summary` and no checkboxes, since the plan file is read rather than ticked off.
 
-Both apply at drafting rather than at scoring, even though the rubric already carries a Simplicity dimension. No revision budget reliably strips scope a draft has already committed to — by then the over-built design is the thing being corrected rather than the thing being avoided, and a pass spent arguing scope back down is a pass not spent on correctness. Constraining the draft also gives expert reviewers a tighter artifact to score.
+Both apply at drafting because nothing later strips scope a draft has already committed to: the draft is where scope is decided, and an over-built design would otherwise be the thing being corrected rather than the thing being avoided.
 
 Drafting works five analysis dimensions against the Context Map — **Architecture**, **Patterns**, **Data Flow**, **Types**, and **Edge Cases**. This was previously a separate "Deep Analysis" phase that produced no artifact and needed its own paragraph warning it not to re-crawl the tree; folding it into drafting removes both the phase boundary and the temptation.
 
@@ -70458,23 +70023,11 @@ Everything written into the plan file describes an outcome. No section carries a
 
 The mechanics sit in the phase that runs them: [Phase 5](#phase-5--embed-branch-creation) for the branch, [Phase 6](#phase-6--post-implementation-handoff) for `plan`'s handoff, and [Phase 4](#how-run-differs-automated-post-implementation) of `run` for the automated chain. Each behaviour is stated once. Before this split the branch and post-implementation mechanics existed twice — in the skill files and in a copy pasted into every plan file — so a renamed flag went stale in whichever copy nobody re-read, and the approval gate was padded with parameter arrays that said nothing about the change. [`planFileOutputPurity.test.ts`](../.github/actions/code-review-action/src/planFileOutputPurity.test.ts) enforces it: it walks the skill markdown, finds every fenced block destined for a plan file, and fails on any of those constructs.
 
-### Review and score
-
-Expert review and scoring are **one step**. Experts are selected from the stack's expert table — always the Pre-mortem Analyst, plus 2–3 more by task scope — and launched as parallel `expert-review` sub-agents.
-
-The step is opt-in for `plan` and [`linear-plan`](./16-linear-plan-skill.md): each runs it only when the user passed `--experts-review` — `plan` because its approval gate puts a human in front of the finished plan either way, `linear-plan` because the teammate reading the stored ticket is that human. Without the flag the plan file records `Score: skipped · expert review disabled (invoked without --experts-review)` — a single literal, so its appearance in `run`, `run-primed`, or `linear-run` output is drift, not a valid state. The `run` family runs the review unconditionally because no human re-reads its plans; a skipped score can reach a stored ticket, where it tells the reader the plan is unreviewed.
-
-Each reviewer receives a **Context Map excerpt** alongside the plan text. A reviewer with no view of the repository infers file contents, and an invented finding costs more than a missing one.
-
-Each returns a schema-validated JSON verdict carrying per-dimension scores on the five-dimension rubric (Alignment, Completeness, Type Safety, Testability, Simplicity; 20 points each), with the overall score derived as their sum. The parent folds the panel's findings into the draft in a single pass and records each surviving reviewer's verdict — derived score and weakest dimension — with no cross-reviewer averaging. The review is an enhancement, never a gate: there is no score threshold, no revision loop, and no caller that blocks or refuses to proceed on the number — [`linear-plan`](./16-linear-plan-skill.md) stores the plan whatever it says.
-
-Scoring used to be a separate phase running a second rubric over what the experts had already scored, with an uncapped auto-iteration loop; a later revision replaced that with a threshold-driven revision budget, and the threshold and budget were then removed entirely once review became an enhancement rather than a gate.
-
 ### Finalize
 
-Apply the aggregated findings and score to the draft, replace the `Score:` placeholder, and write the plan file, with every reference formatted per RFC-0001.
+Write the plan file from the draft, with every reference formatted per RFC-0001. Nothing sits between the two stages: no review pass, no score, no revision loop.
 
-The recorded line names each reviewer's weakest dimension beside their score — `Score: <score> & <score> · weakest: <dimension> (<points>) & <dimension> (<points>) · findings applied`. A score alone says how good a reviewer thought the plan was; the weakest dimension says what to double-check when executing it, and nothing reconstructs that later.
+A review panel of domain experts used to sit here — first as a scoring gate with an auto-iteration loop, then as a threshold-driven revision budget, finally as an enhancement that only recorded a score. It was removed outright ([#662](https://github.com/awinogradov/code-assistants/issues/662)): its parallel reviewer requests dominated the output tokens of ordinary runs while returning findings grounded in files the reviewers had never read, so the draft constraints above now carry the quality the panel was meant to add.
 
 ## Phase 5 — Embed branch creation
 
@@ -70501,21 +70054,21 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
 ```text
         ┌──────────────────────────────────────────────┐
         │ Parent skill (plan / run)                    │
-        └────┬─────────────────────────────────┬───────┘
-  gather-     │ (one fan-out)        review    │ (parallel panel)
-  context ┌───┴───┬────────┬────────┐      ┌───┼────────┐
-          ▼       ▼        ▼        ▼      ▼   ▼        ▼
-     ┌────────┐┌───────┐┌───────┐┌──────┐┌──────┐┌──────┐
-     │digest- ││branch ││issue  ││ todo ││expert││expert│
-     │repo-   ││digest ││context││ grep ││-rev  ││-rev  │
-     │standard││helper ││helper ││direct││  #1  ││  #2  │
-     └───┬────┘└───┬───┘└───┬───┘└───┬──┘└───┬──┘└───┬──┘
-         │ JSON    │ JSON   │ JSON   │ JSON  │ JSON  │ JSON
-         └─────────┴────┬───┴────────┘       └───┬───┘
-                        ▼                        ▼
-             ┌────────────────────┐   ┌────────────────────┐
-             │ Context Map        │   │ Aggregated score   │
-             └────────────────────┘   └────────────────────┘
+        └────┬─────────────────────────────────────────┘
+  gather-    │ (one fan-out)
+  context ┌──┴────┬────────┬────────┐
+          ▼       ▼        ▼        ▼
+     ┌────────┐┌───────┐┌───────┐┌──────┐
+     │digest- ││branch ││issue  ││ todo │
+     │repo-   ││digest ││context││ grep │
+     │standard││helper ││helper ││direct│
+     └───┬────┘└───┬───┘└───┬───┘└───┬──┘
+         │ JSON    │ JSON   │ JSON   │ JSON
+         └─────────┴────┬───┴────────┘
+                        ▼
+             ┌────────────────────┐
+             │ Context Map        │
+             └────────────────────┘
 ```
 
 **Flow Legend:**
@@ -70525,9 +70078,6 @@ Sub-agents isolate work from the parent's context. Each returns a single schema-
 - [`lib/github/fetch-issue.ts`](../claude-plugins/autopilot/lib/github/fetch-issue.ts) helper for GitHub, [`lib/linear/fetch-issue.mjs`](../claude-plugins/autopilot/lib/linear/fetch-issue.mjs) for Linear (one Bash call, not a sub-agent) → `{ source, issueId, title, status, labels[], assignee|null, url|null, description, comments[], truncated, resolveError|null }`
 - `resolve-alert-context` → `{ source, alertNumber, ruleId, severity, state, file, line, message, htmlUrl, resolveError|null }` (alert input only)
 - TODO search → one parent-side Grep bounded at 20 matches, kept as `path:line — text` lines (no sub-agent). The [`resolve-issue-context`](../claude-plugins/autopilot/agents/resolve-issue-context.md) and [`search-codebase-todos`](../claude-plugins/autopilot/agents/search-codebase-todos.md) agents still exist for the `pr-review` CI path, which runs under the code-review action's Bash allowlist.
-- `expert-review` → `{ expertRole, score, dimensions{alignment,completeness,typeSafety,testability,simplicity}, verdict, findings[3–5], grounding[], revision|null }`
-
-`grounding` names what a reviewer actually consulted, and the pipeline screens on it: a panel member with empty grounding, an unparseable report, or file claims it had no tools to make is **discarded rather than averaged**, every discard is named, and a panel that loses everyone reports the plan as unreviewed instead of emitting a score.
 
 ## How run differs: automated post-implementation
 
@@ -70573,8 +70123,8 @@ There are two variants of this flow, each replacing a different half of it. [`/a
 | -------------------------------------------------------------------- | ------------------------------------------------------------ |
 | `claude-plugins/autopilot/skills/plan/SKILL.md`                      | Orchestrator: detection, gather, gate, preflight, plan mode  |
 | `claude-plugins/autopilot/skills/plan/references/input-detection.md` | Detection table, tracker gating, create-issue flags          |
-| `claude-plugins/autopilot/skills/plan/references/pipeline.md`        | Draft template, review and scoring, finalize                 |
-| `claude-plugins/autopilot/skills/plan/references/stack-deltas.md`    | Per-stack example libraries, expert tables, verify examples  |
+| `claude-plugins/autopilot/skills/plan/references/pipeline.md`        | Draft template, finalize                                     |
+| `claude-plugins/autopilot/skills/plan/references/stack-deltas.md`    | Per-stack example libraries and verify examples              |
 | `claude-plugins/autopilot/skills/plan/references/branch-blocks.md`   | `## Pre-Implementation` bodies and their mechanics           |
 | `claude-plugins/autopilot/skills/gather-context/SKILL.md`            | The one context fan-out, its `Scope` input, and the map      |
 | `claude-plugins/autopilot/skills/run/SKILL.md`                       | `plan` plus the automated post-implementation chain          |
@@ -70584,7 +70134,6 @@ There are two variants of this flow, each replacing a different half of it. [`/a
 | `claude-plugins/autopilot/lib/git/branchDigest.ts`                   | Its pure transforms and bounds, fixture-tested               |
 | `claude-plugins/autopilot/lib/github/fetch-issue.ts`                 | GitHub issue helper CLI with opt-in `--assign`               |
 | `claude-plugins/autopilot/lib/github/issueContext.ts`                | Its pure transforms, shape guards, assignee statuses         |
-| `claude-plugins/autopilot/agents/expert-review.md`                   | Domain-expert plan reviewer with per-dimension scores (JSON) |
 | `claude-plugins/autopilot/agents/resolve-issue-context.md`           | GitHub / Linear issue context resolver (JSON; pr-review)     |
 | `claude-plugins/autopilot/agents/resolve-alert-context.md`           | Code-scanning alert context resolver (JSON)                  |
 | `claude-plugins/autopilot/agents/search-codebase-todos.md`           | TODO/issue-reference search (JSON; pr-review)                |
@@ -71588,7 +71137,7 @@ Why `Read` and not the `Skill` tool: a skill loads its whole `SKILL.md`, so ther
 Two runtimes cannot read a file, so they keep a literal copy. Both are single-sourced anyway — only the delivery differs.
 
 - [`releaseNotesPrompt.ts`](../.github/actions/release-action/src/releaseNotesPrompt.ts) is passed to the Anthropic API as a raw system prompt rather than through the Claude Code SDK, so it has no tools at all.
-- The seven structured-output agents declare their own `tools`, and [`expert-review`](../claude-plugins/autopilot/agents/expert-review.md) declares `tools: []`. Granting `Read` to seven agents plus a round-trip each, to deduplicate 184 characters, costs more than it saves.
+- The structured-output agents declare their own restrictive `tools`. Granting `Read` to every agent plus a round-trip each, to deduplicate 184 characters, costs more than it saves.
 
 Do not "fix" either by adding a read directive; neither can execute one.
 
@@ -71618,7 +71167,7 @@ How `/autopilot:explore` primes a session with a broad, durable picture of a rep
 
 ## Why a third on-ramp
 
-Autopilot had exactly two entry points, and both start from a target. [`plan`](../claude-plugins/autopilot/skills/plan/SKILL.md) and [`run`](../claude-plugins/autopilot/skills/run/SKILL.md) each take a GitHub issue, a Linear ticket, a code-scanning alert, or a description concrete enough to plan against — then carry the session through draft, expert panel, scoring, a plan file, a branch, and a pull request. See [Plan and run skills](./05-plan-run-skills.md).
+Autopilot had exactly two entry points, and both start from a target. [`plan`](../claude-plugins/autopilot/skills/plan/SKILL.md) and [`run`](../claude-plugins/autopilot/skills/run/SKILL.md) each take a GitHub issue, a Linear ticket, a code-scanning alert, or a description concrete enough to plan against — then carry the session through draft, a plan file, a branch, and a pull request. See [Plan and run skills](./05-plan-run-skills.md).
 
 Work does not always arrive that way. Sometimes it arrives as an _area_ — "the refactoring flow", "the review pipeline" — and the changes that follow are surgical: a few lines in a file you first have to find. Getting autopilot's context quality for that mode meant inventing a target for `plan` and then discarding everything the plan pipeline dragged along.
 
@@ -71631,7 +71180,7 @@ Two further properties made the map unsuitable for a steer-as-you-go session. It
 | Skill                | You have                   | You get                                                   |
 | -------------------- | -------------------------- | --------------------------------------------------------- |
 | `/autopilot:explore` | an area, no target         | a durable brief, then edit-and-verify on your instruction |
-| `/autopilot:plan`    | a target you want reviewed | a scored plan file, an approval gate, then implementation |
+| `/autopilot:plan`    | a target you want reviewed | a plan file, an approval gate, then implementation        |
 | `/autopilot:run`     | a target you want carried  | the same plan, implemented and driven to a merged PR      |
 
 `explore` is the only one of the three that never branches, never opens a pull request, and never asks for approval — invoking it is not a commitment to change anything.
@@ -71697,7 +71246,7 @@ Two further properties made the map unsuitable for a steer-as-you-go session. It
 - ③ Nothing but derived files moved upstream — skip both full-prime phases and delta-refresh instead.
 - ④ Runs on both paths and owns every volatile section: branch diff, git state, dirty files, stashes, sibling worktrees, unpushed branches.
 - ⑤ A full prime writes every section; a delta refresh rewrites only the volatile ones.
-- ⑥ No plan file, no expert panel, no scoring, no branch prompt, no PR chain.
+- ⑥ No plan file, no branch prompt, no PR chain.
 
 ## Reuse, not a second fan-out
 
@@ -71778,7 +71327,7 @@ The diff is remote-to-remote, so locally-uncommitted work never forces a full pr
 
 After writing the brief the skill reports what it did, notes anything in `## Git state` worth knowing before editing — being on `main`, or on a branch whose work already landed upstream — and stops. It **reports** that state rather than prompting on it, because this skill does not branch.
 
-Every instruction after that is handled the same way: locate through the brief, edit, run the verify check `## Test and verify` names, report. No plan file, no expert panel, no scoring, no branch prompt, no PR chain. `EnterPlanMode`, `ExitPlanMode`, and `preflight-check` are never called — they belong to the flows this skill exists to avoid.
+Every instruction after that is handled the same way: locate through the brief, edit, run the verify check `## Test and verify` names, report. No plan file, no branch prompt, no PR chain. `EnterPlanMode`, `ExitPlanMode`, and `preflight-check` are never called — they belong to the flows this skill exists to avoid.
 
 Suppressing that machinery is half the value. A fix that costs one edit should not cost a planning pipeline. Committing or opening a pull request hands off to [`commits-create`](../claude-plugins/autopilot/skills/commits-create/SKILL.md) or [`pr-create`](../claude-plugins/autopilot/skills/pr-create/SKILL.md), which own those conventions.
 
@@ -71825,18 +71374,18 @@ The alternative was a heuristic inside `run`: notice that the session looks prim
 
 ## When to use which
 
-| Skill                    | You have                               | You get                                                        |
-| ------------------------ | -------------------------------------- | -------------------------------------------------------------- |
-| `/autopilot:explore`     | an area, no target                     | a durable brief, then edit-and-verify on your instruction      |
-| `/autopilot:plan`        | a target you want reviewed             | a scored plan file, an approval gate, then implementation      |
-| `/autopilot:run`         | a target you want carried              | the same plan, implemented and driven to a merged PR           |
-| `/autopilot:run-primed`  | a target **and** a validated brief     | the same as `run`, without re-mapping the repository           |
-| `/autopilot:linear-plan` | a Linear ticket to plan against        | a scored plan stored on the ticket, reviewable before any code |
-| `/autopilot:linear-run`  | a Linear ticket carrying a stored plan | the same as `run`, executing the stored plan verbatim          |
+| Skill                    | You have                               | You get                                                   |
+| ------------------------ | -------------------------------------- | --------------------------------------------------------- |
+| `/autopilot:explore`     | an area, no target                     | a durable brief, then edit-and-verify on your instruction |
+| `/autopilot:plan`        | a target you want reviewed             | a plan file, an approval gate, then implementation        |
+| `/autopilot:run`         | a target you want carried              | the same plan, implemented and driven to a merged PR      |
+| `/autopilot:run-primed`  | a target **and** a validated brief     | the same as `run`, without re-mapping the repository      |
+| `/autopilot:linear-plan` | a Linear ticket to plan against        | a plan stored on the ticket, reviewable before any code   |
+| `/autopilot:linear-run`  | a Linear ticket carrying a stored plan | the same as `run`, executing the stored plan verbatim     |
 
 This table is the single home for the comparison; [chapter 16](./16-linear-plan-skill.md) and [chapter 17](./17-linear-run-skill.md) point here rather than keeping copies that would drift.
 
-`run-primed` is `run` with one phase replaced. Everything from the draft onward — pipeline, expert review, branch, commit, PR, monitor — is the same machinery, referenced rather than restated. The two Linear entries replace a different half: `linear-plan` stops after storing its plan, and `linear-run` picks that plan up later instead of drafting one.
+`run-primed` is `run` with one phase replaced. Everything from the draft onward — pipeline, branch, commit, PR, monitor — is the same machinery, referenced rather than restated. The two Linear entries replace a different half: `linear-plan` stops after storing its plan, and `linear-run` picks that plan up later instead of drafting one.
 
 ## At a glance
 
@@ -71879,7 +71428,7 @@ This table is the single home for the comparison; [chapter 16](./16-linear-plan-
 - ② Four rejections, each naming `/autopilot:run` as the caller's explicit fallback. The skill never invokes it automatically.
 - ③ The brief validated against the checkout's own base.
 - ④ Only what a brief cannot bake in advance: issue or alert details, TODO search, branch diff, git state, and a re-attached snapshot.
-- ⑤ Draft, expert review, scoring, branch, implement, commit, PR, monitor — no plan-approval gate, exactly as `run`.
+- ⑤ Draft, finalize, branch, implement, commit, PR, monitor — no plan-approval gate, exactly as `run`.
 
 ## The validation contract
 
@@ -71956,7 +71505,7 @@ The emitted Context Map has the same sections at all three scopes, so `plan` and
 
 > Chapter 16 of the [repository docs](../README.md#repository-docs).
 
-How `/autopilot:linear-plan` turns a plan from a session artifact into something durable on its Linear ticket — expert-reviewed when `--experts-review` is passed, and stored unconditionally.
+How `/autopilot:linear-plan` turns a plan from a session artifact into something durable on its Linear ticket, stored unconditionally.
 
 > Source of truth: `claude-plugins/autopilot/skills/linear-plan/SKILL.md` (the skill), `…/skills/plan/references/pipeline.md` (the shared review pipeline it executes), and `…/skills/linear-create/SKILL.md` (the description this one rewrites).
 
@@ -71995,7 +71544,7 @@ Three conditions stop the run, and all three are checked **before** the context 
 | The input is not a Linear issue          | a description, GitHub issue, or alert has no ticket either     |
 | No Linear MCP tool resolves              | the write path is unavailable, so the plan could not be stored |
 
-Ordering matters for cost, not correctness. An expert review pass is the most expensive thing autopilot does; discovering afterwards that the plan has nowhere to go wastes all of it. Each message names `/autopilot:plan` as the alternative and the producer never falls through to it automatically. [`linear-run`](./17-linear-run-skill.md) has a different responsibility on the read side: an unusable stored artifact selects its fresh-plan path instead of blocking issue execution.
+Ordering matters for cost, not correctness. The context fan-out and drafting pass are expensive; discovering afterwards that the plan has nowhere to go wastes all of it. Each message names `/autopilot:plan` as the alternative and the producer never falls through to it automatically. [`linear-run`](./17-linear-run-skill.md) has a different responsibility on the read side: an unusable stored artifact selects its fresh-plan path instead of blocking issue execution.
 
 No preflight check runs, and none is needed: this skill creates no branch and no commit, so there is no git state to protect. What the tree looked like is recorded in the stored plan instead.
 
@@ -72006,7 +71555,7 @@ The plan's own sections, demoted one level under a single anchor. The trailing m
 ```text
 ## Implementation plan
 
-Format: v1 · Score: <panel verdicts> · Base: <origin/main SHA> · Stored by /autopilot:linear-plan
+Format: v1 · Base: <origin/main SHA> · Stored by /autopilot:linear-plan
 
 ### Summary              <- required
 ### Implementation Steps <- required
@@ -72022,9 +71571,8 @@ All five are written, because a human reading the ticket should see the whole pl
 The four metadata fields each earn their place:
 
 - **`Format: v1`** is what keeps "stored under an older template" separable from "corrupt". Without it, the first template revision would make every previously stored plan indistinguishable from a mangled description, and the reader would tell users to discard valid stored work.
-- **`Score:`** records what the plan actually achieved, so a later reader can weigh it.
 - **`Base:`** records the tree the plan was drafted against. It is information, not a gate — see [why drift does not block](./17-linear-run-skill.md#drift-is-reported-not-enforced).
-- **`Stored by`** names the producer. This chapter's deliberate path writes `/autopilot:linear-plan`; [`/autopilot:run` on a Linear-issue input](./05-plan-run-skills.md#how-run-differs-automated-post-implementation) writes the same format with `/autopilot:run` — same anchored write and preservation, but its `Score:` is never `skipped` (the run family's review is always-on), and it performs no title refresh and no "AI Ready" transition, because the same session immediately executes the ticket. The reader validates none of this field, so both producers' plans are equally executable.
+- **`Stored by`** names the producer. This chapter's deliberate path writes `/autopilot:linear-plan`; [`/autopilot:run` on a Linear-issue input](./05-plan-run-skills.md#how-run-differs-automated-post-implementation) writes the same format with `/autopilot:run` — same anchored write and preservation, but it performs no title refresh and no "AI Ready" transition, because the same session immediately executes the ticket. The reader validates none of this field, so both producers' plans are equally executable.
 
 The annotated list above is the contract; what the store actually writes is a literal **emission template** the skill carries beside it — the exact stored block with `<angle-bracket>` placeholders for the score (or the literal `skipped`), the base SHA, and each section body. Only placeholders are filled; every other byte — anchor, header line, headings, order, blank-line layout — is emitted verbatim, and the `<- required` / `<- caller-owned` annotations never reach a ticket. That removes the failure mode where each store re-derives the markdown from prose and submits a structurally different description that the reader then rejects as unusable. The first-store `+++ Original task +++` cut is a literal emission form too — the same collapsible shape as `linear-create`'s original-prompt preamble, with the prior description inserted byte-identical and treated as opaque rather than rewritten into the canonical forms below.
 
@@ -72100,11 +71648,11 @@ That normalization is exactly why the store anchors on the `## Implementation pl
 
 ## Storing is unconditional
 
-The plan is stored automatically the moment the shared review pipeline finishes — no plan-mode transition, no separate human approval step, and no score check between finalize and the write. The review score is recorded on the ticket as information for the teammate who reads it, never used as a gate. Like [`plan`](./05-plan-run-skills.md#review-and-score), this skill takes the opt-in `--experts-review` flag: with it the stored ticket carries the panel's assessment; without it the stored header records the literal `Score: skipped`, so the reader can see the plan is unreviewed before deciding to run it.
+The plan is stored automatically the moment the shared pipeline finishes — no plan-mode transition and no separate human approval step between finalize and the write. Plans stored by earlier versions carry a `Score:` field in the header; the reader never parsed it, so they remain executable.
 
 ## How this is guarded
 
-`linear-plan` and `linear-run` are prompt files with no import between them, so a renamed stored section would break the reader with nothing failing in between. `linearPlanContract.test.ts` closes that gap the way [`primedBriefContract.test.ts`](./15-run-primed-skill.md#how-this-is-guarded) does for the explore pair: it extracts the section names and their markers from this skill's own template and asserts the reader consumes exactly the required subset and none of the caller-owned ones. It also pins the format version across both sides, asserts the reader maps every verdict to stored-plan or fresh-plan behavior, asserts the fallback never dispatches the producer or overwrites Linear, and asserts `pipeline.md` states no scoring threshold or revision budget — the review is an enhancement, and a re-introduced gate would silently start losing plans. The [emission template](#the-stored-plan-format) is pinned the same way: it must open with the anchor and placeholder header line, list every contract section in order, leak no `<-` annotation, and carry none of the author forms Linear normalizes away. The title refresh is pinned too — its Steelmanned-Intent source, its link to `linear-create`'s title rules, and both outcome literals reaching the final output block — so a rewording cannot silently drop it again.
+`linear-plan` and `linear-run` are prompt files with no import between them, so a renamed stored section would break the reader with nothing failing in between. `linearPlanContract.test.ts` closes that gap the way [`primedBriefContract.test.ts`](./15-run-primed-skill.md#how-this-is-guarded) does for the explore pair: it extracts the section names and their markers from this skill's own template and asserts the reader consumes exactly the required subset and none of the caller-owned ones. It also pins the format version across both sides, asserts the reader maps every verdict to stored-plan or fresh-plan behavior, and asserts the fallback never dispatches the producer or overwrites Linear. The [emission template](#the-stored-plan-format) is pinned the same way: it must open with the anchor and placeholder header line, list every contract section in order, leak no `<-` annotation, and carry none of the author forms Linear normalizes away. The title refresh is pinned too — its Steelmanned-Intent source, its link to `linear-create`'s title rules, and both outcome literals reaching the final output block — so a rewording cannot silently drop it again.
 
 **What no test can show:** that Linear renders the stored description the way this chapter says. That is settled by a dry run on a real ticket, recorded on the pull request, because no `linear` tracker is configured in this repository and neither skill can execute here. Nothing under `.github/workflows/` runs `bun test` either, so the guard gates locally and in review rather than in CI.
 
@@ -72131,7 +71679,7 @@ How `/autopilot:linear-run` delivers any Linear ticket: executing a valid stored
 
 ## The pattern this exists for
 
-[`linear-plan`](./16-linear-plan-skill.md) leaves a scored, durable plan on a ticket. When that artifact exists and validates, `linear-run` preserves the handoff by executing it exactly. But delegation is broader than that handoff: a Linear ticket may reach the implementation agent directly, without a planning session ever having run.
+[`linear-plan`](./16-linear-plan-skill.md) leaves a durable plan on a ticket. When that artifact exists and validates, `linear-run` preserves the handoff by executing it exactly. But delegation is broader than that handoff: a Linear ticket may reach the implementation agent directly, without a planning session ever having run.
 
 The skill therefore has two deterministic modes. A valid stored artifact selects strict execution. Missing, older, malformed, or unverifiable stored-plan data selects a fresh autonomous planning pipeline. Plan provenance changes how the ticket is executed, never whether the ticket is accepted.
 
@@ -72183,7 +71731,7 @@ For how this pair sits beside the other on-ramps, see the comparison in [the `ru
 - ② A current, complete, verifiable stored plan selects strict execution.
 - ③ Every other verdict selects fresh planning and emits a diagnostic rather than a rejection.
 - ④ The valid artifact supplies the work; a fresh Context Map supplies repository state.
-- ⑤ The shared draft, expert-review, and finalize pipeline produces a run-local plan without changing Linear.
+- ⑤ The shared draft-and-finalize pipeline produces a run-local plan without changing Linear.
 - ⑥ Both modes use the same branch, implementation, commit, pull-request, and monitoring chain with no approval gate.
 
 ## The validation contract
@@ -72292,7 +71840,7 @@ The perimeter is stated in the skill rather than left to inference: this skill i
 
 ## Executing the selected plan
 
-In stored-plan mode, the `### Implementation Steps` are worked in order, each verified against its own `verify:` line before the next begins. No re-drafting, no re-ordering, no merging, no added steps, and no second expert review — the producer's pipeline already finalized the stored artifact, recording either its panel's score or an explicit skip.
+In stored-plan mode, the `### Implementation Steps` are worked in order, each verified against its own `verify:` line before the next begins. No re-drafting, no re-ordering, no merging, and no added steps — the producer's pipeline already finalized the stored artifact.
 
 Where a step cannot be carried out as written, the skill stops and reports which step and why. It does not silently substitute a different plan: a plan that no longer fits its repository is information the reader needs, not an obstacle to route around. The stored `### Files` list is the expected blast radius, so touching a file it does not name is reported for the same reason.
 
@@ -77345,7 +76893,7 @@ The `docs/` guides are numbered chapters in reading order — start at chapter 1
 | 13  | [The `shared-rules` skill](./docs/13-shared-rules-skill.md)                       | the single home for instruction blocks several skills need, and how a consumer reads one at runtime  |
 | 14  | [The `explore` skill](./docs/14-explore-skill.md)                                 | the third on-ramp: prime a durable context brief, then take surgical fixes one at a time             |
 | 15  | [The `run-primed` skill](./docs/15-run-primed-skill.md)                           | the strict run path for a primed session: validate the brief against the checkout, or stop loudly    |
-| 16  | [The `linear-plan` skill](./docs/16-linear-plan-skill.md)                         | storing a scored plan on a Linear ticket so it outlives the session that drafted it                  |
+| 16  | [The `linear-plan` skill](./docs/16-linear-plan-skill.md)                         | storing a plan on a Linear ticket so it outlives the session that drafted it                         |
 | 17  | [The `linear-run` skill](./docs/17-linear-run-skill.md)                           | executing a stored Linear plan verbatim: validate the format, or refuse and name the fix             |
 | 18  | [Portable single-source skills](./docs/18-agent-skills-export.md)                 | one authored skills layout for Claude, Codex, Kimi, and other CLIs, and the verbatim sync (RFC-0002) |
 | 19  | [Skill token budget](./docs/19-skill-token-budget.md)                             | why a skill body is charged per turn, the two rules for splitting one, and the byte-budget guard     |
