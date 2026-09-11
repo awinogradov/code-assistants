@@ -329,7 +329,7 @@ Address PR review comments. Fetches review feedback, categorizes by severity, ma
 
 ### `/autopilot:pr-monitor`
 
-Monitor a PR for CI check status and review feedback until it is ready for human review: checks settled for the current head, no unanswered feedback, no conflict. Resolves review feedback and fixes CI failures along the way, then ends with `Status: READY_FOR_REVIEW` — human approval and merge are asynchronous follow-ups, handled by running the monitor again or `/autopilot:pr-resolve` when feedback arrives. Pass `--wait-for-approval` to keep the previous behaviour of blocking until a human approves with all checks passing. Detects a conflicting branch and rebases it onto its base the sanctioned way, reporting and stopping when the rebase cannot complete cleanly.
+Monitor a PR for CI check status and review feedback until it is ready for human review: checks settled for the current head, no unanswered feedback, no conflict. The waiting runs in a packaged watcher that returns one bounded event, so the model stays dormant through pending CI instead of polling every minute (see the [PR watcher doc](../../docs/20-pr-watcher.md)). Resolves review feedback and fixes CI failures along the way, then ends with `Status: READY_FOR_REVIEW` — human approval and merge are asynchronous follow-ups, handled by running the monitor again or `/autopilot:pr-resolve` when feedback arrives. Pass `--wait-for-approval` to keep the previous behaviour of blocking until a human approves with all checks passing. Detects a conflicting branch and rebases it onto its base the sanctioned way, reporting and stopping when the rebase cannot complete cleanly.
 
 ```bash
 /autopilot:pr-monitor

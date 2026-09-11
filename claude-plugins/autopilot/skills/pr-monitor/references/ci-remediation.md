@@ -1,21 +1,21 @@
 # CI remediation
 
-Reference for [`pr-monitor/SKILL.md`](../SKILL.md) — the CI Fix Workflow, reached only when a check reports `bucket === "fail"`. Its callers are [§1.1](../SKILL.md#11-early-exit-checks) and [§2.2a](../SKILL.md#22a-check-ci-status); read it at that point. On a pull request whose checks pass, it stays unread.
+Reference for [`pr-monitor/SKILL.md`](../SKILL.md) — the CI Fix Workflow, reached only when the watcher returns a [`checks_failed` event](../SKILL.md#the-event-contract). Read it at that point. On a pull request whose checks pass, it stays unread. Background mode does not run it at all.
 
 ## CI Fix Workflow
 
-**If any checks have `bucket === "fail"`:**
+The event carries `checks.failed[]` — each entry a `name`, the `runId` that produced the failure, and a `url`. That list is the complete set of failures on the verified head; no separate check read is needed, and a failure whose run id the state already acknowledged never reaches this file.
 
-For each failing check, extract the run-id from the `link` field: parse the URL path segment after `/runs/` and before `/job/` (or end of path). Compare with `fixAttempts[checkName].lastRunId` — if the run-id is different, reset `attempts` to 0 for that check (new run detected).
+Maintain `fixAttempts` across launches in the conversation: a map of `checkName → { attempts, lastRunId }`. Compare the event's `runId` with `fixAttempts[checkName].lastRunId` — a different run id means a new run, so reset `attempts` to 0 for that check.
 
 **If `attempts < 2` for the failing check** (foreground mode only):
 
 1. Output: "CI check '\<name\>' failed. Attempting fix (attempt N/2)..."
-2. Get failure logs (truncate to last 200 lines):
+2. Get failure logs (truncate to last 200 lines). The run id comes from the event entry, so no URL parsing is involved:
    ```bash
    gh run view <run-id> --log-failed 2>&1 | tail -200
    ```
-   If output is empty (cancelled run), output: "No logs available for cancelled run. Waiting for new run..." and skip fix.
+   If output is empty (cancelled run), output: "No logs available for cancelled run. Waiting for a new run..." and relaunch the watcher with `--ack <event-id>` rather than fixing.
 3. Analyze the error output to determine fix type:
    - Lint errors → read files, apply fixes with Edit tool
    - Type errors → read files, fix type issues with Edit tool
@@ -25,10 +25,8 @@ For each failing check, extract the run-id from the `link` field: parse the URL 
    git push
    ```
    Read [`git-history-policy.md`](../../shared-rules/references/git-history-policy.md) before this push. A plain fast-forward is all this step is allowed to do: if the push is rejected as non-fast-forward, report it and stop rather than merging the base branch or force-pushing.
-5. Set `cooldownRemaining = 3` (skip CI checks for next 3 poll cycles)
-6. Update `fixAttempts[checkName] = { attempts: N+1, lastRunId: <run-id> }`
-7. Output: "CI fix pushed. Cooling down for 3 poll cycles before re-checking..."
-8. Continue polling loop (go to 2.1)
+5. Update `fixAttempts[checkName] = { attempts: N+1, lastRunId: <run-id> }`
+6. Relaunch the watcher with `--ack <event-id>` per [Phase 2](../SKILL.md#phase-2-launch-the-watcher). The push moved the head, so the watcher measures the new commit's checks from scratch — there is no cooldown to manage and no stale failure to wait out.
 
 **If `attempts >= 2`:**
 
@@ -41,5 +39,5 @@ For each failing check, extract the run-id from the `link` field: parse the URL 
      { label: "Cancel", description: "Stop monitoring" }
      ]
    - If "Retry once more": reset attempts to 0, run fix again
-   - If "Skip this check": add check name to a skip list, continue monitoring
+   - If "Skip this check": relaunch with `--ack <event-id>`, which marks that failure handled so the watcher stops reporting it and continues toward its terminal event
    - If "Cancel": stop monitoring
