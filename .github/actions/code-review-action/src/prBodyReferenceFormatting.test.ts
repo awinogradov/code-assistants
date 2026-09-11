@@ -124,7 +124,11 @@ describe("review body file links", () => {
   test("defines the PR blob base from the reviewed head commit", async () => {
     const content = await readFile(reviewSkill, "utf8");
     expect(content).toContain("https://github.com/<REPO>/blob/<headRefOid>");
-    expect(content).toContain("reviewDecision,headRefOid");
+    const metadataFields = content
+      .match(/gh pr view <PR_NUMBER>[^\n]*--json ([\w,]+)/)?.[1]
+      .split(",");
+    expect(metadataFields).toContain("reviewDecision");
+    expect(metadataFields).toContain("headRefOid");
   });
 
   test("templates demonstrate the linked finding-location and anchor forms", async () => {
