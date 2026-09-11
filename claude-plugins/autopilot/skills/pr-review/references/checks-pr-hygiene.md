@@ -42,7 +42,7 @@ Files modified that have nothing to do with the PR's purpose — whitespace, imp
 
 **CHECK-PR-007: Description states why in one sentence and stays short** — Severity: suggestion
 
-The opening paragraph states what changes and why in 1-2 sentences; each bullet is one implementation decision and its reason in at most 20 words. A description that only lists changed files, or that narrates process (plans, expert panels, scores, review rounds), is a finding.
+The opening paragraph states what changes and why in 1-2 sentences; each bullet is one implementation decision and its reason in at most 20 words. A description that only lists changed files, or that narrates process (plans, scores, review rounds), is a finding.
 
 **CHECK-PR-008: Breaking changes called out** — Severity: blocker
 

@@ -1,7 +1,7 @@
 ---
 name: plan
-description: Perform deep analysis of the codebase, recent changes, and the requested task. Create a validated implementation plan, expert-reviewed when --experts-review is passed
-argument-hint: "<task description, GitHub/Linear issue, or GitHub issue URL> [--issue | --linear-issue] [--experts-review]"
+description: Perform deep analysis of the codebase, recent changes, and the requested task. Create a validated implementation plan
+argument-hint: "<task description, GitHub/Linear issue, or GitHub issue URL> [--issue | --linear-issue]"
 allowed-tools:
   - TaskCreate
   - TaskUpdate
@@ -37,7 +37,7 @@ allowed-tools:
   - Skill(autopilot:pr-create)
 ---
 
-Perform deep analysis of the codebase, recent changes, and the requested task. Create a validated implementation plan, expert-reviewed when `--experts-review` is passed.
+Perform deep analysis of the codebase, recent changes, and the requested task. Create a validated implementation plan.
 
 ## Input
 
@@ -50,7 +50,6 @@ Expected forms:
 - `<GitHub-issue-URL>` — full URL (e.g., `https://github.com/org/repo/issues/789`)
 - `<task description> --issue` — file a GitHub issue from the description first, then plan against it
 - `<task description> --linear-issue` — file a Linear issue first — requires a `linear` tracker (see [Linear tracker](../../../../docs/11-linear-tracker.md))
-- `<any form above> --experts-review` — run the expert review-and-score step; without this flag that step is skipped
 
 Additional free-form context may follow any form (e.g., `#42 I think we should start with the auth module`).
 
@@ -58,21 +57,19 @@ Additional free-form context may follow any form (e.g., `#42 I think we should s
 
 - **Task description / issue identifier** — parsed from `$ARGUMENTS`. If empty, prompt once via `AskUserQuestion`: "What should we plan?" with a free-form slot. Do not abort silently.
 - **`--issue` / `--linear-issue`** — handled by the create-issue pre-step in [input-detection.md](references/input-detection.md) before detection. Neither flag ⇒ today's behavior.
-- **`--experts-review`** — parsed and stripped first by the mode-flags pre-step in [input-detection.md](references/input-detection.md#mode-flags). Present ⇒ the pipeline's review step runs; absent ⇒ it is skipped and the skip is recorded in the plan's `Score:` line.
 - **Current branch / worktree / issue-ID mismatch** — from the Context Map's git state ([Phase 3](#phase-3-preflight-verdict)). No prompts beyond preflight's own.
 - **Repository root** — `git rev-parse --show-toplevel`. No prompt.
 
 ## Task Progress Protocol
 
-Create all 5 tasks with TaskCreate, in order, before any work. Set each to `in_progress` at the start of its phase and `completed` at the end.
+Create all 4 tasks with TaskCreate, in order, before any work. Set each to `in_progress` at the start of its phase and `completed` at the end.
 
-| #   | Subject          | ActiveForm            |
-| --- | ---------------- | --------------------- |
-| 1   | Resolve input    | Resolving input       |
-| 2   | Gather context   | Gathering context     |
-| 3   | Draft plan       | Drafting plan         |
-| 4   | Review and score | Reviewing and scoring |
-| 5   | Finalize plan    | Finalizing plan       |
+| #   | Subject        | ActiveForm        |
+| --- | -------------- | ----------------- |
+| 1   | Resolve input  | Resolving input   |
+| 2   | Gather context | Gathering context |
+| 3   | Draft plan     | Drafting plan     |
+| 4   | Finalize plan  | Finalizing plan   |
 
 ## Task
 
@@ -80,7 +77,7 @@ $ARGUMENTS
 
 ## Phase 0: Resolve input
 
-Create the 5 tasks, then set task 1 to `in_progress`.
+Create the 4 tasks, then set task 1 to `in_progress`.
 
 Detect the input type and id per [input-detection.md](references/input-detection.md) — the create-issue flags pre-step first, then the detection table and its tracker gating. Detection is pure string matching and performs **no I/O**; do not fetch anything here.
 
@@ -172,9 +169,9 @@ Invoke `Skill(autopilot:ascii-schemas)` when the change touches architecture or 
 
 Skip diagrams for pure refactors with no structural change, formatting or dependency bumps, single-function logic edits, and documentation-only changes.
 
-## Phase 4: Draft, review, and finalize
+## Phase 4: Draft and finalize
 
-Execute the shared pipeline in [pipeline.md](references/pipeline.md) — draft (task 3), review and score (task 4), finalize (task 5) — resolving your stack's deltas from [stack-deltas.md](references/stack-deltas.md). Carry the `--experts-review` resolution from [Phase 0](#phase-0-resolve-input) into the pipeline: the review step runs only when the flag was passed.
+Execute the shared pipeline in [pipeline.md](references/pipeline.md) — draft (task 3), finalize (task 4) — resolving your stack's deltas from [stack-deltas.md](references/stack-deltas.md).
 
 ## Phase 5: Embed branch creation and request approval
 
@@ -205,8 +202,8 @@ Ask via AskUserQuestion (header "Next"): all changes are implemented and verifie
 ## Additional Resources
 
 - [`references/input-detection.md`](references/input-detection.md) — create-issue flags, detection table, tracker gating, alert divergence
-- [`references/pipeline.md`](references/pipeline.md) — draft template, expert review and scoring, finalize
-- [`references/stack-deltas.md`](references/stack-deltas.md) — per-stack example libraries, expert tables, verify examples
+- [`references/pipeline.md`](references/pipeline.md) — draft template, finalize
+- [`references/stack-deltas.md`](references/stack-deltas.md) — per-stack example libraries and verify examples
 - [`references/branch-blocks.md`](references/branch-blocks.md) — the `## Pre-Implementation` bodies and the mechanics that execute them
 
 When you write the plan file, apply the reference-formatting rules in [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (RFC-0001, read it first) to every reference it contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.

@@ -8,7 +8,7 @@ How `/autopilot:linear-run` delivers any Linear ticket: executing a valid stored
 
 ## The pattern this exists for
 
-[`linear-plan`](./16-linear-plan-skill.md) leaves a scored, durable plan on a ticket. When that artifact exists and validates, `linear-run` preserves the handoff by executing it exactly. But delegation is broader than that handoff: a Linear ticket may reach the implementation agent directly, without a planning session ever having run.
+[`linear-plan`](./16-linear-plan-skill.md) leaves a durable plan on a ticket. When that artifact exists and validates, `linear-run` preserves the handoff by executing it exactly. But delegation is broader than that handoff: a Linear ticket may reach the implementation agent directly, without a planning session ever having run.
 
 The skill therefore has two deterministic modes. A valid stored artifact selects strict execution. Missing, older, malformed, or unverifiable stored-plan data selects a fresh autonomous planning pipeline. Plan provenance changes how the ticket is executed, never whether the ticket is accepted.
 
@@ -60,7 +60,7 @@ For how this pair sits beside the other on-ramps, see the comparison in [the `ru
 - ② A current, complete, verifiable stored plan selects strict execution.
 - ③ Every other verdict selects fresh planning and emits a diagnostic rather than a rejection.
 - ④ The valid artifact supplies the work; a fresh Context Map supplies repository state.
-- ⑤ The shared draft, expert-review, and finalize pipeline produces a run-local plan without changing Linear.
+- ⑤ The shared draft-and-finalize pipeline produces a run-local plan without changing Linear.
 - ⑥ Both modes use the same branch, implementation, commit, pull-request, and monitoring chain with no approval gate.
 
 ## The validation contract
@@ -169,7 +169,7 @@ The perimeter is stated in the skill rather than left to inference: this skill i
 
 ## Executing the selected plan
 
-In stored-plan mode, the `### Implementation Steps` are worked in order, each verified against its own `verify:` line before the next begins. No re-drafting, no re-ordering, no merging, no added steps, and no second expert review — the producer's pipeline already finalized the stored artifact, recording either its panel's score or an explicit skip.
+In stored-plan mode, the `### Implementation Steps` are worked in order, each verified against its own `verify:` line before the next begins. No re-drafting, no re-ordering, no merging, and no added steps — the producer's pipeline already finalized the stored artifact.
 
 Where a step cannot be carried out as written, the skill stops and reports which step and why. It does not silently substitute a different plan: a plan that no longer fits its repository is information the reader needs, not an obstacle to route around. The stored `### Files` list is the expected blast radius, so touching a file it does not name is reported for the same reason.
 

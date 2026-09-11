@@ -30,7 +30,7 @@ allowed-tools:
 
 Prime the session with a broad picture of this repository, write it to disk so it survives compaction, then hand control back and take fixes one at a time.
 
-This is the third on-ramp into a repository, and it exists because the other two do not fit a common shape of work. [`plan`](../plan/SKILL.md) and [`run`](../run/SKILL.md) both require a target and then carry the session through draft, expert panel, scoring, a plan file, a branch, and a pull request. Arriving with an _area_ rather than a task — and following it with a few surgical edits — means inventing a target for `plan` and discarding everything it drags along. `explore` is the same context quality with none of that machinery.
+This is the third on-ramp into a repository, and it exists because the other two do not fit a common shape of work. [`plan`](../plan/SKILL.md) and [`run`](../run/SKILL.md) both require a target and then carry the session through draft, a plan file, a branch, and a pull request. Arriving with an _area_ rather than a task — and following it with a few surgical edits — means inventing a target for `plan` and discarding everything it drags along. `explore` is the same context quality with none of that machinery.
 
 ## When to Use
 
@@ -170,7 +170,7 @@ Then state the contract for the rest of the session and stop. Do not start work;
 
 Once the brief is written, every instruction that follows is handled the same way: locate it through the brief, edit, run the verify check named in `## Test and verify`, and report the result.
 
-**No plan file, no expert panel, no scoring, no branch prompt, no PR chain.** Never call `EnterPlanMode` or `ExitPlanMode`, and never invoke `preflight-check` — those belong to the flows this skill exists to avoid. Suppressing them is half the value here; a fix that costs one edit should not cost a planning pipeline.
+**No plan file, no branch prompt, no PR chain.** Never call `EnterPlanMode` or `ExitPlanMode`, and never invoke `preflight-check` — those belong to the flows this skill exists to avoid. Suppressing them is half the value here; a fix that costs one edit should not cost a planning pipeline.
 
 When the user asks to commit or open a pull request, hand off — invoke `Skill(autopilot:commits-create)` or `Skill(autopilot:pr-create)`, which own those conventions. Do not improvise either with raw `git` or `gh`.
 

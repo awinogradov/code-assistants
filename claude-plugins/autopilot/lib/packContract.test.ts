@@ -25,7 +25,7 @@ const requiredPaths = [
   ".claude-plugin/plugin.json",
   ".claude-plugin/marketplace.json",
   "skills/plan/SKILL.md",
-  "agents/expert-review.md",
+  "agents/digest-repo-standards.md",
   "lib/git/branchDigest.ts",
 ];
 

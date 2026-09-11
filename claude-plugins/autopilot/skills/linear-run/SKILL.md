@@ -1,6 +1,6 @@
 ---
 name: linear-run
-description: Run any Linear issue end to end. Executes a valid stored plan verbatim when one exists; otherwise drafts, reviews, and implements a fresh plan without a human approval gate.
+description: Run any Linear issue end to end. Executes a valid stored plan verbatim when one exists; otherwise drafts and implements a fresh plan without a human approval gate.
 argument-hint: "<Linear issue (ENG-123 or a Linear issue URL)>"
 allowed-tools:
   - TaskCreate
@@ -39,7 +39,7 @@ allowed-tools:
   - Skill(autopilot:pr-create)
 ---
 
-Run any Linear issue end to end. Prefer the durable plan [`linear-plan`](../linear-plan/SKILL.md) stored in its description when that artifact validates; otherwise draft, review, and implement a fresh plan from the issue context.
+Run any Linear issue end to end. Prefer the durable plan [`linear-plan`](../linear-plan/SKILL.md) stored in its description when that artifact validates; otherwise draft and implement a fresh plan from the issue context.
 
 **Difference from [`/autopilot:run`](../run/SKILL.md):** `run` always drafts a plan. This skill first inspects the Linear issue for a checkable durable artifact. A valid stored plan is executed verbatim; missing or unusable stored-plan data selects the same autonomous planning pipeline as `run`. The choice is deterministic from the issue description, never inferred from conversation history or from a claim that another agent ran.
 
@@ -196,15 +196,15 @@ Set task 4 to `in_progress`. Merge the stored plan with the Context Map using th
 
 The two unused sections are read past deliberately. They describe a branch and a post-implementation chain, and this skill supplies both from `run` — the branch because it must be created in _this_ checkout, and the chain because `run` owns it. Consuming a stored copy would mean executing a branch step written for a tree that no longer exists. Set task 4 to `completed`.
 
-Set task 5 to `in_progress`. Confirm the `valid` verdict and drift report from Phase 1. Do not run an expert review of your own: the stored artifact records its producer's review outcome — a score or an explicit skip — and this skill executes the plan, it does not re-assess it. Set task 5 to `completed`.
+Set task 5 to `in_progress`. Confirm the `valid` verdict and drift report from Phase 1. Do not re-assess the stored artifact: this skill executes the plan, it does not review it. Set task 5 to `completed`.
 
 Set task 6 to `in_progress`. Freeze the required stored sections as the execution plan without rewriting them or writing a harness replacement. Set task 6 to `completed`.
 
 ### Fresh-plan mode
 
-Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft, review and score, finalize — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md). Use the Common Instructions and plan-file header rule from [`run`](../run/SKILL.md#common-instructions).
+Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft, finalize — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md). Use the Common Instructions and plan-file header rule from [`run`](../run/SKILL.md#common-instructions).
 
-The pipeline's phases track this skill's plan tasks by subject: its Draft-plan phase is the Establish-plan task, its Review-and-score phase the Validate-plan task, and its Finalize phase the Finalize-plan task.
+The pipeline's phases track this skill's plan tasks by subject: its Draft-plan phase is the Establish-plan task and its Finalize phase the Finalize-plan task; the Validate-plan task completes as not applicable, because there is no stored artifact to validate.
 
 The resulting harness plan is the execution plan for this run only. Do not store it on the Linear issue.
 

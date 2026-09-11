@@ -1,7 +1,7 @@
 ---
 name: linear-plan
-description: Plan a Linear issue exactly as the plan skill does, expert-reviewed when --experts-review is passed, then store the finished plan in that issue's description — refreshing a rough ticket title along the way — so it outlives the session. Storing is unconditional — the recorded score or skip is information on the ticket, never used as a gate.
-argument-hint: "<Linear issue (ENG-123 or a Linear issue URL)> [--experts-review]"
+description: Plan a Linear issue exactly as the plan skill does, then store the finished plan in that issue's description — refreshing a rough ticket title along the way — so it outlives the session. Storing is unconditional and never gated.
+argument-hint: "<Linear issue (ENG-123 or a Linear issue URL)>"
 allowed-tools:
   - TaskCreate
   - TaskUpdate
@@ -33,9 +33,9 @@ allowed-tools:
 
 Plan a Linear issue exactly as [`plan`](../plan/SKILL.md) does, then store the finished plan in that issue's description so it survives the session that produced it.
 
-**Difference from [`/autopilot:plan`](../plan/SKILL.md):** `plan` leaves its plan in the harness plan-mode file, which dies with the session. This skill adds one thing — a durable write to the ticket — and takes one thing away: it does **not** implement. It stops after storing, and [`linear-run`](../linear-run/SKILL.md) is what executes the stored plan later, possibly in a different session or by a different person. That separation is the point: a plan a teammate can read and correct in Linear before any code exists is worth more than one that only ever existed in a transcript. Storing the plan is automatic once the pipeline finishes — no plan-mode transition, no approval gate, and no score gate; invoking this skill is the authorization to store, the same way invoking [`run`](../run/SKILL.md) authorizes its whole chain.
+**Difference from [`/autopilot:plan`](../plan/SKILL.md):** `plan` leaves its plan in the harness plan-mode file, which dies with the session. This skill adds one thing — a durable write to the ticket — and takes one thing away: it does **not** implement. It stops after storing, and [`linear-run`](../linear-run/SKILL.md) is what executes the stored plan later, possibly in a different session or by a different person. That separation is the point: a plan a teammate can read and correct in Linear before any code exists is worth more than one that only ever existed in a transcript. Storing the plan is automatic once the pipeline finishes — no plan-mode transition and no approval gate; invoking this skill is the authorization to store, the same way invoking [`run`](../run/SKILL.md) authorizes its whole chain.
 
-Everything from input resolution through the draft-and-review pipeline is `plan`, referenced rather than restated. Only [Phase 0's gate](#phase-0-resolve-input-and-gate) and [Phase 4's store](#phase-4-store-the-plan-on-the-issue) are new.
+Everything from input resolution through the draft-and-finalize pipeline is `plan`, referenced rather than restated. Only [Phase 0's gate](#phase-0-resolve-input-and-gate) and [Phase 4's store](#phase-4-store-the-plan-on-the-issue) are new.
 
 ## Input
 
@@ -44,7 +44,6 @@ Arguments: `$ARGUMENTS`
 Expected form:
 
 - `<Linear issue>` — a Linear identifier such as `ENG-123`, or a Linear issue URL.
-- `<Linear issue> --experts-review` — run the expert review-and-score step; without this flag that step is skipped and the skip is recorded in the stored `Score:` field.
 
 Additional free-form context may follow (e.g. `ENG-123 start with the adapter`).
 
@@ -56,22 +55,21 @@ Identical to the `plan` skill — see [its Input resolution section](../plan/SKI
 
 ## Completion Requirement
 
-This workflow is not complete until [Phase 4](#phase-4-store-the-plan-on-the-issue) either writes the plan to the issue or reports why the write failed. Producing a scored plan is not completion — an unstored plan is the problem this skill exists to solve.
+This workflow is not complete until [Phase 4](#phase-4-store-the-plan-on-the-issue) either writes the plan to the issue or reports why the write failed. Producing a plan is not completion — an unstored plan is the problem this skill exists to solve.
 
 **Linear MCP access:** Read [`linear-mcp-access.md`](../shared-rules/references/linear-mcp-access.md) and apply its tool-resolution rule, using the bare tool names `get_issue`, `list_issue_statuses`, and `save_issue`.
 
 ## Task Progress Protocol
 
-Create all 6 tasks with TaskCreate, in order, before any work. Set each to `in_progress` at the start of its phase and `completed` at the end.
+Create all 5 tasks with TaskCreate, in order, before any work. Set each to `in_progress` at the start of its phase and `completed` at the end.
 
 | #   | Subject             | ActiveForm            |
 | --- | ------------------- | --------------------- |
 | 1   | Resolve input       | Resolving input       |
 | 2   | Gather context      | Gathering context     |
 | 3   | Draft plan          | Drafting plan         |
-| 4   | Review and score    | Reviewing and scoring |
-| 5   | Finalize plan       | Finalizing plan       |
-| 6   | Store plan on issue | Storing plan on issue |
+| 4   | Finalize plan       | Finalizing plan       |
+| 5   | Store plan on issue | Storing plan on issue |
 
 ## Task
 
@@ -79,11 +77,11 @@ $ARGUMENTS
 
 ## Phase 0: Resolve input and gate
 
-Create the 6 tasks, then set task 1 to `in_progress`.
+Create the 5 tasks, then set task 1 to `in_progress`.
 
-First parse and strip `--experts-review` per the mode-flags pre-step in [input-detection.md](../plan/references/input-detection.md#mode-flags): present ⇒ the pipeline's review step runs; absent ⇒ it is skipped and the skip is recorded in the stored `Score:` field. Then detect the input type and id per [input-detection.md](../plan/references/input-detection.md) — the detection table and its tracker gating. Skip that file's create-issue flags section; it is plan-only. Detection is pure string matching and performs **no I/O**.
+Detect the input type and id per [input-detection.md](../plan/references/input-detection.md) — the detection table and its tracker gating. Skip that file's create-issue flags section; it is plan-only. Detection is pure string matching and performs **no I/O**.
 
-Then resolve all three gate conditions **before** [Phase 1](#phase-1-gather-context). They run up front because the alternative is paying a full context fan-out and an expert review before discovering the plan has nowhere to go:
+Then resolve all three gate conditions **before** [Phase 1](#phase-1-gather-context). They run up front because the alternative is paying a full context fan-out and a drafting pass before discovering the plan has nowhere to go:
 
 | Condition                                | Message                                                                                                                |
 | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -119,13 +117,13 @@ The [Common Instructions in `plan/SKILL.md`](../plan/SKILL.md#common-instruction
 
 The [**Plan file is output, not instructions**](../plan/SKILL.md#plan-file-is-output-not-instructions) rule matters more here than in `plan`, because the plan file's content becomes the stored ticket body. Anything that reads as an instruction to an agent — a tool-call block, a dispatch line — ends up published on a ticket a human is expected to review.
 
-## Phase 3: Draft, review, and finalize
+## Phase 3: Draft and finalize
 
-Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft (task 3), review and score (task 4), finalize (task 5) — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md). Carry the `--experts-review` resolution from [Phase 0](#phase-0-resolve-input-and-gate) into the pipeline: the review step runs only when the flag was passed. Whatever the recorded outcome — a score or a skip — it gates nothing: continue straight to the store. Do not add a separate approval step, a plan-mode transition, or a score check between finalize and the write.
+Execute the shared pipeline in [pipeline.md](../plan/references/pipeline.md) — draft (task 3), finalize (task 4) — resolving your stack's deltas from [stack-deltas.md](../plan/references/stack-deltas.md). Nothing gates the store: continue straight to it. Do not add a separate approval step or a plan-mode transition between finalize and the write.
 
 ## Phase 4: Store the plan on the issue
 
-Set task 6 to `in_progress`.
+Set task 5 to `in_progress`.
 
 ### The stored plan format
 
@@ -134,7 +132,7 @@ The plan's own sections, demoted one level under a single `## Implementation pla
 ```text
 ## Implementation plan
 
-Format: v1 · Score: <panel verdicts> · Base: <origin/main SHA> · Stored by /autopilot:linear-plan
+Format: v1 · Base: <origin/main SHA> · Stored by /autopilot:linear-plan
 
 ### Summary              <- required
 ### Implementation Steps <- required
@@ -147,7 +145,7 @@ Section names are the plan file's own, demoted from `##` to `###`, so mapping a 
 
 All five sections are written, because a human reading the ticket should see the whole plan. The two marked caller-owned are written but **not** for [`linear-run`](../linear-run/SKILL.md) to consume: branch creation and the post-implementation chain belong to the skill doing the running, which supplies its own. Marking them is what lets a guard prove the reader ignores them.
 
-`Format: v1` is the field that lets a later template revision be told apart from a corrupt description. `Base:` records the tree the plan was drafted against; it is information for a later reader, not a gate. When the review step was skipped, the `Score:` field reads the literal `skipped` — `Format: v1 · Score: skipped · Base: <origin/main SHA> · Stored by /autopilot:linear-plan` — so the ticket's reader knows the plan is unreviewed; like the score, it informs and never gates.
+`Format: v1` is the field that lets a later template revision be told apart from a corrupt description. `Base:` records the tree the plan was drafted against; it is information for a later reader, not a gate. Plans stored by earlier versions carry an additional `Score:` field between `Format:` and `Base:`; the reader never parsed it, so those plans stay valid.
 
 ### The emission template
 
@@ -156,7 +154,7 @@ The marker list above is the machine-readable contract between this skill and it
 ```text
 ## Implementation plan
 
-Format: v1 · Score: <score> · Base: <sha> · Stored by /autopilot:linear-plan
+Format: v1 · Base: <sha> · Stored by /autopilot:linear-plan
 
 ### Summary
 
@@ -181,7 +179,6 @@ Format: v1 · Score: <score> · Base: <sha> · Stored by /autopilot:linear-plan
 
 Fill rules:
 
-- `<score>` — the per-reviewer verdicts segment from the review step's recorded `Score:` line (e.g. `87 & 92 · weakest: testability (15) & simplicity (18) · findings applied`), or the literal `skipped` when the review was skipped, matching the two header variants above.
 - `<sha>` — the full SHA exactly as `git rev-parse origin/main` printed it; never abbreviate or reconstruct it.
 - Each section placeholder — that section's body from the finalized plan file, demoted headings included, adjusted only as far as the Linear-safe markdown rules below require.
 
@@ -235,17 +232,17 @@ Because the anchor is matched rather than the wrapper, re-storing on the same is
 
 7. **Move the issue to "AI Ready"** — best-effort, never blocks the store, and runs only after step 5's write succeeded: a failed or refused write performs no transition. The transition is the board's hand-off signal that the ticket is planned and execution-ready. Resolve the target state id with the Linear MCP `list_issue_statuses` tool for the issue's team, then call the Linear MCP `save_issue` tool with `{ "id": "<LINEAR-ID>", "state": "<AI Ready state>" }` — tool resolution per the [Completion Requirement](#completion-requirement) Linear MCP access note. On success, emit `✓ Ticket <LINEAR-ID> moved to AI Ready`; when the team has no "AI Ready" state or the state write fails, emit `issue not moved — <reason>`. Always continue — but the emitted line MUST reach the output block below, never only intermediate text.
 
-Set task 6 to `completed` and output:
+Set task 5 to `completed` and output:
 
 ```
 ✓ Plan stored on <LINEAR-ID> — <url>
-  Score: <panel verdicts> · Base: <sha>
+  Base: <sha>
 
 Next step:
 - Run /autopilot:linear-run <LINEAR-ID> to execute it
 ```
 
-When the review step was skipped, the `Score:` segment reads `skipped` here exactly as in the stored header. Add the step 4 outcome line after the `Score:` line — `✓ Title updated: <new title>` or `title unchanged` — and the step 7 outcome line after it — `✓ Ticket <LINEAR-ID> moved to AI Ready` on success, or the `issue not moved — <reason>` line on failure — so a skipped refresh or transition is visible in the final output, not just mid-run.
+Add the step 4 outcome line after the `Base:` line — `✓ Title updated: <new title>` or `title unchanged` — and the step 7 outcome line after it — `✓ Ticket <LINEAR-ID> moved to AI Ready` on success, or the `issue not moved — <reason>` line on failure — so a skipped refresh or transition is visible in the final output, not just mid-run.
 
 ## Reference formatting
 

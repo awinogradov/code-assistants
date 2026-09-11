@@ -18,7 +18,7 @@ Each section is separated by `---`. The `**Issues:**` section is ALWAYS last. Pl
 
 - Opening paragraph: what changes and why, 1-2 sentences
 - Then one bullet per implementation decision the diff does not explain by itself — the decision and its reason, at most 20 words, at most 7 bullets
-- Nothing about process: no plan, expert panel, score, review round, or "scoped out" narration; a deliberate exclusion is one bullet starting `Out of scope:`
+- Nothing about process: no plan, score, review round, or "scoped out" narration; a deliberate exclusion is one bullet starting `Out of scope:`
 
 Target density for Section 1, from a real PR:
 
