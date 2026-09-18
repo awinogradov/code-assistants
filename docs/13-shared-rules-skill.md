@@ -50,7 +50,6 @@ Why `Read` and not the `Skill` tool: a skill loads its whole `SKILL.md`, so ther
 | ------------------------------- | --------------------------- | ----------------------- |
 | Reference formatting (RFC-0001) | `reference-formatting.md`   | —                       |
 | AskUserQuestion formatting      | `askuserquestion-format.md` | —                       |
-| Codebase context acquisition    | `repomix-snapshot.md`       | `includePatterns`       |
 | Agent structured output         | `agent-json-output.md`      | —                       |
 | Linear MCP access               | `linear-mcp-access.md`      | the bare tool-name list |
 | Git history policy              | `git-history-policy.md`     | —                       |

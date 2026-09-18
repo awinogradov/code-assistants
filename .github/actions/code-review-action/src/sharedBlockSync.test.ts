@@ -46,7 +46,6 @@ const blockSentinels: Record<string, string> = {
   "reference-formatting.md": "ref-format",
   "askuserquestion-format.md": "auq-format",
   "askuserquestion-contract.md": "auq-contract",
-  "repomix-snapshot.md": "repomix-snapshot",
   "agent-json-output.md": "agent-json",
   "issue-body-grammar.md": "issue-body-grammar",
   "linear-mcp-access.md": "linear-mcp",

@@ -127,9 +127,9 @@ code-assistants/
 
 All user-invocable entries are skills. Skills natively accept `$ARGUMENTS` and show `argument-hint` autocomplete. Invoke any of the entries below via `/<name>` at the slash prompt.
 
-### Codebase context snapshot
+### Codebase context
 
-The skills that need whole-codebase context — `/autopilot:plan`, `/autopilot:run`, `/autopilot:run-primed`, `/autopilot:linear-plan`, `/autopilot:linear-run`, `/autopilot:explore`, `/autopilot:issue-create`, `/autopilot:pr-review`, `/autopilot:pr-answer`, `/autopilot:pr-resolve` — acquire it through an ordered source chain: a committed [graphify](https://github.com/Graphify-Labs/graphify) knowledge graph (`graphify-out/graph.json`, queried offline) when the repository carries one, otherwise the committed `.repomix/pack.xml` snapshot (via `attach_packed_output`, falling back to a live `pack_codebase`), otherwise plain Grep/Glob/Read and `git`. `/autopilot:run-primed` re-runs the chain rather than reusing the `outputId` recorded in its context brief, because that id is session-scoped and dead in a forked session. The repomix snapshot is refreshed by CI on every merge to `main`; see the consumer host repo's [Committed Repomix pack](../../docs/09-repomix-pack.md) doc for details.
+The skills that need codebase context — `/autopilot:plan`, `/autopilot:run`, `/autopilot:run-primed`, `/autopilot:linear-plan`, `/autopilot:linear-run`, `/autopilot:explore`, `/autopilot:issue-create`, `/autopilot:linear-create`, `/autopilot:pr-review`, `/autopilot:pr-answer`, `/autopilot:pr-resolve` — gather it with the default tools: `Grep`/`Glob` to locate, `Read` on the matched files only, and `git` through Bash for branch and working-tree state. Nothing is packed, attached, or queried through an MCP server or CLI, so context gathering behaves the same in every repository.
 
 ### `/autopilot:branch-create`
 
@@ -146,7 +146,7 @@ Create a git branch following repository naming conventions with GitHub issue in
 
 ### `/autopilot:issue-create`
 
-Create a GitHub issue with a structured body (Context / What / Why / Scope / Solution) and curated labels via the `gh` CLI. Titles are plain business descriptions — no convention prefixes. Uses the [codebase context snapshot](#codebase-context-snapshot).
+Create a GitHub issue with a structured body (Context / What / Why / Scope / Solution) and curated labels via the `gh` CLI. Titles are plain business descriptions — no convention prefixes. Reads the codebase per [Codebase context](#codebase-context).
 
 ```bash
 /autopilot:issue-create                                                # Prompt for hint, generate everything
@@ -208,7 +208,7 @@ Update an existing PR's title and description based on current branch commits.
 
 ### `/autopilot:plan`
 
-Perform deep analysis and create a validated implementation plan. Detects tech stack automatically. Uses the [codebase context snapshot](#codebase-context-snapshot). Accepts `--brief <path>` for explicit validated context reuse. See [how the plan and run skills work](../../docs/05-plan-run-skills.md) for the flow.
+Perform deep analysis and create a validated implementation plan. Detects tech stack automatically. Reads the codebase per [Codebase context](#codebase-context). Accepts `--brief <path>` for explicit validated context reuse. See [how the plan and run skills work](../../docs/05-plan-run-skills.md) for the flow.
 
 ```bash
 /autopilot:plan #42                                                      # From GitHub issue
@@ -220,7 +220,7 @@ Perform deep analysis and create a validated implementation plan. Detects tech s
 
 ### `/autopilot:run`
 
-Plan and implement without a plan-approval pause, then select one of two terminal paths. A task whose verified plan explicitly requires no repository edits reports `Outcome: no_repository_change`; a repository change is committed, opened as a PR, and monitored until it is ready for human review. A Linear-issue input additionally gets the finalized plan stored on its ticket before implementation — the same stored format `/autopilot:linear-plan` writes; see [the linear-plan skill](../../docs/16-linear-plan-skill.md). Uses the [codebase context snapshot](#codebase-context-snapshot). See [how the plan and run skills work](../../docs/05-plan-run-skills.md#how-run-differs-automated-post-implementation) for the terminal-path contract.
+Plan and implement without a plan-approval pause, then select one of two terminal paths. A task whose verified plan explicitly requires no repository edits reports `Outcome: no_repository_change`; a repository change is committed, opened as a PR, and monitored until it is ready for human review. A Linear-issue input additionally gets the finalized plan stored on its ticket before implementation — the same stored format `/autopilot:linear-plan` writes; see [the linear-plan skill](../../docs/16-linear-plan-skill.md). Reads the codebase per [Codebase context](#codebase-context). See [how the plan and run skills work](../../docs/05-plan-run-skills.md#how-run-differs-automated-post-implementation) for the terminal-path contract.
 
 ```bash
 /autopilot:run #42                                                      # From GitHub issue
@@ -246,7 +246,7 @@ Same as `/autopilot:run`, but reads the repository from a validated `.claude/con
 
 ### `/autopilot:explore`
 
-Map the repository broadly, write a durable context brief and source-dependency sidecar, then take surgical fixes one at a time. Refresh affected sections when dependencies change; structural or unknown changes trigger a full prime. Uses the [codebase context snapshot](#codebase-context-snapshot). See [the explore skill](../../docs/14-explore-skill.md) for the full flow.
+Map the repository broadly, write a durable context brief and source-dependency sidecar, then take surgical fixes one at a time. Refresh affected sections when dependencies change; structural or unknown changes trigger a full prime. Reads the codebase per [Codebase context](#codebase-context). See [the explore skill](../../docs/14-explore-skill.md) for the full flow.
 
 Reach for it when you have an _area_ rather than a target and the changes that follow are small and located. Unlike `/autopilot:plan` and `/autopilot:run` it never branches, never opens a PR, and never asks for approval — invoking it commits you to nothing.
 
@@ -307,7 +307,7 @@ Review and merge dependabot PRs safely, one-by-one.
 
 ### `/autopilot:pr-review`
 
-Review a pull request and provide constructive feedback with structured verdict output. Used by the [Code Review Action](https://github.com/awinogradov/code-review-action) action. Uses the [codebase context snapshot](#codebase-context-snapshot).
+Review a pull request and provide constructive feedback with structured verdict output. Used by the [Code Review Action](https://github.com/awinogradov/code-review-action) action. Reads the codebase per [Codebase context](#codebase-context).
 
 ```bash
 /autopilot:pr-review REPO: owner/repo PR_NUMBER: 123 REVIEWER: tars-copilot PR_AUTHOR: username
@@ -315,7 +315,7 @@ Review a pull request and provide constructive feedback with structured verdict 
 
 ### `/autopilot:pr-answer`
 
-Answer a user comment on a PR review and update review state if needed. Used by the [Code Review Action](https://github.com/awinogradov/code-review-action) action. Uses the [codebase context snapshot](#codebase-context-snapshot).
+Answer a user comment on a PR review and update review state if needed. Used by the [Code Review Action](https://github.com/awinogradov/code-review-action) action. Reads the codebase per [Codebase context](#codebase-context).
 
 ```bash
 /autopilot:pr-answer REPO: owner/repo PR_NUMBER: 123 REVIEWER: tars-copilot COMMENT_BODY: "..." COMMENT_PATH: src/file.ts COMMENT_LINE: 42
@@ -323,7 +323,7 @@ Answer a user comment on a PR review and update review state if needed. Used by 
 
 ### `/autopilot:pr-resolve`
 
-Address PR review comments. Fetches review feedback, categorizes by severity, makes code fixes, replies to comment threads, and updates the PR. Uses the [codebase context snapshot](#codebase-context-snapshot). Aborts when the pull request conflicts with its base, since fixes pushed onto a conflicting branch stay unmergeable.
+Address PR review comments. Fetches review feedback, categorizes by severity, makes code fixes, replies to comment threads, and updates the PR. Reads the codebase per [Codebase context](#codebase-context). Aborts when the pull request conflicts with its base, since fixes pushed onto a conflicting branch stay unmergeable.
 
 ```bash
 /autopilot:pr-resolve
@@ -386,7 +386,7 @@ Delegate a code-analysis, refactoring, or automated-editing task to the Google G
 
 ### `/autopilot:shared-rules`
 
-The canonical home for instruction blocks several skills need — reference formatting (RFC-0001), AskUserQuestion formatting, codebase context acquisition (graphify → repomix → default tools), agent structured output, Linear MCP access, and PR title/body grammar. Each block is a file under `references/`, so a consumer reads exactly the one it needs instead of carrying a copy. Mostly read by other skills rather than invoked directly; see the host repo's [shared-rules doc](../../docs/13-shared-rules-skill.md).
+The canonical home for instruction blocks several skills need — reference formatting (RFC-0001), AskUserQuestion formatting, agent structured output, Linear MCP access, and PR title/body grammar. Each block is a file under `references/`, so a consumer reads exactly the one it needs instead of carrying a copy. Mostly read by other skills rather than invoked directly; see the host repo's [shared-rules doc](../../docs/13-shared-rules-skill.md).
 
 ```bash
 /autopilot:shared-rules                                  # List the blocks and where each is read from
@@ -424,9 +424,9 @@ Invoked automatically at the start of `/autopilot:branch-create`, `/autopilot:co
 
 Acquire all planning context in one parallel fan-out and emit a Context Map. Invoked automatically by `/autopilot:plan` and `/autopilot:run` after they detect the input type, and by `/autopilot:explore`.
 
-The fan-out issues every context call in a single message — the repo-standards and branch-diff digest agents, the session-history digest when Entire is enabled, issue or alert resolution, the TODO search, the codebase snapshot, stack detection, and git state — then runs one snapshot pass and returns the Context Map. Sub-agents return bounded JSON, so the full text of a README, the selected RFCs, and an unbounded `git diff` never reaches the calling skill's context.
+The fan-out issues every context call in a single message — the repo-standards and branch-diff digest agents, the session-history digest when Entire is enabled, issue or alert resolution, the TODO search, stack detection, and git state — then runs one codebase pass and returns the Context Map. Sub-agents return bounded JSON, so the full text of a README, the selected RFCs, and an unbounded `git diff` never reaches the calling skill's context.
 
-An optional `Scope` input selects how that pass reads the snapshot: `task` (the default, used by `plan` and `run`) narrows to what the change touches, `broad` maps the repository breadth-first for `/autopilot:explore`, and `primed` reads only the gaps a validated brief leaves for `/autopilot:run-primed`. The emitted Context Map has the same sections at every scope. `primed` is the one value that also gates off a fan-out agent — the repo-standards digest, whose output the brief already carries.
+An optional `Scope` input selects how that pass reads the repository: `task` (the default, used by `plan` and `run`) narrows to what the change touches, `broad` maps the repository breadth-first for `/autopilot:explore`, and `primed` reads only the gaps a validated brief leaves for `/autopilot:run-primed`. The emitted Context Map has the same sections at every scope. `primed` is the one value that also gates off a fan-out agent — the repo-standards digest, whose output the brief already carries.
 
 Planning is stack-agnostic apart from two values (example libraries, verify examples), which both skills resolve from `plan/references/stack-deltas.md` keyed by `agents.rules`. There are no per-stack planning skills.
 

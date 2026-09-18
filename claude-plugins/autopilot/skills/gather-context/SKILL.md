@@ -9,15 +9,8 @@ allowed-tools:
   - Agent
   - Bash(git *)
   - Bash(node *)
-  - Bash(command -v graphify)
-  - Bash(graphify query *)
-  - Bash(graphify path *)
-  - Bash(graphify explain *)
-  - Bash(graphify affected *)
-  - Bash(graphify --help)
   - Bash(command -v entire)
   - Bash(entire *)
-  - MCP(repomix:*)
 ---
 
 Resolve the task once, then acquire independent context in parallel, and return the **Context Map**. Use bounded helper outputs; keep raw API responses and transcripts out of the parent context.
@@ -42,7 +35,7 @@ When `Scope: primed`, read [brief-reuse.md](references/brief-reuse.md) before de
 
 For issue input, validate and reuse `Resolved issue` or fetch the issue once using the provider helper below. If a same-invocation MCP result lacks a required field, fetch only that missing field through the same provider using the caller’s resolved tool binding, or return that specific gap to the caller if the tool is unavailable; do not require an API key after a successful MCP read. Preserve complete stored-plan text for parsing, but pass agents only the resolved intent, relevant acceptance criteria, and file seeds. For code-scanning alerts, resolve the alert before dependent research. Plain descriptions need no resolver.
 
-Run independent setup alongside resolution: read stack configuration, collect the branch digest outside broad scope, and identify snapshot availability. Actual source selection follows the ordered graph-first contract after intent resolves; availability is not a selection. Graph queries, new task-scoped research, standards selection, and history wait for resolved intent. Failed target resolution stops dependent work.
+Run independent setup alongside resolution: read stack configuration and collect the branch digest outside broad scope. Task-scoped research, standards selection, and history wait for resolved intent. Failed target resolution stops dependent work.
 
 ## Phase 1: Fan out
 
@@ -56,13 +49,12 @@ Once intent is resolved, launch independent remaining calls in one message. Do n
 
 **Direct calls** in the same message:
 
-- **Snapshot** — follow [repomix-snapshot.md](../shared-rules/references/repomix-snapshot.md), without `includePatterns`. Retain its complete evidence record. Declare graphify only after a query **exited zero** and produced a usable shortlist; otherwise use its `superseding graphify` transition. Do not repeat that contract here or reacquire a source already selected by this context holder.
 - **Stack** — Read `package.json` and extract `agents.rules`.
 - **Branch digest** — except `Scope: broad`: one Bash call to the bundled helper, `node "${CLAUDE_PLUGIN_ROOT}/lib/git/digest-branch.ts"` (Node ≥ 24 or Bun; when `CLAUDE_PLUGIN_ROOT` is unset, build the absolute path from this skill's own base directory). It prints one bounded JSON object — `branch`, `isWorktree`, `commits[]`, `files[]`, `isStaleMerged`, `baseAhead`, `truncated`, `digestError`, `telemetry` — covering git state too, so no separate `git branch`/`git rev-parse` calls run. The full invocation and output contract live in [the helper's header](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/lib/git/digest-branch.ts). A failed `cherry`/`rev-list` read yields `isStaleMerged`/`baseAhead` as `null` — treat null as unknown, never as false/0.
 - **Issue context** — Phase 0 only, and only without a matching resolved issue: one Bash call to the provider's bundled helper, in place of a delegated agent. GitHub: `node "${CLAUDE_PLUGIN_ROOT}/lib/github/fetch-issue.ts" <owner/repo> <issue-number>`, appending `--assign` exactly when the caller passes `Auto-assign current user: true` (contract in [the helper's header](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/lib/github/fetch-issue.ts)). Linear: `LINEAR_API_KEY="$LINEAR_API_KEY" node "${CLAUDE_PLUGIN_ROOT}/lib/linear/fetch-issue.mjs" <LINEAR-ID>`. Both print the provider-agnostic issue contract with `resolveError` naming any failure.
 - **Related TODOs** — issue inputs only: one bounded Grep call by this skill (no sub-agent). Search the issue reference forms — for GitHub number `N` both `issues/N` and `#N`, for Linear id `ID` both `issue/ID` and the bare `ID` token — in content mode with `head_limit` ≤ 20, keeping each match as `path:line — text`.
 
-**Broad scope:** skip the Entire settings read, history agent, and branch-digest helper. Read `git status --porcelain` and `git diff --name-only origin/main...HEAD` only to identify working-tree and branch paths the snapshot cannot show; these are context pointers, not a volatile-state digest. Emit `none — caller-owned volatile refresh` for In-flight changes and Git state, and `none — not requested` for Session history. Explore recomputes its volatile sections once after acquisition.
+**Broad scope:** skip the Entire settings read, history agent, and branch-digest helper. Read `git status --porcelain` and `git diff --name-only origin/main...HEAD` only to identify working-tree and branch paths; these are context pointers, not a volatile-state digest. Emit `none — caller-owned volatile refresh` for In-flight changes and Git state, and `none — not requested` for Session history. Explore recomputes its volatile sections once after acquisition.
 
 **Entire enabled:** only after a history trigger, read `.entire/settings.json`; run history only for `"enabled": true`. Report CLI/auth failures without retrying. At `primed` scope, validate standards coverage per brief-reuse; the branch digest still runs because Git state can change independently.
 
@@ -72,15 +64,15 @@ Once intent is resolved, launch independent remaining calls in one message. Do n
 
 ## Phase 2: Scope the codebase pass
 
-Investigate using resolved intent and the selected source after the fan-out returns.
+Investigate using resolved intent after the fan-out returns.
 
-Use the selected source's read contract for implementations, patterns, and tests. Apply its refinement limits and fallback taxonomy; read changed or untracked paths directly only with a recorded reason. Fold any additional evidence into the map.
+Locate implementations, patterns, and tests with `Grep` and `Glob`, then `Read` only the matched files and sections; Git through Bash is authoritative for changed and untracked paths. Keep reads targeted — never sweep the tree or delegate a second traversal of content already read. Fold any additional evidence into the map.
 
-**At `broad` scope there is no change to narrow to**, so read the snapshot breadth-first instead: the principal modules and their boundaries, the entry points, and the conventions that govern them. Fill `Relevant files` and `Patterns to mirror` at that altitude — the modules a newcomer must know and the conventions they must copy, rather than the handful a specific edit would touch.
+**At `broad` scope there is no change to narrow to**, so read the repository breadth-first instead: the principal modules and their boundaries, the entry points, and the conventions that govern them. Fill `Relevant files` and `Patterns to mirror` at that altitude — the modules a newcomer must know and the conventions they must copy, rather than the handful a specific edit would touch.
 
 **With stored-plan file seeds**, start with those implementations and their step relationships, then inspect directly relevant dependencies, tests, and current standards. Do not re-derive unrelated architecture. Expand only for a named evidence gap and fold that evidence into the map.
 
-**At `primed` scope the caller already holds the repository picture**, so read the snapshot only for the task-specific gaps that picture does not cover — the implementations and tests this particular change touches and the brief does not name. Do not re-derive architecture, key types, or test conventions; the caller merges those from its brief.
+**At `primed` scope the caller already holds the repository picture**, so read only for the task-specific gaps that picture does not cover — the implementations and tests this particular change touches and the brief does not name. Do not re-derive architecture, key types, or test conventions; the caller merges those from its brief.
 
 Bound composed summaries: at most 10 relevant files/patterns/types per section and 5 task-relevant comments, with source pointers and explicit omitted counts. Never cut conditions or exceptions; missing decision-relevant evidence requires focused retrieval before deciding. Broad coverage may link module indexes rather than enumerate every file.
 
@@ -104,11 +96,10 @@ Emit these sections in this order. This is the caller's entire view of the repos
 **Applicable standards** — [actual conventions as source + rule, preserving conditions/exceptions; RFC id + status (mark "defaulted" when inferred) + applicable clauses; principles; dropped candidates, overflow counts, and digestError; "none" only when nothing applies]
 **Stack** — [agents.rules value, and the deltas it resolves to]
 **Git state** — [broad: "none — caller-owned volatile refresh"; otherwise from the branch digest: branch, isWorktree, isStaleMerged, baseAhead — null tri-states reported as unknown]
-**Snapshot** — [the evidence record emitted in Phase 1, verbatim — the `context-source:` line for later phases to reuse, and on the graph tier the `graphify-trace:` line and the `graphify-shortlist:` bullets with the relationship justifying each]
 ```
 
-At broad scope, retain the stable-section supporting file paths and discovery roots as acquisition proceeds, with explicit completeness. Attach them to Snapshot for explore’s dependency sidecar; do not re-read the repository just to reconstruct this record.
+At broad scope, retain the supporting file paths and discovery roots behind each stable-feeding section as acquisition proceeds, with explicit completeness, and list them beside that section for explore’s dependency sidecar; do not re-read the repository just to reconstruct this record.
 
-Preserve `isStaleMerged` and unknown/null Git states from the helper. At `primed` scope, name the brief supplying Applicable standards. Carry the Snapshot evidence record verbatim, including relationships on shortlist entries; never substitute a source label alone.
+Preserve `isStaleMerged` and unknown/null Git states from the helper. At `primed` scope, name the brief supplying Applicable standards.
 
 When you write the Context Map, apply the reference-formatting rules in [`reference-formatting.md`](../shared-rules/references/reference-formatting.md) (RFC-0001, read it first) to every reference it contains — link files, docs, skills, agents, and sections, and never leave a reference as bare text.

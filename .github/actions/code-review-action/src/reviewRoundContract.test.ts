@@ -127,9 +127,9 @@ describe("review acquisition order", () => {
   });
 });
 
-describe("graphify boundary", () => {
-  test("Graphify is context-only, never review-surface discovery", () => {
-    expect(skill).toContain("**Graphify is context, never surface.**");
+describe("supporting-read boundary", () => {
+  test("cross-file reads are context-only, never review-surface discovery", () => {
+    expect(skill).toContain("**Supporting reads are context, never surface.**");
     expect(skill).toContain("never expand an incremental round");
   });
 });

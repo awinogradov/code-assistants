@@ -1,6 +1,6 @@
 ---
 name: shared-rules
-description: Canonical home for instruction blocks shared by several autopilot skills and agents — reference formatting (RFC-0001), AskUserQuestion formatting and content-preview contract, codebase context acquisition (graphify → repomix → default tools), agent structured output, issue body grammar, Linear MCP access, peer CLI delegation, git history policy, PR title/body grammar, and GitHub review-thread retrieval. Read the one block you need instead of carrying a copy.
+description: Canonical home for instruction blocks shared by several autopilot skills and agents — reference formatting (RFC-0001), AskUserQuestion formatting and content-preview contract, agent structured output, issue body grammar, Linear MCP access, peer CLI delegation, git history policy, PR title/body grammar, and GitHub review-thread retrieval. Read the one block you need instead of carrying a copy.
 ---
 
 # Shared Rules
@@ -26,7 +26,6 @@ Apply the block's content **verbatim**. It is an instruction, not a summary to p
 | Reference formatting (RFC-0001)  | [reference-formatting.md](./references/reference-formatting.md)         | before writing any output that mentions a file, standard, section, commit, or issue |
 | AskUserQuestion formatting       | [askuserquestion-format.md](./references/askuserquestion-format.md)     | before composing an AskUserQuestion `question` parameter                            |
 | AskUserQuestion preview contract | [askuserquestion-contract.md](./references/askuserquestion-contract.md) | before composing a dialog that presents generated content for review                |
-| Codebase context acquisition     | [repomix-snapshot.md](./references/repomix-snapshot.md)                 | before acquiring codebase context (graphify → repomix → default tools)              |
 | Agent structured output          | [agent-json-output.md](./references/agent-json-output.md)               | when an agent must return a bare JSON object to its parent                          |
 | Issue body grammar               | [issue-body-grammar.md](./references/issue-body-grammar.md)             | before generating a GitHub or Linear issue body                                     |
 | Linear MCP access                | [linear-mcp-access.md](./references/linear-mcp-access.md)               | before calling any Linear MCP tool                                                  |
@@ -36,4 +35,4 @@ Apply the block's content **verbatim**. It is an instruction, not a summary to p
 | PR body grammar                  | [pr-body-grammar.md](./references/pr-body-grammar.md)                   | before generating or updating a PR description                                      |
 | GitHub review-thread retrieval   | [github-review-fetch.md](./references/github-review-fetch.md)           | before fetching a PR's review threads (invocation and output contract)              |
 
-Blocks are parameterised by the caller where noted (the repomix `includePatterns` value, the Linear tool-name list, the peer CLI specifics, the AskUserQuestion strings): each block file states what the caller supplies.
+Blocks are parameterised by the caller where noted (the Linear tool-name list, the peer CLI specifics, the AskUserQuestion strings): each block file states what the caller supplies.

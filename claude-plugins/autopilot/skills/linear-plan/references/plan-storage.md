@@ -61,7 +61,7 @@ Format: v2 · Base: <sha> · Stored by /autopilot:linear-plan
 
 Fill rules:
 
-- Context evidence comes from the Context Map: record the actual inspected revision (HEAD plus dirty-path disclosure when applicable), up to ten source paths with their relationship to the steps, and applicable convention clauses with conditions/exceptions. Preserve overflow and errors; missing evidence is explicitly incomplete, never implied complete. Link source files at the recorded revision when possible. Omit session-scoped `outputId` values and transient tool handles. These records guide later retrieval; they do not exempt the executor from current-code or current-standards checks.
+- Context evidence comes from the Context Map: record the actual inspected revision (HEAD plus dirty-path disclosure when applicable), up to ten source paths with their relationship to the steps, and applicable convention clauses with conditions/exceptions. Preserve overflow and errors; missing evidence is explicitly incomplete, never implied complete. Link source files at the recorded revision when possible. Omit transient tool handles. These records guide later retrieval; they do not exempt the executor from current-code or current-standards checks.
 
 - `<sha>` — the full SHA exactly as `git rev-parse origin/main` printed it; never abbreviate or reconstruct it.
 - Each section placeholder — that section's body from the finalized plan file, demoted headings included, adjusted only as far as the Linear-safe markdown rules below require.

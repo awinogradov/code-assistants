@@ -7,7 +7,7 @@ const baseArgs = {
   sourceRef: '',
   files: [
     'claude-plugins/autopilot/skills/run/SKILL.md',
-    'claude-plugins/autopilot/skills/shared-rules/references/repomix-snapshot.md',
+    'claude-plugins/autopilot/skills/shared-rules/references/git-history-policy.md',
   ],
 };
 
@@ -21,8 +21,8 @@ describe('buildSkillSyncEntries', () => {
       },
       {
         repo: 'awinogradov/code-assistants',
-        source: 'claude-plugins/autopilot/skills/shared-rules/references/repomix-snapshot.md',
-        dest: '.agents/skills/shared-rules/references/repomix-snapshot.md',
+        source: 'claude-plugins/autopilot/skills/shared-rules/references/git-history-policy.md',
+        dest: '.agents/skills/shared-rules/references/git-history-policy.md',
       },
     ]);
   });

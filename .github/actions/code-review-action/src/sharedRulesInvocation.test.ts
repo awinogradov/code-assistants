@@ -40,7 +40,6 @@ const removedBlockPhrases: Record<string, string> = {
   "reference-formatting": "Backticks suppress GitHub autolinking",
   "askuserquestion-format": "renders as raw text",
   "askuserquestion-contract": "Copy the full preview string literally into every option",
-  "repomix-snapshot": "fall back to `mcp__repomix__pack_codebase` with",
   "issue-body-grammar": "each section answers exactly one question",
   "linear-mcp-access": "never bind a generic tool name",
   "peer-cli-delegation": "zero bytes of stdout",

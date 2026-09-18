@@ -20,15 +20,8 @@ allowed-tools:
   - MCP(Ref:*)
   - MCP(exa:*)
   - MCP(perplexity:*)
-  - Bash(command -v graphify)
-  - Bash(graphify query *)
-  - Bash(graphify path *)
-  - Bash(graphify explain *)
-  - Bash(graphify affected *)
-  - Bash(graphify --help)
   - Bash(command -v entire)
   - Bash(entire *)
-  - MCP(repomix:*)
   - AskUserQuestion
   - Skill(autopilot:gather-context)
   - Skill(autopilot:preflight-check)
@@ -142,17 +135,9 @@ Skill(autopilot:gather-context)
 
 Pass the detected input type, the Linear issue id, repository, repository root, the matched tracker's Linear team, and the raw task text as the task summary. Use `Scope: task` unless the explicit brief selected `Scope: primed`.
 
-Pass `Resolved issue` in both modes. For stored-plan mode, also pass the Files list and Implementation Steps as file seeds and relationships, plus durable Context evidence when present. Gather current implementations, directly relevant dependencies/tests, and applicable standards; expand only for a named gap. Fresh-plan mode uses ordinary task discovery. Both retain fresh Git state and current source evidence; never reuse a stored `outputId`. History follows gather-context’s demand trigger.
+Pass `Resolved issue` in both modes. For stored-plan mode, also pass the Files list and Implementation Steps as file seeds and relationships, plus durable Context evidence when present. Gather current implementations, directly relevant dependencies/tests, and applicable standards; expand only for a named gap. Fresh-plan mode uses ordinary task discovery. Both retain fresh Git state. History follows gather-context’s demand trigger.
 
-**Accept the context source before continuing.** Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) and check the returned map's **Snapshot** field against it: it must carry that block's `context-source:` line naming the tier the fan-out selected. When the field is absent, or carries no such line, stop:
-
-`Context phase failed on <LINEAR-ID>: gather-context returned no context-source selection.`
-
-**A graphify label needs the evidence behind it.** When the field reads `context-source: graphify`, check it against the block's evidence record: a `graphify-trace:` line whose `queries=` is one or more, and a `graphify-shortlist:` carrying at least one entry. When either is absent, stop:
-
-`Context phase failed on <LINEAR-ID>: gather-context declared graphify with no query evidence.`
-
-These source-selection failures are fatal: report the missing trace or shortlist rather than proceeding with an unevidenced label. A `digestError` still records degraded content, with affected standards decisions left open. Plan, run, and run-primed remain ungated at this particular selection check and carry source evidence into their plan output.
+**A `digestError` is degraded content, not a stop.** Record it and leave the affected standards decisions open, as [`gather-context`](../gather-context/SKILL.md#phase-1-fan-out) prescribes.
 
 ## Phase 3: Preflight verdict
 
@@ -184,9 +169,7 @@ In `stored-plan` mode, the stored `### Implementation Steps` must be worked in o
 
 In `fresh-plan` mode, the finalized harness plan is the execution contract exactly as it is for [`run`](../run/SKILL.md#phase-5-implement-and-proceed). This mode is autonomous and adds no approval prompt.
 
-**The selected source bounds both modes.** Repository investigation before the first edit is served from the source the Context Map recorded — in `stored-plan` mode as much as in `fresh-plan` mode. A stored plan names the files to touch; it is not a licence to re-derive the repository with ordinary traversal, and the audited failure this answers was a stored-plan run. Reads outside the selected source carry the shared block's `context-fallback:` line, and broad rediscovery does not become valid because a plan already exists.
-
-**Both modes consume the evidence record before traversal.** On the graph tier the map's shortlist is the first place investigation looks, in `stored-plan` mode and `fresh-plan` mode alike — its entries carry the relationship that put them there, so they answer where to look and why without a query being repeated. Only once the shortlist is exhausted does anything else happen, and then as a recorded `context-fallback:` read rather than a fresh sweep. A shortlist that arrived and went unread is the same waste as a graph that was never queried, one step later.
+**The Context Map bounds both modes.** Repository investigation before the first edit starts from the map's Relevant files — in `stored-plan` mode as much as in `fresh-plan` mode. A stored plan names the files to touch; it is not a licence to re-derive the repository with a fresh sweep, and the audited failure this answers was a stored-plan run. A targeted `Grep`/`Read` fills a named gap; broad rediscovery does not become valid because a plan already exists.
 
 ## Phase 6: Branch and run the autopilot chain
 

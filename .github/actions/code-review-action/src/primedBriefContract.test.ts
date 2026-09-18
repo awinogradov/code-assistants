@@ -54,15 +54,7 @@ function briefSections(source: string, kind: "stable" | "volatile"): string[] {
   return [...rows].filter((row) => row[2] === kind).map((row) => row[1].trim());
 }
 
-/**
- * `## Snapshot` is stable, yet `run-primed` must not consume it: the repomix `outputId` the
- * brief records is session-scoped and dead in a forked session, so the pack is re-attached.
- * Named here rather than filtered implicitly, so dropping a second section stays reviewable.
- */
-const notConsumed = new Set(["Snapshot"]);
-
 const stableSections = briefSections(explore, "stable");
-const consumedSections = stableSections.filter((name) => !notConsumed.has(name));
 
 /** The `Source | Section` table rows in `run-primed`, keyed by the source cell. */
 function sectionTableRow(source: string, key: string): string {
@@ -75,7 +67,6 @@ function sectionTableRow(source: string, key: string): string {
 
 describe("primed brief contract", () => {
   test("the brief template still exposes a stable/volatile split", () => {
-    expect(stableSections).toContain("Snapshot");
     expect(stableSections.length).toBeGreaterThan(1);
     expect(briefSections(explore, "volatile").length).toBeGreaterThan(0);
   });
@@ -101,13 +92,8 @@ describe("primed brief contract", () => {
     expect(runPrimed).toContain(needle);
   });
 
-  test.each(consumedSections)("run-primed consumes `## %s` from the brief", (name) => {
+  test.each(stableSections)("run-primed consumes `## %s` from the brief", (name) => {
     expect(sectionTableRow(runPrimed, "Brief")).toContain(`\`## ${name}\``);
-  });
-
-  test.each([...notConsumed])("`## %s` is stable but explicitly not consumed", (name) => {
-    expect(sectionTableRow(runPrimed, "Brief, **unused**")).toContain(`\`## ${name}\``);
-    expect(sectionTableRow(runPrimed, "Brief")).not.toContain(`\`## ${name}\``);
   });
 
   test("gather-context documents all three Scope values", () => {
