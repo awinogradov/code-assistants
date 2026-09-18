@@ -60,3 +60,9 @@
 
 - pr-monitor requires a runtime that notifies the session
 - --experts-review is no longer accepted and no flow launches an expert panel.
+
+## From 10.0.1 to 11.0.0
+
+### Breaking changes
+
+- skills no longer query a Graphify graph or attach a Repomix
