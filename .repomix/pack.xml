@@ -500,6 +500,7 @@ claude-plugins/
       1.8.0.md
       1.8.1.md
       1.9.0.md
+      10.0.0.md
       2.0.0.md
       3.0.0.md
       3.1.0.md
@@ -46924,7 +46925,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "9.0.1",
+  "version": "10.0.0",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -48504,6 +48505,55 @@ Issues generated for GitHub and Linear now include as much context as the work a
 
 * **autopilot:** enter plan mode in plan skill ([8064b81](https://github.com/awinogradov/code-assistants/commit/8064b81560ae2eda762b4a30bde7808804a5ca6a))
 * **autopilot:** sharpen issue sections, drop size caps ([45e3401](https://github.com/awinogradov/code-assistants/commit/45e3401764a23908a42de246ee16b5b31a2fced8))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/10.0.0.md">
+## [10.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v9.0.1...autopilot@v10.0.0) (2026-09-18)
+
+## Release Notes
+
+Skills no longer use Graphify or Repomix for context acquisition — all codebase context now comes from `Grep`/`Glob`/`Read` and `git` only.
+
+## ⚠️ Breaking Changes
+
+### Graphify and Repomix Context Tiers Removed
+
+Skills no longer query a Graphify graph or attach a Repomix pack. Remove `Bash(graphify …)` and `MCP(repomix:*)` from any custom `allowed-tools` overrides, and remove `mcp__repomix__*` from any code-review action tool configurations. The following artifacts are gone from skill output:
+
+- Plan `## Context source` section
+- Context Map `**Snapshot**` field
+- `context-source:`, `graphify-trace:`, `graphify-shortlist:`, and `context-fallback:` records
+
+Follow the `9.0.1 → 10.0.0` instructions in [MIGRATING.md](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/MIGRATING.md) before deploying.
+
+<details><summary>Related issues</summary>
+
+- [#678: Retire Graphify and Repomix context acquisition from autopilot skills](https://github.com/awinogradov/code-assistants/issues/678)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #678 | [#679](https://github.com/awinogradov/code-assistants/pull/679) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **autopilot:** skills no longer query a Graphify graph or attach a Repomix
+pack; the `context-source:`, `graphify-trace:`, `graphify-shortlist:`, and
+`context-fallback:` records, the plan's `## Context source` section, and the
+Context Map's `**Snapshot**` field are gone. See MIGRATING.md 9.0.1 → 10.0.0.
+
+Entire-Checkpoint: dcf78ef1e2c4
+
+### Features
+
+* **autopilot:** retire graphify and repomix context tiers ([89f9f15](https://github.com/awinogradov/code-assistants/commit/89f9f158a8ff21d3cfd07fe247325124b950b2a0))
+
+### CI
+
+* **deps:** bump the pdf-create-renderer group ([6d37ce9](https://github.com/awinogradov/code-assistants/commit/6d37ce947e5f009ccd755a0b5313518a0dd8f53f))
 </file>
 
 <file path="claude-plugins/autopilot/.release_notes/2.0.0.md">
@@ -65804,6 +65854,52 @@ Before writing any output that mentions a file, standard, section, commit, or is
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [10.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v9.0.1...autopilot@v10.0.0) (2026-09-18)
+
+## Release Notes
+
+Skills no longer use Graphify or Repomix for context acquisition — all codebase context now comes from `Grep`/`Glob`/`Read` and `git` only.
+
+## ⚠️ Breaking Changes
+
+### Graphify and Repomix Context Tiers Removed
+
+Skills no longer query a Graphify graph or attach a Repomix pack. Remove `Bash(graphify …)` and `MCP(repomix:*)` from any custom `allowed-tools` overrides, and remove `mcp__repomix__*` from any code-review action tool configurations. The following artifacts are gone from skill output:
+
+- Plan `## Context source` section
+- Context Map `**Snapshot**` field
+- `context-source:`, `graphify-trace:`, `graphify-shortlist:`, and `context-fallback:` records
+
+Follow the `9.0.1 → 10.0.0` instructions in [MIGRATING.md](https://github.com/awinogradov/code-assistants/blob/main/claude-plugins/autopilot/MIGRATING.md) before deploying.
+
+<details><summary>Related issues</summary>
+
+- [#678: Retire Graphify and Repomix context acquisition from autopilot skills](https://github.com/awinogradov/code-assistants/issues/678)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #678 | [#679](https://github.com/awinogradov/code-assistants/pull/679) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **autopilot:** skills no longer query a Graphify graph or attach a Repomix
+pack; the `context-source:`, `graphify-trace:`, `graphify-shortlist:`, and
+`context-fallback:` records, the plan's `## Context source` section, and the
+Context Map's `**Snapshot**` field are gone. See MIGRATING.md 9.0.1 → 10.0.0.
+
+Entire-Checkpoint: dcf78ef1e2c4
+
+### Features
+
+* **autopilot:** retire graphify and repomix context tiers ([89f9f15](https://github.com/awinogradov/code-assistants/commit/89f9f158a8ff21d3cfd07fe247325124b950b2a0))
+
+### CI
+
+* **deps:** bump the pdf-create-renderer group ([6d37ce9](https://github.com/awinogradov/code-assistants/commit/6d37ce947e5f009ccd755a0b5313518a0dd8f53f))
 ## [9.0.1](https://github.com/awinogradov/code-assistants/compare/autopilot@v9.0.0...autopilot@v9.0.1) (2026-09-11)
 
 ## Release Notes
@@ -68797,6 +68893,12 @@ SOFTWARE.
 
 - pr-monitor requires a runtime that notifies the session
 - --experts-review is no longer accepted and no flow launches an expert panel.
+
+## From 9.0.1 to 10.0.0
+
+### Breaking changes
+
+- skills no longer query a Graphify graph or attach a Repomix
 </file>
 
 <file path="claude-plugins/autopilot/package.json">
@@ -68828,14 +68930,14 @@ SOFTWARE.
     "test": "bun test lib",
     "clean": "rm -rf node_modules .turbo"
   },
-  "version": "9.0.1"
+  "version": "10.0.0"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v9.0.1-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![GitHub Release](https://img.shields.io/badge/release-v10.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
 [![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
@@ -69350,7 +69452,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-9.0.1
+10.0.0
 </file>
 
 <file path="docs/01-workspace-structure.md">
