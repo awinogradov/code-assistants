@@ -1,0 +1,370 @@
+{
+  "cli_version": "0.7.8",
+  "checkpoint_id": "dcf78ef1e2c4",
+  "session_id": "6e5e607e-d3a9-43cc-aa49-c434d80f7807",
+  "strategy": "manual-commit",
+  "created_at": "2026-09-18T14:08:39.956997Z",
+  "branch": "issue-678-retire-graphify-repomix-context",
+  "checkpoints_count": 1,
+  "save_step_count": 1,
+  "files_touched": [
+    ".github/actions/agents-skills-sync/src/buildSkillSyncEntries.test.ts",
+    ".github/actions/code-review-action/action.yml",
+    ".github/actions/code-review-action/src/contextSourceContract.test.ts",
+    ".github/actions/code-review-action/src/graphifyEvidence.test.ts",
+    ".github/actions/code-review-action/src/graphifyEvidence.ts",
+    ".github/actions/code-review-action/src/graphifyEvidenceContract.test.ts",
+    ".github/actions/code-review-action/src/graphifyEvidenceFixture.test.ts",
+    ".github/actions/code-review-action/src/graphifyReadOnlyContract.test.ts",
+    ".github/actions/code-review-action/src/graphifyRefinementContract.test.ts",
+    ".github/actions/code-review-action/src/linearPlanContract.test.ts",
+    ".github/actions/code-review-action/src/primedBriefContract.test.ts",
+    ".github/actions/code-review-action/src/reviewContextBundleContract.test.ts",
+    ".github/actions/code-review-action/src/reviewRoundContract.test.ts",
+    ".github/actions/code-review-action/src/sharedBlockSync.test.ts",
+    ".github/actions/code-review-action/src/sharedRulesInvocation.test.ts",
+    ".github/actions/code-review-action/src/skillBodyBudget.test.ts",
+    "README.md",
+    "claude-plugins/autopilot/MIGRATING.md",
+    "claude-plugins/autopilot/README.md",
+    "claude-plugins/autopilot/agents/digest-repo-standards.md",
+    "claude-plugins/autopilot/agents/digest-session-history.md",
+    "claude-plugins/autopilot/skills/explore/SKILL.md",
+    "claude-plugins/autopilot/skills/explore/references/selective-refresh.md",
+    "claude-plugins/autopilot/skills/gather-context/SKILL.md",
+    "claude-plugins/autopilot/skills/gather-context/references/brief-reuse.md",
+    "claude-plugins/autopilot/skills/issue-create/SKILL.md",
+    "claude-plugins/autopilot/skills/linear-create/SKILL.md",
+    "claude-plugins/autopilot/skills/linear-plan/SKILL.md",
+    "claude-plugins/autopilot/skills/linear-plan/references/plan-storage.md",
+    "claude-plugins/autopilot/skills/linear-run/SKILL.md",
+    "claude-plugins/autopilot/skills/linear-run/references/stored-plan-execution.md",
+    "claude-plugins/autopilot/skills/plan/SKILL.md",
+    "claude-plugins/autopilot/skills/plan/references/pipeline.md",
+    "claude-plugins/autopilot/skills/pr-answer/SKILL.md",
+    "claude-plugins/autopilot/skills/pr-resolve/SKILL.md",
+    "claude-plugins/autopilot/skills/pr-review/SKILL.md",
+    "claude-plugins/autopilot/skills/pr-review/references/findings-format.md",
+    "claude-plugins/autopilot/skills/run-primed/SKILL.md",
+    "claude-plugins/autopilot/skills/run/SKILL.md",
+    "claude-plugins/autopilot/skills/shared-rules/SKILL.md",
+    "claude-plugins/autopilot/skills/shared-rules/references/repomix-snapshot.md",
+    "docs/02-agents-field.md",
+    "docs/05-plan-run-skills.md",
+    "docs/09-repomix-pack.md",
+    "docs/13-shared-rules-skill.md",
+    "docs/14-explore-skill.md",
+    "docs/15-run-primed-skill.md",
+    "docs/17-linear-run-skill.md",
+    "docs/19-skill-token-budget.md"
+  ],
+  "agent": "Claude Code",
+  "model": "claude-fable-5-1",
+  "turn_id": "5ed20a22f5c8",
+  "token_usage": {
+    "input_tokens": 222,
+    "cache_creation_tokens": 357088,
+    "cache_read_tokens": 18854880,
+    "output_tokens": 62192,
+    "api_call_count": 108
+  },
+  "skill_events_version": 1,
+  "skill_events": [
+    {
+      "id": "prompt-skill-claude-code-autopilot:run-2026-09-18T08:38:06.146597Z",
+      "event_type": "prompt_invocation",
+      "skill": {
+        "name": "autopilot:run"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "prompt_slash_command",
+        "confidence": "explicit"
+      },
+      "turn_id": "0a0e3535d9d2",
+      "timestamp": "2026-09-18T08:38:06.146597Z",
+      "native": {
+        "command": "/autopilot:run"
+      },
+      "collapse": {
+        "target": "user_message",
+        "label": "/autopilot:run",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01Pq8XqwS4NPKEMYsmyoSVoD",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "autopilot:gather-context"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "5ed20a22f5c8",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 62,
+        "end": 63,
+        "entry_ids": [
+          "7638d95c-8c22-4e00-aa1e-b91a4e716c08"
+        ],
+        "tool_use_id": "toolu_01Pq8XqwS4NPKEMYsmyoSVoD"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01Pq8XqwS4NPKEMYsmyoSVoD"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: autopilot:gather-context",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_0133kwivLfihgeCFiE2Py3pK",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "autopilot:preflight-check"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "5ed20a22f5c8",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 201,
+        "end": 202,
+        "entry_ids": [
+          "aa3d0167-d301-497e-85a3-1050d540fddd"
+        ],
+        "tool_use_id": "toolu_0133kwivLfihgeCFiE2Py3pK"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_0133kwivLfihgeCFiE2Py3pK"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: autopilot:preflight-check",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01F7QPPT4w9s6rdotoJcds76",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "autopilot:issue-create"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "5ed20a22f5c8",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 295,
+        "end": 296,
+        "entry_ids": [
+          "8c428385-f63a-440c-8caf-e3265448a54b"
+        ],
+        "tool_use_id": "toolu_01F7QPPT4w9s6rdotoJcds76"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01F7QPPT4w9s6rdotoJcds76"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: autopilot:issue-create",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_0194cUvgqPc189ruDUCRZngW",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "autopilot:branch-create"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "5ed20a22f5c8",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 342,
+        "end": 343,
+        "entry_ids": [
+          "540387f4-ed3b-4d17-a4ae-307c981351fe"
+        ],
+        "tool_use_id": "toolu_0194cUvgqPc189ruDUCRZngW"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_0194cUvgqPc189ruDUCRZngW"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: autopilot:branch-create",
+        "default_collapsed": true
+      }
+    },
+    {
+      "id": "claude-skill-toolu_01BGgm7Z3eE6t9LhfH2dExyN",
+      "event_type": "tool_invocation",
+      "skill": {
+        "name": "autopilot:commits-create"
+      },
+      "source": {
+        "agent": "claude-code",
+        "signal": "skill_tool_use",
+        "confidence": "explicit"
+      },
+      "turn_id": "5ed20a22f5c8",
+      "transcript_anchor": {
+        "unit": "line",
+        "start": 866,
+        "end": 867,
+        "entry_ids": [
+          "3c257525-9fd4-42fd-b42a-1d6f4164b80c"
+        ],
+        "tool_use_id": "toolu_01BGgm7Z3eE6t9LhfH2dExyN"
+      },
+      "native": {
+        "tool_name": "Skill",
+        "tool_use_id": "toolu_01BGgm7Z3eE6t9LhfH2dExyN"
+      },
+      "collapse": {
+        "target": "tool_pair",
+        "label": "Skill: autopilot:commits-create",
+        "default_collapsed": true
+      }
+    }
+  ],
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-09-18T14:08:39.879325Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 2256,
+    "total_committed": 1340,
+    "total_lines_changed": 2256,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 116,
+      "user_lines_removed": 2256,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        ".github/actions/agents-skills-sync/src/buildSkillSyncEntries.test.ts": 3,
+        ".github/actions/code-review-action/action.yml": 2,
+        ".github/actions/code-review-action/src/linearPlanContract.test.ts": 1,
+        ".github/actions/code-review-action/src/primedBriefContract.test.ts": 1,
+        ".github/actions/code-review-action/src/reviewContextBundleContract.test.ts": 1,
+        ".github/actions/code-review-action/src/reviewRoundContract.test.ts": 3,
+        ".github/actions/code-review-action/src/skillBodyBudget.test.ts": 6,
+        "README.md": 22,
+        "claude-plugins/autopilot/MIGRATING.md": 6,
+        "claude-plugins/autopilot/README.md": 12,
+        "claude-plugins/autopilot/agents/digest-repo-standards.md": 1,
+        "claude-plugins/autopilot/agents/digest-session-history.md": 1,
+        "claude-plugins/autopilot/skills/explore/references/selective-refresh.md": 2,
+        "claude-plugins/autopilot/skills/gather-context/SKILL.md": 8,
+        "claude-plugins/autopilot/skills/gather-context/references/brief-reuse.md": 1,
+        "claude-plugins/autopilot/skills/issue-create/SKILL.md": 6,
+        "claude-plugins/autopilot/skills/linear-create/SKILL.md": 3,
+        "claude-plugins/autopilot/skills/linear-plan/references/plan-storage.md": 1,
+        "claude-plugins/autopilot/skills/linear-run/SKILL.md": 3,
+        "claude-plugins/autopilot/skills/linear-run/references/stored-plan-execution.md": 1,
+        "claude-plugins/autopilot/skills/plan/SKILL.md": 1,
+        "claude-plugins/autopilot/skills/plan/references/pipeline.md": 1,
+        "claude-plugins/autopilot/skills/pr-answer/SKILL.md": 4,
+        "claude-plugins/autopilot/skills/pr-resolve/SKILL.md": 4,
+        "claude-plugins/autopilot/skills/pr-review/SKILL.md": 4,
+        "claude-plugins/autopilot/skills/pr-review/references/findings-format.md": 1,
+        "claude-plugins/autopilot/skills/run-primed/SKILL.md": 4,
+        "claude-plugins/autopilot/skills/run/SKILL.md": 1,
+        "claude-plugins/autopilot/skills/shared-rules/SKILL.md": 2,
+        "docs/02-agents-field.md": 1,
+        "docs/05-plan-run-skills.md": 1,
+        "docs/09-repomix-pack.md": 4,
+        "docs/14-explore-skill.md": 1,
+        "docs/15-run-primed-skill.md": 1,
+        "docs/17-linear-run-skill.md": 1,
+        "docs/19-skill-token-budget.md": 1
+      },
+      "user_removed_per_file": {
+        ".github/actions/agents-skills-sync/src/buildSkillSyncEntries.test.ts": 3,
+        ".github/actions/code-review-action/action.yml": 2,
+        ".github/actions/code-review-action/src/contextSourceContract.test.ts": 192,
+        ".github/actions/code-review-action/src/graphifyEvidence.test.ts": 320,
+        ".github/actions/code-review-action/src/graphifyEvidence.ts": 344,
+        ".github/actions/code-review-action/src/graphifyEvidenceContract.test.ts": 244,
+        ".github/actions/code-review-action/src/graphifyEvidenceFixture.test.ts": 358,
+        ".github/actions/code-review-action/src/graphifyReadOnlyContract.test.ts": 227,
+        ".github/actions/code-review-action/src/graphifyRefinementContract.test.ts": 166,
+        ".github/actions/code-review-action/src/linearPlanContract.test.ts": 1,
+        ".github/actions/code-review-action/src/primedBriefContract.test.ts": 15,
+        ".github/actions/code-review-action/src/reviewContextBundleContract.test.ts": 1,
+        ".github/actions/code-review-action/src/reviewRoundContract.test.ts": 3,
+        ".github/actions/code-review-action/src/sharedBlockSync.test.ts": 1,
+        ".github/actions/code-review-action/src/sharedRulesInvocation.test.ts": 1,
+        ".github/actions/code-review-action/src/skillBodyBudget.test.ts": 6,
+        "README.md": 22,
+        "claude-plugins/autopilot/README.md": 12,
+        "claude-plugins/autopilot/agents/digest-repo-standards.md": 1,
+        "claude-plugins/autopilot/agents/digest-session-history.md": 1,
+        "claude-plugins/autopilot/skills/explore/SKILL.md": 9,
+        "claude-plugins/autopilot/skills/explore/references/selective-refresh.md": 2,
+        "claude-plugins/autopilot/skills/gather-context/SKILL.md": 17,
+        "claude-plugins/autopilot/skills/gather-context/references/brief-reuse.md": 1,
+        "claude-plugins/autopilot/skills/issue-create/SKILL.md": 14,
+        "claude-plugins/autopilot/skills/linear-create/SKILL.md": 11,
+        "claude-plugins/autopilot/skills/linear-plan/SKILL.md": 7,
+        "claude-plugins/autopilot/skills/linear-plan/references/plan-storage.md": 1,
+        "claude-plugins/autopilot/skills/linear-run/SKILL.md": 20,
+        "claude-plugins/autopilot/skills/linear-run/references/stored-plan-execution.md": 1,
+        "claude-plugins/autopilot/skills/plan/SKILL.md": 8,
+        "claude-plugins/autopilot/skills/plan/references/pipeline.md": 7,
+        "claude-plugins/autopilot/skills/pr-answer/SKILL.md": 21,
+        "claude-plugins/autopilot/skills/pr-resolve/SKILL.md": 21,
+        "claude-plugins/autopilot/skills/pr-review/SKILL.md": 11,
+        "claude-plugins/autopilot/skills/pr-review/references/findings-format.md": 1,
+        "claude-plugins/autopilot/skills/run-primed/SKILL.md": 11,
+        "claude-plugins/autopilot/skills/run/SKILL.md": 8,
+        "claude-plugins/autopilot/skills/shared-rules/SKILL.md": 3,
+        "claude-plugins/autopilot/skills/shared-rules/references/repomix-snapshot.md": 89,
+        "docs/02-agents-field.md": 1,
+        "docs/05-plan-run-skills.md": 1,
+        "docs/09-repomix-pack.md": 60,
+        "docs/13-shared-rules-skill.md": 1,
+        "docs/14-explore-skill.md": 1,
+        "docs/15-run-primed-skill.md": 1,
+        "docs/17-linear-run-skill.md": 7,
+        "docs/19-skill-token-budget.md": 1
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 116,
+      "agent_lines_removed": 2256
+    }
+  ]
+}
