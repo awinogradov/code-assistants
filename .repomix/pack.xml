@@ -60467,12 +60467,12 @@ process.exit(0);
   "dependencies": {
     "@react-pdf/renderer": "4.9.0",
     "gray-matter": "4.0.3",
-    "react": "19.2.8",
+    "react": "19.3.0",
     "tsx": "4.23.13",
-    "zod": "4.5.4"
+    "zod": "4.6.1"
   },
   "devDependencies": {
-    "@types/react": "19.2.18"
+    "@types/react": "19.3.0"
   }
 }
 </file>
