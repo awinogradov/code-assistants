@@ -2,6 +2,43 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [11.0.0](https://github.com/awinogradov/code-assistants/compare/code-review-action@v10.0.1...code-review-action@v11.0.0) (2026-09-18)
+
+## Release Notes
+
+Autopilot skills drop Graphify and Repomix entirely — codebase context now comes exclusively from `Grep`/`Glob`/`Read` and `git` tool calls.
+
+## ⚠️ Breaking Changes
+
+### Graphify and Repomix context tiers removed from all autopilot skills
+
+`Bash(graphify …)` and `MCP(repomix:*)` are no longer in any skill's `allowed-tools`, and `mcp__repomix__*` is removed from the code-review action's allowed tools — any workflow or configuration that grants or depends on these tools must drop them. Plans no longer emit a `## Context source` section; the Context Map no longer includes a `**Snapshot**` field; and the `context-source:`, `graphify-trace:`, `graphify-shortlist:`, and `context-fallback:` log records are gone. Follow the migration steps in `MIGRATING.md` under the 9.0.1 → 10.0.0 section.
+
+<details><summary>Related issues</summary>
+
+- [#678: Retire Graphify and Repomix context acquisition from autopilot skills](https://github.com/awinogradov/code-assistants/issues/678)
+- [#679: Retire Graphify and Repomix context acquisition from autopilot skills](https://github.com/awinogradov/code-assistants/pull/679)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #678 | [#679](https://github.com/awinogradov/code-assistants/pull/679) | @awinogradov |
+
+### ⚠ BREAKING CHANGES
+
+* **autopilot:** skills no longer query a Graphify graph or attach a Repomix
+pack; the `context-source:`, `graphify-trace:`, `graphify-shortlist:`, and
+`context-fallback:` records, the plan's `## Context source` section, and the
+Context Map's `**Snapshot**` field are gone. See MIGRATING.md 9.0.1 → 10.0.0.
+
+Entire-Checkpoint: dcf78ef1e2c4
+
+### Features
+
+* **autopilot:** retire graphify and repomix context tiers ([89f9f15](https://github.com/awinogradov/code-assistants/commit/89f9f158a8ff21d3cfd07fe247325124b950b2a0))
 ## [10.0.1](https://github.com/awinogradov/code-assistants/compare/code-review-action@v10.0.0...code-review-action@v10.0.1) (2026-09-11)
 
 ## Release Notes
