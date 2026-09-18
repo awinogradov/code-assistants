@@ -6,7 +6,7 @@
  * that rediscovers anyway, a prompt that never passes the path, or a version
  * gate checking a number the schema no longer exports.
  *
- * Mirrors contextSourceContract.test.ts: the guarded documents are asserted
+ * Mirrors reviewRoundContract.test.ts: the guarded documents are asserted
  * non-empty first (vacuous-pass defence — a moved file would otherwise pass
  * every substring check on ""), and the fallback-reason taxonomy is explicit
  * test data, one assertion per token, so dropping a reason fails loudly.

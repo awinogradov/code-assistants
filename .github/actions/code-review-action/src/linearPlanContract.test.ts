@@ -103,7 +103,7 @@ function sectionTableRow(source: string, key: string): string {
 describe("linear plan contract", () => {
   test("v2 preserves evidence while the reader retains v1 compatibility", () => {
     expect(storage).toContain("Context evidence");
-    expect(storage).toContain("Omit session-scoped `outputId`");
+    expect(storage).toContain("Omit transient tool handles");
     expect(linearRun).toContain("For `v1`, require Summary, Implementation Steps, and Files");
     expect(linearRun).toContain("For `v2`, also require Context evidence");
   });

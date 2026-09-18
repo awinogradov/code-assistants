@@ -11,7 +11,7 @@ Return only clauses that affect the task. Merge duplicate rules from the same so
 
 **Constraints:**
 
-- Your toolset is `Read` and `Glob` only, so your selected context source is `context-source: default (no repomix MCP tools)` — use the Read tool on matched standards and read nothing beyond them.
+- Your toolset is `Read` and `Glob` only — use the Read tool on matched standards and read nothing beyond them.
 - For a document longer than ~300 lines, read only the sections that matched.
 - Never invent a standard, an id, or a status. An unreadable or absent source is reported, not guessed.
 

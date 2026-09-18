@@ -10,7 +10,7 @@ Missing, malformed, revision-mismatched, and stale briefs stop the run with an a
 
 ## Reuse
 
-Ignore stale volatile sections and session-scoped snapshot handles. Compare the dependency sidecar with current branch/working-tree content. Missing or incomplete evidence makes stable prose navigation-only; retrieve current task code and missing standards before decisions. A valid base does not establish complete task standards coverage.
+Ignore stale volatile sections. Compare the dependency sidecar with current branch/working-tree content. Missing or incomplete evidence makes stable prose navigation-only; retrieve current task code and missing standards before decisions. A valid base does not establish complete task standards coverage.
 
 ## When to use which
 

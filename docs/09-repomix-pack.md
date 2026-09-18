@@ -2,16 +2,11 @@
 
 > Chapter 9 of the [repository docs](../README.md#repository-docs).
 
-This repository commits a packed snapshot of `main` at `.repomix/pack.xml` and keeps it fresh with CI on every merge. Autopilot skills read this snapshot for codebase context instead of re-packing on every run. This document describes the artifact, the workflow that produces it, and the contract skills follow to consume it.
+This repository commits a packed snapshot of `main` at `.repomix/pack.xml` and keeps it fresh with CI on every merge. This document describes the artifact and the workflow that produces it.
 
 ## Why it exists
 
-Several Autopilot skills (`/plan`, `/issue-create`, `/run`, `/pr-review`, `/pr-resolve`, `/pr-answer`) need whole-codebase context to ground their output. Each previously called `mcp__repomix__pack_codebase` on every invocation, which:
-
-- repeats the in-memory pack cost on every run, adding latency; and
-- makes the skill hard-depend on the Repomix MCP server being reachable.
-
-A committed snapshot removes the per-run pack tax, lets skills ingest a stable artifact, and produces a reviewable diff log of how the codebase shape changes over time.
+A committed snapshot gives external tooling and consumers a stable, reviewable digest of the codebase and a diff log of how its shape changes over time. Autopilot skills no longer read it: since [#678](https://github.com/awinogradov/code-assistants/issues/678) they gather codebase context with the default tools (`Grep`, `Glob`, `Read`, and `git`), so the pack is an artifact for consumers, not an input to the plugin.
 
 ## The artifact
 
@@ -52,57 +47,6 @@ The `.github/workflows/repomix-pack.yml` workflow regenerates the pack on every 
 
 `node_modules/`, `dist/`, `.turbo/`, and `coverage/` are excluded automatically because Repomix honors `.gitignore` and its built-in default patterns.
 
-## How skills consume it
+## Retired: skill consumption
 
-The consuming skills follow an **ordered source chain**, defined once in the shared [`repomix-snapshot.md`](../claude-plugins/autopilot/skills/shared-rules/references/repomix-snapshot.md) block — each tier is used when it works and falls through when it does not:
-
-1. **graphify knowledge graph** — when the repository commits one ([graphify](https://github.com/Graphify-Labs/graphify): `graphify-out/graph.json` at the root) and the `graphify` CLI resolves, skills query the graph offline (`graphify query|path|explain|affected`) instead of grepping a flat pack.
-2. **Repomix pack** — check whether `.repomix/pack.xml` exists at the repository root; if it exists, call `mcp__repomix__attach_packed_output` with `path: <repo root>/.repomix/pack.xml` to obtain an `outputId`, and if it is absent (or the attach fails), fall back to `mcp__repomix__pack_codebase` with the skill's existing arguments. Either path yields an `outputId` for the downstream `grep_repomix_output` / `read_repomix_output` flow.
-3. **Default tools** — with neither source available, plain Grep/Glob/Read and `git` via Bash.
-
-Because a committed graph or pack reflects `main` at the last merge, on a feature branch it lags by the in-flight changes — acceptable, since review-time skills obtain the actual diff separately and use the snapshot only for surrounding context.
-
-### Graphify query refinement
-
-Preferring the graph is not the same as using it. An audited planning run asked one broad question, got an answer graphify had cut to 52 of 918 nodes, made no follow-up, and continued with ordinary repository traversal ([#587](https://github.com/awinogradov/code-assistants/issues/587)) — the graph was paid for and then re-derived by hand. The shared block therefore gives tier 1 a query discipline:
-
-- Each answer is classified as **focused**, **truncated** (graphify announces it, e.g. `[!] TRUNCATED: showing 52 of 918 nodes`), **empty** (`No matching nodes found.`), or **error**. A truncated answer is an incomplete lookup, not a negative result.
-- A truncated or empty answer is refined with another **graph** operation before any context-gathering file read — a narrower question, a `--context <relation>` filter, or a focused `explain` / `path` / `affected` lookup. Raising `--budget` re-floods the same broad answer, so it is never the sole response.
-- Refinement is capped at three rounds after the first, and the pass ends at a **shortlist** of at most ten files or entities, each with the relationship that justifies it. Direct reads during the pass are limited to that shortlist; the shortlist is what the pass hands on, the way an `outputId` is on tier 2.
-- The pass closes with `graphify-trace: queries=<n> truncated=<yes|no> shortlist=<n> outside-reads=<n>`, which makes the failure mode legible after the fact: `truncated=yes` with `queries=1` is a truncated answer that was never refined.
-- An exhausted tier hands over explicitly — `context-source: repomix <outputId> superseding graphify (refinement-exhausted)` — so exactly one source stays live.
-
-The wording is pinned by [`graphifyRefinementContract`](../.github/actions/code-review-action/src/graphifyRefinementContract.test.ts), which extracts a nested `graphify-refinement` sentinel because the outer block already contains the words the discipline uses. CI can only prove the text is there; whether sessions honour it is measured by the canary recorded on the issue.
-
-### Evidence, not declaration
-
-Refinement assumed a query had happened. Nothing required one: `context-source: graphify` was a label, and a repository that merely _had_ a graph made the label true enough to write. A planning run could query the graph properly while the implementation run that followed it received the source name, rebuilt its own picture with ordinary traversal, and reported the graph tier throughout ([#597](https://github.com/awinogradov/code-assistants/issues/597)). The tier now has to produce evidence:
-
-- The label follows a query that **exited zero** with a usable answer. Availability makes the tier eligible; the first query is what tests that eligibility.
-- What the tier hands on is a three-line record, not a name — `context-source: graphify`, then `graphify-trace:`, then `graphify-shortlist:` with one `path or entity — relationship` bullet per entry. A record with no trace, `queries=0`, or an empty shortlist is an unrecorded selection, and a consumer treats it as no selection at all.
-- Leaving the tier is written down: `context-source: <successor> superseding graphify (<reason>)`, where `<reason>` is `unavailable`, `error`, or `refinement-exhausted`. These say why a source ended, and are not the six `context-fallback:` reasons, which excuse one read inside a source still live.
-- The record travels. [`linear-run`](./17-linear-run-skill.md#enforcing-the-context-source) reads it from the Context Map's `**Snapshot**` field and refuses a graphify label with nothing behind it; `plan` and `run` carry it into the plan file's `## Context source` section, which is also what makes a past run auditable — a plan file is durable and greppable where a transcript is not.
-
-```text
-eligible ──query exits 0──▶ record ──hand-off──▶ shortlist read first
-    │                                                    │
-    └──unavailable / error / refinement-exhausted──▶ successor tier
-```
-
-Two tests carry the executable half. [`graphifyEvidence`](../.github/actions/code-review-action/src/graphifyEvidence.test.ts) is the contract as runnable code — one rejection per clause, so "was graphify selected" has a single machine-checkable answer. [`graphifyEvidenceFixture`](../.github/actions/code-review-action/src/graphifyEvidenceFixture.test.ts) spawns a deterministic `graphify` stub in a temporary repository and records every act in one ordered log, proving a real process ran and exited before the first traversal, and that the shortlist survives the hand-off in both the stored-plan and fresh-plan shapes. Both state their limit in their headers, because it is the limit that makes the rest honest: a `bun test` run **does not execute a session**, so the holders are scripted, and what is proven is that a conforming holder produces a log the validator accepts while every named violation produces one it rejects. Production conformance remains the canary — now with a durable artifact to read it from. The static half stays [`graphifyEvidenceContract`](../.github/actions/code-review-action/src/graphifyEvidenceContract.test.ts), a documentation guard over the `graphify-evidence` sentinel and its consumers.
-
-### Read-only boundary
-
-Querying the graph and maintaining it used to share one permission: twelve skills granted `Bash(graphify *)`, and the synced rule templates told agents to run `graphify update .` after modifying code. In production that combination let an implementation run regenerate the graph against a dirty working tree and commit an 11.8k-line refresh that was ~97% of its PR diff ([#626](https://github.com/awinogradov/code-assistants/issues/626)). The committed graph is a read-only context snapshot of the default branch — the active diff already comes from Git — so the `graphify-readonly` sentinel in the shared block now makes the boundary explicit: the graph is immutable for the duration of a run and may lag behind the feature branch, the read-only surface (`query`, `path`, `explain`, `affected`, plus availability and help checks) is exhaustive, and mutating subcommands or any other write to `graphify-out/**` are forbidden. A missing or broken graph transitions to the successor tier per the reasons above, never triggers regeneration; where a repository regenerates its graph at all, a consumer-owned post-merge workflow does it.
-
-The rule templates reach downstream `AGENTS.md` files on their own sync cadence while the narrowed grants ship with the plugin release, so for the skew window a consumer's synced rules may still instruct a refresh the plugin denies — the sentinel travels with the grants and explicitly overrides stale synced rules until the sync catches up. The warning sign of that window is permission denials for `graphify update` in run logs. [`graphifyReadOnlyContract`](../.github/actions/code-review-action/src/graphifyReadOnlyContract.test.ts) guards all three surfaces: the sentinel's clauses, the absence of any update instruction in the `rules/` templates (scoped to the templates — the repo's own synced `AGENTS.md` copy lags until the next sync and is deliberately not scanned), and a strict allowlist over every `SKILL.md` grant, with the twelve previously granting skills as explicit test data so the scan cannot pass vacuously.
-
-### The exclusive-source read contract
-
-Audited sessions used to attach the pack and then rediscover the repository anyway — direct `Read`/`Grep`/`Glob` sweeps and delegated context agents re-covering files the snapshot already held, across all three tiers at once ([#582](https://github.com/awinogradov/code-assistants/issues/582)). The shared block therefore binds every context holder (the session, and each delegated agent) to an **exclusive selection**:
-
-- One source per holder, recorded once as `context-source: graphify | repomix <outputId> | default <reason>`. A holder whose toolset cannot reach a tier (an agent without repomix MCP tools) selects the highest tier it can use and records why.
-- Every repository-content question is served from the selected source. A direct read outside it carries a one-line machine-readable reason, `context-fallback: <reason> <path>`, from a fixed six-token taxonomy: `absent-or-excluded`, `truncated-or-unreadable`, `stale-snapshot`, `byte-verification`, `generated-or-untracked`, `post-snapshot-mutation`.
-- An oversized pack is served through bounded operations only — `grep_repomix_output` plus `read_repomix_output` with explicit line ranges, never a full-range read — and pack size is never a valid fallback reason.
-
-The normative text lives in the shared [`repomix-snapshot.md`](../claude-plugins/autopilot/skills/shared-rules/references/repomix-snapshot.md) block; the [`contextSourceContract`](../.github/actions/code-review-action/src/contextSourceContract.test.ts) test pins its load-bearing wording, one assertion per taxonomy token.
+Until [#678](https://github.com/awinogradov/code-assistants/issues/678), every context-gathering skill followed an ordered source chain — a committed [graphify](https://github.com/Graphify-Labs/graphify) knowledge graph, then this pack via the Repomix MCP server, then plain file reads — with a selection record, a query-refinement discipline, an evidence record, and a fallback-reason taxonomy layered on top of it, each answering an audited failure ([#582](https://github.com/awinogradov/code-assistants/issues/582), [#587](https://github.com/awinogradov/code-assistants/issues/587), [#597](https://github.com/awinogradov/code-assistants/issues/597), [#626](https://github.com/awinogradov/code-assistants/issues/626)). The bookkeeping came to cost more per session than the context it saved, so the chain, its shared block, the skills' graphify/repomix tool grants, and the guard tests pinning them were removed together. The pack workflow above is unaffected and keeps running for consumers of the artifact.

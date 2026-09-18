@@ -18,15 +18,8 @@ allowed-tools:
   - MCP(Ref:*)
   - MCP(exa:*)
   - MCP(perplexity:*)
-  - Bash(command -v graphify)
-  - Bash(graphify query *)
-  - Bash(graphify path *)
-  - Bash(graphify explain *)
-  - Bash(graphify affected *)
-  - Bash(graphify --help)
   - Bash(command -v entire)
   - Bash(entire *)
-  - MCP(repomix:*)
   - MCP(linear:*)
   - ToolSearch
   - AskUserQuestion
@@ -199,7 +192,7 @@ Once the plan file carries the applicable blocks — and, for a `linear-issue` i
 3. Evaluate the [no-repository-change exit](#no-repository-change-exit). If it passes, report that outcome and stop. If it does not apply and branch creation was deferred, create the branch before repository files change; if files already changed, preserve them while invoking `branch-create` and confirm the worktree afterward.
 4. Execute the autopilot chain — commit → push → PR → monitor — per [Phase 4](#phase-4-embed-branch-creation-and-the-autopilot-chain)'s Step 1 through Completion, without prompting.
 
-Repository questions that come up while implementing step 2 are served from the plan's `## Context source` section — on the graph tier its shortlist first, since each entry already carries the relationship that put it there, and a further `graphify` query only when the shortlist does not cover the question. Reads outside it carry the `context-fallback:` line from the [shared block's taxonomy](../shared-rules/references/repomix-snapshot.md). The section exists because implementation frequently happens in a session that never ran the query, and a source name alone leaves that session re-collecting a repository someone already mapped. A plan with no such section is an unrecorded source: fall back to the taxonomy and carry on.
+Repository questions that come up while implementing step 2 are served from the plan's `## Files` list and the Context Map first; a targeted `Grep`/`Read` fills a named gap, never a fresh sweep of a repository the map already covers.
 
 The only user prompts in the entire run are the branch-type pick for plain-description inputs and review-feedback handling during PR monitoring. There is no plan-approval step.
 

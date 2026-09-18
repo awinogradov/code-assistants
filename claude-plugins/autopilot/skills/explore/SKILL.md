@@ -8,15 +8,8 @@ allowed-tools:
   - Glob
   - Grep
   - Agent
-  - Bash(command -v graphify)
-  - Bash(graphify query *)
-  - Bash(graphify path *)
-  - Bash(graphify explain *)
-  - Bash(graphify affected *)
-  - Bash(graphify --help)
   - Bash(command -v entire)
   - Bash(entire *)
-  - MCP(repomix:*)
   - Bash(git *)
   - Bash(bun run *)
   - Bash(bun test *)
@@ -109,7 +102,6 @@ Base: <origin/main SHA>
 ## In-flight changes         <- volatile
 ## Local session state       <- volatile
 ## Git state                 <- volatile
-## Snapshot                  <- stable
 ```
 
 `Base:` records the base revision. The dependency sidecar binds coverage to the exact brief and source content; follow [selective-refresh.md](references/selective-refresh.md) when writing it. No timestamp is needed. The current branch belongs in the volatile `## Git state`, so switching branches cannot leave a stale name in a stable region.
@@ -126,7 +118,6 @@ Every **stable** section is written from the Context Map, and the transformation
 | Applicable standards | `## Conventions and standards`                   |
 | Key types            | `## Key types`                                   |
 | Test conventions     | `## Test and verify`                             |
-| Snapshot             | `## Snapshot`                                    |
 | In-flight changes    | unused — the brief recomputes it in Phase 3      |
 | Git state            | unused — the brief recomputes it in Phase 3      |
 | Session history      | unused — historical context, read at plan time   |

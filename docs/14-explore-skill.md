@@ -14,7 +14,7 @@ Local staged, unstaged, untracked, and branch changes participate in invalidatio
 
 ## Brief format
 
-The nine sections remain Architecture map, Data flow, Conventions and standards, Key types, Test and verify, In-flight changes, Local session state, Git state, and Snapshot. The first five and Snapshot are stable; the three Git/session sections are recomputed on every refresh. Base records origin/main; the sidecar records actual supporting file content and discovery coverage.
+The eight sections remain Architecture map, Data flow, Conventions and standards, Key types, Test and verify, In-flight changes, Local session state, and Git state. The first five are stable; the three Git/session sections are recomputed on every refresh. Base records origin/main; the sidecar records actual supporting file content and discovery coverage.
 
 ## Diagrams
 

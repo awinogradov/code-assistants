@@ -79,7 +79,7 @@ Example:
       "sessionId": "0199d2ce-6f79-7392",
       "checkpointId": "cp-41f2a8",
       "commit": "df52f28d2a83aaa19dbe02f982de22740fcaeff7",
-      "summary": "Reworked the shared repomix-snapshot block into the graphify-first ordered source chain"
+      "summary": "Moved the git history policy into a shared block read by every git-mutating skill"
     }
   ],
   "dropped": 0,

@@ -1,5 +1,11 @@
 # MIGRATING
 
+## From 9.0.1 to 10.0.0
+
+### Breaking changes
+
+- Graphify and Repomix codebase-context acquisition is retired ([#678](https://github.com/awinogradov/code-assistants/issues/678)). The shared `shared-rules/references/repomix-snapshot.md` block is deleted, and every skill that read it — `plan`, `run`, `run-primed`, `linear-plan`, `linear-run`, `explore`, `gather-context`, `issue-create`, `linear-create`, `pr-review`, `pr-answer`, `pr-resolve` — now gathers context with `Grep`/`Glob`/`Read` and `git` only. Their `allowed-tools` no longer grant `Bash(graphify …)` or `MCP(repomix:*)`; the `context-source:`, `graphify-trace:`, `graphify-shortlist:`, and `context-fallback:` records are gone; plans have no `## Context source` section; the Context Map has no `**Snapshot**` field; and the explore brief has no `## Snapshot` section. A consumer repository needs no configuration change — a Repomix MCP server or `graphify` CLI is simply no longer used. Drop any `mcp__repomix__*` allow-list entries, graphify grants, or plan/brief parsers that expected those records; a stored Linear plan or context brief written by 9.x still reads (its extra section is ignored). The committed `.repomix/pack.xml` and the `repomix-pack` workflow are unaffected — they serve external consumers, not the plugin.
+
 ## From 8.0.0 to 9.0.0
 
 ### Breaking changes

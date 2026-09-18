@@ -7,13 +7,6 @@ allowed-tools:
   - Glob
   - Grep
   - Bash(gh *)
-  - Bash(command -v graphify)
-  - Bash(graphify query *)
-  - Bash(graphify path *)
-  - Bash(graphify explain *)
-  - Bash(graphify affected *)
-  - Bash(graphify --help)
-  - MCP(repomix:*)
   - MCP(context7:*)
   - MCP(Ref:*)
   - MCP(exa:*)
@@ -56,23 +49,13 @@ gh pr view <PR_NUMBER> -R <REPO> --json title,body,files,commits,reviews,comment
 gh pr diff <PR_NUMBER> -R <REPO>
 ```
 
-### 1.2 Load Context
+### 1.2 Load Review History
 
-Launch 2 calls **in parallel** to load codebase context and review history:
+Read [`github-review-fetch.md`](../shared-rules/references/github-review-fetch.md) for the review-thread helper invocation and its output contract, then run it via Bash with `<REPO>`, `<PR_NUMBER>`, and `<PR_AUTHOR>`.
 
-Read [`repomix-snapshot.md`](../shared-rules/references/repomix-snapshot.md) for the ordered context-acquisition chain; this skill passes the review-scoped `includePatterns` (repomix tier only) shown below. Read [`github-review-fetch.md`](../shared-rules/references/github-review-fetch.md) for the review-thread helper invocation and its output contract.
+Use the helper's JSON to understand the full review history, including REVIEWER-specific reviews and comments; surface a non-null `fetchError` per the shared block instead of treating the fetch as empty.
 
-```
-Acquire codebase context: follow the shared repomix-snapshot chain,
-  passing `includePatterns`: ".claude/**, **.md, **.yml, .github/**"
-
-Fetch review threads: run the shared github-review-fetch helper via Bash
-  with <REPO>, <PR_NUMBER>, and <PR_AUTHOR>
-```
-
-After both complete, store the selected context source (and its `outputId` when the repomix tier was selected). Use the helper's JSON to understand the full review history, including REVIEWER-specific reviews and comments; surface a non-null `fetchError` per the shared block instead of treating the fetch as empty.
-
-**Read the pack, don't dump it.** Pull only targeted context via the selected source's read contract (`graphify` queries, or `grep_repomix_output` / sliced `read_repomix_output`); never read the whole pack. Most comment replies need no codebase lookup at all — skip the context reads entirely unless the comment points you at specific other code to verify.
+**Read targeted context only.** Most comment replies need no codebase lookup at all — skip codebase reads entirely unless the comment points you at specific other code to verify, and then `Grep`/`Read` just that code.
 
 ### 1.3 Extended Context
 

@@ -18,15 +18,8 @@ allowed-tools:
   - MCP(Ref:*)
   - MCP(exa:*)
   - MCP(perplexity:*)
-  - Bash(command -v graphify)
-  - Bash(graphify query *)
-  - Bash(graphify path *)
-  - Bash(graphify explain *)
-  - Bash(graphify affected *)
-  - Bash(graphify --help)
   - Bash(command -v entire)
   - Bash(entire *)
-  - MCP(repomix:*)
   - AskUserQuestion
   - Skill(autopilot:gather-context)
   - Skill(autopilot:preflight-check)
@@ -102,7 +95,7 @@ Skill(autopilot:gather-context)
 
 Pass the detected input type, issue id, repository, repository root, Linear team (when applicable), the raw task text as the task summary, the validated brief, and **`Scope: primed`**.
 
-That scope resolves only what a brief cannot bake in advance: issue or alert details, the TODO search, the branch diff, git state, and a re-attached codebase snapshot. It reuses unchanged standards only when [brief-reuse.md](../gather-context/references/brief-reuse.md) establishes coverage; otherwise a narrowed standards digest fills the task’s missing constraints. See [the Scope input](../gather-context/SKILL.md#input).
+That scope resolves only what a brief cannot bake in advance: issue or alert details, the TODO search, the branch diff, git state, and the task-specific codebase reads. It reuses unchanged standards only when [brief-reuse.md](../gather-context/references/brief-reuse.md) establishes coverage; otherwise a narrowed standards digest fills the task’s missing constraints. See [the Scope input](../gather-context/SKILL.md#input).
 
 ## Phase 3: Merge the working context
 
@@ -111,10 +104,10 @@ The brief supplies the repository half, the Context Map the volatile half. The s
 | Source            | Section                                                                                                     |
 | ----------------- | ----------------------------------------------------------------------------------------------------------- |
 | Brief             | `## Architecture map`, `## Data flow`, `## Conventions and standards`, `## Key types`, `## Test and verify` |
-| Brief, **unused** | `## Snapshot`, `## In-flight changes`, `## Local session state`, `## Git state`                             |
-| Context Map       | Issue / alert, Related TODOs, In-flight changes, Git state, Snapshot, Session history                       |
+| Brief, **unused** | `## In-flight changes`, `## Local session state`, `## Git state`                                            |
+| Context Map       | Issue / alert, Related TODOs, In-flight changes, Git state, Session history                                 |
 
-The brief's three volatile sections are ignored because they were computed in the explore session, in a different checkout — the Context Map's equivalents describe _this_ one. `## Snapshot` is stable yet also unused: the repomix `outputId` it records is session-scoped and dead in a forked session, so the map's freshly selected source is the one to read.
+The brief's three volatile sections are ignored because they were computed in the explore session, in a different checkout — the Context Map's equivalents describe _this_ one.
 
 Merge the brief’s verified `## Conventions and standards` with current Applicable standards from the Context Map; current rules and retrieved missing clauses supersede stale claims. Carry the result into the plan’s applicable-standards record. That section doubles as the audit log of what the plan was drafted against, so it must never read `none` on this path merely because the digest agent was skipped.
 

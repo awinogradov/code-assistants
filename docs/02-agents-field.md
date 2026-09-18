@@ -114,7 +114,7 @@ Each consuming skill follows the same shape:
 3. Map the value via the tables above.
 4. If the file is missing, the `agents` object is missing, or the value is unrecognized → fall back.
 
-Implementations may use `Read`, `jq`, or `grep_repomix_output` to read the file. The contract is the JSON path, not the access method.
+Implementations may use `Read` or `jq` to read the file. The contract is the JSON path, not the access method.
 
 ## Fallback behavior
 

@@ -4,7 +4,7 @@
 | ----------------------- | --------------------------------------------------------------------------------------------------- |
 | Stored plan             | `### Summary`, `### Implementation Steps`, `### Files`, `### Context evidence` (v2; optional in v1) |
 | Stored plan, **unused** | `### Pre-Implementation`, `### Post-Implementation`                                                 |
-| Context Map             | Issue, Related TODOs, In-flight changes, Git state, Snapshot, Session history, Applicable standards |
+| Context Map             | Issue, Related TODOs, In-flight changes, Git state, Session history, Applicable standards           |
 
 The two unused sections are read past deliberately. They describe a branch and a post-implementation chain, and this skill supplies both from `run` — the branch because it must be created in _this_ checkout, and the chain because `run` owns it. Consuming a stored copy would mean executing a branch step written for a tree that no longer exists.
 

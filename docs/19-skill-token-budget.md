@@ -63,7 +63,7 @@ Bodies alone understate it, because the invocation-count fix is the larger half.
 
 [PR review](../claude-plugins/autopilot/skills/pr-review/SKILL.md) classifies the round before loading its patch and supporting context. Identical heads stop there; incremental rounds avoid reading the full-diff artifact unless they fall back. Direct issue helpers replace mechanical delegation, retain explicit errors/truncation, and cannot assign an issue in review mode.
 
-Keep operational instructions in the skill: conditions, actions, evidence fields, limits, and failure behavior. Maintenance rationale belongs in docs; the [snapshot history](./09-repomix-pack.md#the-exclusive-source-read-contract) explains why the shared source contract exists. Removing repeated rationale does not remove its safeguards. File-size reductions show instruction savings only; runtime token and latency savings require observing representative sessions.
+Keep operational instructions in the skill: conditions, actions, evidence fields, limits, and failure behavior. Maintenance rationale belongs in docs. Removing repeated rationale does not remove its safeguards. File-size reductions show instruction savings only; runtime token and latency savings require observing representative sessions.
 
 ## Conditional references and bounded digests
 

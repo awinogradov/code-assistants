@@ -20,7 +20,7 @@ All drafting callers read [common instructions](../claude-plugins/autopilot/skil
 
 ## The shared pipeline
 
-The [pipeline](../claude-plugins/autopilot/skills/plan/references/pipeline.md) drafts and writes one plan, without a review panel, score, or separate finalize task. Every step has an observable verification condition. The required `## Context source` carries the snapshot evidence, including `context-source:`, `graphify-trace:`, and `graphify-shortlist:` when using graphify. These records state what was read; consumers must not fabricate or silently reacquire them.
+The [pipeline](../claude-plugins/autopilot/skills/plan/references/pipeline.md) drafts and writes one plan, without a review panel, score, or separate finalize task. Every step has an observable verification condition. The Context Map is the codebase read; a targeted `Grep`/`Read` fills a named gap rather than re-collecting the repository.
 
 Plan tracks Gather context and Write plan. Run additionally tracks Implement and verify and Deliver PR. Batch outcome tracking where supported; parsing and status-only phases do not warrant separate tasks.
 

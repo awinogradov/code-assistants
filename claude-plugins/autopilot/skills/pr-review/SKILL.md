@@ -12,13 +12,6 @@ allowed-tools:
   - Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/linear/fetch-issue.mjs" --review:*)
   - Bash(echo *)
   - MCP(github:*)
-  - Bash(command -v graphify)
-  - Bash(graphify query *)
-  - Bash(graphify path *)
-  - Bash(graphify explain *)
-  - Bash(graphify affected *)
-  - Bash(graphify --help)
-  - MCP(repomix:*)
   - MCP(context7:*)
   - MCP(Ref:*)
   - MCP(exa:*)
@@ -77,7 +70,7 @@ Fetch PR metadata only:
 gh pr view <PR_NUMBER> -R <REPO> --json title,body,files,commits,reviews,latestReviews,comments,reviewDecision,headRefName,headRefOid,baseRefOid
 ```
 
-Proceed to [§1.2](#12-review-round-handling) before loading a diff, threads, issue context, TODOs, or a codebase snapshot. Never embed the selected diff more than once.
+Proceed to [§1.2](#12-review-round-handling) before loading a diff, threads, issue context, TODOs, or surrounding code. Never embed the selected diff more than once.
 
 This `gh pr view` output is the authoritative source for the PR metadata and prior-review verdicts: `reviews`/`latestReviews` carry each prior review's verdict and summary body (the body lists that round's findings). Per-line inline annotations are NOT in any `gh pr view` field — load them via the deterministic review-thread helper run in [§1.3](#13-load-supporting-context). A denied or empty fetch must never be silently treated as "no prior findings" (that path produces an empty, content-free approval).
 
@@ -111,7 +104,7 @@ After selecting and materializing the surface, acquire supporting context below,
 Run only after [§1.2](#12-review-round-handling) selected a non-skipped review surface. Fetch supporting context in parallel where independent:
 
 - **Review threads:** when no valid bundle supplies them, run the bounded helper in [github-review-fetch.md](../shared-rules/references/github-review-fetch.md). A non-null `fetchError` or unavailable/truncated bundle section stays explicit; use budgeted follow-ups for bundle gaps. Never treat a failed fetch as no prior findings.
-- **Codebase:** follow [repomix-snapshot.md](../shared-rules/references/repomix-snapshot.md) with `includePatterns: ".claude/**, **.md, **.yml, .github/**"` on the pack tier. Use targeted reads for cross-file checks; do not dump the pack. Retain the source evidence record for the Context Map.
+- **Codebase:** use targeted `Grep`/`Glob`/`Read` for cross-file checks on the code the patch touches; never sweep the tree.
 - **Linked issue:** resolve and fetch below; no issue-fetching or TODO-search subagents.
 
 Resolve the linked issue from the PR body's `Issues:` section first (`Closes`, `Fixes`, `Resolves`, or `Related to`), then the branch. Accept a GitHub number or issue URL, preserving an explicitly named repository; `issue-<number>-…` means GitHub. A Linear issue URL identifies Linear; a bare `KEY-N` or `<key>-<number>-…` branch (normalize the key to uppercase) requires a matching `agents.trackers` Linear key (`keys`, defaulting to `team`). Do not interpret an arbitrary branch prefix as a tracker. If no issue is linked, record "No linked issue — skipping issue comparison".
@@ -123,9 +116,9 @@ For a resolved issue, execute the existing helper directly (Node ≥24 or Bun fo
 
 Store the provider-agnostic result, including `url`, `comments`, `truncated`, and `resolveError`. Report truncation and avoid claiming issue coverage beyond the returned content. Missing runtime, process failure, invalid JSON, or non-null `resolveError` degrades issue comparison explicitly; continue code review without claiming the issue was satisfied. Do not retry through an agent.
 
-**Related TODOs:** use one bounded search through the selected source for the issue's reference forms: GitHub `issues/N` and `#N`, or Linear `issue/KEY-N` and `KEY-N`, with identifier boundaries so `#12` does not match `#123`. On default tools use Grep with `head_limit: 20`; on the pack tier use a bounded `grep_repomix_output`; on graphify use its query/shortlist discipline and record a permitted fallback if literal references are absent from the graph. Keep at most 20 `path:line — text` entries and report truncation or failure. This is supporting context, not an expansion of the review surface.
+**Related TODOs:** use one bounded Grep (`head_limit: 20`) for the issue's reference forms: GitHub `issues/N` and `#N`, or Linear `issue/KEY-N` and `KEY-N`, with identifier boundaries so `#12` does not match `#123`. Keep at most 20 `path:line — text` entries and report truncation or failure. This is supporting context, not an expansion of the review surface.
 
-**Graphify is context, never surface.** Git/GitHub supplies changed files and the selected patch. Graph queries may explain callers, invariants, reuse, or duplication relevant to that patch, but must never expand an incremental round into unrelated code.
+**Supporting reads are context, never surface.** Git/GitHub supplies changed files and the selected patch. Cross-file reads may explain callers, invariants, reuse, or duplication relevant to that patch, but must never expand an incremental round into unrelated code.
 
 **Reconcile follow-up findings.** Use prior review bodies and unresolved threads to check each previously reported issue against the selected surface. Both sources are bounded on the bundle path (20 prior reviews, 100 threads); recover relevant truncated entries with budgeted follow-ups. Classify findings as new, unchanged, or resolved; do not repeat resolved issues. After reviewing the surface, apply [Verdict Decision Rules](#verdict-decision-rules) once. Those rules own skip/approve/requestChanges precedence, including approval after blockers are fixed.
 
