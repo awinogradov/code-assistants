@@ -20,3 +20,9 @@ No workflow changes are required — inputs and outputs are unchanged.
 ### Breaking changes
 
 - --experts-review is no longer accepted and no flow launches an expert panel.
+
+## From 2.0.0 to 3.0.0
+
+### Breaking changes
+
+- skills no longer query a Graphify graph or attach a Repomix
