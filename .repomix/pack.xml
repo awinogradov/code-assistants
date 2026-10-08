@@ -348,6 +348,7 @@ The content is organized as follows:
         1.4.0.md
         1.4.1.md
         1.5.0.md
+        1.5.1.md
       src/
         migrations/
           migratingAppend.test.ts
@@ -501,6 +502,7 @@ claude-plugins/
       1.8.1.md
       1.9.0.md
       10.0.0.md
+      10.0.1.md
       2.0.0.md
       3.0.0.md
       3.1.0.md
@@ -31632,6 +31634,40 @@ AI-generated release notes, PR descriptions, and review replies are now capped t
 * **release-action:** emit one-sentence release note bullets ([ac51009](https://github.com/awinogradov/code-assistants/commit/ac510098965d3f39ed78d4568088845686896c75))
 </file>
 
+<file path=".github/actions/release-action/.release_notes/1.5.1.md">
+## [1.5.1](https://github.com/awinogradov/code-assistants/compare/release-action@v1.5.0...release-action@v1.5.1) (2026-10-08)
+
+## Release Notes
+
+The publish phase in a monorepo now reads the member package's `package.json` instead of the workspace root, unblocking releases where the root package name is not a valid npm identifier.
+
+## 🐛 Bug Fixes
+
+- Monorepo releases no longer abort when the workspace root `package.json` carries a name that is not a valid npm package name — the action now reads the member package's `package.json` throughout the create phase.
+- The create phase no longer generates a spurious empty `CHANGELOG.md` at the repository root during a monorepo release.
+
+<details><summary>Related issues</summary>
+
+- [#686: release-action: monorepo create reads the root package.json and fails on a non-npm root name](https://github.com/awinogradov/code-assistants/issues/686)
+- [#687: Unblock monorepo releases when the workspace root name is not a valid npm name](https://github.com/awinogradov/code-assistants/pull/687)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #686 | [#687](https://github.com/awinogradov/code-assistants/pull/687) | @awinogradov |
+
+### Bug Fixes
+
+* **release-action:** read member package.json in monorepo ([462e298](https://github.com/awinogradov/code-assistants/commit/462e29876f5d79ab7d05667189c1758e6a659614))
+
+### Tests
+
+* **release-action:** pin workflow ref in badge tests ([d0b8760](https://github.com/awinogradov/code-assistants/commit/d0b876086c8ede6beb3ec6959f449ee063062de7))
+</file>
+
 <file path=".github/actions/release-action/src/migrations/migratingAppend.test.ts">
 /**
  * Tests for MIGRATING.md section rendering and append.
@@ -42294,6 +42330,37 @@ runs:
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [1.5.1](https://github.com/awinogradov/code-assistants/compare/release-action@v1.5.0...release-action@v1.5.1) (2026-10-08)
+
+## Release Notes
+
+The publish phase in a monorepo now reads the member package's `package.json` instead of the workspace root, unblocking releases where the root package name is not a valid npm identifier.
+
+## 🐛 Bug Fixes
+
+- Monorepo releases no longer abort when the workspace root `package.json` carries a name that is not a valid npm package name — the action now reads the member package's `package.json` throughout the create phase.
+- The create phase no longer generates a spurious empty `CHANGELOG.md` at the repository root during a monorepo release.
+
+<details><summary>Related issues</summary>
+
+- [#686: release-action: monorepo create reads the root package.json and fails on a non-npm root name](https://github.com/awinogradov/code-assistants/issues/686)
+- [#687: Unblock monorepo releases when the workspace root name is not a valid npm name](https://github.com/awinogradov/code-assistants/pull/687)
+</details>
+
+
+## GitHub Issues
+
+| Issue | PR | Author |
+| --- | --- | --- |
+| #686 | [#687](https://github.com/awinogradov/code-assistants/pull/687) | @awinogradov |
+
+### Bug Fixes
+
+* **release-action:** read member package.json in monorepo ([462e298](https://github.com/awinogradov/code-assistants/commit/462e29876f5d79ab7d05667189c1758e6a659614))
+
+### Tests
+
+* **release-action:** pin workflow ref in badge tests ([d0b8760](https://github.com/awinogradov/code-assistants/commit/d0b876086c8ede6beb3ec6959f449ee063062de7))
 ## [1.5.0](https://github.com/awinogradov/code-assistants/compare/release-action@v1.4.1...release-action@v1.5.0) (2026-09-02)
 
 ## Release Notes
@@ -43025,7 +43092,7 @@ Add a `release` field to your package.json to configure release behavior. See th
 <file path=".github/actions/release-action/package.json">
 {
   "name": "@code-assistants/release-action",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Composite GitHub Action that automates conventional-commit releases for npm packages, GitHub Actions, and Claude plugins.",
   "private": true,
   "type": "module",
@@ -43064,8 +43131,8 @@ Add a `release` field to your package.json to configure release behavior. See th
 <file path=".github/actions/release-action/README.md">
 # Release action
 
-[![GitHub Release](https://img.shields.io/badge/release-v1.5.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
-[![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
+[![GitHub Release](https://img.shields.io/badge/release-v1.5.1-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release-create.yml)
 
 Composite GitHub Action that automates the release pipeline for npm packages, GitHub Actions, and Claude plugins.
 
@@ -43364,7 +43431,7 @@ uses: awinogradov/code-assistants/.github/actions/release-action@v1
 </file>
 
 <file path=".github/actions/release-action/version">
-1.5.0
+1.5.1
 </file>
 
 <file path=".github/actions/release-automerge/.release_notes/0.1.0.md">
@@ -47146,7 +47213,7 @@ fi
 <file path="claude-plugins/autopilot/.claude-plugin/plugin.json">
 {
   "name": "autopilot",
-  "version": "10.0.0",
+  "version": "10.0.1",
   "description": "Autopilot: plan, implement, commit, PR, and monitor — skills and agents for AI-assisted development workflows",
   "author": {
     "name": "Tony Vi",
@@ -48775,6 +48842,19 @@ Entire-Checkpoint: dcf78ef1e2c4
 ### CI
 
 * **deps:** bump the pdf-create-renderer group ([6d37ce9](https://github.com/awinogradov/code-assistants/commit/6d37ce947e5f009ccd755a0b5313518a0dd8f53f))
+</file>
+
+<file path="claude-plugins/autopilot/.release_notes/10.0.1.md">
+## [10.0.1](https://github.com/awinogradov/code-assistants/compare/autopilot@v10.0.0...autopilot@v10.0.1) (2026-10-08)
+
+## Release Notes
+
+This patch release contains only internal dependency bumps with no user-facing changes.
+
+
+### CI
+
+* **deps:** bump the pdf-create-renderer group across 1 directory with 2 updates ([804fe03](https://github.com/awinogradov/code-assistants/commit/804fe03345399607de123b1e5dfc77dc11b8ad83))
 </file>
 
 <file path="claude-plugins/autopilot/.release_notes/2.0.0.md">
@@ -66075,6 +66155,16 @@ Before writing any output that mentions a file, standard, section, commit, or is
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [10.0.1](https://github.com/awinogradov/code-assistants/compare/autopilot@v10.0.0...autopilot@v10.0.1) (2026-10-08)
+
+## Release Notes
+
+This patch release contains only internal dependency bumps with no user-facing changes.
+
+
+### CI
+
+* **deps:** bump the pdf-create-renderer group across 1 directory with 2 updates ([804fe03](https://github.com/awinogradov/code-assistants/commit/804fe03345399607de123b1e5dfc77dc11b8ad83))
 ## [10.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v9.0.1...autopilot@v10.0.0) (2026-09-18)
 
 ## Release Notes
@@ -69151,15 +69241,15 @@ SOFTWARE.
     "test": "bun test lib",
     "clean": "rm -rf node_modules .turbo"
   },
-  "version": "10.0.0"
+  "version": "10.0.1"
 }
 </file>
 
 <file path="claude-plugins/autopilot/README.md">
 # Autopilot Claude Plugin
 
-[![GitHub Release](https://img.shields.io/badge/release-v10.0.0-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
-[![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release_create.yml)
+[![GitHub Release](https://img.shields.io/badge/release-v10.0.1-blue)](https://github.com/awinogradov/code-assistants/releases/latest)
+[![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/awinogradov/code-assistants/actions/workflows/release-create.yml)
 
 > Part of the [code-assistants](../../README.md) marketplace repository.
 
@@ -69673,7 +69763,7 @@ See [Local development](#local-development) in the Installation section.
 </file>
 
 <file path="claude-plugins/autopilot/version">
-10.0.0
+10.0.1
 </file>
 
 <file path="docs/01-workspace-structure.md">
