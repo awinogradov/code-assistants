@@ -39340,15 +39340,67 @@ describe("release CLI", () => {
   });
 
   describe("generateChangelog()", () => {
-    test("creates CHANGELOG.md if missing", () =>
+    test("leaves no placeholder CHANGELOG.md when none exists", () =>
       withTempRepo(async (testRepo) => {
         await createPackageJson(testRepo);
         await createInitialCommitAndTag(testRepo);
         await createCommit(testRepo, "feat: new feature");
 
-        await generateChangelog("1.1.0", testRepo);
+        const result = await generateChangelog("1.1.0", testRepo);
 
-        expect(await Bun.file(join(testRepo, "CHANGELOG.md")).exists()).toBe(true);
+        expect(await Bun.file(join(testRepo, "CHANGELOG.md")).exists()).toBe(false);
+        expect(result.history).toBe("");
+      }));
+
+    test("reads the member manifest when scoped to a path", () =>
+      withTempRepo(async (testRepo) => {
+        // A bare scope is a valid pnpm workspace-root name but not a valid npm
+        // package name, so an unscoped read aborts the whole run.
+        await Bun.write(
+          join(testRepo, "package.json"),
+          JSON.stringify({ name: "@fortune-os", version: "1.0.0" }, null, 2)
+        );
+        await Bun.write(
+          join(testRepo, "apps", "native", "package.json"),
+          JSON.stringify(
+            {
+              name: "@fortune-os/native",
+              version: "0.1.0",
+              repository: "https://github.com/fortune-os/native",
+            },
+            null,
+            2
+          )
+        );
+        await createInitialCommitAndTag(testRepo);
+        await createCommit(testRepo, "feat: native feature", join("apps", "native", "app.ts"));
+
+        const result = await generateChangelog("0.2.0", testRepo, {
+          tagPrefix: "native@v",
+          path: join("apps", "native"),
+        });
+
+        expect(result.release).toContain("native feature");
+        expect(result.release).toContain("fortune-os/native");
+      }));
+
+    test("writes no root CHANGELOG.md when scoped to a path", () =>
+      withTempRepo(async (testRepo) => {
+        await createPackageJson(testRepo);
+        await Bun.write(
+          join(testRepo, "apps", "native", "package.json"),
+          JSON.stringify({ name: "native", version: "0.1.0" }, null, 2)
+        );
+        await createInitialCommitAndTag(testRepo);
+        await createCommit(testRepo, "feat: native feature", join("apps", "native", "app.ts"));
+
+        const result = await generateChangelog("0.2.0", testRepo, {
+          tagPrefix: "native@v",
+          path: join("apps", "native"),
+        });
+
+        expect(await Bun.file(join(testRepo, "CHANGELOG.md")).exists()).toBe(false);
+        expect(result.history).toBe("");
       }));
 
     test("release contains version number", () =>
@@ -39830,12 +39882,18 @@ export async function bumpVersion(
 export interface ChangelogScope {
   /** Tag prefix passed to `ConventionalChangelog.tags` (e.g. `release-action@v`). */
   tagPrefix?: string;
-  /** Path filter passed to `ConventionalChangelog.commits` so only matching commits appear. */
+  /**
+   * Path filter passed to `ConventionalChangelog.commits` so only matching
+   * commits appear. The directory must carry its own `package.json` — it also
+   * selects the manifest the changelog templates read.
+   */
   path?: string;
 }
 
 /**
- * Generate changelog content from git history
+ * Generate changelog content from git history. Reads no manifest beyond the one
+ * `scope.path` selects, and never creates `<cwd>/CHANGELOG.md` — a missing file
+ * yields an empty `history`.
  *
  * @param newVersion - Version to generate changelog for
  * @param cwd - Working directory (default: process.cwd())
@@ -39846,18 +39904,16 @@ export async function generateChangelog(
   cwd = process.cwd(),
   scope: ChangelogScope = {},
 ): Promise<ChangelogResult> {
-  const changelogFile = join(cwd, "CHANGELOG.md");
+  const changelogFile = Bun.file(join(cwd, "CHANGELOG.md"));
 
-  if (!(await Bun.file(changelogFile).exists())) {
-    await Bun.write(changelogFile, "\n");
-  }
-
-  const historyContent = await Bun.file(changelogFile).text();
+  const historyContent = (await changelogFile.exists()) ? await changelogFile.text() : "";
   const historyStart = historyContent.search(startOfLastReleasePattern);
   const history = historyStart !== -1 ? historyContent.substring(historyStart) : historyContent;
 
   let generator = new ConventionalChangelog(cwd)
-    .readPackage()
+    // A scoped run pins `cwd` to the repository root, so the default lookup would
+    // read the root manifest — whose name need not satisfy npm's name rules.
+    .readPackage(scope.path ? join(cwd, scope.path, "package.json") : undefined)
     .loadPreset({
       name: "conventionalcommits",
       types: [
@@ -41559,10 +41615,28 @@ export async function createInitialCommitAndTag(
  */
 import { describe, expect, test } from "bun:test";
 
-import { updateReleaseBadge } from "./updateReleaseBadge.ts";
+import { releaseWorkflowFile, updateReleaseBadge } from "./updateReleaseBadge.ts";
 
 const serverUrl = "https://github.com";
 const repo = "owner/repo";
+
+/**
+ * Run `fn` with `GITHUB_WORKFLOW_REF` pinned to `value` (or removed when
+ * `undefined`), restoring it afterwards. The runner sets the variable, so a test
+ * of the env-default path is otherwise green locally and red in CI.
+ */
+function withWorkflowRef(value: string | undefined, fn: () => void): void {
+  const original = process.env.GITHUB_WORKFLOW_REF;
+  if (value === undefined) delete process.env.GITHUB_WORKFLOW_REF;
+  else process.env.GITHUB_WORKFLOW_REF = value;
+
+  try {
+    fn();
+  } finally {
+    if (original === undefined) delete process.env.GITHUB_WORKFLOW_REF;
+    else process.env.GITHUB_WORKFLOW_REF = original;
+  }
+}
 
 describe("updateReleaseBadge", () => {
   test("updates existing badge version in-place", () => {
@@ -41616,11 +41690,104 @@ Some text with img.shields.io/badge/release-v1.0.0-blue reference.
 
   test("uses correct URLs in generated badges", () => {
     const readme = "# Test\n";
-    const result = updateReleaseBadge(readme, "1.0.0", "https://gh.example.com", "org/my-repo");
+    const result = updateReleaseBadge(
+      readme,
+      "1.0.0",
+      "https://gh.example.com",
+      "org/my-repo",
+      "release-create.yml",
+    );
 
     expect(result).toContain("https://gh.example.com/org/my-repo/releases/latest");
     expect(result).toContain(
-      "https://gh.example.com/org/my-repo/actions/workflows/release_create.yml"
+      "https://gh.example.com/org/my-repo/actions/workflows/release-create.yml",
+    );
+  });
+
+  test("prepended badges target the given workflow file", () => {
+    const result = updateReleaseBadge(
+      "No header here.\n",
+      "1.0.0",
+      serverUrl,
+      repo,
+      "ship-it.yaml",
+    );
+
+    expect(result).toContain("https://github.com/owner/repo/actions/workflows/ship-it.yaml");
+  });
+
+  test("refreshes a stale Create-Release target on an existing badge", () => {
+    const readme = `# My Project
+[![GitHub Release](https://img.shields.io/badge/release-v1.0.0-blue)](https://github.com/owner/repo/releases/latest)
+[![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/owner/repo/actions/workflows/release_create.yml)
+
+Some content.
+`;
+    const result = updateReleaseBadge(readme, "2.0.0", serverUrl, repo, "release-create.yml");
+
+    expect(result).toContain("actions/workflows/release-create.yml");
+    expect(result).not.toContain("release_create.yml");
+    expect(result).toContain("release-v2.0.0-blue");
+  });
+
+  test("leaves other workflow badges untouched when refreshing", () => {
+    const readme = `# My Project
+[![GitHub Release](https://img.shields.io/badge/release-v1.0.0-blue)](https://github.com/owner/repo/releases/latest)
+[![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](https://github.com/owner/repo/actions/workflows/release_create.yml)
+[![CI](https://img.shields.io/badge/CI-passing-green)](https://github.com/owner/repo/actions/workflows/test.yml)
+`;
+    const result = updateReleaseBadge(readme, "2.0.0", serverUrl, repo, "release-create.yml");
+
+    expect(result).toContain("actions/workflows/test.yml");
+    expect(result).toContain("actions/workflows/release-create.yml");
+  });
+});
+
+describe("releaseWorkflowFile", () => {
+  test("extracts the file name from a workflow ref", () => {
+    expect(
+      releaseWorkflowFile("owner/repo/.github/workflows/release-create.yml@refs/heads/main"),
+    ).toBe("release-create.yml");
+  });
+
+  test("accepts a .yaml extension", () => {
+    expect(releaseWorkflowFile("owner/repo/.github/workflows/ship.yaml@refs/tags/v1")).toBe(
+      "ship.yaml",
+    );
+  });
+
+  test("trims from the first @ so a ref containing @ still resolves", () => {
+    expect(
+      releaseWorkflowFile("owner/repo/.github/workflows/release-create.yml@refs/heads/feat@2"),
+    ).toBe("release-create.yml");
+  });
+
+  test("reads GITHUB_WORKFLOW_REF when called with no argument", () => {
+    withWorkflowRef("owner/repo/.github/workflows/from-env.yml@refs/heads/main", () => {
+      expect(releaseWorkflowFile()).toBe("from-env.yml");
+    });
+  });
+
+  test("falls back when the variable is unset", () => {
+    withWorkflowRef(undefined, () => {
+      expect(releaseWorkflowFile()).toBe("release_create.yml");
+    });
+  });
+
+  test("falls back on an empty value", () => {
+    expect(releaseWorkflowFile("")).toBe("release_create.yml");
+  });
+
+  test("falls back when the ref carries no workflows segment", () => {
+    expect(releaseWorkflowFile("owner/repo@refs/heads/main")).toBe("release_create.yml");
+  });
+
+  test("falls back when the extracted name is not a plain yaml file", () => {
+    expect(releaseWorkflowFile("owner/repo/.github/workflows/nested/deploy.yml@main")).toBe(
+      "release_create.yml",
+    );
+    expect(releaseWorkflowFile("owner/repo/.github/workflows/release-create.txt@main")).toBe(
+      "release_create.yml",
     );
   });
 });
@@ -41631,7 +41798,8 @@ Some text with img.shields.io/badge/release-v1.0.0-blue reference.
  * Update the release badge in README.md with the current version.
  *
  * Handles three cases:
- * 1. Existing badge — updates the version number in-place
+ * 1. Existing badge — updates the version number and the Create-Release
+ *    workflow target in-place
  * 2. README with `# ` header — inserts badges after the first header
  * 3. README without header — prepends badges to the file
  *
@@ -41640,9 +41808,39 @@ Some text with img.shields.io/badge/release-v1.0.0-blue reference.
  * @example
  * ```bash
  * GITHUB_SERVER_URL=https://github.com GITHUB_REPOSITORY=owner/repo \
+ *   GITHUB_WORKFLOW_REF=owner/repo/.github/workflows/release-create.yml@refs/heads/main \
  *   bun src/updateReleaseBadge.ts
  * ```
  */
+
+/** Workflow file the Create-Release badge targets when the running ref is unknown. */
+const fallbackWorkflowFile = "release_create.yml";
+
+/** Matches the Create-Release badge so its target can be refreshed without touching other shields. */
+const createBadgePattern = /\[!\[Create Release\]\([^)]*\)\]\([^)]*\)/;
+
+/**
+ * Derive the running workflow's file name from a `GITHUB_WORKFLOW_REF` value
+ * (`owner/repo/.github/workflows/<file>@<ref>`). Falls back to
+ * `release_create.yml` when the variable is unset or does not yield a plain
+ * `.yml`/`.yaml` file name.
+ *
+ * @see https://docs.github.com/actions/learn-github-actions/variables#default-environment-variables
+ */
+export function releaseWorkflowFile(workflowRef = process.env.GITHUB_WORKFLOW_REF): string {
+  const marker = "/.github/workflows/";
+  const start = workflowRef?.indexOf(marker) ?? -1;
+  if (start === -1 || !workflowRef) return fallbackWorkflowFile;
+
+  // A workflow file name cannot contain `@` but a ref can (e.g. a branch named
+  // `feat@2`), so the first `@` is the boundary — trimming from the last one
+  // would swallow the extension.
+  const tail = workflowRef.slice(start + marker.length);
+  const at = tail.indexOf("@");
+  const file = at === -1 ? tail : tail.slice(0, at);
+
+  return /^[\w.-]+\.ya?ml$/.test(file) ? file : fallbackWorkflowFile;
+}
 
 /**
  * Update or insert release badge in README content.
@@ -41651,6 +41849,7 @@ Some text with img.shields.io/badge/release-v1.0.0-blue reference.
  * @param version - Release version (e.g. "1.2.3")
  * @param serverUrl - GitHub server URL (e.g. "https://github.com")
  * @param repo - GitHub repository (e.g. "owner/repo")
+ * @param workflowFile - Create-Release workflow file name
  * @returns Updated README content
  */
 export function updateReleaseBadge(
@@ -41658,13 +41857,18 @@ export function updateReleaseBadge(
   version: string,
   serverUrl: string,
   repo: string,
+  workflowFile: string = fallbackWorkflowFile,
 ): string {
   const releaseBadge = `[![GitHub Release](https://img.shields.io/badge/release-v${version}-blue)](${serverUrl}/${repo}/releases/latest)`;
-  const createBadge = `[![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](${serverUrl}/${repo}/actions/workflows/release_create.yml)`;
+  const createBadge = `[![Create Release](https://img.shields.io/badge/Create-Release-blue?logo=github)](${serverUrl}/${repo}/actions/workflows/${workflowFile})`;
 
-  // Case 1: Existing badge — update version in-place
+  // Case 1: Existing badge — update version and the Create-Release target
+  // in-place. Refreshing the target is what reaches a README whose badges were
+  // written against a differently-named workflow.
   if (readme.includes("img.shields.io/badge/release-v")) {
-    return readme.replace(/release-v[\d.]*-blue/g, `release-v${version}-blue`);
+    return readme
+      .replace(/release-v[\d.]*-blue/g, `release-v${version}-blue`)
+      .replace(createBadgePattern, createBadge);
   }
 
   const lines = readme.split("\n");
@@ -41686,8 +41890,9 @@ export function updateReleaseBadge(
 }
 
 /**
- * Update the README badge in-place for the given working directory.
- * No-ops when `<cwd>/README.md` does not exist.
+ * Update the README badge in-place for the given working directory, targeting
+ * the workflow named by `GITHUB_WORKFLOW_REF`. No-ops when `<cwd>/README.md`
+ * does not exist.
  *
  * @param cwd - Member directory (defaults to `process.cwd()`).
  */
@@ -41704,9 +41909,16 @@ export async function refreshReleaseBadge(cwd: string = process.cwd()): Promise<
   const version = (await Bun.file(versionPath).text()).trim();
   const serverUrl = process.env.GITHUB_SERVER_URL ?? "https://github.com";
   const repo = process.env.GITHUB_REPOSITORY ?? "";
+  const workflowFile = releaseWorkflowFile();
+
+  if (workflowFile === fallbackWorkflowFile) {
+    console.log(
+      `::warning::Could not derive the release workflow file; badge links to ${workflowFile}`,
+    );
+  }
 
   const readme = await readmeFile.text();
-  const updated = updateReleaseBadge(readme, version, serverUrl, repo);
+  const updated = updateReleaseBadge(readme, version, serverUrl, repo, workflowFile);
 
   if (updated !== readme) {
     await Bun.write(readmePath, updated);
@@ -43065,7 +43277,8 @@ When the repository root declares either `release.members` or a `workspaces` arr
 | ------------------ | ---------------------------- | ------------------------------------------------------------------------------------------------------- |
 | Last tag           | `v*`                         | `<name>@v*` (e.g. `release-action@v1.2.0`)                                                              |
 | Floating major tag | `v1` (`github-action` only)  | `<name>@v1` (`github-action` only)                                                                      |
-| Changelog file     | `CHANGELOG.md`               | `<member>/CHANGELOG.md`                                                                                 |
+| Changelog file     | `CHANGELOG.md`               | `<member>/CHANGELOG.md` (no root placeholder is written)                                                |
+| Manifest read      | Root `package.json`          | The member's own `package.json`                                                                         |
 | Release notes file | `.release_notes/<v>.md`      | `<member>/.release_notes/<v>.md`                                                                        |
 | Branch             | `release-<v>` (configurable) | `release-<name>-<v>` (template `release-{member}-{version}`)                                            |
 | PR label           | `release-action`             | `release-<name>` (auto-created per member)                                                              |
@@ -43073,6 +43286,14 @@ When the repository root declares either `release.members` or a `workspaces` arr
 | Migrations         | n/a                          | `<member>/MIGRATING.md` is appended on major bumps with notes extracted from `BREAKING CHANGE:` footers |
 
 A member with no commits touching its path since its last tag is skipped silently. When a member's release ships and another member declares a workspace dependency on it, the dependent picks up at least a `patch` bump and a `chore(deps)` entry in its changelog.
+
+Because the changelog is generated from the member's own `package.json`, a workspace root whose `name` is not a valid npm package name — a bare scope such as `@acme`, which pnpm accepts but npm's name rules reject — no longer aborts `create`.
+
+### Release badge
+
+In `create` mode the action inserts a release badge pair into the README (the repository root's in standalone mode, each member's in monorepo mode) and refreshes both on every subsequent release.
+
+The Create-Release badge targets the workflow that is running the release, derived from the `GITHUB_WORKFLOW_REF` environment variable the runner provides. When that variable is unset or does not yield a plain `.yml`/`.yaml` file name, the badge falls back to `release_create.yml` and the step logs a warning naming the target it used. A README whose badges were written against a differently named workflow is retargeted in place; other workflow badges in the same README are left untouched.
 
 ### Tag-ref ergonomics
 
