@@ -213,7 +213,8 @@ When the repository root declares either `release.members` or a `workspaces` arr
 | ------------------ | ---------------------------- | ------------------------------------------------------------------------------------------------------- |
 | Last tag           | `v*`                         | `<name>@v*` (e.g. `release-action@v1.2.0`)                                                              |
 | Floating major tag | `v1` (`github-action` only)  | `<name>@v1` (`github-action` only)                                                                      |
-| Changelog file     | `CHANGELOG.md`               | `<member>/CHANGELOG.md`                                                                                 |
+| Changelog file     | `CHANGELOG.md`               | `<member>/CHANGELOG.md` (no root placeholder is written)                                                |
+| Manifest read      | Root `package.json`          | The member's own `package.json`                                                                         |
 | Release notes file | `.release_notes/<v>.md`      | `<member>/.release_notes/<v>.md`                                                                        |
 | Branch             | `release-<v>` (configurable) | `release-<name>-<v>` (template `release-{member}-{version}`)                                            |
 | PR label           | `release-action`             | `release-<name>` (auto-created per member)                                                              |
@@ -221,6 +222,14 @@ When the repository root declares either `release.members` or a `workspaces` arr
 | Migrations         | n/a                          | `<member>/MIGRATING.md` is appended on major bumps with notes extracted from `BREAKING CHANGE:` footers |
 
 A member with no commits touching its path since its last tag is skipped silently. When a member's release ships and another member declares a workspace dependency on it, the dependent picks up at least a `patch` bump and a `chore(deps)` entry in its changelog.
+
+Because the changelog is generated from the member's own `package.json`, a workspace root whose `name` is not a valid npm package name — a bare scope such as `@acme`, which pnpm accepts but npm's name rules reject — no longer aborts `create`.
+
+### Release badge
+
+In `create` mode the action inserts a release badge pair into the README (the repository root's in standalone mode, each member's in monorepo mode) and refreshes both on every subsequent release.
+
+The Create-Release badge targets the workflow that is running the release, derived from the `GITHUB_WORKFLOW_REF` environment variable the runner provides. When that variable is unset or does not yield a plain `.yml`/`.yaml` file name, the badge falls back to `release_create.yml` and the step logs a warning naming the target it used. A README whose badges were written against a differently named workflow is retargeted in place; other workflow badges in the same README are left untouched.
 
 ### Tag-ref ergonomics
 

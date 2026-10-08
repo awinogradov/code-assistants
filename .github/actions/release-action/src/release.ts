@@ -265,12 +265,18 @@ export async function bumpVersion(
 export interface ChangelogScope {
   /** Tag prefix passed to `ConventionalChangelog.tags` (e.g. `release-action@v`). */
   tagPrefix?: string;
-  /** Path filter passed to `ConventionalChangelog.commits` so only matching commits appear. */
+  /**
+   * Path filter passed to `ConventionalChangelog.commits` so only matching
+   * commits appear. The directory must carry its own `package.json` — it also
+   * selects the manifest the changelog templates read.
+   */
   path?: string;
 }
 
 /**
- * Generate changelog content from git history
+ * Generate changelog content from git history. Reads no manifest beyond the one
+ * `scope.path` selects, and never creates `<cwd>/CHANGELOG.md` — a missing file
+ * yields an empty `history`.
  *
  * @param newVersion - Version to generate changelog for
  * @param cwd - Working directory (default: process.cwd())
@@ -281,18 +287,16 @@ export async function generateChangelog(
   cwd = process.cwd(),
   scope: ChangelogScope = {},
 ): Promise<ChangelogResult> {
-  const changelogFile = join(cwd, "CHANGELOG.md");
+  const changelogFile = Bun.file(join(cwd, "CHANGELOG.md"));
 
-  if (!(await Bun.file(changelogFile).exists())) {
-    await Bun.write(changelogFile, "\n");
-  }
-
-  const historyContent = await Bun.file(changelogFile).text();
+  const historyContent = (await changelogFile.exists()) ? await changelogFile.text() : "";
   const historyStart = historyContent.search(startOfLastReleasePattern);
   const history = historyStart !== -1 ? historyContent.substring(historyStart) : historyContent;
 
   let generator = new ConventionalChangelog(cwd)
-    .readPackage()
+    // A scoped run pins `cwd` to the repository root, so the default lookup would
+    // read the root manifest — whose name need not satisfy npm's name rules.
+    .readPackage(scope.path ? join(cwd, scope.path, "package.json") : undefined)
     .loadPreset({
       name: "conventionalcommits",
       types: [
