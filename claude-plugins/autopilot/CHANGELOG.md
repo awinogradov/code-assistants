@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit guidelines.
 
+## [10.0.1](https://github.com/awinogradov/code-assistants/compare/autopilot@v10.0.0...autopilot@v10.0.1) (2026-10-08)
+
+## Release Notes
+
+This patch release contains only internal dependency bumps with no user-facing changes.
+
+
+### CI
+
+* **deps:** bump the pdf-create-renderer group across 1 directory with 2 updates ([804fe03](https://github.com/awinogradov/code-assistants/commit/804fe03345399607de123b1e5dfc77dc11b8ad83))
 ## [10.0.0](https://github.com/awinogradov/code-assistants/compare/autopilot@v9.0.1...autopilot@v10.0.0) (2026-09-18)
 
 ## Release Notes
