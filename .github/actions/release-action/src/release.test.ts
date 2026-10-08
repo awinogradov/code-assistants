@@ -289,15 +289,67 @@ describe("release CLI", () => {
   });
 
   describe("generateChangelog()", () => {
-    test("creates CHANGELOG.md if missing", () =>
+    test("leaves no placeholder CHANGELOG.md when none exists", () =>
       withTempRepo(async (testRepo) => {
         await createPackageJson(testRepo);
         await createInitialCommitAndTag(testRepo);
         await createCommit(testRepo, "feat: new feature");
 
-        await generateChangelog("1.1.0", testRepo);
+        const result = await generateChangelog("1.1.0", testRepo);
 
-        expect(await Bun.file(join(testRepo, "CHANGELOG.md")).exists()).toBe(true);
+        expect(await Bun.file(join(testRepo, "CHANGELOG.md")).exists()).toBe(false);
+        expect(result.history).toBe("");
+      }));
+
+    test("reads the member manifest when scoped to a path", () =>
+      withTempRepo(async (testRepo) => {
+        // A bare scope is a valid pnpm workspace-root name but not a valid npm
+        // package name, so an unscoped read aborts the whole run.
+        await Bun.write(
+          join(testRepo, "package.json"),
+          JSON.stringify({ name: "@fortune-os", version: "1.0.0" }, null, 2)
+        );
+        await Bun.write(
+          join(testRepo, "apps", "native", "package.json"),
+          JSON.stringify(
+            {
+              name: "@fortune-os/native",
+              version: "0.1.0",
+              repository: "https://github.com/fortune-os/native",
+            },
+            null,
+            2
+          )
+        );
+        await createInitialCommitAndTag(testRepo);
+        await createCommit(testRepo, "feat: native feature", join("apps", "native", "app.ts"));
+
+        const result = await generateChangelog("0.2.0", testRepo, {
+          tagPrefix: "native@v",
+          path: join("apps", "native"),
+        });
+
+        expect(result.release).toContain("native feature");
+        expect(result.release).toContain("fortune-os/native");
+      }));
+
+    test("writes no root CHANGELOG.md when scoped to a path", () =>
+      withTempRepo(async (testRepo) => {
+        await createPackageJson(testRepo);
+        await Bun.write(
+          join(testRepo, "apps", "native", "package.json"),
+          JSON.stringify({ name: "native", version: "0.1.0" }, null, 2)
+        );
+        await createInitialCommitAndTag(testRepo);
+        await createCommit(testRepo, "feat: native feature", join("apps", "native", "app.ts"));
+
+        const result = await generateChangelog("0.2.0", testRepo, {
+          tagPrefix: "native@v",
+          path: join("apps", "native"),
+        });
+
+        expect(await Bun.file(join(testRepo, "CHANGELOG.md")).exists()).toBe(false);
+        expect(result.history).toBe("");
       }));
 
     test("release contains version number", () =>
