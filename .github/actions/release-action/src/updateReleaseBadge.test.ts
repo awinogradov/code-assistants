@@ -8,6 +8,24 @@ import { releaseWorkflowFile, updateReleaseBadge } from "./updateReleaseBadge.ts
 const serverUrl = "https://github.com";
 const repo = "owner/repo";
 
+/**
+ * Run `fn` with `GITHUB_WORKFLOW_REF` pinned to `value` (or removed when
+ * `undefined`), restoring it afterwards. The runner sets the variable, so a test
+ * of the env-default path is otherwise green locally and red in CI.
+ */
+function withWorkflowRef(value: string | undefined, fn: () => void): void {
+  const original = process.env.GITHUB_WORKFLOW_REF;
+  if (value === undefined) delete process.env.GITHUB_WORKFLOW_REF;
+  else process.env.GITHUB_WORKFLOW_REF = value;
+
+  try {
+    fn();
+  } finally {
+    if (original === undefined) delete process.env.GITHUB_WORKFLOW_REF;
+    else process.env.GITHUB_WORKFLOW_REF = original;
+  }
+}
+
 describe("updateReleaseBadge", () => {
   test("updates existing badge version in-place", () => {
     const readme = `# My Project
@@ -132,8 +150,16 @@ describe("releaseWorkflowFile", () => {
     ).toBe("release-create.yml");
   });
 
+  test("reads GITHUB_WORKFLOW_REF when called with no argument", () => {
+    withWorkflowRef("owner/repo/.github/workflows/from-env.yml@refs/heads/main", () => {
+      expect(releaseWorkflowFile()).toBe("from-env.yml");
+    });
+  });
+
   test("falls back when the variable is unset", () => {
-    expect(releaseWorkflowFile(undefined)).toBe("release_create.yml");
+    withWorkflowRef(undefined, () => {
+      expect(releaseWorkflowFile()).toBe("release_create.yml");
+    });
   });
 
   test("falls back on an empty value", () => {
